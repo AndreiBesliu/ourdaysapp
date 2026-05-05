@@ -1,6 +1,6 @@
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays } from 'date-fns';
 import { ChevronLeft, ChevronRight, Briefcase, Heart, Wrench, Calendar as CalendarIcon, Star, Circle, CheckCircle2, X, Plus, Clock } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useModalBack } from '../hooks/useModalBack';
 
@@ -60,6 +60,54 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
       width: '100%'
     })
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '')) return;
+      
+      // Don't trigger if ANY modal is open
+      if (document.querySelector('.fixed.inset-0')) return;
+
+      if (!selectedDate) {
+        if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+          e.preventDefault();
+          setSelectedDate(new Date());
+        }
+        return;
+      }
+
+      let newDate = selectedDate;
+      if (e.key === 'ArrowLeft') newDate = addDays(selectedDate, -1);
+      else if (e.key === 'ArrowRight') newDate = addDays(selectedDate, 1);
+      else if (e.key === 'ArrowUp') newDate = addDays(selectedDate, -7);
+      else if (e.key === 'ArrowDown') newDate = addDays(selectedDate, 7);
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        setModalDay(selectedDate);
+        setIsDayModalOpen(true);
+        return;
+      } else {
+        return;
+      }
+
+      e.preventDefault();
+      setSelectedDate(newDate);
+
+      // Auto-switch month if navigating outside current month
+      if (!isSameMonth(newDate, currentDate)) {
+        if (newDate < currentDate) {
+          setDirection(-1);
+        } else {
+          setDirection(1);
+        }
+        setCurrentDate(startOfMonth(newDate));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedDate, currentDate, setSelectedDate, setCurrentDate]);
 
   const renderHeader = () => {
     return (
@@ -236,7 +284,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
           drag="x"
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={1}
-          onDragEnd={(e, { offset, velocity }) => {
+          onDragEnd={(_, { offset, velocity }) => {
             const swipe = swipePower(offset.x, velocity.x);
 
             if (swipe < -swipeConfidenceThreshold || offset.x < -50) {
