@@ -323,12 +323,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   };
 
   const ownerId = editEvent ? editEvent.ownerId : auth.currentUser?.uid;
-  const owner = ownerId ? (userMap[ownerId] || (ownerId === auth.currentUser?.uid ? {
-    id: ownerId, 
-    name: auth.currentUser?.displayName, 
-    email: auth.currentUser?.email, 
-    photoURL: auth.currentUser?.photoURL 
-  } : null)) : null;
+  const owner = ownerId ? (userMap[ownerId] || null) : null;
 
   const commonGroups = owner ? groups?.filter(g => g.members?.includes(owner.id)) || [] : [];
 

@@ -184,12 +184,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   };
 
   const ownerId = event?.ownerId;
-  const owner = ownerId ? (userMap[ownerId] || (ownerId === auth.currentUser?.uid ? {
-    id: ownerId, 
-    name: auth.currentUser?.displayName, 
-    email: auth.currentUser?.email, 
-    photoURL: auth.currentUser?.photoURL 
-  } : null)) : null;
+  const owner = ownerId ? (userMap[ownerId] || null) : null;
 
   const commonGroups = owner ? groups?.filter(g => g.members?.includes(owner.id)) || [] : [];
 

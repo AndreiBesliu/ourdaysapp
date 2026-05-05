@@ -51,13 +51,13 @@ export default function CalendarHome() {
       setGroups(fetchedGroups);
       
       const map: Record<string, any> = {};
+      // Seed current user from auth first, then enrich with Firestore doc (which has photoURL)
       map[auth.currentUser!.uid] = { id: auth.currentUser!.uid, email: auth.currentUser!.email, name: auth.currentUser!.displayName || 'Me' };
       
-      const memberIds = new Set<string>([...legacyFamily]);
+      const memberIds = new Set<string>([auth.currentUser!.uid, ...legacyFamily]);
       fetchedGroups.forEach((g: any) => g.members?.forEach((id: string) => memberIds.add(id)));
       
       for (const id of Array.from(memberIds)) {
-        if (id === auth.currentUser!.uid) continue;
         const userDoc = await getDoc(doc(db, 'users', id));
         if (userDoc.exists()) {
           map[id] = { id, ...userDoc.data() };
