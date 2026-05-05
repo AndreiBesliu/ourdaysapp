@@ -21,38 +21,60 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
 
   useModalBack(isDayModalOpen, () => setIsDayModalOpen(false));
 
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
   const minSwipeDistance = 50;
 
-  const onTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
-    setTouchEnd(null);
-    if ('touches' in e) {
-      setTouchStart(e.targetTouches[0].clientX);
-    } else {
-      setTouchStart((e as React.MouseEvent).clientX);
-    }
+  const nextMonth = () => {
+    setSlideDirection('left');
+    setCurrentDate(addMonths(currentDate, 1));
+  };
+  
+  const prevMonth = () => {
+    setSlideDirection('right');
+    setCurrentDate(subMonths(currentDate, 1));
   };
 
-  const onTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
-    if ('touches' in e) {
-      setTouchEnd(e.targetTouches[0].clientX);
-    } else if (touchStart !== null) {
-      setTouchEnd((e as React.MouseEvent).clientX);
-    }
-  };
+  useEffect(() => {
+    if (touchStart === null) return;
 
-  const onTouchEndHandler = () => {
-    if (!touchStart || !touchEnd) return;
-    const distance = touchStart - touchEnd;
-    if (distance > minSwipeDistance) nextMonth();
-    if (distance < -minSwipeDistance) prevMonth();
-    setTouchStart(null);
-    setTouchEnd(null);
-  };
+    const handlePointerMove = (e: PointerEvent) => {
+      setSwipeOffset(e.clientX - touchStart);
+    };
 
-  const nextMonth = () => setCurrentDate(addMonths(currentDate, 1));
-  const prevMonth = () => setCurrentDate(subMonths(currentDate, 1));
+    const handlePointerUp = (e: PointerEvent) => {
+      const distance = touchStart - e.clientX;
+      if (distance > minSwipeDistance) {
+        setSlideDirection('left');
+        nextMonth();
+      } else if (distance < -minSwipeDistance) {
+        setSlideDirection('right');
+        prevMonth();
+      } else {
+        setSlideDirection(null);
+      }
+      setTouchStart(null);
+      setSwipeOffset(0);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [touchStart, currentDate]);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    setTouchStart(e.clientX);
+    setSwipeOffset(0);
+    setSlideDirection(null);
+  };
 
   const renderHeader = () => {
     return (
@@ -213,23 +235,30 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
       );
       days = [];
     }
-    return <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900 shadow-sm">{rows}</div>;
+    return (
+      <div 
+        key={currentDate.toString()} 
+        className={`border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900 shadow-sm animate-in fade-in duration-300 ${
+          slideDirection === 'left' ? 'slide-in-from-right-16' : 
+          slideDirection === 'right' ? 'slide-in-from-left-16' : ''
+        }`}
+      >
+        {rows}
+      </div>
+    );
   };
 
   return (
     <div 
-      className="w-full"
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEndHandler}
-      onMouseDown={onTouchStart}
-      onMouseMove={onTouchMove}
-      onMouseUp={onTouchEndHandler}
-      onMouseLeave={() => setTouchStart(null)}
+      className="w-full relative overflow-x-hidden"
+      onPointerDown={handlePointerDown}
+      style={{ touchAction: 'pan-y' }}
     >
-      {renderHeader()}
-      {renderDays()}
-      {renderCells()}
+      <div style={{ transform: touchStart !== null ? `translateX(${swipeOffset}px)` : 'none', transition: touchStart === null ? 'transform 0.3s ease-out' : 'none' }}>
+        {renderHeader()}
+        {renderDays()}
+        {renderCells()}
+      </div>
 
       {/* Day Events Modal */}
       {isDayModalOpen && modalDay && (
