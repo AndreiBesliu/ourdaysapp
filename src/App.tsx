@@ -96,7 +96,7 @@ function App() {
             if (data.primaryColor || data.isDarkMode !== undefined) {
               setTheme(
                 data.primaryColor || '221.2 83.2% 53.3%',
-                data.isDarkMode === true
+                data.isDarkMode !== undefined ? data.isDarkMode === true : true
               );
               setAdvancedTheme({
                 backgroundImage: data.backgroundImage || null,

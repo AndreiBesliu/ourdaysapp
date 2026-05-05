@@ -12,7 +12,7 @@ interface ThemeState {
 
 export const useThemeStore = create<ThemeState>((set) => ({
   primaryColor: '221.2 83.2% 53.3%',
-  isDarkMode: false,
+  isDarkMode: true,
   backgroundImage: null,
   backgroundStyle: 'stretch',
   backgroundOverlay: 50,

@@ -430,7 +430,8 @@ export default function CalendarHome() {
         <GroupChatWidget 
           groupId={activeGroupId} 
           groupName={groups.find(g => g.id === activeGroupId)?.name || 'Group'} 
-          userMap={userMap} 
+          userMap={userMap}
+          groupMembers={groups.find(g => g.id === activeGroupId)?.members || []}
         />
       )}
 
