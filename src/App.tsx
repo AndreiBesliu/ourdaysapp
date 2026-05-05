@@ -16,7 +16,7 @@ import { useThemeStore } from './store';
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const { setTheme, isDarkMode, primaryColor } = useThemeStore();
+  const { setTheme, setAdvancedTheme, isDarkMode, primaryColor, backgroundImage, backgroundStyle, backgroundOverlay } = useThemeStore();
 
   useEffect(() => {
     if (isDarkMode) {
@@ -28,7 +28,37 @@ function App() {
 
   useEffect(() => {
     document.documentElement.style.setProperty('--primary', primaryColor);
-  }, [primaryColor]);
+    
+    // Apply background image and overlay
+    if (backgroundImage) {
+      document.body.style.backgroundImage = `
+        linear-gradient(rgba(${isDarkMode ? '0,0,0' : '255,255,255'}, ${((backgroundOverlay || 50) / 100).toFixed(2)}), rgba(${isDarkMode ? '0,0,0' : '255,255,255'}, ${((backgroundOverlay || 50) / 100).toFixed(2)})),
+        url(${backgroundImage})
+      `;
+      if (backgroundStyle === 'stretch') {
+        document.body.style.backgroundSize = 'cover';
+        document.body.style.backgroundRepeat = 'no-repeat';
+        document.body.style.backgroundPosition = 'center';
+        document.body.style.backgroundAttachment = 'fixed';
+      } else if (backgroundStyle === 'contain') {
+        document.body.style.backgroundSize = 'contain';
+        document.body.style.backgroundRepeat = 'no-repeat';
+        document.body.style.backgroundPosition = 'center';
+        document.body.style.backgroundAttachment = 'fixed';
+      } else {
+        document.body.style.backgroundSize = 'auto';
+        document.body.style.backgroundRepeat = 'repeat';
+        document.body.style.backgroundPosition = 'top left';
+        document.body.style.backgroundAttachment = 'scroll';
+      }
+    } else {
+      document.body.style.backgroundImage = '';
+      document.body.style.backgroundSize = '';
+      document.body.style.backgroundRepeat = '';
+      document.body.style.backgroundPosition = '';
+      document.body.style.backgroundAttachment = '';
+    }
+  }, [primaryColor, backgroundImage, backgroundStyle, backgroundOverlay, isDarkMode]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -45,6 +75,11 @@ function App() {
                 data.primaryColor || '221.2 83.2% 53.3%',
                 data.isDarkMode === true
               );
+              setAdvancedTheme({
+                backgroundImage: data.backgroundImage || null,
+                backgroundStyle: data.backgroundStyle || 'stretch',
+                backgroundOverlay: data.backgroundOverlay ?? 50
+              });
             }
           }
 
