@@ -285,6 +285,21 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             createdAt: new Date().toISOString()
           });
         }
+        
+        // Notify assignees
+        const otherAssignees = assigneeIds.filter(id => id !== auth.currentUser?.uid);
+        if (otherAssignees.length > 0 && isTask) {
+          otherAssignees.forEach(async (userId) => {
+            await addDoc(collection(db, 'notifications'), {
+              userId,
+              type: 'task',
+              title: 'New Task Assigned',
+              body: `You have been assigned to: ${title}`,
+              read: false,
+              createdAt: new Date()
+            });
+          });
+        }
       }
       if (!editEvent) {
         localStorage.removeItem('ourDays_draftEvent');

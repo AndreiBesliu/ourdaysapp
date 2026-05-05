@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { isSameDay, format } from 'date-fns';
-import { auth, db } from '../firebase';
+import { auth, db, messaging } from '../firebase';
+import { getToken } from 'firebase/messaging';
 import { collection, query, onSnapshot, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
 import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star } from 'lucide-react';
 import CalendarGrid from '../components/CalendarGrid';
@@ -9,6 +10,8 @@ import EventDetailsModal from '../components/EventDetailsModal';
 import InviteFamilyModal from '../components/InviteFamilyModal';
 import CreateGroupModal from '../components/CreateGroupModal';
 import LeaveGroupModal from '../components/LeaveGroupModal';
+import NotificationsDropdown from '../components/NotificationsDropdown';
+import GroupChatWidget from '../components/GroupChatWidget';
 import { useNavigate } from 'react-router-dom';
 
 export default function CalendarHome() {
@@ -79,6 +82,31 @@ export default function CalendarHome() {
       setPendingFamilyInvites(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
     return () => unsubscribe();
+  }, []);
+
+  // Request notification permissions and save FCM token
+  useEffect(() => {
+    if (!auth.currentUser || !messaging) return;
+
+    const requestPermission = async () => {
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          const token = await getToken(messaging, { 
+            vapidKey: 'BIsH5f-u0rS2wZ3jL-yqF9qS-nFf_vB1a_zZ_8j-xZ_8' // Replace with your actual VAPID key if you have one
+          });
+          if (token) {
+            await updateDoc(doc(db, 'users', auth.currentUser!.uid), {
+              fcmTokens: arrayUnion(token)
+            });
+          }
+        }
+      } catch (err) {
+        console.error('An error occurred while retrieving token. ', err);
+      }
+    };
+
+    requestPermission();
   }, []);
 
   useEffect(() => {
@@ -170,7 +198,7 @@ export default function CalendarHome() {
         </div>
         
         <div className="flex items-center gap-4">
-
+          <NotificationsDropdown />
           <button 
             onClick={() => navigate('/wallet')}
             className="p-2 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-full transition-colors"
@@ -396,6 +424,15 @@ export default function CalendarHome() {
       >
         <Plus className="w-6 h-6" />
       </button>
+
+      {/* Group Chat Widget */}
+      {activeGroupId !== 'personal' && (
+        <GroupChatWidget 
+          groupId={activeGroupId} 
+          groupName={groups.find(g => g.id === activeGroupId)?.name || 'Group'} 
+          userMap={userMap} 
+        />
+      )}
 
       {/* Add Event Modal */}
       <AddEventModal 
