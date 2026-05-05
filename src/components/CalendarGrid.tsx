@@ -1,6 +1,7 @@
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays } from 'date-fns';
 import { ChevronLeft, ChevronRight, Briefcase, Heart, Wrench, Calendar as CalendarIcon, Star, Circle, CheckCircle2, X, Plus, Clock } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useModalBack } from '../hooks/useModalBack';
 
 interface CalendarGridProps {
@@ -21,59 +22,43 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
 
   useModalBack(isDayModalOpen, () => setIsDayModalOpen(false));
 
-  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [swipeOffset, setSwipeOffset] = useState(0);
-  const minSwipeDistance = 50;
+  const [direction, setDirection] = useState<number>(0);
+  const swipeConfidenceThreshold = 10000;
+  const swipePower = (offset: number, velocity: number) => {
+    return Math.abs(offset) * velocity;
+  };
 
   const nextMonth = () => {
-    setSlideDirection('left');
+    setDirection(1);
     setCurrentDate(addMonths(currentDate, 1));
   };
   
   const prevMonth = () => {
-    setSlideDirection('right');
+    setDirection(-1);
     setCurrentDate(subMonths(currentDate, 1));
   };
 
-  useEffect(() => {
-    if (touchStart === null) return;
-
-    const handlePointerMove = (e: PointerEvent) => {
-      setSwipeOffset(e.clientX - touchStart);
-    };
-
-    const handlePointerUp = (e: PointerEvent) => {
-      const distance = touchStart - e.clientX;
-      if (distance > minSwipeDistance) {
-        setSlideDirection('left');
-        nextMonth();
-      } else if (distance < -minSwipeDistance) {
-        setSlideDirection('right');
-        prevMonth();
-      } else {
-        setSlideDirection(null);
-      }
-      setTouchStart(null);
-      setSwipeOffset(0);
-    };
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('pointercancel', handlePointerUp);
-
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerUp);
-    };
-  }, [touchStart, currentDate]);
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    setTouchStart(e.clientX);
-    setSwipeOffset(0);
-    setSlideDirection(null);
+  const variants = {
+    enter: (direction: number) => ({
+      x: direction > 0 ? '100%' : '-100%',
+      opacity: 0,
+      position: 'absolute' as const,
+      width: '100%'
+    }),
+    center: {
+      zIndex: 1,
+      x: 0,
+      opacity: 1,
+      position: 'relative' as const,
+      width: '100%'
+    },
+    exit: (direction: number) => ({
+      zIndex: 0,
+      x: direction > 0 ? '-100%' : '100%',
+      opacity: 0,
+      position: 'absolute' as const,
+      width: '100%'
+    })
   };
 
   const renderHeader = () => {
@@ -236,27 +221,43 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
       days = [];
     }
     return (
-      <div 
-        key={currentDate.toString()} 
-        className={`border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900 shadow-sm animate-in fade-in duration-300 ${
-          slideDirection === 'left' ? 'slide-in-from-right-16' : 
-          slideDirection === 'right' ? 'slide-in-from-left-16' : ''
-        }`}
-      >
-        {rows}
-      </div>
+      <AnimatePresence initial={false} custom={direction}>
+        <motion.div
+          key={currentDate.toString()}
+          custom={direction}
+          variants={variants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          transition={{
+            x: { type: "spring", stiffness: 300, damping: 30 },
+            opacity: { duration: 0.2 }
+          }}
+          drag="x"
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={1}
+          onDragEnd={(e, { offset, velocity }) => {
+            const swipe = swipePower(offset.x, velocity.x);
+
+            if (swipe < -swipeConfidenceThreshold || offset.x < -50) {
+              nextMonth();
+            } else if (swipe > swipeConfidenceThreshold || offset.x > 50) {
+              prevMonth();
+            }
+          }}
+          className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900 shadow-sm"
+        >
+          {rows}
+        </motion.div>
+      </AnimatePresence>
     );
   };
 
   return (
-    <div 
-      className="w-full relative overflow-x-hidden"
-      onPointerDown={handlePointerDown}
-      style={{ touchAction: 'pan-y' }}
-    >
-      <div style={{ transform: touchStart !== null ? `translateX(${swipeOffset}px)` : 'none', transition: touchStart === null ? 'transform 0.3s ease-out' : 'none' }}>
-        {renderHeader()}
-        {renderDays()}
+    <div className="w-full relative overflow-x-hidden select-none">
+      {renderHeader()}
+      {renderDays()}
+      <div className="relative w-full">
         {renderCells()}
       </div>
 
