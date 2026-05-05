@@ -64,7 +64,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
           </button>
         </div>
 
-        <form onSubmit={handleCreate} className="p-6 space-y-4 overflow-y-auto">
+        <form onSubmit={handleCreate} className="p-6 space-y-4 overflow-y-auto flex-1">
           <div className="space-y-2">
             <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Group Name</label>
             <input 

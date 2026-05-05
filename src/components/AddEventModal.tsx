@@ -276,7 +276,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
           <div className="flex items-center justify-between">
             {selectedDate && (
               <div className="flex items-center gap-3 relative">

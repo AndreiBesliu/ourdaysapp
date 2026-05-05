@@ -111,7 +111,7 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName 
           </button>
         </div>
 
-        <form onSubmit={handleInvite} className="p-6 space-y-4 overflow-y-auto">
+        <form onSubmit={handleInvite} className="p-6 space-y-4 overflow-y-auto flex-1">
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             Enter the email address of the person you want to invite. They can sign up later if they don't have an account yet.
           </p>

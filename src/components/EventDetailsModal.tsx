@@ -229,7 +229,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6 overflow-y-auto">
+        <div className="p-6 space-y-6 overflow-y-auto flex-1">
           
           {/* Task Status */}
           {event.isTask && (
