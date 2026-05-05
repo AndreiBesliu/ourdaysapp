@@ -7,7 +7,7 @@ export function useModalBack(isOpen: boolean, onClose: () => void) {
     // Push a new state when the modal opens
     window.history.pushState({ modal: true }, '');
 
-    const handlePopState = (e: PopStateEvent) => {
+    const handlePopState = () => {
       // If the back button is pressed, the state we pushed is popped.
       onClose();
     };

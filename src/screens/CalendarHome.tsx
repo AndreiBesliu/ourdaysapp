@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { isSameDay, format } from 'date-fns';
 import { auth, db } from '../firebase';
 import { collection, query, onSnapshot, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
-import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, ListTodo, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star } from 'lucide-react';
+import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star } from 'lucide-react';
 import CalendarGrid from '../components/CalendarGrid';
 import AddEventModal from '../components/AddEventModal';
 import EventDetailsModal from '../components/EventDetailsModal';

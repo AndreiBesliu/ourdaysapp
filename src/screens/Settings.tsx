@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Moon, Sun, Palette, LogOut, Settings as SettingsIcon, Camera, Home } from 'lucide-react';
+import { Moon, Sun, Palette, LogOut, Settings as SettingsIcon, Camera, Home } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../store';
 import { auth, db } from '../firebase';
