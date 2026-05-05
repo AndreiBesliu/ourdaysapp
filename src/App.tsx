@@ -29,25 +29,27 @@ function App() {
   useEffect(() => {
     document.documentElement.style.setProperty('--primary', primaryColor);
 
-    // Auto-contrast: compute a readable foreground color for text on primary backgrounds
-    // primaryColor is "H S% L%" — we parse lightness and saturation to estimate luminance
+    // Auto-contrast: compute WCAG-compliant foreground color for text on primary backgrounds
+    // primaryColor is "H S% L%" format
     const parts = primaryColor.split(' ');
     const h = parseFloat(parts[0]);
     const s = parseFloat(parts[1]) / 100;
     const l = parseFloat(parts[2]) / 100;
-    // Convert HSL to approximate luminance
+
+    // Convert HSL → RGB using standard formula
     const a = s * Math.min(l, 1 - l);
-    const toLinear = (channel: number) => {
-      const c = Math.abs(channel);
-      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    const toRgb = (n: number) => {
+      const k = (n + h / 30) % 12;
+      return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
     };
-    const fR = toLinear(l - a * ((h % 360 < 60 || h % 360 >= 300) ? 1 : h % 360 < 180 ? -1 : 0));
-    // Simple heuristic: use lightness directly (fast and reliable enough for HSL)
-    // Light colors (l > 0.55) get dark text; dark colors get light text
-    const foreground = l > 0.55
-      ? '20 14% 10%'      // near-black
-      : '210 40% 98%';    // near-white
-    void fR; // suppress unused warning
+    const r = toRgb(0), g = toRgb(8), b = toRgb(4);
+
+    // Convert to linear light values (WCAG)
+    const toLinear = (c: number) => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    const luminance = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+
+    // WCAG: luminance > 0.179 → use dark text; otherwise use light text
+    const foreground = luminance > 0.179 ? '20 14% 10%' : '210 40% 98%';
     document.documentElement.style.setProperty('--primary-foreground', foreground);
     
     // Apply background image and overlay
