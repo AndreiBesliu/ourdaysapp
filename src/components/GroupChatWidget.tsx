@@ -141,11 +141,23 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
 
   const getSeenStatus = (msg: any) => {
     if (msg.senderId !== auth.currentUser?.uid) return null;
-    if (!msg.seenBy || msg.seenBy.length <= 1) {
-      return 'sent'; // only sender has seen it
+
+    const myMsgTime = msg.createdAt?.toMillis?.() ?? 0;
+
+    // Primary: if ANY other member sent a message AFTER this one, they clearly read it
+    const seenByReply = messages.some(m =>
+      m.senderId !== auth.currentUser?.uid &&
+      (m.createdAt?.toMillis?.() ?? 0) > myMsgTime
+    );
+    if (seenByReply) return 'seen';
+
+    // Fallback: explicit seenBy array
+    if (msg.seenBy && msg.seenBy.length > 1) {
+      const allSeen = otherMemberIds.length > 0 && otherMemberIds.every((id: string) => msg.seenBy.includes(id));
+      return allSeen ? 'seen' : 'delivered';
     }
-    const allSeen = otherMemberIds.length > 0 && otherMemberIds.every(id => msg.seenBy?.includes(id));
-    return allSeen ? 'seen' : 'delivered';
+
+    return 'sent';
   };
 
   return (
