@@ -22,5 +22,6 @@ Date: May 5, 2026
 * SHARED LISTS STRATEGY: We concluded that a separate "Standalone Lists" hub is unnecessary right now. The current architecture—where Tasks within a specific Event can be assigned to multiple users—perfectly serves the purpose of operational family lists (e.g., Grocery lists attached to a specific shopping day).
 * PUSH NOTIFICATIONS: Acknowledged as a vital upcoming feature (Cloud Functions to ping family members on new events/tasks), but officially deferred to a later development phase.
 * ANDROID COMPILATION: Deferred. We will continue developing the web/PWA platform until the feature set feels fully robust before locking it into a native Android APK build.
+* GROUP MANAGEMENT: The absolute immediate next step is to implement robust group lifecycle management. This includes giving users the ability to 'Leave Group', giving owners the ability to 'Remove Groups', and implementing an automatic cleanup script/logic to permanently auto-delete a group from the database when its member count reaches zero.
 
 Ready to pick up exactly where we left off on the Home PC!
