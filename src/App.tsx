@@ -28,6 +28,27 @@ function App() {
 
   useEffect(() => {
     document.documentElement.style.setProperty('--primary', primaryColor);
+
+    // Auto-contrast: compute a readable foreground color for text on primary backgrounds
+    // primaryColor is "H S% L%" — we parse lightness and saturation to estimate luminance
+    const parts = primaryColor.split(' ');
+    const h = parseFloat(parts[0]);
+    const s = parseFloat(parts[1]) / 100;
+    const l = parseFloat(parts[2]) / 100;
+    // Convert HSL to approximate luminance
+    const a = s * Math.min(l, 1 - l);
+    const toLinear = (channel: number) => {
+      const c = Math.abs(channel);
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    const fR = toLinear(l - a * ((h % 360 < 60 || h % 360 >= 300) ? 1 : h % 360 < 180 ? -1 : 0));
+    // Simple heuristic: use lightness directly (fast and reliable enough for HSL)
+    // Light colors (l > 0.55) get dark text; dark colors get light text
+    const foreground = l > 0.55
+      ? '20 14% 10%'      // near-black
+      : '210 40% 98%';    // near-white
+    void fR; // suppress unused warning
+    document.documentElement.style.setProperty('--primary-foreground', foreground);
     
     // Apply background image and overlay
     if (backgroundImage) {

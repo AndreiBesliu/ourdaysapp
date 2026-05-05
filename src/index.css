@@ -79,3 +79,11 @@
     background-color: hsl(var(--primary) / 0.8);
   }
 }
+
+/* Auto-contrast: text on primary-colored backgrounds uses --primary-foreground */
+.bg-primary {
+  color: hsl(var(--primary-foreground));
+}
+.bg-primary svg {
+  color: hsl(var(--primary-foreground));
+}

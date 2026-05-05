@@ -92,8 +92,8 @@ export default function CalendarHome() {
       try {
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
-          const token = await getToken(messaging, { 
-            vapidKey: 'BIsH5f-u0rS2wZ3jL-yqF9qS-nFf_vB1a_zZ_8j-xZ_8' // Replace with your actual VAPID key if you have one
+          const token = await getToken(messaging!, { 
+            vapidKey: 'BIsH5f-u0rS2wZ3jL-yqF9qS-nFf_vB1a_zZ_8j-xZ_8'
           });
           if (token) {
             await updateDoc(doc(db, 'users', auth.currentUser!.uid), {
