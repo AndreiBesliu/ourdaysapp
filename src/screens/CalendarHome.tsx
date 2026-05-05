@@ -10,6 +10,7 @@ import EventDetailsModal from '../components/EventDetailsModal';
 import InviteFamilyModal from '../components/InviteFamilyModal';
 import CreateGroupModal from '../components/CreateGroupModal';
 import LeaveGroupModal from '../components/LeaveGroupModal';
+import GroupSettingsModal from '../components/GroupSettingsModal';
 import NotificationsDropdown from '../components/NotificationsDropdown';
 import GroupChatWidget from '../components/GroupChatWidget';
 import { useNavigate } from 'react-router-dom';
@@ -30,6 +31,7 @@ export default function CalendarHome() {
   const [pendingFamilyInvites, setPendingFamilyInvites] = useState<any[]>([]);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [overviewModalType, setOverviewModalType] = useState<'total' | 'pending' | 'completed' | null>(null);
+  const [isGroupSettingsOpen, setIsGroupSettingsOpen] = useState(false);
   const [userMap, setUserMap] = useState<Record<string, any>>({});
   const navigate = useNavigate();
 
@@ -373,14 +375,10 @@ export default function CalendarHome() {
               </button>
               
               <button 
-                onClick={() => setIsLeaveGroupModalOpen(true)}
-                className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors flex items-center gap-2 ${
-                  groups.find(g => g.id === activeGroupId)?.ownerId === auth.currentUser?.uid
-                    ? 'bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400'
-                    : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400'
-                }`}
+                onClick={() => setIsGroupSettingsOpen(true)}
+                className="px-4 py-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
               >
-                {groups.find(g => g.id === activeGroupId)?.ownerId === auth.currentUser?.uid ? 'Delete Group' : 'Leave Group'}
+                <Settings className="w-4 h-4" /> Edit Group
               </button>
             </div>
             
@@ -578,6 +576,17 @@ export default function CalendarHome() {
         groupId={activeGroupId !== 'personal' ? activeGroupId : ''}
         groupName={groups.find(g => g.id === activeGroupId)?.name || ''}
         isOwner={groups.find(g => g.id === activeGroupId)?.ownerId === auth.currentUser?.uid}
+        onSuccess={() => setActiveGroupId('personal')}
+      />
+
+      <GroupSettingsModal
+        isOpen={isGroupSettingsOpen}
+        onClose={() => setIsGroupSettingsOpen(false)}
+        groupId={activeGroupId !== 'personal' ? activeGroupId : ''}
+        groupName={groups.find(g => g.id === activeGroupId)?.name || ''}
+        isOwner={groups.find(g => g.id === activeGroupId)?.ownerId === auth.currentUser?.uid}
+        userMap={userMap}
+        members={groups.find(g => g.id === activeGroupId)?.members || []}
         onSuccess={() => setActiveGroupId('personal')}
       />
 
