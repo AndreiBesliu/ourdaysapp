@@ -24,6 +24,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   const [showOwnerProfile, setShowOwnerProfile] = useState(false);
   const [linkedAsset, setLinkedAsset] = useState<any | null>(null);
+  const [linkedChecklistAssets, setLinkedChecklistAssets] = useState<Record<string, any>>({});
 
   useEffect(() => {
     if (event?.assetId) {
@@ -42,7 +43,26 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     } else {
       setLinkedAsset(null);
     }
-  }, [event?.assetId]);
+    
+    // Fetch checklist assets
+    if (event?.checklistItems) {
+      const fetchChecklistAssets = async () => {
+        const newMap: Record<string, any> = {};
+        for (const item of event.checklistItems) {
+          if (item.assetId) {
+            try {
+              const docSnap = await getDoc(doc(db, 'assets', item.assetId));
+              if (docSnap.exists()) {
+                newMap[item.assetId] = { id: docSnap.id, ...docSnap.data() };
+              }
+            } catch(e) {}
+          }
+        }
+        setLinkedChecklistAssets(newMap);
+      };
+      fetchChecklistAssets();
+    }
+  }, [event?.assetId, event?.checklistItems]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -380,6 +400,27 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                     {item.assetUrl && !item.isCompleted && (
                       <div className="ml-8 mt-1 rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 self-start max-w-[200px] cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullScreenImage(item.assetUrl)}>
                         <img src={item.assetUrl} alt={item.text} className="w-full h-auto" />
+                      </div>
+                    )}
+                    {item.assetId && !item.isCompleted && linkedChecklistAssets[item.assetId]?.barcodeValue && (
+                      <div className="ml-8 mt-2 bg-white p-3 rounded-xl flex flex-col items-center justify-center border border-zinc-200 dark:border-zinc-700 self-start">
+                        <p className="font-semibold text-zinc-900 mb-2 text-xs">{linkedChecklistAssets[item.assetId].name}</p>
+                        {linkedChecklistAssets[item.assetId].barcodeFormat?.includes('QR') ? (
+                          <QRCode value={linkedChecklistAssets[item.assetId].barcodeValue} size={100} />
+                        ) : (
+                          <div className="w-full flex justify-center overflow-hidden">
+                            <Barcode 
+                              value={linkedChecklistAssets[item.assetId].barcodeValue} 
+                              format={linkedChecklistAssets[item.assetId].barcodeFormat === 'EAN_13' ? 'EAN13' : linkedChecklistAssets[item.assetId].barcodeFormat === 'EAN_8' ? 'EAN8' : linkedChecklistAssets[item.assetId].barcodeFormat === 'UPC_A' ? 'UPC' : linkedChecklistAssets[item.assetId].barcodeFormat === 'CODE_39' ? 'CODE39' : 'CODE128'}
+                              width={1.5}
+                              height={50}
+                              displayValue={true}
+                              background="#ffffff"
+                              lineColor="#000000"
+                              fontSize={12}
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

@@ -14,6 +14,7 @@ interface ChecklistItem {
   assetUrl?: string | null; // Optional image attachment for this item
   assetFile?: File; // Temporary file before upload
   selectedAssetUrl?: string | null; // Image picked from wallet
+  assetId?: string | null; // Asset ID from wallet
 }
 
 interface AddEventModalProps {
@@ -195,7 +196,13 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         } else if (item.selectedAssetUrl) {
           finalItemUrl = item.selectedAssetUrl;
         }
-        return { id: item.id, text: item.text, isCompleted: item.isCompleted, assetUrl: finalItemUrl === undefined ? null : finalItemUrl };
+        return { 
+          id: item.id, 
+          text: item.text, 
+          isCompleted: item.isCompleted, 
+          assetUrl: finalItemUrl === undefined ? null : finalItemUrl,
+          assetId: item.assetId || null
+        };
       }));
 
       const baseEventData = {
@@ -410,15 +417,15 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                         <button 
                           type="button" 
                           onClick={() => setShowAssetPicker(item.id)}
-                          className={`p-1 transition-colors ${item.selectedAssetUrl || (item.assetUrl && !item.assetFile) ? 'text-emerald-500' : 'text-zinc-400 hover:text-emerald-500'}`}
+                          className={`p-1 transition-colors ${item.selectedAssetUrl || item.assetId || (item.assetUrl && !item.assetFile) ? 'text-emerald-500' : 'text-zinc-400 hover:text-emerald-500'}`}
                           title="Pick from Assets"
                         >
                           <Wallet className="w-4 h-4" />
                         </button>
-                        {(item.selectedAssetUrl || item.assetUrl || item.assetFile) && (
+                        {(item.selectedAssetUrl || item.assetUrl || item.assetFile || item.assetId) && (
                           <button 
                             type="button" 
-                            onClick={() => setChecklistItems(checklistItems.map(i => i.id === item.id ? { ...i, assetUrl: null, selectedAssetUrl: null, assetFile: undefined } : i))}
+                            onClick={() => setChecklistItems(checklistItems.map(i => i.id === item.id ? { ...i, assetUrl: null, selectedAssetUrl: null, assetId: null, assetFile: undefined } : i))}
                             className="p-1 text-red-400 hover:text-red-500 transition-colors"
                             title="Remove Asset"
                           >
@@ -430,13 +437,20 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                         <X className="w-4 h-4" />
                       </button>
                     </div>
-                    {(item.assetFile || item.selectedAssetUrl || item.assetUrl) && (
+                    {(item.assetFile || item.selectedAssetUrl || item.assetUrl || item.assetId) && (
                       <div className="ml-6 mt-2 rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 self-start max-w-[120px]">
-                        <img 
-                          src={item.assetFile ? URL.createObjectURL(item.assetFile) : (item.selectedAssetUrl || item.assetUrl || '')} 
-                          alt="Preview" 
-                          className="w-full h-auto object-contain" 
-                        />
+                        {(item.assetFile || item.selectedAssetUrl || item.assetUrl) ? (
+                          <img 
+                            src={item.assetFile ? URL.createObjectURL(item.assetFile) : (item.selectedAssetUrl || item.assetUrl || '')} 
+                            alt="Preview" 
+                            className="w-full h-auto object-contain" 
+                          />
+                        ) : (
+                          <div className="p-2 flex flex-col items-center justify-center text-zinc-500">
+                            <Wallet className="w-6 h-6 mb-1 text-emerald-500" />
+                            <span className="text-[10px] text-center">Linked Card</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -669,7 +683,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                           setRemoveMainImage(false);
                         } else {
                           setChecklistItems(checklistItems.map(item => 
-                            item.id === showAssetPicker ? { ...item, selectedAssetUrl: asset.imageUrl, assetFile: undefined } : item
+                            item.id === showAssetPicker ? { ...item, selectedAssetUrl: asset.imageUrl || null, assetId: asset.id, assetFile: undefined } : item
                           ));
                         }
                         setShowAssetPicker(null);
