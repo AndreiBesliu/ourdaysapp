@@ -248,7 +248,12 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                 <div className="text-center py-8">
                   <p className="text-sm text-zinc-500 mb-4">No events scheduled for this day.</p>
                   <button 
-                    onClick={() => { setIsDayModalOpen(false); onAddEventClick && onAddEventClick(); }}
+                    onClick={() => { 
+                      setIsDayModalOpen(false); 
+                      if (onAddEventClick) {
+                        setTimeout(() => onAddEventClick(), 50);
+                      }
+                    }}
                     className="px-4 py-2 bg-primary hover:bg-primary/90 text-white text-sm font-medium rounded-lg transition-colors inline-flex items-center gap-2"
                   >
                     <Plus className="w-4 h-4" /> Add Event
@@ -271,7 +276,12 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                     return (
                       <div 
                         key={idx} 
-                        onClick={() => { setIsDayModalOpen(false); onEventClick && onEventClick(ev); }}
+                        onClick={() => { 
+                          setIsDayModalOpen(false); 
+                          if (onEventClick) {
+                            setTimeout(() => onEventClick(ev), 50);
+                          }
+                        }}
                         className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors border border-zinc-200 dark:border-zinc-700"
                       >
                         <div className={`p-2 rounded-lg ${colorClass}`}>
@@ -323,7 +333,12 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                     );
                   })}
                   <button 
-                    onClick={() => { setIsDayModalOpen(false); onAddEventClick && onAddEventClick(); }}
+                    onClick={() => { 
+                      setIsDayModalOpen(false); 
+                      if (onAddEventClick) {
+                        setTimeout(() => onAddEventClick(), 50);
+                      }
+                    }}
                     className="mt-2 w-full py-2.5 border-2 border-dashed border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-800 hover:border-zinc-300 dark:hover:text-zinc-200 dark:hover:border-zinc-600 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
                   >
                     <Plus className="w-4 h-4" /> Add Event
