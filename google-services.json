@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1041245506351",
+    "project_id": "our-days-2a939",
+    "storage_bucket": "our-days-2a939.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1041245506351:android:c9597e0883547ce22cafda",
+        "android_client_info": {
+          "package_name": "Besliu.Org"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAPNWGdNc4F1lEsP4ZneI09tTVDt6aacYo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
