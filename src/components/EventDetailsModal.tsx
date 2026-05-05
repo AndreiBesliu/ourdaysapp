@@ -309,6 +309,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                   {!isAssignee && <option value={auth.currentUser?.uid}>Assign to Me</option>}
                   {Object.values(userMap)
                     .filter((u: any) => !assigneeIds.includes(u.id))
+                    .filter((u: any) => event.groupId ? groups?.find(g => g.id === event.groupId)?.members?.includes(u.id) : u.id === auth.currentUser?.uid)
                     .map((u: any) => (
                       <option key={u.id} value={u.id}>{u.name || u.email?.split('@')[0]}</option>
                   ))}

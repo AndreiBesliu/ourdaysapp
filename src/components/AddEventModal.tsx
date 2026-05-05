@@ -115,22 +115,63 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setRemoveMainImage(false);
       setSelectedGroupId(editEvent.groupId || 'personal');
     } else if (isOpen && !editEvent) {
-      setTitle('');
-      setDescription('');
-      setChecklistItems([]);
-      setCategory(CATEGORIES[0]);
-      setIsTask(false);
-      setAssigneeIds([]);
+      let loadedDraft = false;
+      const draftJSON = localStorage.getItem('ourDays_draftEvent');
+      if (draftJSON) {
+        try {
+          const parsed = JSON.parse(draftJSON);
+          if (window.confirm("You have an unsaved draft for a new event. Do you want to restore it?")) {
+            setTitle(parsed.title || '');
+            setDescription(parsed.description || '');
+            if (parsed.checklistItems) setChecklistItems(parsed.checklistItems);
+            if (parsed.categoryId) {
+              const cat = CATEGORIES.find(c => c.id === parsed.categoryId);
+              if (cat) setCategory(cat);
+            }
+            if (parsed.isTask !== undefined) setIsTask(parsed.isTask);
+            if (parsed.assigneeIds) setAssigneeIds(parsed.assigneeIds);
+            if (parsed.visibleTo) setVisibleTo(parsed.visibleTo);
+            if (parsed.selectedGroupId) setSelectedGroupId(parsed.selectedGroupId);
+            if (parsed.repeat) setRepeat(parsed.repeat);
+            loadedDraft = true;
+          } else {
+            localStorage.removeItem('ourDays_draftEvent');
+          }
+        } catch(e) {}
+      }
+
+      if (!loadedDraft) {
+        setTitle('');
+        setDescription('');
+        setChecklistItems([]);
+        setCategory(CATEGORIES[0]);
+        setIsTask(false);
+        setAssigneeIds([]);
+        setRepeat('none');
+        setVisibleTo(userMap ? Object.values(userMap).filter((u: any) => u.id !== auth.currentUser?.uid).map((u: any) => u.id) : []);
+        setSelectedGroupId(activeGroupId);
+      }
       setImageFile(null);
-      setRepeat('none');
-      setVisibleTo(userMap ? Object.values(userMap).filter((u: any) => u.id !== auth.currentUser?.uid).map((u: any) => u.id) : []);
       setSelectedAssetUrl(null);
       setSelectedAssetId(null);
       setRemoveMainImage(false);
-      setSelectedGroupId(activeGroupId);
     }
     setShowOwnerProfile(false);
   }, [editEvent, isOpen, userMap, activeGroupId]);
+
+  // Autosave draft
+  useEffect(() => {
+    if (isOpen && !editEvent) {
+      const draft = {
+        title, description, checklistItems, categoryId: category.id, isTask, assigneeIds, visibleTo, selectedGroupId, repeat
+      };
+      if (title || description || checklistItems.length > 0) {
+        localStorage.setItem('ourDays_draftEvent', JSON.stringify(draft));
+      } else {
+        localStorage.removeItem('ourDays_draftEvent');
+      }
+    }
+  }, [title, description, checklistItems, category, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, isOpen, editEvent]);
 
   if (!isOpen) return null;
 
@@ -244,6 +285,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             createdAt: new Date().toISOString()
           });
         }
+      }
+      if (!editEvent) {
+        localStorage.removeItem('ourDays_draftEvent');
       }
       setTitle('');
       setDescription('');
@@ -512,7 +556,10 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                     {assigneeIds.includes(auth.currentUser.uid) && <CheckCircle2 className="w-3 h-3" />}
                   </button>
                 )}
-                {users.map(u => (
+                {selectedGroupId !== 'personal' && users.map(u => {
+                  const belongsToGroup = groups.find(g => g.id === selectedGroupId)?.members?.includes(u.id);
+                  if (!belongsToGroup) return null;
+                  return (
                   <button 
                     key={u.id}
                     type="button"
@@ -526,7 +573,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                     {u.name || 'Member'}
                     {assigneeIds.includes(u.id) && <CheckCircle2 className="w-3 h-3" />}
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

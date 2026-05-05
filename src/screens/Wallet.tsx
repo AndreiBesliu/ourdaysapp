@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db, storage } from '../firebase';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Wallet as WalletIcon, Plus, Image as ImageIcon, Trash2, Users, User, HeartPulse, Home, Car, DollarSign, Settings2, Folder, Edit2, Check, X, ScanLine, QrCode } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -32,6 +32,9 @@ export default function Wallet() {
   const [barcodeValue, setBarcodeValue] = useState('');
   const [barcodeFormat, setBarcodeFormat] = useState('');
   const [loading, setLoading] = useState(false);
+  const [transferToUserId, setTransferToUserId] = useState('');
+  const [keepCopy, setKeepCopy] = useState(true);
+  const [sharedUsers, setSharedUsers] = useState<any[]>([]);
 
   const navigate = useNavigate();
 
@@ -57,9 +60,27 @@ export default function Wallet() {
       }
     });
 
+    const qGroups = query(collection(db, 'groups'), where('members', 'array-contains', auth.currentUser.uid));
+    const unsubGroups = onSnapshot(qGroups, async (snapshot) => {
+      const fetchedGroups = snapshot.docs.map(doc => doc.data());
+      const memberIds = new Set<string>();
+      fetchedGroups.forEach((g: any) => g.members?.forEach((id: string) => memberIds.add(id)));
+      
+      const fetchedUsers: any[] = [];
+      for (const id of Array.from(memberIds)) {
+        if (id === auth.currentUser?.uid) continue;
+        const userDoc = await getDoc(doc(db, 'users', id));
+        if (userDoc.exists()) {
+          fetchedUsers.push({ id, ...userDoc.data() });
+        }
+      }
+      setSharedUsers(fetchedUsers);
+    });
+
     return () => {
       unsubscribe();
       unsubUser();
+      unsubGroups();
     };
   }, []);
 
@@ -108,7 +129,22 @@ export default function Wallet() {
       };
 
       if (editingAsset) {
-        await updateDoc(doc(db, 'assets', editingAsset.id), assetData);
+        if (transferToUserId) {
+          if (keepCopy) {
+            // Update original for current user, duplicate for new user
+            await updateDoc(doc(db, 'assets', editingAsset.id), assetData);
+            await addDoc(collection(db, 'assets'), {
+              ...assetData,
+              ownerId: transferToUserId,
+              createdAt: new Date().toISOString()
+            });
+          } else {
+            // Transfer completely
+            await updateDoc(doc(db, 'assets', editingAsset.id), { ...assetData, ownerId: transferToUserId });
+          }
+        } else {
+          await updateDoc(doc(db, 'assets', editingAsset.id), assetData);
+        }
         setEditingAsset(null);
       } else {
         await addDoc(collection(db, 'assets'), {
@@ -151,6 +187,8 @@ export default function Wallet() {
     setBarcodeValue(asset.barcodeValue || '');
     setBarcodeFormat(asset.barcodeFormat || '');
     setFile(null);
+    setTransferToUserId('');
+    setKeepCopy(true);
   };
 
   const openAddModal = () => {
@@ -509,6 +547,36 @@ export default function Wallet() {
                   <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
                 </label>
               </div>
+
+              {editingAsset && editingAsset.ownerId === auth.currentUser?.uid && sharedUsers.length > 0 && (
+                <div className="flex flex-col gap-3 p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
+                  <div className="flex flex-col">
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Transfer Asset</p>
+                    <p className="text-xs text-zinc-500">Hand over ownership to someone else</p>
+                  </div>
+                  <select
+                    value={transferToUserId}
+                    onChange={e => setTransferToUserId(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-zinc-800 dark:border-zinc-700 outline-none focus:border-emerald-500"
+                  >
+                    <option value="">Keep Ownership</option>
+                    {sharedUsers.map(u => (
+                      <option key={u.id} value={u.id}>{u.name || u.email}</option>
+                    ))}
+                  </select>
+                  {transferToUserId && (
+                    <label className="flex items-center gap-2 cursor-pointer mt-1">
+                      <input
+                        type="checkbox"
+                        checked={keepCopy}
+                        onChange={e => setKeepCopy(e.target.checked)}
+                        className="w-4 h-4 text-emerald-500 bg-zinc-100 border-zinc-300 rounded focus:ring-emerald-500 focus:ring-2 dark:bg-zinc-700 dark:border-zinc-600"
+                      />
+                      <span className="text-xs text-zinc-700 dark:text-zinc-300">Keep a copy in my wallet</span>
+                    </label>
+                  )}
+                </div>
+              )}
 
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => { setIsAdding(false); setEditingAsset(null); }} className="flex-1 py-2 text-zinc-600 dark:text-zinc-400 font-medium bg-zinc-100 dark:bg-zinc-800 rounded-lg">Cancel</button>
