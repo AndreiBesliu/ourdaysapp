@@ -106,7 +106,23 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
         imageUrl = await getDownloadURL(fileRef);
       }
 
-      await addDoc(collection(db, `groups/${groupId}/messages`), {
+      // Also mark all prior messages as seen when user sends (they clearly saw them)
+    const myUid = auth.currentUser.uid;
+    const unseenByMe = messages.filter(m =>
+      m.senderId !== myUid &&
+      (!m.seenBy || !m.seenBy.includes(myUid))
+    );
+    if (unseenByMe.length > 0) {
+      const batch = writeBatch(db);
+      unseenByMe.forEach(m => {
+        batch.update(doc(db, `groups/${groupId}/messages`, m.id), {
+          seenBy: arrayUnion(myUid)
+        });
+      });
+      batch.commit().catch(console.error);
+    }
+
+    await addDoc(collection(db, `groups/${groupId}/messages`), {
         text: newMessage.trim() || null,
         imageUrl: imageUrl || null,
         senderId: auth.currentUser.uid,
@@ -138,11 +154,32 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
         <div className="mb-4 w-80 sm:w-96 h-[450px] bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden">
           {/* Header */}
           <div className="p-3 bg-primary flex items-center justify-between shrink-0">
-            <div>
-              <h3 className="font-bold text-sm">Group Chat</h3>
-              <p className="text-[10px] opacity-80">{groupName}</p>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-sm">Group Chat · {groupName}</h3>
+              {/* Member avatars */}
+              <div className="flex items-center gap-1 mt-1">
+                {groupMembers.map(memberId => {
+                  const member = userMap[memberId];
+                  if (!member) return null;
+                  return (
+                    <div
+                      key={memberId}
+                      title={member.name || member.email?.split('@')[0]}
+                      className="w-5 h-5 rounded-full bg-black/20 flex items-center justify-center overflow-hidden border border-white/30 shrink-0"
+                    >
+                      {member.photoURL ? (
+                        <img src={member.photoURL} alt={member.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-[8px] font-bold">
+                          {(member.name || member.email || '?').charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-black/10 rounded-full transition-colors">
+            <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-black/10 rounded-full transition-colors ml-2">
               <X className="w-4 h-4" />
             </button>
           </div>
