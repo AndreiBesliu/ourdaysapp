@@ -38,12 +38,13 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     }
   }, [event]);
 
+  useModalBack(isOpen, onClose);
+
   if (!isOpen || !event) return null;
 
   const isOwner = event.ownerId === auth.currentUser?.uid;
   const isInvitee = event.inviteeId === auth.currentUser?.uid;
 
-  useModalBack(isOpen, onClose);
   const assigneeIds: string[] = event.assigneeIds || (event.assigneeId ? [event.assigneeId] : []);
   const isAssignee = assigneeIds.includes(auth.currentUser?.uid || '');
   const hasAssignee = assigneeIds.length > 0;
