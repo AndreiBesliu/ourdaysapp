@@ -60,6 +60,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const [assets, setAssets] = useState<any[]>([]);
   const [showAssetPicker, setShowAssetPicker] = useState<'main' | string | null>(null); // 'main' or checklistItem id
   const [selectedAssetUrl, setSelectedAssetUrl] = useState<string | null>(null);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [removeMainImage, setRemoveMainImage] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState(activeGroupId);
   const [showOwnerProfile, setShowOwnerProfile] = useState(false);
@@ -123,6 +124,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setRepeat('none');
       setVisibleTo(userMap ? Object.values(userMap).filter((u: any) => u.id !== auth.currentUser?.uid).map((u: any) => u.id) : []);
       setSelectedAssetUrl(null);
+      setSelectedAssetId(null);
       setRemoveMainImage(false);
       setSelectedGroupId(activeGroupId);
     }
@@ -210,6 +212,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         taskStatus: editEvent ? editEvent.taskStatus : (isTask ? 'not-started' : 'none'),
         assigneeIds: assigneeIds,
         assigneeId: assigneeIds[0] || null,
+        assetId: removeMainImage ? null : (selectedAssetId || (editEvent ? editEvent.assetId : null)),
         updatedAt: new Date().toISOString()
       };
 
@@ -240,6 +243,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setChecklistItems([]);
       setImageFile(null);
       setSelectedAssetUrl(null);
+      setSelectedAssetId(null);
       setAssigneeIds([]);
       setIsTask(false);
       setRepeat('none');
@@ -596,7 +600,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   className="flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors w-full h-full"
                 >
                   <Wallet className="w-5 h-5" />
-                  <span className="text-xs font-medium">{selectedAssetUrl ? 'Asset Selected' : 'Pick from Assets'}</span>
+                  <span className="text-xs font-medium">{selectedAssetUrl || selectedAssetId ? 'Asset Selected' : 'Pick from Assets'}</span>
                 </button>
               </div>
             </div>
@@ -611,7 +615,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                    />
                  </div>
                  <div className="flex justify-end w-full">
-                   <button type="button" onClick={() => { setImageFile(null); setSelectedAssetUrl(null); setRemoveMainImage(true); }} className="text-red-500 text-xs font-medium flex items-center gap-1 hover:underline">
+                   <button type="button" onClick={() => { setImageFile(null); setSelectedAssetUrl(null); setSelectedAssetId(null); setRemoveMainImage(true); }} className="text-red-500 text-xs font-medium flex items-center gap-1 hover:underline">
                      <Trash2 className="w-3 h-3" /> Remove Attached Asset
                    </button>
                  </div>
@@ -647,19 +651,20 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             </div>
             
             <div className="p-4 overflow-y-auto flex-1 bg-zinc-100/50 dark:bg-zinc-900/50">
-              {assets.filter(a => a.imageUrl).length === 0 ? (
+              {assets.length === 0 ? (
                 <div className="text-center py-10 text-zinc-500">
                   <Wallet className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                  <p>No image assets found in your Assets.</p>
+                  <p>No assets found in your Wallet.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {assets.filter(a => a.imageUrl).map(asset => (
+                  {assets.map(asset => (
                     <div 
                       key={asset.id}
                       onClick={() => {
                         if (showAssetPicker === 'main') {
-                          setSelectedAssetUrl(asset.imageUrl);
+                          setSelectedAssetUrl(asset.imageUrl || null);
+                          setSelectedAssetId(asset.id);
                           setImageFile(null);
                           setRemoveMainImage(false);
                         } else {
@@ -671,8 +676,12 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                       }}
                       className="group cursor-pointer bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden hover:border-emerald-500 hover:shadow-md transition-all relative"
                     >
-                      <div className="aspect-square bg-zinc-100 dark:bg-zinc-900 relative">
-                        <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <div className="aspect-square bg-zinc-100 dark:bg-zinc-900 relative flex items-center justify-center">
+                        {asset.imageUrl ? (
+                          <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        ) : (
+                          <Wallet className="w-10 h-10 text-zinc-400 opacity-50 group-hover:scale-110 transition-transform duration-300" />
+                        )}
                         <div className="absolute inset-0 bg-emerald-500/0 group-hover:bg-emerald-500/10 transition-colors"></div>
                       </div>
                       <div className="p-2 border-t border-zinc-100 dark:border-zinc-800">

@@ -8,12 +8,14 @@ import AddEventModal from '../components/AddEventModal';
 import EventDetailsModal from '../components/EventDetailsModal';
 import InviteFamilyModal from '../components/InviteFamilyModal';
 import CreateGroupModal from '../components/CreateGroupModal';
+import LeaveGroupModal from '../components/LeaveGroupModal';
 import { useNavigate } from 'react-router-dom';
 
 export default function CalendarHome() {
   const [activeGroupId, setActiveGroupId] = useState<string | 'personal'>('personal');
   const [groups, setGroups] = useState<any[]>([]);
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
+  const [isLeaveGroupModalOpen, setIsLeaveGroupModalOpen] = useState(false);
   
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
@@ -334,12 +336,25 @@ export default function CalendarHome() {
 
         {activeGroupId !== 'personal' && (
           <div className="flex justify-center items-center gap-4 mb-2 px-4 flex-wrap">
-            <button 
-              onClick={() => setIsInviteModalOpen(true)}
-              className="px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
-            >
-              <UserPlus className="w-4 h-4" /> Invite to {groups.find(g => g.id === activeGroupId)?.name}
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setIsInviteModalOpen(true)}
+                className="px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
+              >
+                <UserPlus className="w-4 h-4" /> Invite
+              </button>
+              
+              <button 
+                onClick={() => setIsLeaveGroupModalOpen(true)}
+                className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors flex items-center gap-2 ${
+                  groups.find(g => g.id === activeGroupId)?.ownerId === auth.currentUser?.uid
+                    ? 'bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400'
+                    : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                }`}
+              >
+                {groups.find(g => g.id === activeGroupId)?.ownerId === auth.currentUser?.uid ? 'Delete Group' : 'Leave Group'}
+              </button>
+            </div>
             
             <div className="flex items-center -space-x-2">
               {groups.find(g => g.id === activeGroupId)?.members?.map((memberId: string) => {
@@ -517,6 +532,15 @@ export default function CalendarHome() {
       <CreateGroupModal
         isOpen={isCreateGroupModalOpen}
         onClose={() => setIsCreateGroupModalOpen(false)}
+      />
+
+      <LeaveGroupModal
+        isOpen={isLeaveGroupModalOpen}
+        onClose={() => setIsLeaveGroupModalOpen(false)}
+        groupId={activeGroupId !== 'personal' ? activeGroupId : ''}
+        groupName={groups.find(g => g.id === activeGroupId)?.name || ''}
+        isOwner={groups.find(g => g.id === activeGroupId)?.ownerId === auth.currentUser?.uid}
+        onSuccess={() => setActiveGroupId('personal')}
       />
 
     </div>
