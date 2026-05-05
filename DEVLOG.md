@@ -14,7 +14,16 @@
 ## 📜 Workflow Rules (Permanent)
 > ⚠️ These rules apply to EVERY session and EVERY task, no exceptions.
 
-1.  **Start-of-Task Logging** — Before writing any code, append a `Task Started` entry to the **Session Log section of this file** (not just in chat).
+1.  **Start-of-Task Logging** — Before writing any code, append a `Task Started` entry to the **Session Log section of this file** (not just in chat). The entry must include:
+    - Date & time (local)
+    - The exact user prompt that triggered the task
+    - A one-line summary of what the model intends to do
+    - Format:
+      ```
+      **YYYY-MM-DD HH:MM - Task Started**
+      > Prompt: "<exact user prompt>"
+      > Plan: <one-line description of what will be done>
+      ```
 2.  **End-of-Task Logging** — After deploying, append a `Task Completed` entry to this file summarising what changed, what was tested, and the deploy status.
 3.  **Roadmap Sync** — Move completed features from "Roadmap" to "Completed Features" in this file.
 4.  **Build Before Deploy** — Always run `npm run build` successfully before deploying.
@@ -85,3 +94,21 @@
 
 **~19:27 - Task Started**: Update DEVLOG with all session tasks and strengthen workflow rules.
 **~19:27 - Task Completed**: Full session log written. Workflow rules clarified to require file edits (not just chat mentions).
+
+---
+
+## 📅 Session Log: May 5, 2026 (continued)
+
+**2026-05-05 22:27 - Task Started**
+> Prompt: "it seems that the devlog is not being updated as it says in the rules, are the rules not well established or written?"
+> Plan: Catch up all missed task log entries and tighten workflow rule wording to require file edits explicitly.
+
+**2026-05-05 22:27 - Task Completed**: DEVLOG fully caught up with all session tasks. Rule 1 reworded. Pushed to GitHub.
+
+---
+
+**2026-05-05 22:29 - Task Started**
+> Prompt: "logging the start of the task should also log the prompt entered and the date"
+> Plan: Update workflow Rule 1 to require exact prompt text and date/time in every Task Started log entry.
+
+**2026-05-05 22:29 - Task Completed**: Rule 1 updated with required format including date, prompt, and plan. This entry is the first example of the new format. Pushed to GitHub.
