@@ -159,7 +159,7 @@ export default function CalendarHome() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex flex-col relative pt-[60px]">
+    <div className="min-h-screen bg-transparent flex flex-col relative pt-[60px]">
       {/* Header */}
       <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex items-center justify-between fixed top-0 left-0 right-0 w-full z-[100] shadow-sm">
         <div className="flex items-center gap-2 text-primary">
