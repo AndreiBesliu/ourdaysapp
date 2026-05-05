@@ -1,15 +1,21 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export function useModalBack(isOpen: boolean, onClose: () => void) {
+  const onCloseRef = useRef(onClose);
+  const modalIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!isOpen) return;
 
-    // Push a new state when the modal opens
-    window.history.pushState({ modal: true }, '');
+    modalIdRef.current = Date.now() + Math.random();
+    window.history.pushState({ modalId: modalIdRef.current }, '');
 
     const handlePopState = () => {
-      // If the back button is pressed, the state we pushed is popped.
-      onClose();
+      onCloseRef.current();
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -17,12 +23,9 @@ export function useModalBack(isOpen: boolean, onClose: () => void) {
     return () => {
       window.removeEventListener('popstate', handlePopState);
       
-      // If the modal is closing NOT by the popstate (e.g., user clicked X),
-      // we need to clean up the history stack so the user doesn't have to 
-      // press back twice later.
-      if (window.history.state?.modal) {
+      if (window.history.state?.modalId === modalIdRef.current) {
         window.history.back();
       }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 }
