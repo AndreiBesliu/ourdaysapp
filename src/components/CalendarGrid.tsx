@@ -1,6 +1,6 @@
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays } from 'date-fns';
 import { ChevronLeft, ChevronRight, Briefcase, Heart, Wrench, Calendar as CalendarIcon, Star, Circle, CheckCircle2, X, Plus, Clock } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useModalBack } from '../hooks/useModalBack';
 
 interface CalendarGridProps {
