@@ -18,6 +18,7 @@ This document serves as a persistent development log to ensure smooth handovers 
 
 ### 1. New Features & Ideas
 - **Minigames**: Integrate a simple embedded game (e.g., HTML5 Canvas or React) to make the app more engaging for the family.
+- **Transferable Assets**: Allow users to fully transfer ownership of an asset (like a loyalty card) to another user, rather than just sharing access to it.
 - **AI Integration**:
   - Connect to an AI service (e.g., Gemini / OpenAI) to auto-suggest tasks or categorize events.
   - Create a special "AI Group" where you can add tasks, and the AI will process or auto-complete them.
