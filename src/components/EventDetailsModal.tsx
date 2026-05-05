@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon, Trash2, Edit2 } from 'lucide-react';
-import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
+import Barcode from 'react-barcode';
+import QRCode from 'react-qr-code';
+import { Wallet } from 'lucide-react';
 import { format } from 'date-fns';
 import { useModalBack } from '../hooks/useModalBack';
 
@@ -20,6 +23,26 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   const [checklist, setChecklist] = useState<any[]>(event?.checklistItems || []);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   const [showOwnerProfile, setShowOwnerProfile] = useState(false);
+  const [linkedAsset, setLinkedAsset] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (event?.assetId) {
+      const fetchAsset = async () => {
+        try {
+          const docRef = doc(db, 'assets', event.assetId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setLinkedAsset({ id: docSnap.id, ...docSnap.data() });
+          }
+        } catch (e) {
+          console.error('Failed to fetch linked asset', e);
+        }
+      };
+      fetchAsset();
+    } else {
+      setLinkedAsset(null);
+    }
+  }, [event?.assetId]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -361,6 +384,33 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                     )}
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Linked Asset Barcode / Details */}
+          {linkedAsset && linkedAsset.barcodeValue && (
+            <div>
+              <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-1.5">
+                <Wallet className="w-4 h-4" /> Linked Asset Code
+              </p>
+              <div className="bg-white p-4 rounded-xl flex flex-col items-center justify-center w-full min-h-[150px] border border-zinc-200 dark:border-zinc-700">
+                <p className="font-semibold text-zinc-900 mb-4 text-center">{linkedAsset.name}</p>
+                {linkedAsset.barcodeFormat?.includes('QR') ? (
+                  <QRCode value={linkedAsset.barcodeValue} size={150} />
+                ) : (
+                  <div className="w-full flex justify-center overflow-hidden">
+                    <Barcode 
+                      value={linkedAsset.barcodeValue} 
+                      format={linkedAsset.barcodeFormat === 'EAN_13' ? 'EAN13' : linkedAsset.barcodeFormat === 'EAN_8' ? 'EAN8' : linkedAsset.barcodeFormat === 'UPC_A' ? 'UPC' : linkedAsset.barcodeFormat === 'CODE_39' ? 'CODE39' : 'CODE128'}
+                      width={2}
+                      height={80}
+                      displayValue={true}
+                      background="#ffffff"
+                      lineColor="#000000"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
