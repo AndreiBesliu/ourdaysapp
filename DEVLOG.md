@@ -209,3 +209,17 @@
 > Plan: Implement Meld Validation (Set vs Run, calculating points). Implement a Staging UI where players select cards from their hand and create staged melds locally. Enforce the "Initial Meld must be >= 45 points and contain a run" rule before pushing to Firestore.
 
 **2026-05-06 17:38 - Task Completed**: `RummyEngine.ts` updated with `validateMeld` and point calculation for Sets/Runs (accounting for Jokers and Aces). UI updated: Clicking cards in your hand highlights them. If 3+ are highlighted, a bouncing "Meld X Cards" button appears. Melds are staged in a purple bar above the hand until the 45-point condition is met, after which they can be played to the board for everyone to see. Built and deployed.
+
+**2026-05-06 17:53 - Session Wrap-up**
+> Status: Leaving work. All code is successfully built, deployed, and pushed to `main`.
+> Completed Today:
+> 1. Universal "Games Hub" Arcade framework.
+> 2. Tic-Tac-Toe multiplayer.
+> 3. Cloud Functions for Game Invites (Push Notifications).
+> 4. Persistent Active Game Banner in `CalendarHome`.
+> 5. All-Time Arcade Leaderboard.
+> 6. Rummy 45 (Phases 1-3): 106-card generation, Drag-and-drop hand sorting, Turn enforcement (Draw/Discard loop), Strict Validation (Sets/Runs), and the 45-Point Staging UI logic.
+> 
+> **Next Steps (To resume at home)**:
+> - **Phase 4 (Lipeala)**: Allow players to drag and attach individual cards from their hand onto *existing* melds on the board.
+> - **Phase 5 (End Game)**: Detect when a player discards their final card (Inchidere), end the game, tally up the negative points for remaining cards in hands, and assign the win/score to the Leaderboard.
