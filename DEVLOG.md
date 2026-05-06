@@ -163,3 +163,5 @@
 **2026-05-06 12:20 - Task Started**
 > Prompt: "i already have the Blaze plan"
 > Plan: Set up Firebase Cloud Functions to create a robust, server-side "AI Assistant". When a task is assigned to the "ai_assistant" dummy user/group, a Firestore trigger will automatically ping Gemini and generate a checklist in the background.
+
+**2026-05-06 12:24 - Task Completed**: Set up the `functions/` directory, updated `firebase.json`, and wrote `functions/src/index.ts`. The backend uses `firebase-functions/v2/firestore` triggers and Secret Manager to securely handle the API key and auto-generate checklists when tasks are assigned to the `ai_assistant`. Also added the AI Assistant as an assignee option in the UI.
