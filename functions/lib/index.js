@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
+exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 const params_1 = require("firebase-functions/params");
@@ -108,6 +108,59 @@ exports.onMessageCreated = (0, firestore_1.onDocumentCreated)("groups/{groupId}/
     }
     catch (error) {
         console.error("Error sending FCM payload:", error);
+    }
+});
+exports.onGameCreated = (0, firestore_1.onDocumentCreated)("games/{gameId}", async (event) => {
+    var _a, _b, _c;
+    const snapshot = event.data;
+    if (!snapshot)
+        return;
+    const gameData = snapshot.data();
+    const creatorId = gameData.createdBy;
+    const groupId = gameData.groupId;
+    const gameType = gameData.gameType || "a game";
+    if (!groupId || !creatorId)
+        return;
+    try {
+        const groupDoc = await admin.firestore().doc(`groups/${groupId}`).get();
+        if (!groupDoc.exists)
+            return;
+        const groupData = groupDoc.data();
+        if (!groupData)
+            return;
+        const groupName = groupData.name || "A group";
+        const members = groupData.members || [];
+        const targetUserIds = members.filter((id) => id !== creatorId);
+        if (targetUserIds.length === 0)
+            return;
+        const creatorDoc = await admin.firestore().doc(`users/${creatorId}`).get();
+        const creatorName = ((_a = creatorDoc.data()) === null || _a === void 0 ? void 0 : _a.name) || ((_c = (_b = creatorDoc.data()) === null || _b === void 0 ? void 0 : _b.email) === null || _c === void 0 ? void 0 : _c.split('@')[0]) || "Someone";
+        const tokens = [];
+        for (const uid of targetUserIds) {
+            const userDoc = await admin.firestore().doc(`users/${uid}`).get();
+            if (userDoc.exists) {
+                const userData = userDoc.data();
+                if ((userData === null || userData === void 0 ? void 0 : userData.fcmTokens) && Array.isArray(userData.fcmTokens)) {
+                    tokens.push(...userData.fcmTokens);
+                }
+            }
+        }
+        const uniqueTokens = [...new Set(tokens)];
+        if (uniqueTokens.length === 0)
+            return;
+        const readableGameType = gameType.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+        const payload = {
+            notification: {
+                title: `🎮 New Game in ${groupName}!`,
+                body: `${creatorName} wants to play ${readableGameType}. Tap to join!`,
+            },
+            tokens: uniqueTokens
+        };
+        const response = await admin.messaging().sendEachForMulticast(payload);
+        console.log(`Successfully sent ${response.successCount} game invites; failed ${response.failureCount}`);
+    }
+    catch (error) {
+        console.error("Error sending Game Invite FCM:", error);
     }
 });
 //# sourceMappingURL=index.js.map

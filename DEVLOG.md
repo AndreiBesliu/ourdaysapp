@@ -193,3 +193,9 @@
 > Plan: Add date-filtering to `GamesHubModal` so games are tied to `selectedDate`. Add a cancel/delete button for the owner of games in 'waiting' status.
 
 **2026-05-06 16:23 - Task Completed**: `GamesHubModal` now accepts `selectedDate` and filters active/past games based on the calendar day. Added a red Trash icon button to allow the game creator to delete un-started games. Built and deployed.
+
+**2026-05-06 16:25 - Task Started**
+> Prompt: "ok, any more suggestions for improving this functionality?" -> "i like it"
+> Plan: Implement 3 UX enhancements: Push Notifications for game invites via Cloud Functions, a persistent "Game in Progress" Banner on the Calendar screen, and an All-Time Leaderboard tab in the Arcade.
+
+**2026-05-06 16:33 - Task Completed**: `onGameCreated` Cloud Function added and deployed to send FCM messages to group members when a game is created. Added `activeGames` banner to `CalendarHome.tsx` to surface running games outside the modal. Built a robust `Leaderboard` tab inside `GamesHubModal` that queries all finished games and ranks players by wins. Built and deployed to Firebase.

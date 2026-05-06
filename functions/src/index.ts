@@ -122,3 +122,60 @@ export const onMessageCreated = onDocumentCreated("groups/{groupId}/messages/{me
     console.error("Error sending FCM payload:", error);
   }
 });
+
+export const onGameCreated = onDocumentCreated("games/{gameId}", async (event) => {
+  const snapshot = event.data;
+  if (!snapshot) return;
+
+  const gameData = snapshot.data();
+  const creatorId = gameData.createdBy;
+  const groupId = gameData.groupId;
+  const gameType = gameData.gameType || "a game";
+
+  if (!groupId || !creatorId) return;
+
+  try {
+    const groupDoc = await admin.firestore().doc(`groups/${groupId}`).get();
+    if (!groupDoc.exists) return;
+    const groupData = groupDoc.data();
+    if (!groupData) return;
+
+    const groupName = groupData.name || "A group";
+    const members = groupData.members || [];
+    const targetUserIds = members.filter((id: string) => id !== creatorId);
+    
+    if (targetUserIds.length === 0) return;
+
+    const creatorDoc = await admin.firestore().doc(`users/${creatorId}`).get();
+    const creatorName = creatorDoc.data()?.name || creatorDoc.data()?.email?.split('@')[0] || "Someone";
+
+    const tokens: string[] = [];
+    for (const uid of targetUserIds) {
+      const userDoc = await admin.firestore().doc(`users/${uid}`).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        if (userData?.fcmTokens && Array.isArray(userData.fcmTokens)) {
+          tokens.push(...userData.fcmTokens);
+        }
+      }
+    }
+
+    const uniqueTokens = [...new Set(tokens)];
+    if (uniqueTokens.length === 0) return;
+
+    const readableGameType = gameType.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+    const payload = {
+      notification: {
+        title: `🎮 New Game in ${groupName}!`,
+        body: `${creatorName} wants to play ${readableGameType}. Tap to join!`,
+      },
+      tokens: uniqueTokens
+    };
+
+    const response = await admin.messaging().sendEachForMulticast(payload);
+    console.log(`Successfully sent ${response.successCount} game invites; failed ${response.failureCount}`);
+  } catch (error) {
+    console.error("Error sending Game Invite FCM:", error);
+  }
+});

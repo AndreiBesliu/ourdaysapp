@@ -35,6 +35,7 @@ export default function CalendarHome() {
   const [isGroupSettingsOpen, setIsGroupSettingsOpen] = useState(false);
   const [isGamesHubOpen, setIsGamesHubOpen] = useState(false);
   const [userMap, setUserMap] = useState<Record<string, any>>({});
+  const [activeGames, setActiveGames] = useState<any[]>([]);
   const navigate = useNavigate();
 
   // Listen to user's groups and build userMap
@@ -73,6 +74,29 @@ export default function CalendarHome() {
       unsubscribeGroups();
     };
   }, []);
+
+  // Listen to active games for the group today
+  useEffect(() => {
+    if (activeGroupId === 'personal' || !selectedDate) {
+      setActiveGames([]);
+      return;
+    }
+
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const q = query(
+      collection(db, 'games'),
+      where('groupId', '==', activeGroupId),
+      where('date', '==', dateStr)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const games = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+      const active = games.filter(g => g.status === 'playing' || g.status === 'waiting');
+      setActiveGames(active);
+    });
+
+    return () => unsubscribe();
+  }, [activeGroupId, selectedDate]);
 
   // Listen to incoming group invites
   useEffect(() => {
@@ -406,6 +430,28 @@ export default function CalendarHome() {
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {/* Game in Progress Banner */}
+        {activeGames.length > 0 && (
+          <div onClick={() => setIsGamesHubOpen(true)} className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-3 flex items-center justify-between cursor-pointer hover:bg-indigo-500/20 transition-colors -mt-2 mb-2 animate-in fade-in slide-in-from-top-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-500/20 rounded-lg flex items-center justify-center text-indigo-500 animate-pulse">
+                <Gamepad2 className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="font-bold text-indigo-700 dark:text-indigo-400 text-sm">
+                  {activeGames[0].gameType.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())} is active!
+                </p>
+                <p className="text-xs text-indigo-600/70 dark:text-indigo-400/70">
+                  {activeGames.length > 1 ? `${activeGames.length} games running. Tap to resume.` : 'Tap to resume playing.'}
+                </p>
+              </div>
+            </div>
+            <button className="px-3 py-1.5 bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm">
+              Resume
+            </button>
           </div>
         )}
 
