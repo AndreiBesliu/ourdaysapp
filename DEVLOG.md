@@ -199,3 +199,9 @@
 > Plan: Implement 3 UX enhancements: Push Notifications for game invites via Cloud Functions, a persistent "Game in Progress" Banner on the Calendar screen, and an All-Time Leaderboard tab in the Arcade.
 
 **2026-05-06 16:33 - Task Completed**: `onGameCreated` Cloud Function added and deployed to send FCM messages to group members when a game is created. Added `activeGames` banner to `CalendarHome.tsx` to surface running games outside the modal. Built a robust `Leaderboard` tab inside `GamesHubModal` that queries all finished games and ranks players by wins. Built and deployed to Firebase.
+
+**2026-05-06 17:29 - Task Started**
+> Prompt: "we are (ready for Phase 2)"
+> Plan: Implement Phase 2 of Rummy 45. Add turn phases (`draw` vs `play`), clicking the Deck to draw, clicking the Discard Pile to draw the top discarded card, and dragging a card from the hand to the Discard Pile to end the turn.
+
+**2026-05-06 17:31 - Task Completed**: Implemented the core Rummy game loop. Added `turnPhase` to Firestore. Users can click the Deck or Discard pile to draw (turns the deck green/pulsing when it's their draw phase). Players end their turn by dragging a card to the discard pile (highlights yellow/green). Turns automatically advance to the next player. Built and deployed.

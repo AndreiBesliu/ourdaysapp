@@ -17,6 +17,7 @@ export interface GameState {
   players: Record<string, PlayerState>;
   playerIds: string[]; // Order of play
   turnIndex: number;
+  turnPhase: 'draw' | 'play';
   deck: RummyCard[];
   discardPile: RummyCard[];
   melds: { id: string, playerId: string, cards: RummyCard[] }[];
@@ -85,6 +86,7 @@ export const initializeGame = (playerUids: string[]): GameState => {
     players,
     playerIds: playerUids,
     turnIndex: 0,
+    turnPhase: 'play', // First player starts with 15 cards, so they skip drawing!
     deck,
     discardPile: [],
     melds: [],

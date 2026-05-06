@@ -86,6 +86,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
           },
           playerIds: playerIds,
           turnIndex: 0,
+          turnPhase: 'draw',
           deck: [],
           discardPile: [],
           melds: [],

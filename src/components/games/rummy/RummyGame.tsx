@@ -51,8 +51,8 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     });
   };
 
-  const onDragEnd = (result: any) => {
-    if (!result.destination) return;
+  const onDragEnd = async (result: any) => {
+    if (!result.destination || !auth.currentUser) return;
 
     // Local re-ordering of hand
     if (result.source.droppableId === 'my-hand' && result.destination.droppableId === 'my-hand') {
@@ -62,13 +62,88 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       
       setLocalHand(items);
       // We also need to save this sorting to Firestore to persist it across reloads
-      if (auth.currentUser) {
-        updateDoc(doc(db, 'games', game.id), {
-          [`state.players.${auth.currentUser.uid}.hand`]: items
-        });
+      await updateDoc(doc(db, 'games', game.id), {
+        [`state.players.${auth.currentUser.uid}.hand`]: items
+      });
+      return;
+    }
+
+    // Discarding a card
+    if (result.source.droppableId === 'my-hand' && result.destination.droppableId === 'discard-pile') {
+      const isMyTurn = game.state.playerIds[game.state.turnIndex] === auth.currentUser.uid;
+      const isPlayPhase = game.state.turnPhase === 'play';
+      
+      if (!isMyTurn || !isPlayPhase) return;
+
+      const items = Array.from(localHand);
+      const [discardedCard] = items.splice(result.source.index, 1);
+      
+      setLocalHand(items); // Optimistic UI
+
+      const isWin = items.length === 0;
+      const nextTurnIndex = (game.state.turnIndex + 1) % game.state.playerIds.length;
+
+      const updates: any = {
+        [`state.players.${auth.currentUser.uid}.hand`]: items,
+        'state.discardPile': [...game.state.discardPile, discardedCard]
+      };
+
+      if (isWin) {
+        updates.status = 'finished';
+        updates.winner = auth.currentUser.uid;
+      } else {
+        updates['state.turnIndex'] = nextTurnIndex;
+        updates['state.turnPhase'] = 'draw';
       }
+
+      await updateDoc(doc(db, 'games', game.id), updates);
     }
   };
+
+  const handleDrawFromDeck = async () => {
+    if (!auth.currentUser) return;
+    const isMyTurn = game.state.playerIds[game.state.turnIndex] === auth.currentUser.uid;
+    const isDrawPhase = game.state.turnPhase === 'draw';
+    
+    if (!isMyTurn || !isDrawPhase || game.state.deck.length === 0) return;
+
+    const deck = [...game.state.deck];
+    const drawnCard = deck.shift();
+    if (!drawnCard) return;
+
+    const newHand = [...localHand, drawnCard];
+    setLocalHand(newHand); // Optimistic UI
+
+    await updateDoc(doc(db, 'games', game.id), {
+      'state.deck': deck,
+      [`state.players.${auth.currentUser.uid}.hand`]: newHand,
+      'state.turnPhase': 'play'
+    });
+  };
+
+  const handleDrawFromDiscard = async () => {
+    if (!auth.currentUser) return;
+    const isMyTurn = game.state.playerIds[game.state.turnIndex] === auth.currentUser.uid;
+    const isDrawPhase = game.state.turnPhase === 'draw';
+    
+    if (!isMyTurn || !isDrawPhase || game.state.discardPile.length === 0) return;
+
+    const discardPile = [...game.state.discardPile];
+    const drawnCard = discardPile.pop(); // Take the top card
+    if (!drawnCard) return;
+
+    const newHand = [...localHand, drawnCard];
+    setLocalHand(newHand); // Optimistic UI
+
+    await updateDoc(doc(db, 'games', game.id), {
+      'state.discardPile': discardPile,
+      [`state.players.${auth.currentUser.uid}.hand`]: newHand,
+      'state.turnPhase': 'play'
+    });
+  };
+
+  const isMyTurn = game.status === 'playing' && game.state.playerIds[game.state.turnIndex] === auth.currentUser?.uid;
+  const turnPhase = game.state.turnPhase;
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-emerald-800 rounded-xl relative">
@@ -132,27 +207,61 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="flex-1 flex flex-col relative">
             
+            {/* Turn Indicator */}
+            <div className="bg-emerald-950 text-center py-2 text-sm font-bold shadow-md z-10 flex items-center justify-center gap-2">
+              {isMyTurn ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                  <span className="text-white">Your Turn! ({turnPhase === 'draw' ? 'Draw a card' : 'Meld or Discard'})</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-emerald-300">
+                    Waiting for {userMap[game.state.playerIds[game.state.turnIndex]]?.name}...
+                  </span>
+                </>
+              )}
+            </div>
+
             {/* Play Area (Table) */}
             <div className="flex-1 p-4 flex flex-col">
               {/* Deck & Discard */}
-              <div className="flex justify-center gap-6 mb-8">
+              <div className="flex justify-center gap-6 mb-8 mt-2">
                 {/* Deck */}
                 <div className="flex flex-col items-center">
-                  <div className="w-16 h-24 sm:w-20 sm:h-28 bg-emerald-900 border-2 border-emerald-700 rounded-xl shadow-lg flex items-center justify-center text-emerald-500 cursor-pointer hover:bg-emerald-800 transition-colors">
-                    <span className="font-bold text-sm">Draw</span>
+                  <div 
+                    onClick={handleDrawFromDeck}
+                    className={`w-16 h-24 sm:w-20 sm:h-28 bg-emerald-900 border-2 border-emerald-700 rounded-xl shadow-lg flex items-center justify-center text-emerald-500 transition-colors ${isMyTurn && turnPhase === 'draw' ? 'ring-4 ring-green-400 cursor-pointer hover:bg-emerald-800 animate-pulse' : 'opacity-80'}`}
+                  >
+                    <span className="font-bold text-sm text-center px-1">{isMyTurn && turnPhase === 'draw' ? 'Click to Draw' : 'Deck'}</span>
                   </div>
                   <span className="text-emerald-200 text-xs mt-2">{game.state.deck?.length} left</span>
                 </div>
                 
                 {/* Discard Pile */}
                 <div className="flex flex-col items-center">
-                  <div className="w-16 h-24 sm:w-20 sm:h-28 bg-emerald-900/30 border-2 border-dashed border-emerald-500/50 rounded-xl flex items-center justify-center">
-                    {game.state.discardPile?.length > 0 ? (
-                      <Card face={game.state.discardPile[game.state.discardPile.length - 1]} />
-                    ) : (
-                      <span className="text-emerald-500/50 text-xs text-center px-2">Discard</span>
+                  <Droppable droppableId="discard-pile">
+                    {(provided, snapshot) => (
+                      <div 
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        onClick={handleDrawFromDiscard}
+                        className={`w-16 h-24 sm:w-20 sm:h-28 bg-emerald-900/30 border-2 rounded-xl flex items-center justify-center transition-all ${snapshot.isDraggingOver ? 'bg-emerald-800 border-green-400 scale-105 shadow-[0_0_15px_rgba(74,222,128,0.5)]' : isMyTurn && turnPhase === 'play' ? 'border-dashed border-yellow-400 ring-2 ring-yellow-400/50' : isMyTurn && turnPhase === 'draw' && game.state.discardPile?.length > 0 ? 'border-green-400 ring-4 ring-green-400/50 cursor-pointer animate-pulse' : 'border-dashed border-emerald-500/50'}`}
+                      >
+                        {game.state.discardPile?.length > 0 ? (
+                          <div className="w-full h-full p-1 pointer-events-none">
+                            <Card face={game.state.discardPile[game.state.discardPile.length - 1]} />
+                          </div>
+                        ) : (
+                          <span className="text-emerald-500/50 text-xs text-center px-2">
+                            {snapshot.isDraggingOver ? 'Drop to Discard' : 'Discard'}
+                          </span>
+                        )}
+                        {/* Hidden placeholder to satisfy dnd library */}
+                        <div className="hidden">{provided.placeholder}</div>
+                      </div>
                     )}
-                  </div>
+                  </Droppable>
                 </div>
               </div>
               
