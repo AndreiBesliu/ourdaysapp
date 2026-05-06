@@ -3,6 +3,7 @@ import { X, Gamepad2, Play, Clock } from 'lucide-react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
 import TicTacToe from './TicTacToe';
+import RummyGame from './rummy/RummyGame';
 
 interface GamesHubModalProps {
   isOpen: boolean;
@@ -37,11 +38,26 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
     
     try {
       let initialState = {};
+      let playerIds = [auth.currentUser.uid];
+
       if (gameType === 'tic-tac-toe') {
         initialState = {
           board: Array(9).fill(null),
           xIsNext: true,
           players: { X: auth.currentUser.uid, O: null }
+        };
+      } else if (gameType === 'rummy-45') {
+        initialState = {
+          players: {
+            [auth.currentUser.uid]: { uid: auth.currentUser.uid, hand: [], hasMelded: false, score: 0 }
+          },
+          playerIds: playerIds,
+          turnIndex: 0,
+          deck: [],
+          discardPile: [],
+          melds: [],
+          status: 'waiting',
+          winner: null
         };
       }
 
@@ -91,6 +107,9 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
               {activeGame.gameType === 'tic-tac-toe' && (
                 <TicTacToe game={activeGame} userMap={userMap} onBack={() => setPlayingGameId(null)} />
               )}
+              {activeGame.gameType === 'rummy-45' && (
+                <RummyGame game={activeGame} userMap={userMap} onBack={() => setPlayingGameId(null)} />
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-8">
@@ -107,12 +126,9 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                     <p className="text-sm text-zinc-500">A classic 2-player game. First to get 3 in a row wins!</p>
                   </div>
 
-                  {/* Rummy 45 Card (Coming Soon) */}
-                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 opacity-70 relative overflow-hidden">
-                    <div className="absolute top-3 right-3 bg-zinc-200 dark:bg-zinc-800 text-xs px-2 py-1 rounded font-semibold text-zinc-600 dark:text-zinc-400">
-                      Coming Soon
-                    </div>
-                    <div className="w-12 h-12 bg-red-100 dark:bg-red-500/20 text-red-500 rounded-xl flex items-center justify-center mb-3">
+                  {/* Rummy 45 Card */}
+                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors cursor-pointer group" onClick={() => handleCreateGame('rummy-45')}>
+                    <div className="w-12 h-12 bg-red-100 dark:bg-red-500/20 text-red-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                       <div className="text-xl font-bold font-mono">45</div>
                     </div>
                     <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Rummy 45</h5>
