@@ -171,3 +171,9 @@
 > Plan: Replace the `<input type="text">` fields in checklist rendering with auto-resizing `<textarea>` elements to accommodate multi-line text without hiding it.
 
 **2026-05-06 09:00 - Task Completed**: `input` fields changed to `textarea` with inline auto-resize logic in both `AddEventModal.tsx` and `EventDetailsModal.tsx`. Tested build and deployed to Firebase successfully.
+
+**2026-05-06 09:03 - Task Started**
+> Prompt: "when i am editing a task/event item or anything else in it i want the modifications to auto save as soon as i make them, i don't want to only save on clicking the save event button at the bottom"
+> Plan: Add a debounced `useEffect` to `AddEventModal.tsx` to automatically push changes to Firestore when `editEvent` is active. Change the Save button to "Done" during edits.
+
+**2026-05-06 09:04 - Task Completed**: Implemented real-time autosave in `AddEventModal.tsx` using a 1-second debounce timeout. Added `autoSaveStatus` indicator next to the modified "Done" button. Built and deployed to Firebase successfully.

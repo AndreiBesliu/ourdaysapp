@@ -44,6 +44,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const [isTask, setIsTask] = useState(false);
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -172,6 +173,51 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       }
     }
   }, [title, description, checklistItems, category, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, isOpen, editEvent]);
+
+  // Auto-save edits to Firestore
+  useEffect(() => {
+    if (isOpen && editEvent) {
+      if (!title.trim()) return;
+      
+      setAutoSaveStatus('saving');
+      const timeoutId = setTimeout(async () => {
+        try {
+          let imageUrl = removeMainImage ? null : (selectedAssetUrl || editEvent.imageUrl);
+          
+          const safeChecklistItems = checklistItems.map(item => ({
+            id: item.id,
+            text: item.text,
+            isCompleted: item.isCompleted,
+            assetUrl: item.assetUrl || null,
+            assetId: item.assetId || null
+          }));
+
+          const baseEventData = {
+            title,
+            description,
+            checklistItems: safeChecklistItems,
+            categoryId: category.id,
+            groupId: selectedGroupId !== 'personal' ? selectedGroupId : null,
+            visibleTo: selectedGroupId !== 'personal' ? visibleTo : [],
+            imageUrl: imageUrl,
+            isTask,
+            assigneeIds,
+            assigneeId: assigneeIds[0] || null,
+            assetId: removeMainImage ? null : (selectedAssetId || editEvent.assetId),
+            updatedAt: new Date().toISOString()
+          };
+
+          await updateDoc(doc(db, 'events', editEvent.id), baseEventData);
+          setAutoSaveStatus('saved');
+        } catch (e) {
+          console.error('Autosave error', e);
+          setAutoSaveStatus('error');
+        }
+      }, 1000);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [title, description, checklistItems, category, isTask, assigneeIds, visibleTo, selectedGroupId, removeMainImage, selectedAssetId, selectedAssetUrl, isOpen, editEvent]);
 
   if (!isOpen) return null;
 
@@ -728,13 +774,20 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             )}
           </div>
 
-          <div className="pt-2 shrink-0">
+          <div className="pt-2 shrink-0 flex items-center justify-between gap-4">
+            {editEvent && (
+              <div className="text-xs font-medium text-zinc-500 flex items-center gap-1.5 shrink-0">
+                {autoSaveStatus === 'saving' && <><div className="w-3.5 h-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin"></div> Saving...</>}
+                {autoSaveStatus === 'saved' && <><CheckCircle2 className="w-4 h-4 text-emerald-500" /> Saved</>}
+                {autoSaveStatus === 'error' && <span className="text-red-500">Error saving</span>}
+              </div>
+            )}
             <button
               type="submit"
-              disabled={loading || !title.trim()}
-              className="w-full bg-primary hover:bg-primary/90 text-white font-medium py-2.5 rounded-lg transition-colors disabled:opacity-50"
+              disabled={loading || !title.trim() || autoSaveStatus === 'saving'}
+              className={`w-full bg-primary hover:bg-primary/90 text-white font-medium py-2.5 rounded-lg transition-colors disabled:opacity-50 ${editEvent ? 'max-w-[140px] ml-auto' : ''}`}
             >
-              {loading ? 'Saving...' : 'Save Event'}
+              {loading ? (editEvent ? 'Saving...' : 'Adding...') : (editEvent ? 'Done' : 'Save Event')}
             </button>
           </div>
         </form>
