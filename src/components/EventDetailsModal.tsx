@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon, Trash2, Edit2 } from 'lucide-react';
+import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon, Trash2, Edit2, ChevronUp, ChevronDown } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import Barcode from 'react-barcode';
@@ -135,6 +135,35 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEditChecklistText = async (itemId: string, newText: string) => {
+    if (!canEdit) return;
+    const newChecklist = checklist.map(item => 
+      item.id === itemId ? { ...item, text: newText } : item
+    );
+    setChecklist(newChecklist);
+    try {
+      await updateDoc(doc(db, 'events', event.id), { checklistItems: newChecklist });
+    } catch (e) {
+      console.error(e);
+      setChecklist(event.checklistItems || []);
+    }
+  };
+
+  const moveChecklistItem = async (index: number, direction: 'up' | 'down') => {
+    if (!canEdit) return;
+    if ((direction === 'up' && index === 0) || (direction === 'down' && index === checklist.length - 1)) return;
+    const newItems = [...checklist];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    [newItems[index], newItems[targetIndex]] = [newItems[targetIndex], newItems[index]];
+    setChecklist(newItems);
+    try {
+      await updateDoc(doc(db, 'events', event.id), { checklistItems: newItems });
+    } catch (e) {
+      console.error(e);
+      setChecklist(event.checklistItems || []);
     }
   };
 
@@ -375,7 +404,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                 <CheckCircle className="w-4 h-4" /> To-Do List
               </p>
               <div className="space-y-2">
-                {checklist.map((item) => (
+                {checklist.map((item, index) => (
                   <div key={item.id} className="flex flex-col gap-2 p-3 bg-zinc-50 dark:bg-zinc-800/30 border border-zinc-200 dark:border-zinc-700 rounded-lg">
                     <div className="flex items-start gap-3">
                       <button 
@@ -389,9 +418,32 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                       >
                         <CheckCircle className="w-3.5 h-3.5" />
                       </button>
-                      <span className={`text-sm flex-1 pt-0.5 ${item.isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-700 dark:text-zinc-300'}`}>
-                        {item.text}
-                      </span>
+                      <input 
+                        type="text"
+                        defaultValue={item.text}
+                        onBlur={(e) => {
+                          if (e.target.value !== item.text) {
+                            handleEditChecklistText(item.id, e.target.value);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        disabled={!canEdit || item.isCompleted}
+                        className={`text-sm flex-1 pt-0.5 bg-transparent border-none focus:ring-0 outline-none min-w-0 ${item.isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-700 dark:text-zinc-300'}`}
+                      />
+                      {canEdit && !item.isCompleted && (
+                        <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                          <button type="button" onClick={() => moveChecklistItem(index, 'up')} disabled={index === 0} className="p-1 text-zinc-400 hover:text-primary disabled:opacity-30 transition-colors" title="Move Up">
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button type="button" onClick={() => moveChecklistItem(index, 'down')} disabled={index === checklist.length - 1} className="p-1 text-zinc-400 hover:text-primary disabled:opacity-30 transition-colors" title="Move Down">
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {item.assetUrl && !item.isCompleted && (
                       <div className="ml-8 mt-1 rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 self-start max-w-[200px] cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullScreenImage(item.assetUrl)}>

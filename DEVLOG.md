@@ -33,6 +33,41 @@
 
 ## 🚀 Active Roadmap & Backlog
 
+# Our Days App - Development Log
+
+## 🏗 Project Infrastructure (Permanent)
+*   **GitHub Repository**: [AndreiBesliu/ourdaysapp](https://github.com/AndreiBesliu/ourdaysapp.git)
+*   **Firebase Project ID**: `our-days-2a939`
+*   **Firebase Hosting URL**: [https://our-days-2a939.web.app](https://our-days-2a939.web.app)
+*   **Firebase Console**: [Console Overview](https://console.firebase.google.com/project/our-days-2a939/overview)
+*   **Connection Status**:
+    *   Git: Connected & Pushing to `main`.
+    *   Firebase: Authenticated via CLI; Deployment via `npx firebase-tools deploy --only hosting`.
+
+---
+
+## 📜 Workflow Rules (Permanent)
+> ⚠️ These rules apply to EVERY session and EVERY task, no exceptions.
+
+1.  **Start-of-Task Logging** — Before writing any code, append a `Task Started` entry to the **Session Log section of this file** (not just in chat). The entry must include:
+    - Date & time (local)
+    - The exact user prompt that triggered the task
+    - A one-line summary of what the model intends to do
+    - Format:
+      ```
+      **YYYY-MM-DD HH:MM - Task Started**
+      > Prompt: "<exact user prompt>"
+      > Plan: <one-line description of what will be done>
+      ```
+2.  **End-of-Task Logging** — After deploying, append a `Task Completed` entry to this file summarising what changed, what was tested, and the deploy status.
+3.  **Roadmap Sync** — Move completed features from "Roadmap" to "Completed Features" in this file.
+4.  **Build Before Deploy** — Always run `npm run build` successfully before deploying.
+5.  **Deploy After Every Feature** — Run `npx firebase-tools deploy --only hosting` and commit + push to Git after each feature is done.
+
+---
+
+## 🚀 Active Roadmap & Backlog
+
 ### 1. In Progress / Upcoming
 - **Minigames**: Integrate a simple embedded game (e.g., HTML5 Canvas or React) to make the app more engaging for the family.
   - Evaluate the difficulty of creating "Rummy 45" from scratch and making it playable for a group in-app.
@@ -40,9 +75,6 @@
   - Connect to an AI service (e.g., Gemini / OpenAI) to auto-suggest tasks or categorize events.
   - Create a special "AI Group" where you can add tasks, and the AI will process or auto-complete them.
 - **True Push Notifications**: Implement Firebase Cloud Functions to send OS-level push notifications (Requires Firebase Blaze Plan).
-- **Checklist Management**:
-  - Edit the checklist text.
-  - Ability to reorder the list items with ease.
 
 ### 2. Backlog
 - **Android Compilation**: Wrap the web/PWA into a native Android APK build once the web version is feature-complete.
@@ -51,6 +83,7 @@
 ---
 
 ## ✅ Completed Features
+- **Checklist Management**: Added ability to edit checklist text and reorder items via up/down arrows in event modals.
 - **Group Chat**: Real-time collapsible chat popup for group members, with image sharing and seen status.
 - **Group Settings Modal**: Replaced "Delete Group" with an "Edit Group" modal covering rename, member management, and delete/leave.
 - **In-App Notifications**: Notification bell with alerts for task assignments and group activity.
@@ -126,3 +159,9 @@
 > Plan: Sync provided screenshot To-Do list with DEVLOG.md roadmap and initialize the task log.
 
 **2026-05-06 08:51 - Task Completed**: DEVLOG roadmap synced with To-Do list (Checklist management & Rummy 45 added). Session log updated according to rules. Pushed to GitHub.
+
+**2026-05-06 08:52 - Task Started**
+> Prompt: "let's start with the checklist updates"
+> Plan: Implement checklist editing and reordering functionality in AddEventModal and EventDetailsModal.
+
+**2026-05-06 08:54 - Task Completed**: Checklist editing and reordering functions added to `AddEventModal.tsx` and `EventDetailsModal.tsx`. Tested build and deployed to Firebase successfully.

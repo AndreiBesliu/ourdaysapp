@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2 } from 'lucide-react';
+import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, ChevronUp, ChevronDown } from 'lucide-react';
 import { addDoc, collection, query, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
@@ -204,6 +204,18 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
   const handleRemoveChecklistItem = (id: string) => {
     setChecklistItems(checklistItems.filter(item => item.id !== id));
+  };
+
+  const moveChecklistItem = (index: number, direction: 'up' | 'down') => {
+    if ((direction === 'up' && index === 0) || (direction === 'down' && index === checklistItems.length - 1)) return;
+    const newItems = [...checklistItems];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    [newItems[index], newItems[targetIndex]] = [newItems[targetIndex], newItems[index]];
+    setChecklistItems(newItems);
+  };
+
+  const handleEditChecklistText = (id: string, newText: string) => {
+    setChecklistItems(checklistItems.map(item => item.id === id ? { ...item, text: newText } : item));
   };
 
   const handleChecklistItemImage = (id: string, file: File) => {
@@ -451,13 +463,24 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
             {checklistItems.length > 0 && (
               <div className="space-y-2 mt-3">
-                {checklistItems.map(item => (
+                {checklistItems.map((item, index) => (
                   <div key={item.id} className="flex flex-col bg-white dark:bg-zinc-800 p-2 rounded-lg border border-zinc-200 dark:border-zinc-700">
                     <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border border-zinc-300 rounded-sm"></div>
-                      <span className="flex-1 text-sm text-zinc-700 dark:text-zinc-300">{item.text}</span>
+                      <div className="w-4 h-4 border border-zinc-300 rounded-sm shrink-0"></div>
+                      <input 
+                        type="text"
+                        value={item.text}
+                        onChange={(e) => handleEditChecklistText(item.id, e.target.value)}
+                        className="flex-1 text-sm bg-transparent border-none focus:ring-0 outline-none text-zinc-700 dark:text-zinc-300 min-w-0"
+                      />
                       
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button type="button" onClick={() => moveChecklistItem(index, 'up')} disabled={index === 0} className="p-1 text-zinc-400 hover:text-primary disabled:opacity-30 transition-colors" title="Move Up">
+                          <ChevronUp className="w-4 h-4" />
+                        </button>
+                        <button type="button" onClick={() => moveChecklistItem(index, 'down')} disabled={index === checklistItems.length - 1} className="p-1 text-zinc-400 hover:text-primary disabled:opacity-30 transition-colors" title="Move Down">
+                          <ChevronDown className="w-4 h-4" />
+                        </button>
                         <input 
                           type="file" 
                           id={`file-${item.id}`} 
