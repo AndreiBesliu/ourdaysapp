@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, ChevronUp, ChevronDown } from 'lucide-react';
+import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, ChevronUp, ChevronDown, Sparkles } from 'lucide-react';
 import { addDoc, collection, query, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
+import { isAIEnabled, generateChecklistForTask } from '../ai';
 import { onSnapshot } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { useModalBack } from '../hooks/useModalBack';
@@ -45,6 +46,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const [isTask, setIsTask] = useState(false);
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
@@ -251,6 +253,31 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       { id: Date.now().toString(), text: newItemText, isCompleted: false }
     ]);
     setNewItemText('');
+  };
+
+  const handleGenerateChecklist = async () => {
+    if (!title.trim()) {
+      alert("Please enter an Event Title first so the AI knows what to suggest.");
+      return;
+    }
+    setIsGeneratingAI(true);
+    try {
+      const suggestions = await generateChecklistForTask(title, description);
+      if (suggestions.length === 0) {
+        alert("The AI couldn't generate a checklist for this title.");
+        return;
+      }
+      const newItems = suggestions.map(text => ({
+        id: Date.now().toString() + Math.random(),
+        text,
+        isCompleted: false
+      }));
+      setChecklistItems(prev => [...prev, ...newItems]);
+    } catch (error: any) {
+      alert(error.message || "Failed to generate checklist.");
+    } finally {
+      setIsGeneratingAI(false);
+    }
   };
 
   const handleRemoveChecklistItem = (id: string) => {
@@ -516,6 +543,21 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               </button>
             </div>
 
+            {isAIEnabled() && (
+              <button
+                type="button"
+                onClick={handleGenerateChecklist}
+                disabled={isGeneratingAI}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 rounded-lg text-sm font-medium transition-colors hover:bg-indigo-100 dark:hover:bg-indigo-900/40 disabled:opacity-50 mt-2"
+              >
+                {isGeneratingAI ? (
+                  <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div> Generating Magic Checklist...</>
+                ) : (
+                  <><Sparkles className="w-4 h-4" /> Auto-suggest Checklist via AI</>
+                )}
+              </button>
+            )}
+
             {checklistItems.length > 0 && (
               <div className="space-y-2 mt-3">
                 {checklistItems.map((item, index) => (
@@ -654,6 +696,21 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                     {assigneeIds.includes(auth.currentUser.uid) && <CheckCircle2 className="w-3 h-3" />}
                   </button>
                 )}
+                
+                <button 
+                  type="button"
+                  onClick={() => toggleAssignee('ai_assistant')}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1 transition-colors ${
+                    assigneeIds.includes('ai_assistant') 
+                      ? 'bg-indigo-500 text-white border-indigo-500' 
+                      : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50'
+                  }`}
+                  title="Assign to AI Assistant to automatically generate a checklist"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  AI Assistant
+                  {assigneeIds.includes('ai_assistant') && <CheckCircle2 className="w-3 h-3" />}
+                </button>
                 {selectedGroupId !== 'personal' && users.map(u => {
                   const belongsToGroup = groups.find(g => g.id === selectedGroupId)?.members?.includes(u.id);
                   if (!belongsToGroup) return null;

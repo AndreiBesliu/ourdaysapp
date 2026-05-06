@@ -21,41 +21,7 @@
     - Format:
       ```
       **YYYY-MM-DD HH:MM - Task Started**
-      > Prompt: "<exact user prompt>"
-      > Plan: <one-line description of what will be done>
-      ```
-2.  **End-of-Task Logging** — After deploying, append a `Task Completed` entry to this file summarising what changed, what was tested, and the deploy status.
-3.  **Roadmap Sync** — Move completed features from "Roadmap" to "Completed Features" in this file.
-4.  **Build Before Deploy** — Always run `npm run build` successfully before deploying.
-5.  **Deploy After Every Feature** — Run `npx firebase-tools deploy --only hosting` and commit + push to Git after each feature is done.
 
----
-
-## 🚀 Active Roadmap & Backlog
-
-# Our Days App - Development Log
-
-## 🏗 Project Infrastructure (Permanent)
-*   **GitHub Repository**: [AndreiBesliu/ourdaysapp](https://github.com/AndreiBesliu/ourdaysapp.git)
-*   **Firebase Project ID**: `our-days-2a939`
-*   **Firebase Hosting URL**: [https://our-days-2a939.web.app](https://our-days-2a939.web.app)
-*   **Firebase Console**: [Console Overview](https://console.firebase.google.com/project/our-days-2a939/overview)
-*   **Connection Status**:
-    *   Git: Connected & Pushing to `main`.
-    *   Firebase: Authenticated via CLI; Deployment via `npx firebase-tools deploy --only hosting`.
-
----
-
-## 📜 Workflow Rules (Permanent)
-> ⚠️ These rules apply to EVERY session and EVERY task, no exceptions.
-
-1.  **Start-of-Task Logging** — Before writing any code, append a `Task Started` entry to the **Session Log section of this file** (not just in chat). The entry must include:
-    - Date & time (local)
-    - The exact user prompt that triggered the task
-    - A one-line summary of what the model intends to do
-    - Format:
-      ```
-      **YYYY-MM-DD HH:MM - Task Started**
       > Prompt: "<exact user prompt>"
       > Plan: <one-line description of what will be done>
       ```
@@ -189,3 +155,11 @@
 > Plan: Apply `color-scheme: dark` to `.dark` class and `accent-color` globally in `index.css` so native browser inputs (like the date picker) match the application theme perfectly.
 
 **2026-05-06 09:27 - Task Completed**: `index.css` updated with `color-scheme` and `accent-color`. Verified build and deployed to Firebase successfully.
+
+**2026-05-06 12:05 - Task Started**
+> Prompt: "let's try 2"
+> Plan: Plan and begin implementation of AI Integration (Gemini/OpenAI) for auto-suggesting task checklists and creating an "AI Assistant" feature.
+
+**2026-05-06 12:20 - Task Started**
+> Prompt: "i already have the Blaze plan"
+> Plan: Set up Firebase Cloud Functions to create a robust, server-side "AI Assistant". When a task is assigned to the "ai_assistant" dummy user/group, a Firestore trigger will automatically ping Gemini and generate a checklist in the background.
