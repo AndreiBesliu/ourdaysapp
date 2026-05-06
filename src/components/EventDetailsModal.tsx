@@ -418,9 +418,12 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                       >
                         <CheckCircle className="w-3.5 h-3.5" />
                       </button>
-                      <input 
-                        type="text"
+                      <textarea 
                         defaultValue={item.text}
+                        onInput={(e) => {
+                          e.currentTarget.style.height = 'auto';
+                          e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                        }}
                         onBlur={(e) => {
                           if (e.target.value !== item.text) {
                             handleEditChecklistText(item.id, e.target.value);
@@ -428,11 +431,19 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                         }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
+                            e.preventDefault();
                             e.currentTarget.blur();
                           }
                         }}
+                        ref={(el) => {
+                          if (el) {
+                            el.style.height = 'auto';
+                            el.style.height = `${el.scrollHeight}px`;
+                          }
+                        }}
+                        rows={1}
                         disabled={!canEdit || item.isCompleted}
-                        className={`text-sm flex-1 pt-0.5 bg-transparent border-none focus:ring-0 outline-none min-w-0 ${item.isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-700 dark:text-zinc-300'}`}
+                        className={`text-sm flex-1 pt-0.5 bg-transparent border-none focus:ring-0 outline-none min-w-0 resize-none overflow-hidden ${item.isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-700 dark:text-zinc-300'}`}
                       />
                       {canEdit && !item.isCompleted && (
                         <div className="flex items-center gap-1 shrink-0 mt-0.5">

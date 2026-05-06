@@ -165,3 +165,9 @@
 > Plan: Implement checklist editing and reordering functionality in AddEventModal and EventDetailsModal.
 
 **2026-05-06 08:54 - Task Completed**: Checklist editing and reordering functions added to `AddEventModal.tsx` and `EventDetailsModal.tsx`. Tested build and deployed to Firebase successfully.
+
+**2026-05-06 08:59 - Task Started**
+> Prompt: "good, i checked out what works, but, something broke, there is more text on some items, that is now hidden, i can navigate the text via left and right keys, or mouse select and drag, but, i want it all visible, let the item height grow to acomodate all the text"
+> Plan: Replace the `<input type="text">` fields in checklist rendering with auto-resizing `<textarea>` elements to accommodate multi-line text without hiding it.
+
+**2026-05-06 09:00 - Task Completed**: `input` fields changed to `textarea` with inline auto-resize logic in both `AddEventModal.tsx` and `EventDetailsModal.tsx`. Tested build and deployed to Firebase successfully.

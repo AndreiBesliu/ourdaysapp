@@ -467,11 +467,21 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   <div key={item.id} className="flex flex-col bg-white dark:bg-zinc-800 p-2 rounded-lg border border-zinc-200 dark:border-zinc-700">
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 border border-zinc-300 rounded-sm shrink-0"></div>
-                      <input 
-                        type="text"
+                      <textarea 
                         value={item.text}
-                        onChange={(e) => handleEditChecklistText(item.id, e.target.value)}
-                        className="flex-1 text-sm bg-transparent border-none focus:ring-0 outline-none text-zinc-700 dark:text-zinc-300 min-w-0"
+                        onChange={(e) => {
+                          e.target.style.height = 'auto';
+                          e.target.style.height = `${e.target.scrollHeight}px`;
+                          handleEditChecklistText(item.id, e.target.value);
+                        }}
+                        ref={(el) => {
+                          if (el) {
+                            el.style.height = 'auto';
+                            el.style.height = `${el.scrollHeight}px`;
+                          }
+                        }}
+                        rows={1}
+                        className="flex-1 text-sm bg-transparent border-none focus:ring-0 outline-none text-zinc-700 dark:text-zinc-300 min-w-0 resize-none overflow-hidden py-0"
                       />
                       
                       <div className="flex items-center gap-1 shrink-0">
