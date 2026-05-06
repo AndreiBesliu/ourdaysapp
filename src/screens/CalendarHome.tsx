@@ -441,16 +441,44 @@ export default function CalendarHome() {
                 <Gamepad2 className="w-5 h-5" />
               </div>
               <div>
-                <p className="font-bold text-indigo-700 dark:text-indigo-400 text-sm">
-                  {activeGames[0].gameType.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())} is active!
+                <p className="font-bold text-indigo-700 dark:text-indigo-400 text-sm flex items-center gap-2">
+                  {activeGames[0].gameType.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())} 
+                  {activeGames[0].status === 'waiting' ? 'Lobby' : 'in progress'}
+                  
+                  {/* Show who is in the game */}
+                  <span className="flex items-center -space-x-1.5 ml-2">
+                    {(() => {
+                      const game = activeGames[0];
+                      let playerIds: string[] = [];
+                      if (game.gameType === 'tic-tac-toe') {
+                        playerIds = [game.state?.players?.X, game.state?.players?.O].filter(Boolean);
+                      } else if (game.gameType === 'rummy-45') {
+                        playerIds = game.state?.playerIds || [];
+                      }
+                      
+                      return playerIds.map((uid) => {
+                        const u = userMap[uid];
+                        if (!u) return null;
+                        return (
+                          <div key={uid} className="w-5 h-5 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-indigo-500/20 flex items-center justify-center text-[8px] font-bold text-zinc-600 dark:text-zinc-300 relative overflow-hidden" title={u.name || u.email}>
+                            {u.photoURL ? (
+                              <img src={u.photoURL} alt={u.name || u.email} className="w-full h-full object-cover" />
+                            ) : (
+                              (u.name?.[0] || u.email?.[0] || '?').toUpperCase()
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </span>
                 </p>
                 <p className="text-xs text-indigo-600/70 dark:text-indigo-400/70">
-                  {activeGames.length > 1 ? `${activeGames.length} games running. Tap to resume.` : 'Tap to resume playing.'}
+                  {activeGames.length > 1 ? `${activeGames.length} games running. Tap to view.` : (activeGames[0].status === 'waiting' ? 'Waiting for players... Tap to join.' : 'Tap to resume playing.')}
                 </p>
               </div>
             </div>
             <button className="px-3 py-1.5 bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm">
-              Resume
+              {activeGames[0].status === 'waiting' ? 'Join' : 'Resume'}
             </button>
           </div>
         )}
