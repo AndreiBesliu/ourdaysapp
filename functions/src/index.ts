@@ -30,7 +30,7 @@ export const autoSuggestChecklist = onDocumentCreated({
   try {
     const key = geminiApiKey.value();
     const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
     const prompt = `You are a helpful AI Assistant for a family organization app. 
 The user created a task/event titled "${title}".

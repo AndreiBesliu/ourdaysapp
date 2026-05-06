@@ -12,7 +12,7 @@ export const isAIEnabled = () => !!genAI;
 export async function generateChecklistForTask(title: string, description: string): Promise<string[]> {
   if (!genAI) throw new Error("AI is not configured. Missing VITE_GEMINI_API_KEY in .env.local.");
   
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
   
   const prompt = `You are a helpful assistant for a family organization app. 
 The user is creating a task/event titled "${title}".
@@ -33,8 +33,8 @@ Example output: ["Buy milk", "Get eggs", "Pay the cashier"]`;
       return list.map(i => String(i));
     }
     return [];
-  } catch (error) {
+  } catch (error: any) {
     console.error("AI Generation Error", error);
-    throw new Error("Failed to generate checklist.");
+    throw new Error(`AI Error: ${error.message || 'Unknown error'}`);
   }
 }
