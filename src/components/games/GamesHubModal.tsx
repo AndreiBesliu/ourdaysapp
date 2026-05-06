@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { X, Gamepad2, Play, Clock } from 'lucide-react';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { X, Gamepad2, Play, Clock, Trash2 } from 'lucide-react';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
 import TicTacToe from './TicTacToe';
 import RummyGame from './rummy/RummyGame';
+import { format } from 'date-fns';
 
 interface GamesHubModalProps {
   isOpen: boolean;
@@ -11,18 +12,21 @@ interface GamesHubModalProps {
   groupId: string;
   groupName: string;
   userMap: Record<string, any>;
+  selectedDate: Date | null;
 }
 
-export default function GamesHubModal({ isOpen, onClose, groupId, groupName, userMap }: GamesHubModalProps) {
+export default function GamesHubModal({ isOpen, onClose, groupId, groupName, userMap, selectedDate }: GamesHubModalProps) {
   const [activeGames, setActiveGames] = useState<any[]>([]);
   const [playingGameId, setPlayingGameId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isOpen || !groupId) return;
+    if (!isOpen || !groupId || !selectedDate) return;
 
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
     const q = query(
       collection(db, 'games'),
-      where('groupId', '==', groupId)
+      where('groupId', '==', groupId),
+      where('date', '==', dateStr)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -31,10 +35,10 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
     });
 
     return () => unsubscribe();
-  }, [isOpen, groupId]);
+  }, [isOpen, groupId, selectedDate]);
 
   const handleCreateGame = async (gameType: string) => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser || !selectedDate) return;
     
     try {
       let initialState = {};
@@ -63,6 +67,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
 
       const docRef = await addDoc(collection(db, 'games'), {
         groupId,
+        date: format(selectedDate, 'yyyy-MM-dd'),
         gameType,
         status: 'waiting', // waiting, playing, finished
         createdAt: serverTimestamp(),
@@ -74,6 +79,16 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
       setPlayingGameId(docRef.id);
     } catch (error) {
       console.error("Error creating game:", error);
+    }
+  };
+
+  const handleCancelGame = async (gameId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await deleteDoc(doc(db, 'games', gameId));
+      if (playingGameId === gameId) setPlayingGameId(null);
+    } catch (err) {
+      console.error("Error deleting game:", err);
     }
   };
 
@@ -140,7 +155,9 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
               {/* Active/Past Games */}
               {activeGames.length > 0 && (
                 <div>
-                  <h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">Ongoing & Past Games</h4>
+                  <h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">
+                    Games on {selectedDate ? format(selectedDate, 'MMM d, yyyy') : 'this day'}
+                  </h4>
                   <div className="flex flex-col gap-3">
                     {activeGames.map((game) => (
                       <div key={game.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex items-center justify-between hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
@@ -161,12 +178,23 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                             </p>
                           </div>
                         </div>
-                        <button 
-                          onClick={() => setPlayingGameId(game.id)}
-                          className="px-4 py-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors"
-                        >
-                          {game.status === 'finished' ? 'View' : <><Play className="w-4 h-4" /> Join</>}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {game.status === 'waiting' && game.createdBy === auth.currentUser?.uid && (
+                            <button 
+                              onClick={(e) => handleCancelGame(game.id, e)}
+                              className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                              title="Cancel Game"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => setPlayingGameId(game.id)}
+                            className="px-4 py-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors"
+                          >
+                            {game.status === 'finished' ? 'View' : <><Play className="w-4 h-4" /> Join</>}
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

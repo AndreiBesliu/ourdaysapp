@@ -187,3 +187,9 @@
 > Plan: Plan the complex architecture and state management for Rummy 45 (Remi Etalat) and write an implementation plan artifact to confirm game rules and layout before coding the engine.
 
 **2026-05-06 16:15 - Task Completed**: `rummy_45_plan.md` artifact generated. Wrote `RummyEngine.ts` to handle complex 106-card deck generation and shuffle logic. Created `RummyGame.tsx` component with `@hello-pangea/dnd` to render the Game Board, Lobby, and interactive drag-and-drop player hand. Connected the UI to the Games Hub. Phase 1 (Engine and Board) is fully complete.
+
+**2026-05-06 16:21 - Task Started**
+> Prompt: "we need to be able to cancel a game if it hasn't started yet, also there will be a lot of games piling up..."
+> Plan: Add date-filtering to `GamesHubModal` so games are tied to `selectedDate`. Add a cancel/delete button for the owner of games in 'waiting' status.
+
+**2026-05-06 16:23 - Task Completed**: `GamesHubModal` now accepts `selectedDate` and filters active/past games based on the calendar day. Added a red Trash icon button to allow the game creator to delete un-started games. Built and deployed.

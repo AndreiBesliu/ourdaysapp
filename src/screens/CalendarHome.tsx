@@ -605,6 +605,7 @@ export default function CalendarHome() {
         groupId={activeGroupId !== 'personal' ? activeGroupId : ''}
         groupName={groups.find(g => g.id === activeGroupId)?.name || ''}
         userMap={userMap}
+        selectedDate={selectedDate}
       />
 
     </div>
