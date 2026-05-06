@@ -122,13 +122,33 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
     }
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // If playing a game, don't close the whole modal, just exit game view? 
+        // Actually, let's just close the modal.
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const activeGame = activeGames.find(g => g.id === playingGameId);
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-2xl shadow-xl flex flex-col h-[80vh] overflow-hidden border border-zinc-200 dark:border-zinc-800 relative">
+    <div 
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-2xl shadow-xl flex flex-col h-[80vh] overflow-hidden border border-zinc-200 dark:border-zinc-800 relative"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50">
           <div className="flex items-center gap-2">
