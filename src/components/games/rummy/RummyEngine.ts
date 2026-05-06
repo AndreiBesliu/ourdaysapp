@@ -94,3 +94,97 @@ export const initializeGame = (playerUids: string[]): GameState => {
     winner: null
   };
 };
+
+// --- PHASE 3: MELD VALIDATION & SCORING ---
+
+const VALUE_ORDER = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+
+export const validateMeld = (cards: RummyCard[]): { isValid: boolean; type?: 'set' | 'run'; points: number; error?: string } => {
+  if (cards.length < 3) return { isValid: false, points: 0, error: 'Meld must have at least 3 cards.' };
+
+  if (cards.length < 3) return { isValid: false, points: 0, error: 'Meld must have at least 3 cards.' };
+  const naturalCards = cards.filter(c => !c.isJoker);
+
+  if (naturalCards.length < 2) return { isValid: false, points: 0, error: 'Meld must have at least 2 natural cards.' };
+
+  // Check if SET (same value, different suits)
+  const isSet = naturalCards.every(c => c.value === naturalCards[0].value);
+  if (isSet) {
+    // Suits must be unique
+    const suits = new Set(naturalCards.map(c => c.suit));
+    if (suits.size !== naturalCards.length) return { isValid: false, points: 0, error: 'Sets must have distinct suits.' };
+    if (cards.length > 4) return { isValid: false, points: 0, error: 'Sets cannot have more than 4 cards.' };
+    
+    // Valid SET
+    return { isValid: true, type: 'set', points: calculateMeldPoints(cards, 'set') };
+  }
+
+  // Check if RUN (same suit, consecutive values)
+  const isSameSuit = naturalCards.every(c => c.suit === naturalCards[0].suit);
+  if (isSameSuit) {
+    // Try to form a run. Since users might place them out of order if we don't sort, we should assume the array is the exact order they intended, OR we sort it. Let's assume the cards array is ordered by the user.
+    // Actually, checking consecutive order with Jokers is tricky. Let's just map them to their indexes.
+    // For simplicity, we expect the user to provide them in order.
+    let currentIdx = -1;
+    let validRun = true;
+    let hasAceAtStart = false;
+
+    // Check if first card is an Ace (A-2-3)
+    if (!cards[0].isJoker && cards[0].value === 'A') {
+      hasAceAtStart = true;
+      currentIdx = -1; // Ace acts as "1" here. 2 is index 0.
+    } else if (!cards[0].isJoker) {
+      currentIdx = VALUE_ORDER.indexOf(cards[0].value!);
+    } else {
+      // First card is Joker. We deduce its value from the next natural card.
+      const firstNaturalIdx = cards.findIndex(c => !c.isJoker);
+      const firstNaturalValueIdx = VALUE_ORDER.indexOf(cards[firstNaturalIdx].value!);
+      currentIdx = firstNaturalValueIdx - firstNaturalIdx;
+      if (currentIdx < -1) validRun = false; // Cannot go below Ace(1)
+    }
+
+    if (validRun) {
+      for (let i = hasAceAtStart ? 1 : 1; i < cards.length; i++) {
+        const c = cards[i];
+        currentIdx++;
+        if (!c.isJoker) {
+          // If we hit an Ace at the END, currentIdx should be 12 (which is 'A').
+          const expectedVal = VALUE_ORDER[currentIdx];
+          if (c.value !== expectedVal) {
+            // Special case: we can wrap A around? No, standard rummy: Q-K-A is valid, A-2-3 is valid, but K-A-2 is NOT.
+            validRun = false;
+            break;
+          }
+        }
+        if (currentIdx > 12) {
+          validRun = false; // Exceeded Ace
+          break;
+        }
+      }
+    }
+
+    if (validRun) {
+      return { isValid: true, type: 'run', points: calculateMeldPoints(cards, 'run', hasAceAtStart) };
+    }
+  }
+
+  return { isValid: false, points: 0, error: 'Cards do not form a valid Set or Run.' };
+};
+
+const calculateMeldPoints = (cards: RummyCard[], type: 'set' | 'run', aceAsOne: boolean = false): number => {
+  let pts = 0;
+  for (const c of cards) {
+    if (c.isJoker) {
+      pts += 50;
+    } else if (c.value === 'A') {
+      if (type === 'set') pts += 25;
+      else if (aceAsOne) pts += 5;
+      else pts += 10;
+    } else {
+      const idx = VALUE_ORDER.indexOf(c.value!);
+      if (idx >= 0 && idx <= 7) pts += 5; // 2-9
+      else pts += 10; // 10-K
+    }
+  }
+  return pts;
+};

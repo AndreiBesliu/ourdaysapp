@@ -11,8 +11,13 @@ interface RummyGameProps {
   onBack: () => void;
 }
 
+import { validateMeld } from './RummyEngine';
+
 export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
   const [localHand, setLocalHand] = useState<any[]>([]);
+  const [selectedCards, setSelectedCards] = useState<string[]>([]);
+  const [stagedMelds, setStagedMelds] = useState<{cards: any[], type: 'set'|'run', points: number}[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const isOwner = game.createdBy === auth.currentUser?.uid;
   const isJoined = game.state.playerIds.includes(auth.currentUser?.uid);
@@ -74,6 +79,10 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       const isPlayPhase = game.state.turnPhase === 'play';
       
       if (!isMyTurn || !isPlayPhase) return;
+      if (stagedMelds.length > 0) {
+        setErrorMsg("Please play or cancel your staged melds before discarding.");
+        return;
+      }
 
       const items = Array.from(localHand);
       const [discardedCard] = items.splice(result.source.index, 1);
@@ -140,6 +149,74 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       [`state.players.${auth.currentUser.uid}.hand`]: newHand,
       'state.turnPhase': 'play'
     });
+  };
+
+  const toggleCardSelection = (cardId: string) => {
+    if (selectedCards.includes(cardId)) {
+      setSelectedCards(selectedCards.filter(id => id !== cardId));
+    } else {
+      setSelectedCards([...selectedCards, cardId]);
+    }
+    setErrorMsg(null);
+  };
+
+  const stageMeld = () => {
+    const cardsToMeld = localHand.filter(c => selectedCards.includes(c.id));
+    const result = validateMeld(cardsToMeld);
+    
+    if (!result.isValid) {
+      setErrorMsg(result.error || "Invalid meld.");
+      setSelectedCards([]);
+      return;
+    }
+
+    setStagedMelds([...stagedMelds, { cards: cardsToMeld, type: result.type!, points: result.points }]);
+    setLocalHand(localHand.filter(c => !selectedCards.includes(c.id)));
+    setSelectedCards([]);
+    setErrorMsg(null);
+  };
+
+  const cancelStagedMelds = () => {
+    const returningCards = stagedMelds.flatMap(m => m.cards);
+    setLocalHand([...localHand, ...returningCards]);
+    setStagedMelds([]);
+    setErrorMsg(null);
+  };
+
+  const playMeldsToBoard = async () => {
+    if (!auth.currentUser) return;
+    const player = game.state.players[auth.currentUser.uid];
+
+    if (!player.hasMelded) {
+      const totalPoints = stagedMelds.reduce((sum, m) => sum + m.points, 0);
+      const hasRun = stagedMelds.some(m => m.type === 'run');
+      
+      if (totalPoints < 45 || !hasRun) {
+        setErrorMsg(`Initial meld requires 45 points and at least 1 run. You have ${totalPoints} pts.`);
+        return;
+      }
+    }
+
+    const newMelds = stagedMelds.map(m => ({
+      id: Math.random().toString(36).substr(2, 9),
+      playerId: auth.currentUser!.uid,
+      cards: m.cards
+    }));
+
+    const updates: any = {
+      [`state.players.${auth.currentUser.uid}.hand`]: localHand,
+      [`state.players.${auth.currentUser.uid}.hasMelded`]: true,
+      'state.melds': [...game.state.melds, ...newMelds]
+    };
+
+    if (localHand.length === 0) {
+      updates.status = 'finished';
+      updates.winner = auth.currentUser.uid;
+    }
+
+    await updateDoc(doc(db, 'games', game.id), updates);
+    setStagedMelds([]);
+    setErrorMsg(null);
   };
 
   const isMyTurn = game.status === 'playing' && game.state.playerIds[game.state.turnIndex] === auth.currentUser?.uid;
@@ -265,22 +342,83 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                 </div>
               </div>
               
-              {/* Melds Area */}
-              <div className="flex-1 bg-emerald-900/20 rounded-xl border border-emerald-700/50 p-4 overflow-y-auto">
-                <p className="text-emerald-500/50 text-center text-sm font-medium">Table (Melds go here)</p>
-                {/* TODO: Render active melds here */}
+              {/* Melds Area (The Board) */}
+              <div className="flex-1 bg-emerald-900/20 rounded-xl border border-emerald-700/50 p-4 overflow-y-auto flex flex-col gap-4">
+                {game.state.melds.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center text-emerald-500/50 text-sm font-medium">
+                    No melds on the board yet.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-4">
+                    {game.state.melds.map((meld: any) => (
+                      <div key={meld.id} className="bg-emerald-800/30 p-2 rounded-lg border border-emerald-700/30">
+                        <div className="text-[10px] text-emerald-400/70 mb-1 uppercase tracking-wider font-bold">
+                          {userMap[meld.playerId]?.name}
+                        </div>
+                        <div className="flex -space-x-8 sm:-space-x-12 hover:space-x-1 transition-all">
+                          {meld.cards.map((c: any, i: number) => (
+                            <div key={c.id} className="relative shadow-md h-16 sm:h-20 shrink-0" style={{ zIndex: i }}>
+                              <Card face={c} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
+            {/* Staged Melds Area */}
+            {stagedMelds.length > 0 && isMyTurn && turnPhase === 'play' && (
+              <div className="bg-indigo-950 border-t-2 border-indigo-500 p-3 shadow-lg z-20 shrink-0">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-indigo-300 font-bold text-sm">Staged Melds ({stagedMelds.reduce((sum, m) => sum + m.points, 0)} pts)</span>
+                  <div className="flex gap-2">
+                    <button onClick={cancelStagedMelds} className="px-3 py-1 bg-zinc-800 text-white text-xs rounded shadow hover:bg-zinc-700">Cancel</button>
+                    <button onClick={playMeldsToBoard} className="px-3 py-1 bg-indigo-500 text-white font-bold text-xs rounded shadow hover:bg-indigo-400">Play Melds to Board</button>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-4">
+                  {stagedMelds.map((meld, idx) => (
+                    <div key={idx} className="flex -space-x-8 sm:-space-x-12">
+                      {meld.cards.map((c, i) => (
+                        <div key={c.id} className="relative shadow-sm h-16 sm:h-20 shrink-0" style={{ zIndex: i }}>
+                          <Card face={c} />
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Error Message */}
+            {errorMsg && (
+              <div className="absolute bottom-40 left-4 right-4 bg-red-500 text-white p-2 rounded text-center text-sm font-bold shadow-xl z-50 animate-in fade-in slide-in-from-bottom-2">
+                {errorMsg}
+              </div>
+            )}
+
             {/* Current Player Hand */}
             {isJoined && (
-              <div className="h-32 sm:h-40 bg-emerald-950/80 p-2 sm:p-4 overflow-x-auto overflow-y-hidden border-t border-emerald-900 shrink-0">
+              <div className="h-32 sm:h-40 bg-emerald-950/80 p-2 sm:p-4 overflow-x-auto overflow-y-hidden border-t border-emerald-900 shrink-0 relative">
+                {isMyTurn && turnPhase === 'play' && selectedCards.length >= 3 && (
+                  <div className="absolute top-0 left-0 right-0 flex justify-center -mt-6 z-30">
+                    <button 
+                      onClick={stageMeld}
+                      className="px-6 py-2 bg-yellow-500 text-yellow-950 font-black rounded-full shadow-[0_0_15px_rgba(234,179,8,0.5)] animate-bounce text-sm"
+                    >
+                      Meld {selectedCards.length} Cards
+                    </button>
+                  </div>
+                )}
                 <Droppable droppableId="my-hand" direction="horizontal">
                   {(provided) => (
                     <div 
                       ref={provided.innerRef} 
                       {...provided.droppableProps}
-                      className="flex gap-1.5 sm:gap-2 h-full min-w-min px-2"
+                      className="flex gap-1.5 sm:gap-2 h-full min-w-min px-2 pt-2"
                     >
                       {localHand.map((card: any, index: number) => (
                         <Draggable key={card.id} draggableId={card.id} index={index}>
@@ -289,9 +427,15 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
-                              className={`h-full ${snapshot.isDragging ? 'z-50 scale-105' : ''}`}
+                              className={`h-full transition-transform ${snapshot.isDragging ? 'z-50 scale-105' : ''} ${selectedCards.includes(card.id) ? '-translate-y-3' : ''}`}
                             >
-                              <Card face={card} />
+                              <Card 
+                                face={card} 
+                                isSelected={selectedCards.includes(card.id)}
+                                onClick={() => {
+                                  if (isMyTurn && turnPhase === 'play') toggleCardSelection(card.id);
+                                }}
+                              />
                             </div>
                           )}
                         </Draggable>
@@ -310,7 +454,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
 }
 
 // Sub-component for rendering a card
-function Card({ face }: { face: any }) {
+function Card({ face, isSelected, onClick }: { face: any, isSelected?: boolean, onClick?: () => void }) {
   const isRed = face.suit === 'H' || face.suit === 'D';
   const colorClass = face.isJoker ? 'text-purple-600' : (isRed ? 'text-red-600' : 'text-slate-900');
   
@@ -321,7 +465,10 @@ function Card({ face }: { face: any }) {
   if (face.suit === 'S') SuitIcon = '♠';
 
   return (
-    <div className={`w-16 sm:w-20 h-full bg-white rounded-lg shadow-md border border-zinc-200 flex flex-col items-center justify-center select-none ${colorClass}`}>
+    <div 
+      onClick={onClick}
+      className={`w-12 sm:w-16 h-full bg-white rounded-lg shadow-md border ${isSelected ? 'border-yellow-400 ring-4 ring-yellow-400/50' : 'border-zinc-200'} flex flex-col items-center justify-center select-none cursor-pointer ${colorClass}`}
+    >
       {face.isJoker ? (
         <div className="font-bold text-center flex flex-col items-center">
           <span className="text-xs uppercase">Joker</span>

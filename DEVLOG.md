@@ -204,4 +204,8 @@
 > Prompt: "we are (ready for Phase 2)"
 > Plan: Implement Phase 2 of Rummy 45. Add turn phases (`draw` vs `play`), clicking the Deck to draw, clicking the Discard Pile to draw the top discarded card, and dragging a card from the hand to the Discard Pile to end the turn.
 
-**2026-05-06 17:31 - Task Completed**: Implemented the core Rummy game loop. Added `turnPhase` to Firestore. Users can click the Deck or Discard pile to draw (turns the deck green/pulsing when it's their draw phase). Players end their turn by dragging a card to the discard pile (highlights yellow/green). Turns automatically advance to the next player. Built and deployed.
+**2026-05-06 17:34 - Task Started**
+> Prompt: "go ahead (Phase 3)"
+> Plan: Implement Meld Validation (Set vs Run, calculating points). Implement a Staging UI where players select cards from their hand and create staged melds locally. Enforce the "Initial Meld must be >= 45 points and contain a run" rule before pushing to Firestore.
+
+**2026-05-06 17:38 - Task Completed**: `RummyEngine.ts` updated with `validateMeld` and point calculation for Sets/Runs (accounting for Jokers and Aces). UI updated: Clicking cards in your hand highlights them. If 3+ are highlighted, a bouncing "Meld X Cards" button appears. Melds are staged in a purple bar above the hand until the 45-point condition is met, after which they can be played to the board for everyone to see. Built and deployed.
