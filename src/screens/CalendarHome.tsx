@@ -3,7 +3,7 @@ import { isSameDay, format } from 'date-fns';
 import { auth, db, messaging } from '../firebase';
 import { getToken } from 'firebase/messaging';
 import { collection, query, onSnapshot, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
-import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star } from 'lucide-react';
+import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2 } from 'lucide-react';
 import CalendarGrid from '../components/CalendarGrid';
 import AddEventModal from '../components/AddEventModal';
 import EventDetailsModal from '../components/EventDetailsModal';
@@ -13,6 +13,7 @@ import LeaveGroupModal from '../components/LeaveGroupModal';
 import GroupSettingsModal from '../components/GroupSettingsModal';
 import NotificationsDropdown from '../components/NotificationsDropdown';
 import GroupChatWidget from '../components/GroupChatWidget';
+import GamesHubModal from '../components/games/GamesHubModal';
 import { useNavigate } from 'react-router-dom';
 
 export default function CalendarHome() {
@@ -32,6 +33,7 @@ export default function CalendarHome() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [overviewModalType, setOverviewModalType] = useState<'total' | 'pending' | 'completed' | null>(null);
   const [isGroupSettingsOpen, setIsGroupSettingsOpen] = useState(false);
+  const [isGamesHubOpen, setIsGamesHubOpen] = useState(false);
   const [userMap, setUserMap] = useState<Record<string, any>>({});
   const navigate = useNavigate();
 
@@ -368,6 +370,13 @@ export default function CalendarHome() {
           <div className="flex justify-center items-center gap-4 mb-2 px-4 flex-wrap">
             <div className="flex gap-2">
               <button 
+                onClick={() => setIsGamesHubOpen(true)}
+                className="px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
+              >
+                <Gamepad2 className="w-4 h-4" /> Games
+              </button>
+              
+              <button 
                 onClick={() => setIsInviteModalOpen(true)}
                 className="px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
               >
@@ -588,6 +597,14 @@ export default function CalendarHome() {
         userMap={userMap}
         members={groups.find(g => g.id === activeGroupId)?.members || []}
         onSuccess={() => setActiveGroupId('personal')}
+      />
+
+      <GamesHubModal
+        isOpen={isGamesHubOpen}
+        onClose={() => setIsGamesHubOpen(false)}
+        groupId={activeGroupId !== 'personal' ? activeGroupId : ''}
+        groupName={groups.find(g => g.id === activeGroupId)?.name || ''}
+        userMap={userMap}
       />
 
     </div>

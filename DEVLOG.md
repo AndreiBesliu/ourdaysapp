@@ -175,3 +175,9 @@
 > Plan: Evaluate Rummy 45 feasibility and begin implementing OS-level True Push Notifications using Firebase Cloud Messaging (FCM) since the Cloud Functions infrastructure is now ready.
 
 **2026-05-06 16:03 - Task Completed**: Evaluated Rummy 45 (High difficulty, documented in DEVLOG). Implemented `onMessageCreated` Firebase Cloud Function. It automatically queries the group members and dispatches FCM payloads to their devices using `sendEachForMulticast`. Web Push frontend was already configured in previous sessions. Built and deployed to Firebase successfully.
+
+**2026-05-06 16:00 - Task Started**
+> Prompt: "1, let's create a way to play not just rummy 45 but othe games as well"
+> Plan: Design and implement a scalable "Games Hub" framework. Create a new Firestore collection `games` to sync real-time state, build a generic Games Lobby UI within groups, and implement Tic-Tac-Toe as the first proof-of-concept multiplayer game.
+
+**2026-05-06 16:05 - Task Completed**: `GamesHubModal` created to show an arcade for groups. Implemented a fully functional, real-time synced `TicTacToe` game using Firestore. The architecture is modular so other games (like Rummy 45) can be easily added into the hub. Built and deployed to Firebase successfully.
