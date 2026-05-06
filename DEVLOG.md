@@ -36,11 +36,7 @@
 
 ### 1. In Progress / Upcoming
 - **Minigames**: Integrate a simple embedded game (e.g., HTML5 Canvas or React) to make the app more engaging for the family.
-  - Evaluate the difficulty of creating "Rummy 45" from scratch and making it playable for a group in-app.
-- **AI Integration**:
-  - Connect to an AI service (e.g., Gemini / OpenAI) to auto-suggest tasks or categorize events.
-  - Create a special "AI Group" where you can add tasks, and the AI will process or auto-complete them.
-- **True Push Notifications**: Implement Firebase Cloud Functions to send OS-level push notifications (Requires Firebase Blaze Plan).
+  - *Evaluation of Rummy 45*: High difficulty. Requires complex real-time game state (deck, discard pile, melds, validation logic, drag-and-drop mechanics). Estimated 1-2 weeks of dedicated development. Recommended to start with a simpler game first (e.g., Uno or Tic-Tac-Toe).
 
 ### 2. Backlog
 - **Android Compilation**: Wrap the web/PWA into a native Android APK build once the web version is feature-complete.
@@ -49,6 +45,8 @@
 ---
 
 ## ✅ Completed Features
+- **True Push Notifications**: Implemented Firebase Cloud Messaging (FCM) and Cloud Functions to deliver OS-level push notifications to group members when a chat message is received.
+- **AI Assistant**: Server-side Gemini 2.5 Flash Lite integration generating automated checklists for tasks assigned to the `ai_assistant`.
 - **Checklist Management**: Added ability to edit checklist text and reorder items via up/down arrows in event modals.
 - **Group Chat**: Real-time collapsible chat popup for group members, with image sharing and seen status.
 - **Group Settings Modal**: Replaced "Delete Group" with an "Edit Group" modal covering rename, member management, and delete/leave.
@@ -165,3 +163,15 @@
 > Plan: Set up Firebase Cloud Functions to create a robust, server-side "AI Assistant". When a task is assigned to the "ai_assistant" dummy user/group, a Firestore trigger will automatically ping Gemini and generate a checklist in the background.
 
 **2026-05-06 12:24 - Task Completed**: Set up the `functions/` directory, updated `firebase.json`, and wrote `functions/src/index.ts`. The backend uses `firebase-functions/v2/firestore` triggers and Secret Manager to securely handle the API key and auto-generate checklists when tasks are assigned to the `ai_assistant`. Also added the AI Assistant as an assignee option in the UI.
+
+**2026-05-06 14:41 - Task Started**
+> Prompt: "same error, did you send the update?"
+> Plan: Fix aggressive Firebase edge caching by adding Cache-Control headers to firebase.json, and downgrade AI model from gemini-2.5-flash (which was returning 503) to gemini-2.5-flash-lite for stability.
+
+**2026-05-06 15:04 - Task Completed**: `gemini-2.5-flash-lite` successfully integrated. Cache busters added to `firebase.json` and `index.html`. 
+
+**2026-05-06 15:52 - Task Started**
+> Prompt: "ok, it works, let's move forward with the roadmap, and then we can improve upon what we have"
+> Plan: Evaluate Rummy 45 feasibility and begin implementing OS-level True Push Notifications using Firebase Cloud Messaging (FCM) since the Cloud Functions infrastructure is now ready.
+
+**2026-05-06 16:03 - Task Completed**: Evaluated Rummy 45 (High difficulty, documented in DEVLOG). Implemented `onMessageCreated` Firebase Cloud Function. It automatically queries the group members and dispatches FCM payloads to their devices using `sendEachForMulticast`. Web Push frontend was already configured in previous sessions. Built and deployed to Firebase successfully.

@@ -70,3 +70,55 @@ Example output: ["Buy milk", "Get eggs", "Pay the cashier"]`;
     console.error("AI Generation Error", error);
   }
 });
+
+export const onMessageCreated = onDocumentCreated("groups/{groupId}/messages/{messageId}", async (event) => {
+  const snapshot = event.data;
+  if (!snapshot) return;
+
+  const msgData = snapshot.data();
+  const senderId = msgData.senderId;
+  const groupId = event.params.groupId;
+
+  try {
+    const groupDoc = await admin.firestore().doc(`groups/${groupId}`).get();
+    if (!groupDoc.exists) return;
+    const groupData = groupDoc.data();
+    if (!groupData) return;
+
+    const groupName = groupData.name || "A group";
+    const members = groupData.members || [];
+    const targetUserIds = members.filter((id: string) => id !== senderId);
+    
+    if (targetUserIds.length === 0) return;
+
+    const senderDoc = await admin.firestore().doc(`users/${senderId}`).get();
+    const senderName = senderDoc.data()?.name || senderDoc.data()?.email?.split('@')[0] || "Someone";
+
+    const tokens: string[] = [];
+    for (const uid of targetUserIds) {
+      const userDoc = await admin.firestore().doc(`users/${uid}`).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        if (userData?.fcmTokens && Array.isArray(userData.fcmTokens)) {
+          tokens.push(...userData.fcmTokens);
+        }
+      }
+    }
+
+    const uniqueTokens = [...new Set(tokens)];
+    if (uniqueTokens.length === 0) return;
+
+    const payload = {
+      notification: {
+        title: `${senderName} in ${groupName}`,
+        body: msgData.text || (msgData.imageUrl ? "Sent an image" : "Sent a message"),
+      },
+      tokens: uniqueTokens
+    };
+
+    const response = await admin.messaging().sendEachForMulticast(payload);
+    console.log(`Successfully sent ${response.successCount} messages; failed ${response.failureCount}`);
+  } catch (error) {
+    console.error("Error sending FCM payload:", error);
+  }
+});

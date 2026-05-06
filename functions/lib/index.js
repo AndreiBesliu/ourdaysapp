@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.autoSuggestChecklist = void 0;
+exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 const params_1 = require("firebase-functions/params");
@@ -59,6 +59,55 @@ Example output: ["Buy milk", "Get eggs", "Pay the cashier"]`;
     }
     catch (error) {
         console.error("AI Generation Error", error);
+    }
+});
+exports.onMessageCreated = (0, firestore_1.onDocumentCreated)("groups/{groupId}/messages/{messageId}", async (event) => {
+    var _a, _b, _c;
+    const snapshot = event.data;
+    if (!snapshot)
+        return;
+    const msgData = snapshot.data();
+    const senderId = msgData.senderId;
+    const groupId = event.params.groupId;
+    try {
+        const groupDoc = await admin.firestore().doc(`groups/${groupId}`).get();
+        if (!groupDoc.exists)
+            return;
+        const groupData = groupDoc.data();
+        if (!groupData)
+            return;
+        const groupName = groupData.name || "A group";
+        const members = groupData.members || [];
+        const targetUserIds = members.filter((id) => id !== senderId);
+        if (targetUserIds.length === 0)
+            return;
+        const senderDoc = await admin.firestore().doc(`users/${senderId}`).get();
+        const senderName = ((_a = senderDoc.data()) === null || _a === void 0 ? void 0 : _a.name) || ((_c = (_b = senderDoc.data()) === null || _b === void 0 ? void 0 : _b.email) === null || _c === void 0 ? void 0 : _c.split('@')[0]) || "Someone";
+        const tokens = [];
+        for (const uid of targetUserIds) {
+            const userDoc = await admin.firestore().doc(`users/${uid}`).get();
+            if (userDoc.exists) {
+                const userData = userDoc.data();
+                if ((userData === null || userData === void 0 ? void 0 : userData.fcmTokens) && Array.isArray(userData.fcmTokens)) {
+                    tokens.push(...userData.fcmTokens);
+                }
+            }
+        }
+        const uniqueTokens = [...new Set(tokens)];
+        if (uniqueTokens.length === 0)
+            return;
+        const payload = {
+            notification: {
+                title: `${senderName} in ${groupName}`,
+                body: msgData.text || (msgData.imageUrl ? "Sent an image" : "Sent a message"),
+            },
+            tokens: uniqueTokens
+        };
+        const response = await admin.messaging().sendEachForMulticast(payload);
+        console.log(`Successfully sent ${response.successCount} messages; failed ${response.failureCount}`);
+    }
+    catch (error) {
+        console.error("Error sending FCM payload:", error);
     }
 });
 //# sourceMappingURL=index.js.map
