@@ -183,3 +183,9 @@
 > Plan: Add an editable date picker to `AddEventModal.tsx`, maintain local `eventDate` state, and include date modifications in the real-time autosave and submit logic.
 
 **2026-05-06 09:12 - Task Completed**: Replaced the static date display in `AddEventModal.tsx` with a native `<input type="date">`. Added local state for `eventDate` which now seamlessly hooks into the new autosave engine and draft systems. Built and deployed successfully.
+
+**2026-05-06 09:26 - Task Started**
+> Prompt: "can we customize the calendar to be more in line with the theme, let's have darkmode influence the background and use the accent color somehow"
+> Plan: Apply `color-scheme: dark` to `.dark` class and `accent-color` globally in `index.css` so native browser inputs (like the date picker) match the application theme perfectly.
+
+**2026-05-06 09:27 - Task Completed**: `index.css` updated with `color-scheme` and `accent-color`. Verified build and deployed to Firebase successfully.
