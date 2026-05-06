@@ -177,3 +177,9 @@
 > Plan: Add a debounced `useEffect` to `AddEventModal.tsx` to automatically push changes to Firestore when `editEvent` is active. Change the Save button to "Done" during edits.
 
 **2026-05-06 09:04 - Task Completed**: Implemented real-time autosave in `AddEventModal.tsx` using a 1-second debounce timeout. Added `autoSaveStatus` indicator next to the modified "Done" button. Built and deployed to Firebase successfully.
+
+**2026-05-06 09:11 - Task Started**
+> Prompt: "i want to be able to move events from one day to another, basically a way to change the event/task date"
+> Plan: Add an editable date picker to `AddEventModal.tsx`, maintain local `eventDate` state, and include date modifications in the real-time autosave and submit logic.
+
+**2026-05-06 09:12 - Task Completed**: Replaced the static date display in `AddEventModal.tsx` with a native `<input type="date">`. Added local state for `eventDate` which now seamlessly hooks into the new autosave engine and draft systems. Built and deployed successfully.

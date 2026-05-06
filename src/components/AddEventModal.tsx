@@ -37,6 +37,7 @@ const CATEGORIES = [
 
 export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent, userMap = {}, activeGroupId = 'personal', groups = [] }: AddEventModalProps) {
   const [title, setTitle] = useState('');
+  const [eventDate, setEventDate] = useState<string>('');
   const [description, setDescription] = useState('');
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [newItemText, setNewItemText] = useState('');
@@ -107,6 +108,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   useEffect(() => {
     if (editEvent && isOpen) {
       setTitle(editEvent.title || '');
+      setEventDate(editEvent.date ? format(new Date(editEvent.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'));
       setDescription(editEvent.description || '');
       setChecklistItems(editEvent.checklistItems || []);
       setCategory(CATEGORIES.find(c => c.id === editEvent.categoryId) || CATEGORIES[0]);
@@ -123,6 +125,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           const parsed = JSON.parse(draftJSON);
           if (window.confirm("You have an unsaved draft for a new event. Do you want to restore it?")) {
             setTitle(parsed.title || '');
+            if (parsed.eventDate) setEventDate(parsed.eventDate);
             setDescription(parsed.description || '');
             if (parsed.checklistItems) setChecklistItems(parsed.checklistItems);
             if (parsed.categoryId) {
@@ -143,6 +146,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
       if (!loadedDraft) {
         setTitle('');
+        setEventDate(selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'));
         setDescription('');
         setChecklistItems([]);
         setCategory(CATEGORIES[0]);
@@ -164,7 +168,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   useEffect(() => {
     if (isOpen && !editEvent) {
       const draft = {
-        title, description, checklistItems, categoryId: category.id, isTask, assigneeIds, visibleTo, selectedGroupId, repeat
+        title, eventDate, description, checklistItems, categoryId: category.id, isTask, assigneeIds, visibleTo, selectedGroupId, repeat
       };
       if (title || description || checklistItems.length > 0) {
         localStorage.setItem('ourDays_draftEvent', JSON.stringify(draft));
@@ -172,12 +176,12 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         localStorage.removeItem('ourDays_draftEvent');
       }
     }
-  }, [title, description, checklistItems, category, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, isOpen, editEvent]);
+  }, [title, eventDate, description, checklistItems, category, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, isOpen, editEvent]);
 
   // Auto-save edits to Firestore
   useEffect(() => {
     if (isOpen && editEvent) {
-      if (!title.trim()) return;
+      if (!title.trim() || !eventDate) return;
       
       setAutoSaveStatus('saving');
       const timeoutId = setTimeout(async () => {
@@ -195,6 +199,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           const baseEventData = {
             title,
             description,
+            date: new Date(eventDate).toISOString(),
             checklistItems: safeChecklistItems,
             categoryId: category.id,
             groupId: selectedGroupId !== 'personal' ? selectedGroupId : null,
@@ -217,7 +222,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       
       return () => clearTimeout(timeoutId);
     }
-  }, [title, description, checklistItems, category, isTask, assigneeIds, visibleTo, selectedGroupId, removeMainImage, selectedAssetId, selectedAssetUrl, isOpen, editEvent]);
+  }, [title, eventDate, description, checklistItems, category, isTask, assigneeIds, visibleTo, selectedGroupId, removeMainImage, selectedAssetId, selectedAssetUrl, isOpen, editEvent]);
 
   if (!isOpen) return null;
 
@@ -323,7 +328,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       };
 
       if (editEvent) {
-        await updateDoc(doc(db, 'events', editEvent.id), { ...baseEventData, date: editEvent.date });
+        await updateDoc(doc(db, 'events', editEvent.id), { ...baseEventData, date: new Date(eventDate).toISOString() });
+        onClose();
+        return; // Early return for edit
       } else {
         let eventsToCreate = 1;
         if (repeat === 'daily') eventsToCreate = 14; // next 2 weeks
@@ -331,15 +338,15 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         if (repeat === 'monthly') eventsToCreate = 6; // next 6 months
 
         for (let i = 0; i < eventsToCreate; i++) {
-          let eventDate = new Date(selectedDate);
+          let eventDateObj = new Date(eventDate);
           if (i > 0) {
-            if (repeat === 'daily') eventDate.setDate(eventDate.getDate() + i);
-            if (repeat === 'weekly') eventDate.setDate(eventDate.getDate() + (i * 7));
-            if (repeat === 'monthly') eventDate.setMonth(eventDate.getMonth() + i);
+            if (repeat === 'daily') eventDateObj.setDate(eventDateObj.getDate() + i);
+            if (repeat === 'weekly') eventDateObj.setDate(eventDateObj.getDate() + (i * 7));
+            if (repeat === 'monthly') eventDateObj.setMonth(eventDateObj.getMonth() + i);
           }
           await addDoc(collection(db, 'events'), {
             ...baseEventData,
-            date: eventDate.toISOString(),
+            date: eventDateObj.toISOString(),
             createdAt: new Date().toISOString()
           });
         }
@@ -401,12 +408,15 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
           <div className="flex items-center justify-between">
-            {selectedDate && (
-              <div className="flex items-center gap-3 relative">
-                <div className="text-sm font-medium text-primary bg-primary/10 px-3 py-2 rounded-lg inline-block">
-                  {format(selectedDate, 'EEEE, MMMM d, yyyy')}
-                </div>
-                {owner && (
+            <div className="flex items-center gap-3 relative">
+              <input 
+                type="date"
+                value={eventDate}
+                onChange={(e) => setEventDate(e.target.value)}
+                className="text-sm font-medium text-primary bg-primary/10 px-3 py-2 rounded-lg outline-none border-none focus:ring-2 focus:ring-primary/50 cursor-pointer min-w-[140px]"
+                required
+              />
+              {owner && (
                   <div className="relative">
                     <button type="button" onClick={() => setShowOwnerProfile(!showOwnerProfile)} className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 flex items-center justify-center overflow-hidden hover:ring-2 hover:ring-primary transition-all shadow-sm" title="View Owner">
                       {owner.photoURL ? (
@@ -459,7 +469,6 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   </div>
                 )}
               </div>
-            )}
           </div>
 
           <div className="space-y-2">
