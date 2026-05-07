@@ -97,7 +97,7 @@ export const initializeGame = (playerUids: string[]): GameState => {
 
 // --- PHASE 3: MELD VALIDATION & SCORING ---
 
-const VALUE_ORDER = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+export const VALUE_ORDER = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 
 export const validateMeld = (cards: RummyCard[]): { isValid: boolean; type?: 'set' | 'run'; points: number; error?: string } => {
   if (cards.length < 3) return { isValid: false, points: 0, error: 'Meld must have at least 3 cards.' };
@@ -217,4 +217,22 @@ export const calculatePenaltyPoints = (hand: RummyCard[]): number => {
     }
   }
   return pts;
+};
+
+export const canSwapJoker = (meldCards: RummyCard[], cardToSwap: RummyCard): { isValid: boolean; jokerCard?: RummyCard; newMeld?: RummyCard[] } => {
+  if (cardToSwap.isJoker) return { isValid: false };
+
+  const jokerIndex = meldCards.findIndex(c => c.isJoker);
+  if (jokerIndex === -1) return { isValid: false };
+
+  const testMeld = [...meldCards];
+  const jokerCard = testMeld[jokerIndex];
+  testMeld[jokerIndex] = cardToSwap;
+
+  const validation = validateMeld(testMeld);
+  if (validation.isValid) {
+    return { isValid: true, jokerCard, newMeld: testMeld };
+  }
+
+  return { isValid: false };
 };
