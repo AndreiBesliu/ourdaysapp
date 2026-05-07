@@ -219,7 +219,7 @@ export const calculatePenaltyPoints = (hand: RummyCard[]): number => {
   return pts;
 };
 
-export const canSwapJoker = (meldCards: RummyCard[], cardToSwap: RummyCard): { isValid: boolean; jokerCard?: RummyCard; newMeld?: RummyCard[] } => {
+export const canSwapJoker = (meldCards: RummyCard[], cardToSwap: RummyCard): { isValid: boolean; jokerCard?: RummyCard; newMeldCards?: RummyCard[] } => {
   if (cardToSwap.isJoker) return { isValid: false };
 
   const jokerIndex = meldCards.findIndex(c => c.isJoker);
@@ -231,7 +231,7 @@ export const canSwapJoker = (meldCards: RummyCard[], cardToSwap: RummyCard): { i
 
   const validation = validateMeld(testMeld);
   if (validation.isValid) {
-    return { isValid: true, jokerCard, newMeld: testMeld };
+    return { isValid: true, jokerCard, newMeldCards: testMeld };
   }
 
   return { isValid: false };
