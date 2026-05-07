@@ -29,6 +29,7 @@
 3.  **Roadmap Sync** — Move completed features from "Roadmap" to "Completed Features" in this file.
 4.  **Build Before Deploy** — Always run `npm run build` successfully before deploying.
 5.  **Deploy After Every Feature** — Run `npx firebase-tools deploy --only hosting` and commit + push to Git after each feature is done.
+6.  **Secret Management** — NEVER hardcode API keys or secrets in source code, scratch files, or test scripts. Always use local `.env` files, ensure they are explicitly listed in `.gitignore`, and use `process.env` to access them securely.
 
 ---
 
