@@ -1,15 +1,14 @@
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
-import { defineSecret } from "firebase-functions/params";
+
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 admin.initializeApp();
 
-const geminiApiKey = defineSecret("GEMINI_API_KEY");
+
 
 export const autoSuggestChecklist = onDocumentCreated({
-  document: "events/{eventId}",
-  secrets: [geminiApiKey]
+  document: "events/{eventId}"
 }, async (event) => {
   const snapshot = event.data;
   if (!snapshot) return;
@@ -28,16 +27,21 @@ export const autoSuggestChecklist = onDocumentCreated({
   const description = data.description || "";
 
   try {
-    const key = geminiApiKey.value();
+    const key = process.env.GEMINI_API_KEY_LOCAL;
+    if (!key) {
+      console.error("GEMINI_API_KEY_LOCAL missing from environment.");
+      return;
+    }
     const genAI = new GoogleGenerativeAI(key);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
     const prompt = `You are a helpful AI Assistant for a family organization app. 
 The user created a task/event titled "${title}".
 ${description ? `The description is: "${description}".` : ""}
-Generate a checklist of 3 to 7 actionable, brief steps or items needed to complete this task.
+If this looks like a Grocery or Shopping list, generate a checklist grouped by supermarket aisles (e.g., "Dairy: Milk", "Produce: Apples").
+Otherwise, generate a checklist of 3 to 7 actionable, brief steps or items needed to complete this task.
 Return ONLY a valid JSON array of strings, nothing else. No markdown formatting.
-Example output: ["Buy milk", "Get eggs", "Pay the cashier"]`;
+Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1", "Step 2"]`;
 
     const result = await model.generateContent(prompt);
     const text = result.response.text();

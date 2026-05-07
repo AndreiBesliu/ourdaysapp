@@ -7,12 +7,14 @@ import { useNavigate } from 'react-router-dom';
 import BarcodeScanner from '../components/BarcodeScanner';
 import Barcode from 'react-barcode';
 import QRCode from 'react-qr-code';
+import ExpensesTab from '../components/ExpensesTab';
 
 export default function Wallet() {
   const [assets, setAssets] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>(['Home & Living', 'Health & Medical', 'Vehicles', 'Financial']);
   const [isAdding, setIsAdding] = useState(false);
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<'assets' | 'expenses'>('assets');
   
   // Modal states
   const [editingAsset, setEditingAsset] = useState<any | null>(null);
@@ -396,19 +398,42 @@ export default function Wallet() {
           </button>
           <div className="flex items-center gap-2 text-emerald-500">
             <WalletIcon className="w-6 h-6" />
-            <h1 className="text-xl font-bold text-zinc-900 dark:text-white">Assets</h1>
+            <h1 className="text-xl font-bold text-zinc-900 dark:text-white">Wallet</h1>
           </div>
         </div>
-        <button 
-          onClick={openAddModal}
-          className="p-2 bg-emerald-50 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 rounded-lg hover:bg-emerald-100 transition-colors"
-        >
-          <Plus className="w-5 h-5" />
-        </button>
+        {activeTab === 'assets' && (
+          <button 
+            onClick={openAddModal}
+            className="p-2 bg-emerald-50 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 rounded-lg hover:bg-emerald-100 transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+        )}
       </header>
+
+      <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-4 pt-2 sticky top-[60px] z-40">
+        <div className="max-w-5xl mx-auto flex gap-6">
+          <button 
+            onClick={() => setActiveTab('assets')}
+            className={`pb-3 text-sm font-bold transition-colors ${activeTab === 'assets' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+          >
+            Assets
+          </button>
+          <button 
+            onClick={() => setActiveTab('expenses')}
+            className={`pb-3 text-sm font-bold transition-colors ${activeTab === 'expenses' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
+          >
+            Group Expenses
+          </button>
+        </div>
+      </div>
 
       <main className="flex-1 max-w-5xl w-full mx-auto p-4 flex flex-col gap-8">
         
+        {activeTab === 'expenses' ? (
+          <ExpensesTab sharedUsers={sharedUsers} />
+        ) : (
+          <>
         {/* Categories Panel */}
         <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
@@ -466,6 +491,8 @@ export default function Wallet() {
           ))
         )}
 
+          </>
+        )}
       </main>
 
       {/* Add/Edit Asset Modal */}

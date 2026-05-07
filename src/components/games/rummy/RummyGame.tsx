@@ -11,7 +11,7 @@ interface RummyGameProps {
   onBack: () => void;
 }
 
-import { validateMeld, canAttachToMeld, calculatePenaltyPoints } from './RummyEngine';
+import { validateMeld, canAttachToMeld, calculatePenaltyPoints, canSwapJoker, VALUE_ORDER } from './RummyEngine';
 
 export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
   const [localHand, setLocalHand] = useState<any[]>([]);
@@ -53,6 +53,27 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     await updateDoc(doc(db, 'games', game.id), {
       state: newGameState,
       status: 'playing'
+    });
+  };
+
+  const sortHand = async () => {
+    if (!auth.currentUser) return;
+    const items = Array.from(localHand);
+    
+    items.sort((a, b) => {
+      if (a.isJoker && !b.isJoker) return 1;
+      if (!a.isJoker && b.isJoker) return -1;
+      if (a.isJoker && b.isJoker) return 0;
+      
+      const suitOrder = ['H', 'S', 'D', 'C'];
+      if (a.suit !== b.suit) return suitOrder.indexOf(a.suit!) - suitOrder.indexOf(b.suit!);
+      
+      return VALUE_ORDER.indexOf(a.value!) - VALUE_ORDER.indexOf(b.value!);
+    });
+
+    setLocalHand(items);
+    await updateDoc(doc(db, 'games', game.id), {
+      [`state.players.${auth.currentUser.uid}.hand`]: items
     });
   };
 
@@ -150,18 +171,31 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       const cardToAttach = items[result.source.index];
 
       const attachCheck = canAttachToMeld(targetMeld.cards, cardToAttach);
-      if (!attachCheck.isValid) {
-        setErrorMsg("That card cannot be attached to this meld.");
+      const swapCheck = canSwapJoker(targetMeld.cards, cardToAttach);
+
+      if (!attachCheck.isValid && !swapCheck.isValid) {
+        setErrorMsg("That card cannot be attached or swapped to this meld.");
         return;
       }
 
-      // Valid attachment!
-      items.splice(result.source.index, 1);
+      let updatedMeldCards = targetMeld.cards;
+      if (swapCheck.isValid) {
+        updatedMeldCards = swapCheck.newMeldCards!;
+        items.splice(result.source.index, 1);
+        const originalJoker = targetMeld.cards.find((c: any) => c.isJoker && !updatedMeldCards.includes(c));
+        if (originalJoker) {
+           items.push(originalJoker);
+        }
+      } else {
+        updatedMeldCards = attachCheck.newCards!;
+        items.splice(result.source.index, 1);
+      }
+
       setLocalHand(items); // Optimistic UI
       setErrorMsg(null);
 
       const updatedMelds = [...game.state.melds];
-      updatedMelds[meldIndex] = { ...targetMeld, cards: attachCheck.newCards };
+      updatedMelds[meldIndex] = { ...targetMeld, cards: updatedMeldCards };
 
       const updates: any = {
         [`state.players.${auth.currentUser.uid}.hand`]: items,
@@ -476,6 +510,9 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
             {/* Current Player Hand */}
             {isJoined && (
               <div className="h-32 sm:h-40 bg-emerald-950/80 p-2 sm:p-4 overflow-x-auto overflow-y-hidden border-t border-emerald-900 shrink-0 relative">
+                <button onClick={sortHand} className="absolute top-2 right-2 z-40 px-3 py-1 bg-emerald-800 text-emerald-200 text-xs font-bold rounded shadow hover:bg-emerald-700 transition-colors border border-emerald-700/50">
+                  Sort Hand
+                </button>
                 {isMyTurn && turnPhase === 'play' && selectedCards.length >= 3 && (
                   <div className="absolute top-0 left-0 right-0 flex justify-center -mt-6 z-30">
                     <button 

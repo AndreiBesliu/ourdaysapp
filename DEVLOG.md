@@ -249,3 +249,9 @@
 **2026-05-07 14:11 - Task Started**
 > Prompt: "i want to deploy the updates to Firebase now and after that i want you to start with suggestions 1,2,3. we will leave 4 for later."
 > Plan: Triggering build and Firebase deployment. Next, implementing Suggestion 1: Rummy 45 Pro Mechanics (Card Sorting Button and Joker Swapping logic).
+
+**2026-05-07 14:14 - Task Completed**: Suggestion 1 implemented. Added `sortHand` function to `RummyGame.tsx` to automatically group hand by Suit and Value. Added `canSwapJoker` logic to `RummyEngine.ts` and drag-and-drop support so users can replace a Joker in a meld with the natural card it represents and take the Joker into their hand.
+
+**2026-05-07 14:15 - Task Completed**: Suggestion 2 and 3 implemented. 
+- **Suggestion 2**: Added premium CSS micro-animations (`animate-deal` and `animate-pop-in`) to `index.css` and applied them to card draws and meld creation in Rummy 45.
+- **Suggestion 3**: Refactored the Gemini prompt in Firebase Functions to output categorized shopping lists (by supermarket aisle) if it detects a grocery-related task. Added a new `ExpensesTab.tsx` integrated seamlessly into `Wallet.tsx` to serve as a Splitwise-style expense tracker for the group.
