@@ -222,6 +222,13 @@
 > 6. Rummy 45 (Phases 1-3): 106-card generation, Drag-and-drop hand sorting, Turn enforcement (Draw/Discard loop), Strict Validation (Sets/Runs), and the 45-Point Staging UI logic.
 > 
 > **Next Steps (To resume at home)**:
+> - **Tic-Tac-Toe Polish**:
+>   - Register and display scores across rounds.
+>   - Add a "New Round" button to reset the board after a win/draw without needing to create a new game.
+> - **Rummy 45 Visual Overhaul**:
+>   - **Tile Assets**: Replace standard playing cards (Suits) with Rummy tiles (Numbers 1-13 in 4 colors: Red, Yellow, Blue, Black).
+>   - **The "Tabla" (Board) Layout**: Implement a 2-row grid system for the player's personal board instead of a horizontal list.
+>   - **Slot-based Organization**: Allow players to place cards in specific slots and leave empty spaces between them for better organization.
 > - **Phase 4 (Lipeala)**: Allow players to drag and attach individual cards from their hand onto *existing* melds on the board.
 > - **Phase 5 (End Game)**: Detect when a player discards their final card (Inchidere), end the game, tally up the negative points for remaining cards in hands, and assign the win/score to the Leaderboard.
 
