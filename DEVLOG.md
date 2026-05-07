@@ -223,3 +223,29 @@
 > **Next Steps (To resume at home)**:
 > - **Phase 4 (Lipeala)**: Allow players to drag and attach individual cards from their hand onto *existing* melds on the board.
 > - **Phase 5 (End Game)**: Detect when a player discards their final card (Inchidere), end the game, tally up the negative points for remaining cards in hands, and assign the win/score to the Leaderboard.
+
+---
+
+## 📅 Session Log: May 7, 2026
+
+**2026-05-07 09:02 - Task Started**
+> Prompt: "check the ourdayapp folder"
+> Plan: Review the repository state and identify the next steps for Rummy 45 (Phase 4 & 5).
+
+**2026-05-07 09:41 - Task Started**
+> Prompt: "you can start"
+> Plan: Implement Phase 4 (Lipeala) in RummyEngine.ts and RummyGame.tsx to allow dragging cards from the hand and attaching them to existing melds.
+
+**2026-05-07 10:42 - Task Completed**: `canAttachToMeld` validation implemented in engine. Existing melds on board converted to `Droppable` zones. Added rule blocking players from attaching their last card to enforce discarding on closing. Phase 4 done.
+
+**2026-05-07 10:42 - Task Started**
+> Prompt: "yes" (Proceed to Phase 5)
+> Plan: Implement end-game scoring for Rummy 45. Add `calculatePenaltyPoints` to tally negative points for remaining cards in losers' hands when the winner discards. Update the Arcade Leaderboard to display these total points.
+
+**2026-05-07 10:44 - Task Completed**: Phase 5 implemented. `calculatePenaltyPoints` logic uses standard Rummy values (-50 Joker, -25 Ace, -10 Faces, -5 Numbers). The Leaderboard now aggregates and displays cumulative negative points for all players across finished games. Build and deployed to Firebase.
+
+---
+
+**2026-05-07 14:11 - Task Started**
+> Prompt: "i want to deploy the updates to Firebase now and after that i want you to start with suggestions 1,2,3. we will leave 4 for later."
+> Plan: Triggering build and Firebase deployment. Next, implementing Suggestion 1: Rummy 45 Pro Mechanics (Card Sorting Button and Joker Swapping logic).

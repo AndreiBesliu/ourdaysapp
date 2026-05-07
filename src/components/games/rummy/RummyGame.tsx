@@ -11,7 +11,7 @@ interface RummyGameProps {
   onBack: () => void;
 }
 
-import { validateMeld } from './RummyEngine';
+import { validateMeld, canAttachToMeld, calculatePenaltyPoints } from './RummyEngine';
 
 export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
   const [localHand, setLocalHand] = useState<any[]>([]);
@@ -100,12 +100,76 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       if (isWin) {
         updates.status = 'finished';
         updates.winner = auth.currentUser.uid;
+
+        // Calculate penalty points for all players
+        game.state.playerIds.forEach((uid: string) => {
+          if (uid === auth.currentUser!.uid) {
+            updates[`state.players.${uid}.score`] = 0; // Winner has 0 penalty
+          } else {
+            const loserHand = uid === auth.currentUser!.uid ? items : game.state.players[uid].hand;
+            updates[`state.players.${uid}.score`] = calculatePenaltyPoints(loserHand);
+          }
+        });
       } else {
         updates['state.turnIndex'] = nextTurnIndex;
         updates['state.turnPhase'] = 'draw';
       }
 
       await updateDoc(doc(db, 'games', game.id), updates);
+      return;
+    }
+
+    // Attaching a card to a meld
+    if (result.source.droppableId === 'my-hand' && result.destination.droppableId.startsWith('meld-')) {
+      const isMyTurn = game.state.playerIds[game.state.turnIndex] === auth.currentUser.uid;
+      const isPlayPhase = game.state.turnPhase === 'play';
+      
+      if (!isMyTurn || !isPlayPhase) return;
+      if (stagedMelds.length > 0) {
+        setErrorMsg("Please play or cancel your staged melds before attaching.");
+        return;
+      }
+
+      const playerState = game.state.players[auth.currentUser.uid];
+      if (!playerState.hasMelded) {
+        setErrorMsg("You must play your initial 45-point meld before attaching cards.");
+        return;
+      }
+
+      const items = Array.from(localHand);
+      if (items.length === 1) {
+        setErrorMsg("You cannot attach your last card. You must keep one card to discard (Inchidere).");
+        return;
+      }
+
+      const meldId = result.destination.droppableId.replace('meld-', '');
+      const meldIndex = game.state.melds.findIndex((m: any) => m.id === meldId);
+      if (meldIndex === -1) return;
+
+      const targetMeld = game.state.melds[meldIndex];
+      const cardToAttach = items[result.source.index];
+
+      const attachCheck = canAttachToMeld(targetMeld.cards, cardToAttach);
+      if (!attachCheck.isValid) {
+        setErrorMsg("That card cannot be attached to this meld.");
+        return;
+      }
+
+      // Valid attachment!
+      items.splice(result.source.index, 1);
+      setLocalHand(items); // Optimistic UI
+      setErrorMsg(null);
+
+      const updatedMelds = [...game.state.melds];
+      updatedMelds[meldIndex] = { ...targetMeld, cards: attachCheck.newCards };
+
+      const updates: any = {
+        [`state.players.${auth.currentUser.uid}.hand`]: items,
+        'state.melds': updatedMelds
+      };
+
+      await updateDoc(doc(db, 'games', game.id), updates);
+      return;
     }
   };
 
@@ -351,18 +415,27 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                 ) : (
                   <div className="flex flex-wrap gap-4">
                     {game.state.melds.map((meld: any) => (
-                      <div key={meld.id} className="bg-emerald-800/30 p-2 rounded-lg border border-emerald-700/30">
-                        <div className="text-[10px] text-emerald-400/70 mb-1 uppercase tracking-wider font-bold">
-                          {userMap[meld.playerId]?.name}
-                        </div>
-                        <div className="flex -space-x-8 sm:-space-x-12 hover:space-x-1 transition-all">
-                          {meld.cards.map((c: any, i: number) => (
-                            <div key={c.id} className="relative shadow-md h-16 sm:h-20 shrink-0" style={{ zIndex: i }}>
-                              <Card face={c} />
+                      <Droppable key={meld.id} droppableId={`meld-${meld.id}`} direction="horizontal">
+                        {(provided, snapshot) => (
+                          <div 
+                            ref={provided.innerRef}
+                            {...provided.droppableProps}
+                            className={`bg-emerald-800/30 p-2 rounded-lg border transition-colors ${snapshot.isDraggingOver ? 'bg-emerald-700/50 border-yellow-400 ring-2 ring-yellow-400/50' : 'border-emerald-700/30'}`}
+                          >
+                            <div className="text-[10px] text-emerald-400/70 mb-1 uppercase tracking-wider font-bold">
+                              {userMap[meld.playerId]?.name}
                             </div>
-                          ))}
-                        </div>
-                      </div>
+                            <div className="flex -space-x-8 sm:-space-x-12 hover:space-x-1 transition-all">
+                              {meld.cards.map((c: any, i: number) => (
+                                <div key={c.id} className="relative shadow-md h-16 sm:h-20 shrink-0" style={{ zIndex: i }}>
+                                  <Card face={c} />
+                                </div>
+                              ))}
+                              <div className="hidden">{provided.placeholder}</div>
+                            </div>
+                          </div>
+                        )}
+                      </Droppable>
                     ))}
                   </div>
                 )}

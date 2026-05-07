@@ -188,3 +188,33 @@ const calculateMeldPoints = (cards: RummyCard[], type: 'set' | 'run', aceAsOne: 
   }
   return pts;
 };
+
+export const canAttachToMeld = (meldCards: RummyCard[], card: RummyCard): { isValid: boolean; newCards?: RummyCard[] } => {
+  // Test adding to end
+  const appendTest = validateMeld([...meldCards, card]);
+  if (appendTest.isValid) {
+    return { isValid: true, newCards: [...meldCards, card] };
+  }
+  // Test adding to start
+  const prependTest = validateMeld([card, ...meldCards]);
+  if (prependTest.isValid) {
+    return { isValid: true, newCards: [card, ...meldCards] };
+  }
+  return { isValid: false };
+};
+
+export const calculatePenaltyPoints = (hand: RummyCard[]): number => {
+  let pts = 0;
+  for (const c of hand) {
+    if (c.isJoker) {
+      pts -= 50;
+    } else if (c.value === 'A') {
+      pts -= 25;
+    } else {
+      const idx = VALUE_ORDER.indexOf(c.value!);
+      if (idx >= 0 && idx <= 7) pts -= 5; // 2-9
+      else pts -= 10; // 10-K
+    }
+  }
+  return pts;
+};

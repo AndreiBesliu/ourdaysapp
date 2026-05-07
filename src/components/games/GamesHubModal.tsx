@@ -19,7 +19,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
   const [activeGames, setActiveGames] = useState<any[]>([]);
   const [playingGameId, setPlayingGameId] = useState<string | null>(null);
   const [view, setView] = useState<'arcade' | 'leaderboard'>('arcade');
-  const [leaderboard, setLeaderboard] = useState<{uid: string, wins: number}[]>([]);
+  const [leaderboard, setLeaderboard] = useState<{uid: string, wins: number, points?: number}[]>([]);
 
   // Daily Games Query
   useEffect(() => {
@@ -48,16 +48,26 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const games = snapshot.docs.map(d => d.data());
-      const winsMap: Record<string, number> = {};
+      const statsMap: Record<string, { wins: number; points: number }> = {};
       
       games.forEach(g => {
         if (g.winner) {
-          winsMap[g.winner] = (winsMap[g.winner] || 0) + 1;
+          if (!statsMap[g.winner]) statsMap[g.winner] = { wins: 0, points: 0 };
+          statsMap[g.winner].wins += 1;
+        }
+
+        if (g.gameType === 'rummy-45' && g.state && g.state.players) {
+          Object.values(g.state.players).forEach((p: any) => {
+             if (p.score !== undefined) {
+               if (!statsMap[p.uid]) statsMap[p.uid] = { wins: 0, points: 0 };
+               statsMap[p.uid].points += p.score;
+             }
+          });
         }
       });
 
-      const sortedLeaderboard = Object.entries(winsMap)
-        .map(([uid, wins]) => ({ uid, wins }))
+      const sortedLeaderboard = Object.entries(statsMap)
+        .map(([uid, stats]) => ({ uid, ...stats }))
         .sort((a, b) => b.wins - a.wins);
 
       setLeaderboard(sortedLeaderboard);
@@ -314,6 +324,9 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                             <div className="text-right">
                               <p className="text-2xl font-black text-primary">{entry.wins}</p>
                               <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Wins</p>
+                              {entry.points !== undefined && entry.points < 0 && (
+                                 <p className="text-xs font-bold text-red-500 mt-1">{entry.points} pts</p>
+                              )}
                             </div>
                           </div>
                         );
