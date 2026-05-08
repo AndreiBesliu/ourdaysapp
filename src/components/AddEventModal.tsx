@@ -769,9 +769,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                               </div>
                               {(item.assetFile || item.selectedAssetUrl || item.assetUrl || item.assetId) && (
                                 <div className="ml-8 mt-2 rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 self-start max-w-[120px]">
-                                  {(item.assetFile || item.selectedAssetUrl || item.assetUrl) ? (
+                                  {(item.assetFile || item.selectedAssetUrl || item.assetUrl || (item.assetId && assets.find(a => a.id === item.assetId)?.imageUrl)) ? (
                                     <img 
-                                      src={item.assetFile ? URL.createObjectURL(item.assetFile) : (item.selectedAssetUrl || item.assetUrl || '')} 
+                                      src={item.assetFile ? URL.createObjectURL(item.assetFile) : (item.selectedAssetUrl || item.assetUrl || assets.find(a => a.id === item.assetId)?.imageUrl || '')} 
                                       alt="Preview" 
                                       className="w-full h-auto object-contain" 
                                     />

@@ -587,18 +587,31 @@ export default function Wallet() {
                 </div>
               </div>
 
-              <div className="flex gap-2">
-                <div className="flex-1 p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed text-center">
+              <div className="flex gap-2 h-28">
+                <div className="flex-1 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed text-center relative overflow-hidden group">
                   <input type="file" id="asset-upload" className="hidden" accept="image/*" onChange={(e) => {
                     if (e.target.files) {
                       setFile(e.target.files[0]);
                       setSelectedPastImageUrl(null);
                     }
                   }} />
-                  <label htmlFor="asset-upload" className="cursor-pointer flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors h-full">
-                    <ImageIcon className="w-5 h-5" />
-                    <span className="text-xs font-medium">{file ? file.name : (selectedPastImageUrl ? 'Past Image Selected' : (editingAsset && editingAsset.imageUrl ? 'Replace Image' : 'Upload Image'))}</span>
-                  </label>
+                  {(file || selectedPastImageUrl || (editingAsset && editingAsset.imageUrl)) ? (
+                    <>
+                      <img 
+                        src={file ? URL.createObjectURL(file) : (selectedPastImageUrl || editingAsset?.imageUrl)} 
+                        alt="Preview" 
+                        className="w-full h-full object-cover" 
+                      />
+                      <label htmlFor="asset-upload" className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
+                         <span className="text-xs font-medium">Change Image</span>
+                      </label>
+                    </>
+                  ) : (
+                    <label htmlFor="asset-upload" className="cursor-pointer flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors w-full h-full p-3">
+                      <ImageIcon className="w-5 h-5" />
+                      <span className="text-xs font-medium">Upload Image</span>
+                    </label>
+                  )}
                 </div>
                 
                 <div className="flex-1 flex flex-col gap-2">
