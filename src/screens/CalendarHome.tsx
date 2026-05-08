@@ -320,9 +320,20 @@ export default function CalendarHome() {
               className="bg-primary/5 border border-primary/20 rounded-lg p-3 flex flex-col justify-center cursor-pointer hover:bg-primary/10 transition-colors"
             >
               <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Total Events</p>
-              <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                {events.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date())).length}
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                  {events.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date())).length}
+                </p>
+                <div className="flex -space-x-1">
+                  {events.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date())).slice(0, 5).map((ev, idx) => {
+                    const color = ev.categoryId === 'work' ? 'bg-blue-500' : 
+                                  ev.categoryId === 'family_time' ? 'bg-emerald-500' : 
+                                  ev.categoryId === 'chores' ? 'bg-amber-500' : 
+                                  ev.categoryId === 'health' ? 'bg-rose-500' : 'bg-zinc-500';
+                    return <div key={`${ev.id}-${idx}`} className={`w-3 h-3 rounded-full border border-white dark:border-zinc-900 ${color}`} />
+                  })}
+                </div>
+              </div>
             </div>
             <div 
               onClick={() => setOverviewModalType('pending')}

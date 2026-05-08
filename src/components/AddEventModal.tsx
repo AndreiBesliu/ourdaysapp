@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, Sparkles, GripVertical, Search } from 'lucide-react';
+import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, Sparkles, GripVertical, Search, Check } from 'lucide-react';
 import { addDoc, collection, query, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
@@ -693,7 +693,12 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                                 <div {...provided.dragHandleProps} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-grab active:cursor-grabbing p-1 -ml-1">
                                   <GripVertical className="w-4 h-4" />
                                 </div>
-                                <div className="w-4 h-4 border border-zinc-300 rounded-sm shrink-0"></div>
+                                <div 
+                                  onClick={() => setChecklistItems(items => items.map(i => i.id === item.id ? { ...i, isCompleted: !i.isCompleted } : i))}
+                                  className={`w-4 h-4 border rounded-sm shrink-0 flex items-center justify-center cursor-pointer transition-colors ${item.isCompleted ? 'bg-primary border-primary text-white' : 'border-zinc-300 dark:border-zinc-600'}`}
+                                >
+                                  {item.isCompleted && <Check className="w-3 h-3" />}
+                                </div>
                                 <textarea 
                                   value={item.text}
                                   onChange={(e) => {
@@ -730,7 +735,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                                     }
                                   }}
                                   rows={1}
-                                  className="flex-1 text-sm bg-transparent border-none focus:ring-0 outline-none text-zinc-700 dark:text-zinc-300 min-w-0 resize-none overflow-hidden py-0"
+                                  className={`flex-1 text-sm bg-transparent border-none focus:ring-0 outline-none min-w-0 resize-none overflow-hidden py-0 ${item.isCompleted ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-300'}`}
                                 />
                                 
                                 <div className="flex items-center gap-1 shrink-0">
@@ -767,7 +772,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                                   <X className="w-4 h-4" />
                                 </button>
                               </div>
-                              {(item.assetFile || item.selectedAssetUrl || item.assetUrl || item.assetId) && (
+                              {!item.isCompleted && (item.assetFile || item.selectedAssetUrl || item.assetUrl || item.assetId) && (
                                 <div className="ml-8 mt-2 rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 self-start max-w-[120px]">
                                   {(item.assetFile || item.selectedAssetUrl || item.assetUrl || (item.assetId && assets.find(a => a.id === item.assetId)?.imageUrl)) ? (
                                     <img 
@@ -778,7 +783,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                                   ) : (
                                     <div className="p-2 flex flex-col items-center justify-center text-zinc-500">
                                       <Wallet className="w-6 h-6 mb-1 text-emerald-500" />
-                                      <span className="text-[10px] text-center">Linked Card</span>
+                                      <span className="text-[10px] text-center font-medium px-1 line-clamp-2">
+                                        {item.assetId && assets.find(a => a.id === item.assetId)?.name ? assets.find(a => a.id === item.assetId)?.name : 'Linked Card'}
+                                      </span>
                                     </div>
                                   )}
                                 </div>
