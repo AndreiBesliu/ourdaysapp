@@ -78,6 +78,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const [suggestedAsset, setSuggestedAsset] = useState<any | null>(null);
   const [lastAddedItemId, setLastAddedItemId] = useState<string | null>(null);
   const [assetSearchQuery, setAssetSearchQuery] = useState('');
+  const [saveUploadsToWallet, setSaveUploadsToWallet] = useState(false);
 
   useModalBack(isOpen, onClose);
 
@@ -350,9 +351,21 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     try {
       let imageUrl = null;
       if (imageFile) {
-        const fileRef = ref(storage, `events/${auth.currentUser.uid}/${Date.now()}_${imageFile.name}`);
+        const fileRef = ref(storage, `events/${auth.currentUser?.uid}/${Date.now()}_${imageFile.name}`);
         await uploadBytes(fileRef, imageFile);
         imageUrl = await getDownloadURL(fileRef);
+
+        if (saveUploadsToWallet) {
+          await addDoc(collection(db, 'assets'), {
+            name: title || 'Event Image',
+            category: 'Uncategorized',
+            categories: ['Uncategorized'],
+            imageUrl: imageUrl,
+            ownerId: auth.currentUser?.uid,
+            createdAt: new Date().toISOString(),
+            sharedWithFamily: selectedGroupId !== 'personal'
+          });
+        }
       } else if (selectedAssetUrl) {
         imageUrl = selectedAssetUrl;
       }
@@ -364,6 +377,18 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           const itemRef = ref(storage, `checklists/${auth.currentUser?.uid}/${Date.now()}_${item.assetFile.name}`);
           await uploadBytes(itemRef, item.assetFile);
           finalItemUrl = await getDownloadURL(itemRef);
+
+          if (saveUploadsToWallet) {
+            await addDoc(collection(db, 'assets'), {
+              name: item.text || 'Checklist Item',
+              category: 'Uncategorized',
+              categories: ['Uncategorized'],
+              imageUrl: finalItemUrl,
+              ownerId: auth.currentUser?.uid,
+              createdAt: new Date().toISOString(),
+              sharedWithFamily: selectedGroupId !== 'personal'
+            });
+          }
         } else if (item.selectedAssetUrl) {
           finalItemUrl = item.selectedAssetUrl;
         }
@@ -442,6 +467,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setImageFile(null);
       setSelectedAssetUrl(null);
       setSelectedAssetId(null);
+      setSaveUploadsToWallet(false);
       setAssigneeIds([]);
       setIsTask(false);
       setRepeat('none');
@@ -956,6 +982,25 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                    </button>
                  </div>
                </div>
+            )}
+
+            {/* Save to Wallet Toggle */}
+            {(imageFile || checklistItems.some(i => i.assetFile)) && (
+              <div className="flex items-center justify-between p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 animate-in fade-in slide-in-from-top-2 mt-3">
+                <div>
+                  <p className="text-sm font-medium text-emerald-900 dark:text-emerald-100">Save Uploads to Wallet</p>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">Add new photos from this event to Assets</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="sr-only peer" 
+                    checked={saveUploadsToWallet}
+                    onChange={(e) => setSaveUploadsToWallet(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 dark:peer-focus:ring-emerald-500/50 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-600 peer-checked:bg-emerald-500"></div>
+                </label>
+              </div>
             )}
           </div>
 

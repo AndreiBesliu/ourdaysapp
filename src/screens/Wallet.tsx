@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db, storage } from '../firebase';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, where } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, where, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Wallet as WalletIcon, Plus, Image as ImageIcon, Trash2, Users, User, HeartPulse, Home, Car, DollarSign, Settings2, Folder, Edit2, Check, X, ScanLine, QrCode } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -25,6 +25,9 @@ export default function Wallet() {
   const [newFilterValue, setNewFilterValue] = useState('');
   const [viewingAssetCode, setViewingAssetCode] = useState<any | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [pastImages, setPastImages] = useState<string[]>([]);
+  const [showPastImages, setShowPastImages] = useState(false);
+  const [selectedPastImageUrl, setSelectedPastImageUrl] = useState<string | null>(null);
   
   // Form state
   const [name, setName] = useState('');
@@ -95,6 +98,7 @@ export default function Wallet() {
         setViewingImage(null);
         setViewingAssetCode(null);
         setIsScanning(false);
+        setShowPastImages(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -118,6 +122,8 @@ export default function Wallet() {
         const timeoutTask = new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timed out. Storage might be blocked.')), 15000));
         await Promise.race([uploadTask, timeoutTask]);
         url = await getDownloadURL(fileRef);
+      } else if (selectedPastImageUrl) {
+        url = selectedPastImageUrl;
       }
 
       const assetData = {
@@ -160,6 +166,7 @@ export default function Wallet() {
       setName('');
       setSelectedCategories([]);
       setFile(null);
+      setSelectedPastImageUrl(null);
       setBarcodeValue('');
       setBarcodeFormat('');
       setIsShared(false);
@@ -189,6 +196,7 @@ export default function Wallet() {
     setBarcodeValue(asset.barcodeValue || '');
     setBarcodeFormat(asset.barcodeFormat || '');
     setFile(null);
+    setSelectedPastImageUrl(null);
     setTransferToUserId('');
     setKeepCopy(true);
   };
@@ -201,6 +209,7 @@ export default function Wallet() {
     setBarcodeValue('');
     setBarcodeFormat('');
     setFile(null);
+    setSelectedPastImageUrl(null);
     setIsAdding(true);
   };
 
@@ -226,6 +235,30 @@ export default function Wallet() {
       await updateDoc(doc(db, 'users', auth.currentUser.uid), { walletCategories: newCats });
       setNewFilterValue('');
     } catch (e) { console.error(e); }
+    setLoading(false);
+  };
+
+  const openPastImages = async () => {
+    if (!auth.currentUser) return;
+    setLoading(true);
+    try {
+      const q = query(collection(db, 'events'), where('ownerId', '==', auth.currentUser.uid));
+      const snap = await getDocs(q);
+      const urls = new Set<string>();
+      snap.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.imageUrl) urls.add(data.imageUrl);
+        if (data.checklistItems) {
+          data.checklistItems.forEach((item: any) => {
+            if (item.assetUrl) urls.add(item.assetUrl);
+          });
+        }
+      });
+      setPastImages(Array.from(urls));
+      setShowPastImages(true);
+    } catch (e) {
+      console.error('Failed to fetch past images', e);
+    }
     setLoading(false);
   };
 
@@ -541,26 +574,37 @@ export default function Wallet() {
 
               <div className="flex gap-2">
                 <div className="flex-1 p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed text-center">
-                  <input type="file" id="asset-upload" className="hidden" accept="image/*" onChange={(e) => e.target.files && setFile(e.target.files[0])} />
+                  <input type="file" id="asset-upload" className="hidden" accept="image/*" onChange={(e) => {
+                    if (e.target.files) {
+                      setFile(e.target.files[0]);
+                      setSelectedPastImageUrl(null);
+                    }
+                  }} />
                   <label htmlFor="asset-upload" className="cursor-pointer flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors h-full">
                     <ImageIcon className="w-5 h-5" />
-                    <span className="text-xs font-medium">{file ? file.name : (editingAsset && editingAsset.imageUrl ? 'Replace Image' : 'Upload Image')}</span>
+                    <span className="text-xs font-medium">{file ? file.name : (selectedPastImageUrl ? 'Past Image Selected' : (editingAsset && editingAsset.imageUrl ? 'Replace Image' : 'Upload Image'))}</span>
                   </label>
                 </div>
                 
-                <div className="flex-1 p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed text-center flex flex-col justify-center items-center">
-                  {barcodeValue ? (
-                    <div className="text-center">
-                      <p className="text-xs text-emerald-500 font-bold mb-1">Scanned!</p>
-                      <p className="text-[10px] text-zinc-500 truncate w-24 mx-auto" title={barcodeValue}>{barcodeValue}</p>
-                      <button type="button" onClick={() => { setBarcodeValue(''); setBarcodeFormat(''); }} className="text-[10px] text-red-500 hover:underline mt-1">Remove</button>
-                    </div>
-                  ) : (
-                    <button type="button" onClick={() => setIsScanning(true)} className="flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors w-full h-full">
-                      <ScanLine className="w-5 h-5" />
-                      <span className="text-xs font-medium">Scan Code</span>
-                    </button>
-                  )}
+                <div className="flex-1 flex flex-col gap-2">
+                  <button type="button" onClick={openPastImages} className="flex-1 flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed bg-zinc-50 dark:bg-zinc-800/30">
+                    <Folder className="w-4 h-4" />
+                    <span className="text-[10px] font-medium leading-tight">Pick from Past<br/>Uploads</span>
+                  </button>
+                  <div className="flex-1 p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed text-center flex flex-col justify-center items-center">
+                    {barcodeValue ? (
+                      <div className="text-center">
+                        <p className="text-[10px] text-emerald-500 font-bold mb-0.5">Scanned!</p>
+                        <p className="text-[9px] text-zinc-500 truncate w-16 mx-auto" title={barcodeValue}>{barcodeValue}</p>
+                        <button type="button" onClick={() => { setBarcodeValue(''); setBarcodeFormat(''); }} className="text-[9px] text-red-500 hover:underline">Remove</button>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => setIsScanning(true)} className="flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors w-full h-full">
+                        <ScanLine className="w-4 h-4" />
+                        <span className="text-[10px] font-medium">Scan Code</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -678,6 +722,51 @@ export default function Wallet() {
                 <Plus className="w-4 h-4" /> Add
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Past Images Modal */}
+      {showPastImages && (
+        <div onClick={() => setShowPastImages(false)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+          <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50">
+              <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <Folder className="w-5 h-5 text-emerald-500" />
+                Select Past Upload
+              </h3>
+              <button onClick={() => setShowPastImages(false)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-4 overflow-y-auto flex-1 bg-zinc-100/50 dark:bg-zinc-900/50">
+              {pastImages.length === 0 ? (
+                <div className="text-center py-10 text-zinc-500">
+                  <ImageIcon className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                  <p>No past images found.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {pastImages.map((url, i) => (
+                    <div 
+                      key={i}
+                      onClick={() => {
+                        setSelectedPastImageUrl(url);
+                        setFile(null);
+                        setShowPastImages(false);
+                      }}
+                      className="group cursor-pointer bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden hover:border-emerald-500 hover:shadow-md transition-all relative aspect-square"
+                    >
+                      <img src={url} alt="Past upload" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <div className="absolute inset-0 bg-emerald-500/0 group-hover:bg-emerald-500/20 transition-colors flex items-center justify-center">
+                        <Check className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transform scale-50 group-hover:scale-100 transition-all drop-shadow-md" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
