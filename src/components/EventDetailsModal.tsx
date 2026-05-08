@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon, Trash2, Edit2, GripVertical } from 'lucide-react';
+import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon, Trash2, Edit2, GripVertical, Sparkles } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import Barcode from 'react-barcode';
@@ -505,6 +505,23 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                   )}
                 </Droppable>
               </DragDropContext>
+            </div>
+          )}
+
+          {/* AI Generating Skeletons */}
+          {checklist.length === 0 && event.assigneeIds?.includes('ai_assistant') && (
+            <div>
+              <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-primary" /> Magic Checklist Generating...
+              </p>
+              <div className="space-y-2 animate-pulse">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800/30 border border-zinc-200 dark:border-zinc-700 rounded-lg">
+                    <div className="w-5 h-5 rounded-full border border-zinc-200 dark:border-zinc-700 shrink-0"></div>
+                    <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-2/3"></div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

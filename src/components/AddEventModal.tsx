@@ -259,7 +259,19 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const checkForAssetSuggestions = (text: string) => {
     if (!text || selectedAssetId) return; // already linked
     const lowerText = text.toLowerCase();
-    const matchedAsset = assets.find(a => lowerText.includes(a.name.toLowerCase()));
+    const userWords = lowerText.split(/\s+/).filter((w: string) => w.length > 2);
+    
+    const matchedAsset = assets.find(a => {
+      const assetNameLower = a.name.toLowerCase();
+      const assetWords = assetNameLower.split(/\s+/).filter((w: string) => w.length > 2);
+      
+      // Match if the typed text matches the asset name, or if any word matches
+      return assetNameLower.includes(lowerText) || 
+             lowerText.includes(assetNameLower) || 
+             userWords.some((uw: string) => assetNameLower.includes(uw)) || 
+             assetWords.some((aw: string) => lowerText.includes(aw));
+    });
+    
     if (matchedAsset && suggestedAsset?.id !== matchedAsset.id) {
       setSuggestedAsset(matchedAsset);
     }
@@ -270,9 +282,14 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     setTitle(newTitle);
     checkForAssetSuggestions(newTitle);
     
-    // Chrono natural language date parsing
+    // Chrono natural language date parsing with Romanian support
     if (!editEvent) {
-      const parsed = chrono.parse(newTitle);
+      let parseableTitle = newTitle.toLowerCase();
+      parseableTitle = parseableTitle.replace(/\bmaine\b/g, 'tomorrow');
+      parseableTitle = parseableTitle.replace(/\bazi\b/g, 'today');
+      parseableTitle = parseableTitle.replace(/\bpoimaine\b/g, 'in 2 days');
+      
+      const parsed = chrono.parse(parseableTitle);
       if (parsed && parsed.length > 0) {
         const parsedDate = parsed[0].start.date();
         setEventDate(format(parsedDate, 'yyyy-MM-dd'));
