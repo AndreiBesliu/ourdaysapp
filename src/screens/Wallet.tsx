@@ -244,22 +244,30 @@ export default function Wallet() {
     try {
       const urls = new Set<string>();
       
-      const assetsRef = ref(storage, `assets/${auth.currentUser.uid}`);
-      const eventsRef = ref(storage, `events/${auth.currentUser.uid}`);
-      
-      const fetchUrlsFromRef = async (folderRef: any) => {
+      const fetchAllFromRef = async (folderRef: any) => {
         try {
           const res = await listAll(folderRef);
+          
+          // Get all files in current directory
           await Promise.all(res.items.map(async (itemRef) => {
-            const url = await getDownloadURL(itemRef);
-            urls.add(url);
+            try {
+              const url = await getDownloadURL(itemRef);
+              urls.add(url);
+            } catch (e) {
+              // Ignore files that can't be downloaded (permissions, etc)
+            }
           }));
+          
+          // Recursively search subdirectories
+          await Promise.all(res.prefixes.map(prefixRef => fetchAllFromRef(prefixRef)));
         } catch (e) {
-          console.warn("Folder might not exist or be empty", e);
+          console.warn("Could not list directory", folderRef.fullPath, e);
         }
       };
 
-      await Promise.all([fetchUrlsFromRef(assetsRef), fetchUrlsFromRef(eventsRef)]);
+      // Start from known root folders to avoid full bucket scan if restricted
+      const roots = ['assets', 'events', 'checklists', 'chat-images', 'backgrounds'].map(path => ref(storage, path));
+      await Promise.all(roots.map(rootRef => fetchAllFromRef(rootRef)));
       
       setPastImages(Array.from(urls));
       setShowPastImages(true);
