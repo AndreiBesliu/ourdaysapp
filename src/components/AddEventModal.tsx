@@ -358,11 +358,57 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         alert("The AI couldn't generate a checklist for this title.");
         return;
       }
-      const newItems = suggestions.map(text => ({
-        id: Date.now().toString() + Math.random(),
-        text,
-        isCompleted: false
-      }));
+      
+      const eventTitleLower = title.toLowerCase();
+      const supermarkets = ['mega', 'auchan', 'penny', 'kaufland', 'carrefour', 'lidl', 'profi', 'profi', 'kaufland', 'carrefour', 'lidl'];
+      const activeSupermarkets = supermarkets.filter(sm => eventTitleLower.includes(sm));
+      
+      const newItems = suggestions.map(text => {
+        const lowerText = text.toLowerCase();
+        const itemWords = lowerText.split(/\s+/).filter(w => w.length > 2);
+        
+        let bestAssetMatch: any = null;
+        let highestScore = 0;
+
+        assets.forEach(asset => {
+          const assetNameLower = asset.name.toLowerCase();
+          let score = 0;
+          
+          // Contextual supermarket match
+          const matchesSupermarket = activeSupermarkets.some(sm => assetNameLower.includes(sm));
+          const belongsToAnySupermarket = supermarkets.some(sm => assetNameLower.includes(sm));
+          
+          if (matchesSupermarket) score += 30; // Very high priority for contextual brands
+          else if (belongsToAnySupermarket && activeSupermarkets.length > 0) score -= 50; // Huge penalty if it belongs to a DIFFERENT supermarket
+          
+          // Direct exact match
+          if (assetNameLower === lowerText) score += 20;
+          else if (assetNameLower.includes(lowerText) || lowerText.includes(assetNameLower)) score += 10;
+          
+          // Word overlap
+          const assetWords = assetNameLower.split(/\s+/).filter((w: string) => w.length > 2);
+          let overlap = 0;
+          itemWords.forEach((iw: string) => {
+            if (assetWords.some((aw: string) => aw === iw || aw.includes(iw) || iw.includes(aw))) overlap++;
+          });
+          
+          score += (overlap * 5);
+
+          if (overlap > 0 && score > highestScore) {
+            highestScore = score;
+            bestAssetMatch = asset;
+          }
+        });
+
+        return {
+          id: Date.now().toString() + Math.random(),
+          text,
+          isCompleted: false,
+          assetId: bestAssetMatch && highestScore > 0 ? bestAssetMatch.id : null,
+          selectedAssetUrl: bestAssetMatch && highestScore > 0 ? (bestAssetMatch.imageUrl || null) : null
+        };
+      });
+      
       setChecklistItems(prev => [...prev, ...newItems]);
       Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {});
     } catch (error: any) {
