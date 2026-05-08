@@ -1,5 +1,5 @@
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays } from 'date-fns';
-import { ChevronLeft, ChevronRight, Briefcase, Heart, Wrench, Calendar as CalendarIcon, Star, Circle, CheckCircle2, X, Plus, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Briefcase, Heart, Wrench, Calendar as CalendarIcon, Star, Circle, CheckCircle2, X, Plus, Clock, ChevronUp, ChevronDown } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useModalBack } from '../hooks/useModalBack';
@@ -19,6 +19,7 @@ interface CalendarGridProps {
 export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate, setSelectedDate, events = [], userMap, view, onEventClick, onAddEventClick }: CalendarGridProps) {
   const [isDayModalOpen, setIsDayModalOpen] = useState(false);
   const [modalDay, setModalDay] = useState<Date | null>(null);
+  const [isWeekView, setIsWeekView] = useState(false);
 
   useModalBack(isDayModalOpen, () => setIsDayModalOpen(false));
 
@@ -28,14 +29,26 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
     return Math.abs(offset) * velocity;
   };
 
-  const nextMonth = () => {
+  const nextPeriod = () => {
     setDirection(1);
-    setCurrentDate(addMonths(currentDate, 1));
+    if (isWeekView) {
+      const newDate = addDays(selectedDate || currentDate, 7);
+      setSelectedDate(newDate);
+      setCurrentDate(newDate);
+    } else {
+      setCurrentDate(addMonths(currentDate, 1));
+    }
   };
   
-  const prevMonth = () => {
+  const prevPeriod = () => {
     setDirection(-1);
-    setCurrentDate(subMonths(currentDate, 1));
+    if (isWeekView) {
+      const newDate = addDays(selectedDate || currentDate, -7);
+      setSelectedDate(newDate);
+      setCurrentDate(newDate);
+    } else {
+      setCurrentDate(subMonths(currentDate, 1));
+    }
   };
 
   const variants = {
@@ -111,15 +124,22 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
 
   const renderHeader = () => {
     return (
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-zinc-800 dark:text-zinc-100">
-          {format(currentDate, 'MMMM yyyy')}
+      <div className="flex justify-between items-center mb-4 px-2">
+        <h2 className="text-xl font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
+          {format(isWeekView && selectedDate ? selectedDate : currentDate, 'MMMM yyyy')}
+          <button 
+            onClick={() => setIsWeekView(!isWeekView)} 
+            className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
+            title={isWeekView ? "Expand to Month View" : "Collapse to Week View"}
+          >
+            {isWeekView ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+          </button>
         </h2>
         <div className="flex gap-2">
-          <button onClick={prevMonth} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
+          <button onClick={prevPeriod} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
             <ChevronLeft className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
           </button>
-          <button onClick={nextMonth} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
+          <button onClick={nextPeriod} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
             <ChevronRight className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
           </button>
         </div>
@@ -142,10 +162,18 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
   };
 
   const renderCells = () => {
-    const monthStart = startOfMonth(currentDate);
-    const monthEnd = endOfMonth(monthStart);
-    const startDate = startOfWeek(monthStart);
-    const endDate = endOfWeek(monthEnd);
+    let monthStart, monthEnd, startDate, endDate;
+    
+    if (isWeekView && selectedDate) {
+      startDate = startOfWeek(selectedDate);
+      endDate = endOfWeek(selectedDate);
+      monthStart = startOfMonth(selectedDate);
+    } else {
+      monthStart = startOfMonth(currentDate);
+      monthEnd = endOfMonth(monthStart);
+      startDate = startOfWeek(monthStart);
+      endDate = endOfWeek(monthEnd);
+    }
 
     const rows = [];
     let days = [];
@@ -289,9 +317,9 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
             const swipe = swipePower(offset.x, velocity.x);
 
             if (swipe < -swipeConfidenceThreshold || offset.x < -50) {
-              nextMonth();
+              nextPeriod();
             } else if (swipe > swipeConfidenceThreshold || offset.x > 50) {
-              prevMonth();
+              prevPeriod();
             }
           }}
           className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900 shadow-sm"

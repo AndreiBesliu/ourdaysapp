@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { isSameDay, format } from 'date-fns';
 import { auth, db, messaging } from '../firebase';
 import { getToken } from 'firebase/messaging';
 import { collection, query, onSnapshot, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
-import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw } from 'lucide-react';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import CalendarGrid from '../components/CalendarGrid';
 import AddEventModal from '../components/AddEventModal';
 import EventDetailsModal from '../components/EventDetailsModal';
@@ -27,6 +28,7 @@ export default function CalendarHome() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
   const [eventToEdit, setEventToEdit] = useState<any | null>(null);
+  const [initialTemplate, setInitialTemplate] = useState<any | null>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [pendingFamilyInvites, setPendingFamilyInvites] = useState<any[]>([]);
@@ -36,7 +38,46 @@ export default function CalendarHome() {
   const [isGamesHubOpen, setIsGamesHubOpen] = useState(false);
   const [userMap, setUserMap] = useState<Record<string, any>>({});
   const [activeGames, setActiveGames] = useState<any[]>([]);
+  const [isFabExpanded, setIsFabExpanded] = useState(false);
   const navigate = useNavigate();
+
+  // Pull to refresh states
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const startY = useRef(0);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (window.scrollY === 0) {
+      startY.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (startY.current > 0) {
+      const y = e.touches[0].clientY;
+      const dist = y - startY.current;
+      if (dist > 0 && dist < 150) {
+        setPullDistance(dist);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (pullDistance > 60) {
+      setIsRefreshing(true);
+      Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {});
+      
+      // Simulate refresh of data
+      setTimeout(() => {
+        setIsRefreshing(false);
+        setPullDistance(0);
+        Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
+      }, 1000);
+    } else {
+      setPullDistance(0);
+    }
+    startY.current = 0;
+  };
 
   // Listen to user's groups and build userMap
   useEffect(() => {
@@ -244,7 +285,21 @@ export default function CalendarHome() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-5xl w-full mx-auto p-4 flex flex-col gap-6 pb-24">
+      <main 
+        className="flex-1 max-w-5xl w-full mx-auto p-4 flex flex-col gap-6 pb-24 transition-transform relative"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{ transform: `translateY(${pullDistance * 0.4}px)` }}
+      >
+        {/* Pull to refresh indicator */}
+        {(pullDistance > 0 || isRefreshing) && (
+          <div className="absolute top-[-20px] left-0 w-full flex justify-center z-10">
+             <div className="w-8 h-8 rounded-full bg-white dark:bg-zinc-800 shadow-md flex items-center justify-center border border-zinc-200 dark:border-zinc-700">
+                <RefreshCw className={`w-4 h-4 text-primary ${isRefreshing ? 'animate-spin' : ''}`} style={{ transform: `rotate(${pullDistance * 2}deg)` }} />
+             </div>
+          </div>
+        )}
         
         {/* Today's Overview Dashboard */}
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm">
@@ -493,18 +548,61 @@ export default function CalendarHome() {
           userMap={userMap}
           view={activeGroupId === 'personal' ? 'personal' : 'family'}
           onEventClick={(ev) => setSelectedEvent(ev)}
-          onAddEventClick={() => { setEventToEdit(null); setIsAddModalOpen(true); }}
+          onAddEventClick={() => { setEventToEdit(null); setInitialTemplate(null); setIsAddModalOpen(true); }}
         />
 
       </main>
 
-      {/* Floating Action Button */}
-      <button 
-        onClick={() => { setEventToEdit(null); setIsAddModalOpen(true); }}
-        className="fixed bottom-8 right-8 w-14 h-14 bg-primary hover:bg-primary/90 text-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 z-20"
-      >
-        <Plus className="w-6 h-6" />
-      </button>
+      {/* Floating Action Button with Expansion */}
+      <div className="fixed bottom-8 right-8 z-[90] flex flex-col items-end gap-3">
+        {isFabExpanded && (
+          <div className="flex flex-col items-end gap-3 mb-2">
+            <button
+              onClick={() => {
+                setEventToEdit(null);
+                setInitialTemplate({ title: 'Grocery List', category: 'chores', isTask: true });
+                setIsAddModalOpen(true);
+                setIsFabExpanded(false);
+              }}
+              className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full shadow-lg text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-all animate-in slide-in-from-bottom-4 fade-in"
+            >
+              Grocery List <ShoppingCart className="w-4 h-4 text-emerald-500" />
+            </button>
+            <button
+              onClick={() => {
+                setEventToEdit(null);
+                setInitialTemplate({ title: 'New Chore', category: 'chores', isTask: true });
+                setIsAddModalOpen(true);
+                setIsFabExpanded(false);
+              }}
+              className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full shadow-lg text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-all animate-in slide-in-from-bottom-6 fade-in"
+            >
+              New Chore <Wrench className="w-4 h-4 text-amber-500" />
+            </button>
+            <button
+              onClick={() => {
+                setEventToEdit(null);
+                setInitialTemplate(null);
+                setIsAddModalOpen(true);
+                setIsFabExpanded(false);
+              }}
+              className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full shadow-lg text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-all animate-in slide-in-from-bottom-8 fade-in"
+            >
+              Standard Event <CalendarIcon className="w-4 h-4 text-primary" />
+            </button>
+          </div>
+        )}
+        <button 
+          onClick={() => setIsFabExpanded(!isFabExpanded)}
+          className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all z-[90] ${
+            isFabExpanded 
+              ? 'bg-zinc-800 dark:bg-zinc-100 text-white dark:text-zinc-900 rotate-45' 
+              : 'bg-primary hover:bg-primary/90 text-white hover:shadow-xl hover:-translate-y-1'
+          }`}
+        >
+          <Plus className="w-6 h-6" />
+        </button>
+      </div>
 
       {/* Group Chat Widget */}
       {activeGroupId !== 'personal' && (
@@ -519,9 +617,10 @@ export default function CalendarHome() {
       {/* Add Event Modal */}
       <AddEventModal 
         isOpen={isAddModalOpen} 
-        onClose={() => { setIsAddModalOpen(false); setEventToEdit(null); }} 
+        onClose={() => { setIsAddModalOpen(false); setEventToEdit(null); setInitialTemplate(null); }} 
         selectedDate={selectedDate} 
         editEvent={eventToEdit}
+        initialTemplate={initialTemplate}
         userMap={userMap}
         activeGroupId={activeGroupId}
         groups={groups}

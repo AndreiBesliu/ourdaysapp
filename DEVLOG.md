@@ -36,10 +36,20 @@
 ## 🚀 Active Roadmap & Backlog
 
 ### 1. In Progress / Upcoming
-- **Minigames**: Integrate a simple embedded game (e.g., HTML5 Canvas or React) to make the app more engaging for the family.
-  - *Evaluation of Rummy 45*: High difficulty. Requires complex real-time game state (deck, discard pile, melds, validation logic, drag-and-drop mechanics). Estimated 1-2 weeks of dedicated development. Recommended to start with a simpler game first (e.g., Uno or Tic-Tac-Toe).
+- **Smart Asset Auto-Linking**: Intelligently scan event titles (e.g., "Mega Image Groceries") against the user's Wallet assets and automatically suggest/link the corresponding loyalty card to the event.
+- **Natural Language Parsing**: Use `chrono-node` to extract dates/times from event titles (e.g., "Doctor tomorrow at 3pm") and auto-fill the calendar.
+- **Rapid List Entry**: Implement auto-focus and 'Enter-to-add' mechanics for checklist items to allow keyboard-only rapid entry.
+- **Collapsible Week View**: Upgrade `CalendarGrid` to allow swiping/toggling between full Month view and condensed Week view to save vertical space.
+- **Pull-to-Refresh & Sticky Headers**: Add a native-feeling pull-to-refresh mechanism on the home screen and sticky date headers for scrollable lists.
+
+> **UI/UX Design Constraints (Explicit User Preferences)**
+> 🚫 NO Swipe Actions (e.g. no swiping left/right to delete/complete items).
+> 🚫 NO Confetti, heavy micro-animations, or overly playful gamification on completion.
+> ⚠️ Haptics should be used, but kept subtle and not overdone.
+> ✅ YES to clean, functional, "power-user" premium UX.
 
 ### 2. Backlog
+- **Minigames**: Integrate a simple embedded game (e.g., HTML5 Canvas or React). Evaluated Rummy 45 but it is high difficulty; maybe start with Uno or Tic-Tac-Toe.
 - **Android Compilation**: Wrap the web/PWA into a native Android APK build once the web version is feature-complete.
 - **UI Refinement**: Continue polishing dark mode transitions and mobile responsiveness.
 
@@ -66,6 +76,17 @@
 
 **~18:10 - Task Started**: Implementing Task Assignment Constraints and Autosave Engine.
 **~18:15 - Task Completed**: Constraints enforced in `AddEventModal` and `EventDetailsModal`. Autosave draft logic added to `AddEventModal`. Build verified. Deployed.
+
+---
+
+## 📅 Session Log: May 8, 2026
+
+**~09:50 - Task Started**
+> Prompt: "something happened to the AI suggestion option" & "ok, can we make it work as before?"
+> Plan: Refactor AI checklist generation to use a secure Firebase Callable Function (`generateAIChecklist`), allowing the "Auto-suggest Checklist via AI" button to return to the UI without exposing the Gemini API key to the client.
+
+**~10:05 - Task Completed**
+Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.language` to strictly enforce AI language. Added `generateAIChecklist` to `functions/src/index.ts` with strict locale prompting. Re-enabled the client-side button in `AddEventModal.tsx`. Build verified and deployed.
 
 **~18:20 - Task Started**: Implementing Transferable Assets in `Wallet.tsx`.
 **~18:30 - Task Completed**: Transfer logic with "Keep Copy" checkbox added. Deployed.

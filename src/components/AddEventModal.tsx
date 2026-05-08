@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, ChevronUp, ChevronDown, Sparkles } from 'lucide-react';
+import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, Sparkles, GripVertical, Search } from 'lucide-react';
 import { addDoc, collection, query, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
@@ -7,6 +7,9 @@ import { isAIEnabled, generateChecklistForTask } from '../ai';
 import { onSnapshot } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { useModalBack } from '../hooks/useModalBack';
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import * as chrono from 'chrono-node';
 
 interface ChecklistItem {
   id: string;
@@ -23,6 +26,7 @@ interface AddEventModalProps {
   onClose: () => void;
   selectedDate: Date | null;
   editEvent?: any;
+  initialTemplate?: any;
   userMap?: Record<string, any>;
   activeGroupId?: string | 'personal';
   groups?: any[];
@@ -36,7 +40,7 @@ const CATEGORIES = [
   { id: 'other', label: 'Other', color: 'bg-zinc-500', defaultShared: false },
 ];
 
-export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent, userMap = {}, activeGroupId = 'personal', groups = [] }: AddEventModalProps) {
+export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent, initialTemplate, userMap = {}, activeGroupId = 'personal', groups = [] }: AddEventModalProps) {
   const [title, setTitle] = useState('');
   const [eventDate, setEventDate] = useState<string>('');
   const [description, setDescription] = useState('');
@@ -69,6 +73,11 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const [removeMainImage, setRemoveMainImage] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState(activeGroupId);
   const [showOwnerProfile, setShowOwnerProfile] = useState(false);
+
+  // New UX features states
+  const [suggestedAsset, setSuggestedAsset] = useState<any | null>(null);
+  const [lastAddedItemId, setLastAddedItemId] = useState<string | null>(null);
+  const [assetSearchQuery, setAssetSearchQuery] = useState('');
 
   useModalBack(isOpen, onClose);
 
@@ -147,13 +156,13 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       }
 
       if (!loadedDraft) {
-        setTitle('');
+        setTitle(initialTemplate?.title || '');
         setEventDate(selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'));
         setDescription('');
         setChecklistItems([]);
-        setCategory(CATEGORIES[0]);
-        setIsTask(false);
-        setAssigneeIds([]);
+        setCategory(initialTemplate?.category ? CATEGORIES.find(c => c.id === initialTemplate.category) || CATEGORIES[0] : CATEGORIES[0]);
+        setIsTask(initialTemplate?.isTask || false);
+        setAssigneeIds(initialTemplate?.assigneeIds || []);
         setRepeat('none');
         setVisibleTo(userMap ? Object.values(userMap).filter((u: any) => u.id !== auth.currentUser?.uid).map((u: any) => u.id) : []);
         setSelectedGroupId(activeGroupId);
@@ -246,13 +255,42 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
 
 
-  const handleAddChecklistItem = () => {
+  const checkForAssetSuggestions = (text: string) => {
+    if (!text || selectedAssetId) return; // already linked
+    const lowerText = text.toLowerCase();
+    const matchedAsset = assets.find(a => lowerText.includes(a.name.toLowerCase()));
+    if (matchedAsset && suggestedAsset?.id !== matchedAsset.id) {
+      setSuggestedAsset(matchedAsset);
+    }
+  };
+
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTitle = e.target.value;
+    setTitle(newTitle);
+    checkForAssetSuggestions(newTitle);
+    
+    // Chrono natural language date parsing
+    if (!editEvent) {
+      const parsed = chrono.parse(newTitle);
+      if (parsed && parsed.length > 0) {
+        const parsedDate = parsed[0].start.date();
+        setEventDate(format(parsedDate, 'yyyy-MM-dd'));
+      }
+    }
+  };
+
+  const handleAddChecklistItem = (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!newItemText.trim()) return;
+    const newId = Date.now().toString();
     setChecklistItems([
       ...checklistItems, 
-      { id: Date.now().toString(), text: newItemText, isCompleted: false }
+      { id: newId, text: newItemText, isCompleted: false }
     ]);
     setNewItemText('');
+    setLastAddedItemId(newId);
+    Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
+    checkForAssetSuggestions(newItemText);
   };
 
   const handleGenerateChecklist = async () => {
@@ -273,6 +311,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         isCompleted: false
       }));
       setChecklistItems(prev => [...prev, ...newItems]);
+      Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {});
     } catch (error: any) {
       alert(error.message || "Failed to generate checklist.");
     } finally {
@@ -284,12 +323,13 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     setChecklistItems(checklistItems.filter(item => item.id !== id));
   };
 
-  const moveChecklistItem = (index: number, direction: 'up' | 'down') => {
-    if ((direction === 'up' && index === 0) || (direction === 'down' && index === checklistItems.length - 1)) return;
-    const newItems = [...checklistItems];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    [newItems[index], newItems[targetIndex]] = [newItems[targetIndex], newItems[index]];
-    setChecklistItems(newItems);
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    const items = Array.from(checklistItems);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+    setChecklistItems(items);
+    Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
   };
 
   const handleEditChecklistText = (id: string, newText: string) => {
@@ -503,7 +543,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             <input
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={handleTitleChange}
               placeholder="e.g., Dentist Appointment"
               required
               className="w-full px-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none"
@@ -559,84 +599,130 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             )}
 
             {checklistItems.length > 0 && (
-              <div className="space-y-2 mt-3">
-                {checklistItems.map((item, index) => (
-                  <div key={item.id} className="flex flex-col bg-white dark:bg-zinc-800 p-2 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border border-zinc-300 rounded-sm shrink-0"></div>
-                      <textarea 
-                        value={item.text}
-                        onChange={(e) => {
-                          e.target.style.height = 'auto';
-                          e.target.style.height = `${e.target.scrollHeight}px`;
-                          handleEditChecklistText(item.id, e.target.value);
-                        }}
-                        ref={(el) => {
-                          if (el) {
-                            el.style.height = 'auto';
-                            el.style.height = `${el.scrollHeight}px`;
-                          }
-                        }}
-                        rows={1}
-                        className="flex-1 text-sm bg-transparent border-none focus:ring-0 outline-none text-zinc-700 dark:text-zinc-300 min-w-0 resize-none overflow-hidden py-0"
-                      />
-                      
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button type="button" onClick={() => moveChecklistItem(index, 'up')} disabled={index === 0} className="p-1 text-zinc-400 hover:text-primary disabled:opacity-30 transition-colors" title="Move Up">
-                          <ChevronUp className="w-4 h-4" />
-                        </button>
-                        <button type="button" onClick={() => moveChecklistItem(index, 'down')} disabled={index === checklistItems.length - 1} className="p-1 text-zinc-400 hover:text-primary disabled:opacity-30 transition-colors" title="Move Down">
-                          <ChevronDown className="w-4 h-4" />
-                        </button>
-                        <input 
-                          type="file" 
-                          id={`file-${item.id}`} 
-                          className="hidden" 
-                          accept="image/*"
-                          onChange={(e) => e.target.files && handleChecklistItemImage(item.id, e.target.files[0])}
-                        />
-                        <label htmlFor={`file-${item.id}`} className="cursor-pointer p-1 text-zinc-400 hover:text-primary transition-colors" title="Upload New Photo">
-                          <ImageIcon className={`w-4 h-4 ${item.assetFile ? 'text-primary' : ''}`} />
-                        </label>
-                        <button 
-                          type="button" 
-                          onClick={() => setShowAssetPicker(item.id)}
-                          className={`p-1 transition-colors ${item.selectedAssetUrl || item.assetId || (item.assetUrl && !item.assetFile) ? 'text-emerald-500' : 'text-zinc-400 hover:text-emerald-500'}`}
-                          title="Pick from Assets"
-                        >
-                          <Wallet className="w-4 h-4" />
-                        </button>
-                        {(item.selectedAssetUrl || item.assetUrl || item.assetFile || item.assetId) && (
-                          <button 
-                            type="button" 
-                            onClick={() => setChecklistItems(checklistItems.map(i => i.id === item.id ? { ...i, assetUrl: null, selectedAssetUrl: null, assetId: null, assetFile: undefined } : i))}
-                            className="p-1 text-red-400 hover:text-red-500 transition-colors"
-                            title="Remove Asset"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                      <button type="button" onClick={() => handleRemoveChecklistItem(item.id)} className="p-1 text-zinc-400 hover:text-red-500 transition-colors">
-                        <X className="w-4 h-4" />
-                      </button>
+              <DragDropContext onDragEnd={handleDragEnd}>
+                <Droppable droppableId="checklist">
+                  {(provided) => (
+                    <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2 mt-3">
+                      {checklistItems.map((item, index) => (
+                        <Draggable key={item.id} draggableId={item.id} index={index}>
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              className={`flex flex-col bg-white dark:bg-zinc-800 p-2 rounded-lg border ${snapshot.isDragging ? 'border-primary shadow-lg ring-2 ring-primary/20' : 'border-zinc-200 dark:border-zinc-700'}`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div {...provided.dragHandleProps} className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-grab active:cursor-grabbing p-1 -ml-1">
+                                  <GripVertical className="w-4 h-4" />
+                                </div>
+                                <div className="w-4 h-4 border border-zinc-300 rounded-sm shrink-0"></div>
+                                <textarea 
+                                  value={item.text}
+                                  onChange={(e) => {
+                                    e.target.style.height = 'auto';
+                                    e.target.style.height = `${e.target.scrollHeight}px`;
+                                    handleEditChecklistText(item.id, e.target.value);
+                                    checkForAssetSuggestions(e.target.value);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      const newId = Date.now().toString();
+                                      setChecklistItems(items => {
+                                        const idx = items.findIndex(i => i.id === item.id);
+                                        const newArray = [...items];
+                                        newArray.splice(idx + 1, 0, { id: newId, text: '', isCompleted: false });
+                                        return newArray;
+                                      });
+                                      setLastAddedItemId(newId);
+                                      Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
+                                    } else if (e.key === 'Backspace' && item.text === '') {
+                                      e.preventDefault();
+                                      handleRemoveChecklistItem(item.id);
+                                    }
+                                  }}
+                                  ref={(el) => {
+                                    if (el) {
+                                      el.style.height = 'auto';
+                                      el.style.height = `${el.scrollHeight}px`;
+                                      if (item.id === lastAddedItemId) {
+                                        el.focus();
+                                        setLastAddedItemId(null);
+                                      }
+                                    }
+                                  }}
+                                  rows={1}
+                                  className="flex-1 text-sm bg-transparent border-none focus:ring-0 outline-none text-zinc-700 dark:text-zinc-300 min-w-0 resize-none overflow-hidden py-0"
+                                />
+                                
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <input 
+                                    type="file" 
+                                    id={`file-${item.id}`} 
+                                    className="hidden" 
+                                    accept="image/*"
+                                    onChange={(e) => e.target.files && handleChecklistItemImage(item.id, e.target.files[0])}
+                                  />
+                                  <label htmlFor={`file-${item.id}`} className="cursor-pointer p-1 text-zinc-400 hover:text-primary transition-colors" title="Upload New Photo">
+                                    <ImageIcon className={`w-4 h-4 ${item.assetFile ? 'text-primary' : ''}`} />
+                                  </label>
+                                  <button 
+                                    type="button" 
+                                    onClick={() => setShowAssetPicker(item.id)}
+                                    className={`p-1 transition-colors ${item.selectedAssetUrl || item.assetId || (item.assetUrl && !item.assetFile) ? 'text-emerald-500' : 'text-zinc-400 hover:text-emerald-500'}`}
+                                    title="Pick from Assets"
+                                  >
+                                    <Wallet className="w-4 h-4" />
+                                  </button>
+                                  {(item.selectedAssetUrl || item.assetUrl || item.assetFile || item.assetId) && (
+                                    <button 
+                                      type="button" 
+                                      onClick={() => setChecklistItems(checklistItems.map(i => i.id === item.id ? { ...i, assetUrl: null, selectedAssetUrl: null, assetId: null, assetFile: undefined } : i))}
+                                      className="p-1 text-red-400 hover:text-red-500 transition-colors"
+                                      title="Remove Asset"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </div>
+                                <button type="button" onClick={() => handleRemoveChecklistItem(item.id)} className="p-1 text-zinc-400 hover:text-red-500 transition-colors">
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                              {(item.assetFile || item.selectedAssetUrl || item.assetUrl || item.assetId) && (
+                                <div className="ml-8 mt-2 rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 self-start max-w-[120px]">
+                                  {(item.assetFile || item.selectedAssetUrl || item.assetUrl) ? (
+                                    <img 
+                                      src={item.assetFile ? URL.createObjectURL(item.assetFile) : (item.selectedAssetUrl || item.assetUrl || '')} 
+                                      alt="Preview" 
+                                      className="w-full h-auto object-contain" 
+                                    />
+                                  ) : (
+                                    <div className="p-2 flex flex-col items-center justify-center text-zinc-500">
+                                      <Wallet className="w-6 h-6 mb-1 text-emerald-500" />
+                                      <span className="text-[10px] text-center">Linked Card</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
                     </div>
-                    {(item.assetFile || item.selectedAssetUrl || item.assetUrl || item.assetId) && (
-                      <div className="ml-6 mt-2 rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 self-start max-w-[120px]">
-                        {(item.assetFile || item.selectedAssetUrl || item.assetUrl) ? (
-                          <img 
-                            src={item.assetFile ? URL.createObjectURL(item.assetFile) : (item.selectedAssetUrl || item.assetUrl || '')} 
-                            alt="Preview" 
-                            className="w-full h-auto object-contain" 
-                          />
-                        ) : (
-                          <div className="p-2 flex flex-col items-center justify-center text-zinc-500">
-                            <Wallet className="w-6 h-6 mb-1 text-emerald-500" />
-                            <span className="text-[10px] text-center">Linked Card</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                  )}
+                </Droppable>
+              </DragDropContext>
+            )}
+
+            {isGeneratingAI && (
+              <div className="space-y-2 mt-3 animate-pulse">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="flex items-center gap-3 p-3 bg-zinc-100 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 rounded-lg">
+                    <div className="w-4 h-4 rounded-sm bg-zinc-200 dark:bg-zinc-700 shrink-0"></div>
+                    <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-2/3"></div>
+                    <div className="ml-auto w-4 h-4 rounded bg-zinc-200 dark:bg-zinc-700 shrink-0"></div>
                   </div>
                 ))}
               </div>
@@ -644,6 +730,39 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           </div>
 
           <div className="space-y-2">
+            {suggestedAsset && !selectedAssetId && (
+              <div className="mb-4 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in slide-in-from-bottom-2 fade-in">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-500/20 rounded-lg flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                    <Wallet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Link {suggestedAsset.name}?</p>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400">We noticed this matches a card in your Wallet.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button 
+                    type="button"
+                    onClick={() => setSuggestedAsset(null)}
+                    className="px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 rounded-lg transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setSelectedAssetId(suggestedAsset.id);
+                      setSuggestedAsset(null);
+                      Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {});
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold bg-emerald-500 text-white rounded-lg shadow-sm hover:bg-emerald-600 transition-colors"
+                  >
+                    Link Card
+                  </button>
+                </div>
+              </div>
+            )}
             <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Category</label>
             <div className="grid grid-cols-2 gap-2">
               {CATEGORIES.map((cat) => (
@@ -874,47 +993,67 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               </button>
             </div>
             
+            <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input 
+                  type="text" 
+                  placeholder="Search assets..." 
+                  value={assetSearchQuery}
+                  onChange={(e) => setAssetSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-zinc-100 dark:bg-zinc-800 border-none rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-zinc-900 dark:text-zinc-100 placeholder-zinc-500"
+                />
+              </div>
+            </div>
+            
             <div className="p-4 overflow-y-auto flex-1 bg-zinc-100/50 dark:bg-zinc-900/50">
-              {assets.length === 0 ? (
-                <div className="text-center py-10 text-zinc-500">
-                  <Wallet className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                  <p>No assets found in your Wallet.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {assets.map(asset => (
-                    <div 
-                      key={asset.id}
-                      onClick={() => {
-                        if (showAssetPicker === 'main') {
-                          setSelectedAssetUrl(asset.imageUrl || null);
-                          setSelectedAssetId(asset.id);
-                          setImageFile(null);
-                          setRemoveMainImage(false);
-                        } else {
-                          setChecklistItems(checklistItems.map(item => 
-                            item.id === showAssetPicker ? { ...item, selectedAssetUrl: asset.imageUrl || null, assetId: asset.id, assetFile: undefined } : item
-                          ));
-                        }
-                        setShowAssetPicker(null);
-                      }}
-                      className="group cursor-pointer bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden hover:border-emerald-500 hover:shadow-md transition-all relative"
-                    >
-                      <div className="aspect-square bg-zinc-100 dark:bg-zinc-900 relative flex items-center justify-center">
-                        {asset.imageUrl ? (
-                          <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                        ) : (
-                          <Wallet className="w-10 h-10 text-zinc-400 opacity-50 group-hover:scale-110 transition-transform duration-300" />
-                        )}
-                        <div className="absolute inset-0 bg-emerald-500/0 group-hover:bg-emerald-500/10 transition-colors"></div>
-                      </div>
-                      <div className="p-2 border-t border-zinc-100 dark:border-zinc-800">
-                        <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 line-clamp-1 group-hover:text-emerald-500 transition-colors text-center">{asset.name}</p>
-                      </div>
+              {(() => {
+                const filteredAssets = assets.filter(a => a.name.toLowerCase().includes(assetSearchQuery.toLowerCase()));
+                if (filteredAssets.length === 0) {
+                  return (
+                    <div className="text-center py-10 text-zinc-500">
+                      <Wallet className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                      <p>{assetSearchQuery ? 'No matching assets found.' : 'No assets found in your Wallet.'}</p>
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                }
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {filteredAssets.map(asset => (
+                      <div 
+                        key={asset.id}
+                        onClick={() => {
+                          if (showAssetPicker === 'main') {
+                            setSelectedAssetUrl(asset.imageUrl || null);
+                            setSelectedAssetId(asset.id);
+                            setImageFile(null);
+                            setRemoveMainImage(false);
+                          } else {
+                            setChecklistItems(checklistItems.map(item => 
+                              item.id === showAssetPicker ? { ...item, selectedAssetUrl: asset.imageUrl || null, assetId: asset.id, assetFile: undefined } : item
+                            ));
+                          }
+                          setShowAssetPicker(null);
+                          setAssetSearchQuery('');
+                        }}
+                        className="group cursor-pointer bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden hover:border-emerald-500 hover:shadow-md transition-all relative"
+                      >
+                        <div className="aspect-square bg-zinc-100 dark:bg-zinc-900 relative flex items-center justify-center">
+                          {asset.imageUrl ? (
+                            <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                          ) : (
+                            <Wallet className="w-10 h-10 text-zinc-400 opacity-50 group-hover:scale-110 transition-transform duration-300" />
+                          )}
+                          <div className="absolute inset-0 bg-emerald-500/0 group-hover:bg-emerald-500/10 transition-colors"></div>
+                        </div>
+                        <div className="p-2 border-t border-zinc-100 dark:border-zinc-800">
+                          <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 line-clamp-1 group-hover:text-emerald-500 transition-colors text-center">{asset.name}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
+exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
+const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const generative_ai_1 = require("@google/generative-ai");
 admin.initializeApp();
@@ -31,6 +32,9 @@ exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)({
         const prompt = `You are a helpful AI Assistant for a family organization app. 
 The user created a task/event titled "${title}".
 ${description ? `The description is: "${description}".` : ""}
+
+IMPORTANT: Analyze the language used in the title and description above. You MUST write the entire checklist translated into that exact same language.
+
 If this looks like a Grocery or Shopping list, generate a checklist grouped by supermarket aisles (e.g., "Dairy: Milk", "Produce: Apples").
 Otherwise, generate a checklist of 3 to 7 actionable, brief steps or items needed to complete this task.
 Return ONLY a valid JSON array of strings, nothing else. No markdown formatting.
@@ -163,6 +167,42 @@ exports.onGameCreated = (0, firestore_1.onDocumentCreated)("games/{gameId}", asy
     }
     catch (error) {
         console.error("Error sending Game Invite FCM:", error);
+    }
+});
+exports.generateAIChecklist = (0, https_1.onCall)(async (request) => {
+    const { title, description, language = 'en-US' } = request.data;
+    if (!title) {
+        throw new https_1.HttpsError('invalid-argument', 'Title is required.');
+    }
+    try {
+        const key = process.env.GEMINI_API_KEY_LOCAL;
+        if (!key) {
+            throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
+        }
+        const genAI = new generative_ai_1.GoogleGenerativeAI(key);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+        const prompt = `You are a helpful AI Assistant for a family organization app. 
+The user is creating a task/event titled "${title}".
+${description ? `The description is: "${description}".` : ""}
+
+IMPORTANT: You MUST write the entire checklist translated into this exact language locale: "${language}".
+
+If this looks like a Grocery or Shopping list, generate a checklist grouped by supermarket aisles (e.g., "Dairy: Milk", "Produce: Apples").
+Otherwise, generate a checklist of 3 to 7 actionable, brief steps or items needed to complete this task.
+Return ONLY a valid JSON array of strings, nothing else. No markdown formatting.
+Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1", "Step 2"]`;
+        const result = await model.generateContent(prompt);
+        const text = result.response.text();
+        const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+        const list = JSON.parse(cleanText);
+        if (Array.isArray(list)) {
+            return { suggestions: list.map(String) };
+        }
+        return { suggestions: [] };
+    }
+    catch (error) {
+        console.error("AI Generation Error", error);
+        throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
 //# sourceMappingURL=index.js.map

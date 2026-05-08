@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon, Trash2, Edit2, ChevronUp, ChevronDown } from 'lucide-react';
+import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon, Trash2, Edit2, GripVertical } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import Barcode from 'react-barcode';
 import QRCode from 'react-qr-code';
 import { Wallet } from 'lucide-react';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { format } from 'date-fns';
 import { useModalBack } from '../hooks/useModalBack';
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 
 interface EventDetailsModalProps {
   isOpen: boolean;
@@ -102,6 +104,11 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     try {
       await updateDoc(doc(db, 'events', event.id), { taskStatus: newStatus });
       event.taskStatus = newStatus; // optimistic update
+      if (newStatus === 'completed') {
+        Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {});
+      } else {
+        Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -152,13 +159,13 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     }
   };
 
-  const moveChecklistItem = async (index: number, direction: 'up' | 'down') => {
-    if (!canEdit) return;
-    if ((direction === 'up' && index === 0) || (direction === 'down' && index === checklist.length - 1)) return;
-    const newItems = [...checklist];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    [newItems[index], newItems[targetIndex]] = [newItems[targetIndex], newItems[index]];
+  const handleDragEnd = async (result: DropResult) => {
+    if (!canEdit || !result.destination) return;
+    const newItems = Array.from(checklist);
+    const [reorderedItem] = newItems.splice(result.source.index, 1);
+    newItems.splice(result.destination.index, 0, reorderedItem);
     setChecklist(newItems);
+    Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
     try {
       await updateDoc(doc(db, 'events', event.id), { checklistItems: newItems });
     } catch (e) {
@@ -175,6 +182,9 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       item.id === itemId ? { ...item, isCompleted: !item.isCompleted } : item
     );
     setChecklist(newChecklist);
+    
+    const isNowCompleted = newChecklist.find(i => i.id === itemId)?.isCompleted;
+    Haptics.impact({ style: isNowCompleted ? ImpactStyle.Medium : ImpactStyle.Light }).catch(() => {});
 
     try {
       await updateDoc(doc(db, 'events', event.id), { checklistItems: newChecklist });
@@ -403,88 +413,98 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
               <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-1.5">
                 <CheckCircle className="w-4 h-4" /> To-Do List
               </p>
-              <div className="space-y-2">
-                {checklist.map((item, index) => (
-                  <div key={item.id} className="flex flex-col gap-2 p-3 bg-zinc-50 dark:bg-zinc-800/30 border border-zinc-200 dark:border-zinc-700 rounded-lg">
-                    <div className="flex items-start gap-3">
-                      <button 
-                        onClick={() => handleToggleChecklistItem(item.id)}
-                        disabled={!canEdit}
-                        className={`mt-0.5 shrink-0 w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
-                          item.isCompleted 
-                            ? 'bg-emerald-500 border-emerald-500 text-white' 
-                            : 'border-zinc-400 dark:border-zinc-500 text-transparent hover:border-primary'
-                        }`}
-                      >
-                        <CheckCircle className="w-3.5 h-3.5" />
-                      </button>
-                      <textarea 
-                        defaultValue={item.text}
-                        onInput={(e) => {
-                          e.currentTarget.style.height = 'auto';
-                          e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
-                        }}
-                        onBlur={(e) => {
-                          if (e.target.value !== item.text) {
-                            handleEditChecklistText(item.id, e.target.value);
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            e.currentTarget.blur();
-                          }
-                        }}
-                        ref={(el) => {
-                          if (el) {
-                            el.style.height = 'auto';
-                            el.style.height = `${el.scrollHeight}px`;
-                          }
-                        }}
-                        rows={1}
-                        disabled={!canEdit || item.isCompleted}
-                        className={`text-sm flex-1 pt-0.5 bg-transparent border-none focus:ring-0 outline-none min-w-0 resize-none overflow-hidden ${item.isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-700 dark:text-zinc-300'}`}
-                      />
-                      {canEdit && !item.isCompleted && (
-                        <div className="flex items-center gap-1 shrink-0 mt-0.5">
-                          <button type="button" onClick={() => moveChecklistItem(index, 'up')} disabled={index === 0} className="p-1 text-zinc-400 hover:text-primary disabled:opacity-30 transition-colors" title="Move Up">
-                            <ChevronUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button type="button" onClick={() => moveChecklistItem(index, 'down')} disabled={index === checklist.length - 1} className="p-1 text-zinc-400 hover:text-primary disabled:opacity-30 transition-colors" title="Move Down">
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
+              <DragDropContext onDragEnd={handleDragEnd}>
+                <Droppable droppableId="event-checklist">
+                  {(provided) => (
+                    <div {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
+                      {checklist.map((item, index) => (
+                        <Draggable key={item.id} draggableId={item.id} index={index} isDragDisabled={!canEdit}>
+                          {(provided, snapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              className={`flex flex-col gap-2 p-3 bg-zinc-50 dark:bg-zinc-800/30 border rounded-lg ${snapshot.isDragging ? 'border-primary shadow-lg ring-2 ring-primary/20' : 'border-zinc-200 dark:border-zinc-700'}`}
+                            >
+                              <div className="flex items-start gap-3">
+                                {canEdit && (
+                                  <div {...provided.dragHandleProps} className="mt-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-grab active:cursor-grabbing p-1 -ml-1 -mr-1">
+                                    <GripVertical className="w-4 h-4" />
+                                  </div>
+                                )}
+                                <button 
+                                  onClick={() => handleToggleChecklistItem(item.id)}
+                                  disabled={!canEdit}
+                                  className={`mt-0.5 shrink-0 w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
+                                    item.isCompleted 
+                                      ? 'bg-emerald-500 border-emerald-500 text-white' 
+                                      : 'border-zinc-400 dark:border-zinc-500 text-transparent hover:border-primary'
+                                  }`}
+                                >
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                </button>
+                                <textarea 
+                                  defaultValue={item.text}
+                                  onInput={(e) => {
+                                    e.currentTarget.style.height = 'auto';
+                                    e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`;
+                                  }}
+                                  onBlur={(e) => {
+                                    if (e.target.value !== item.text) {
+                                      handleEditChecklistText(item.id, e.target.value);
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      e.currentTarget.blur();
+                                    }
+                                  }}
+                                  ref={(el) => {
+                                    if (el) {
+                                      el.style.height = 'auto';
+                                      el.style.height = `${el.scrollHeight}px`;
+                                    }
+                                  }}
+                                  rows={1}
+                                  disabled={!canEdit || item.isCompleted}
+                                  className={`text-sm flex-1 pt-0.5 bg-transparent border-none focus:ring-0 outline-none min-w-0 resize-none overflow-hidden ${item.isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-700 dark:text-zinc-300'}`}
+                                />
+                              </div>
+                              {item.assetUrl && !item.isCompleted && (
+                                <div className="ml-8 mt-1 rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 self-start max-w-[200px] cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullScreenImage(item.assetUrl)}>
+                                  <img src={item.assetUrl} alt={item.text} className="w-full h-auto" />
+                                </div>
+                              )}
+                              {item.assetId && !item.isCompleted && linkedChecklistAssets[item.assetId]?.barcodeValue && (
+                                <div className="ml-8 mt-2 bg-white p-3 rounded-xl flex flex-col items-center justify-center border border-zinc-200 dark:border-zinc-700 self-start">
+                                  <p className="font-semibold text-zinc-900 mb-2 text-xs">{linkedChecklistAssets[item.assetId].name}</p>
+                                  {linkedChecklistAssets[item.assetId].barcodeFormat?.includes('QR') ? (
+                                    <QRCode value={linkedChecklistAssets[item.assetId].barcodeValue} size={100} />
+                                  ) : (
+                                    <div className="w-full flex justify-center overflow-hidden">
+                                      <Barcode 
+                                        value={linkedChecklistAssets[item.assetId].barcodeValue} 
+                                        format={linkedChecklistAssets[item.assetId].barcodeFormat === 'EAN_13' ? 'EAN13' : linkedChecklistAssets[item.assetId].barcodeFormat === 'EAN_8' ? 'EAN8' : linkedChecklistAssets[item.assetId].barcodeFormat === 'UPC_A' ? 'UPC' : linkedChecklistAssets[item.assetId].barcodeFormat === 'CODE_39' ? 'CODE39' : 'CODE128'}
+                                        width={1.5}
+                                        height={50}
+                                        displayValue={true}
+                                        background="#ffffff"
+                                        lineColor="#000000"
+                                        fontSize={12}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
                     </div>
-                    {item.assetUrl && !item.isCompleted && (
-                      <div className="ml-8 mt-1 rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 self-start max-w-[200px] cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullScreenImage(item.assetUrl)}>
-                        <img src={item.assetUrl} alt={item.text} className="w-full h-auto" />
-                      </div>
-                    )}
-                    {item.assetId && !item.isCompleted && linkedChecklistAssets[item.assetId]?.barcodeValue && (
-                      <div className="ml-8 mt-2 bg-white p-3 rounded-xl flex flex-col items-center justify-center border border-zinc-200 dark:border-zinc-700 self-start">
-                        <p className="font-semibold text-zinc-900 mb-2 text-xs">{linkedChecklistAssets[item.assetId].name}</p>
-                        {linkedChecklistAssets[item.assetId].barcodeFormat?.includes('QR') ? (
-                          <QRCode value={linkedChecklistAssets[item.assetId].barcodeValue} size={100} />
-                        ) : (
-                          <div className="w-full flex justify-center overflow-hidden">
-                            <Barcode 
-                              value={linkedChecklistAssets[item.assetId].barcodeValue} 
-                              format={linkedChecklistAssets[item.assetId].barcodeFormat === 'EAN_13' ? 'EAN13' : linkedChecklistAssets[item.assetId].barcodeFormat === 'EAN_8' ? 'EAN8' : linkedChecklistAssets[item.assetId].barcodeFormat === 'UPC_A' ? 'UPC' : linkedChecklistAssets[item.assetId].barcodeFormat === 'CODE_39' ? 'CODE39' : 'CODE128'}
-                              width={1.5}
-                              height={50}
-                              displayValue={true}
-                              background="#ffffff"
-                              lineColor="#000000"
-                              fontSize={12}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  )}
+                </Droppable>
+              </DragDropContext>
             </div>
           )}
 
