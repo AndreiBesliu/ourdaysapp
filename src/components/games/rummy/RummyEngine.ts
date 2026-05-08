@@ -203,9 +203,10 @@ export const canAttachToMeld = (meldCards: RummyCard[], card: RummyCard): { isVa
   return { isValid: false };
 };
 
-export const calculatePenaltyPoints = (hand: RummyCard[]): number => {
+export const calculatePenaltyPoints = (hand: (RummyCard | null)[]): number => {
   let pts = 0;
   for (const c of hand) {
+    if (!c) continue;
     if (c.isJoker) {
       pts -= 50;
     } else if (c.value === 'A') {

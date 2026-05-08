@@ -24,7 +24,12 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
 
   useEffect(() => {
     if (auth.currentUser && game.state.players[auth.currentUser.uid]?.hand) {
-      setLocalHand(game.state.players[auth.currentUser.uid].hand);
+      const dbHand = game.state.players[auth.currentUser.uid].hand;
+      const paddedHand = Array(30).fill(null);
+      for (let i = 0; i < dbHand.length && i < 30; i++) {
+        paddedHand[i] = dbHand[i];
+      }
+      setLocalHand(paddedHand);
     }
   }, [game]);
 
@@ -58,7 +63,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
 
   const sortHand = async () => {
     if (!auth.currentUser) return;
-    const items = Array.from(localHand);
+    const items = localHand.filter(c => c !== null);
     
     items.sort((a, b) => {
       if (a.isJoker && !b.isJoker) return 1;
@@ -71,9 +76,14 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       return VALUE_ORDER.indexOf(a.value!) - VALUE_ORDER.indexOf(b.value!);
     });
 
-    setLocalHand(items);
+    const newHand = Array(30).fill(null);
+    for (let i = 0; i < items.length; i++) {
+      newHand[i] = items[i];
+    }
+
+    setLocalHand(newHand);
     await updateDoc(doc(db, 'games', game.id), {
-      [`state.players.${auth.currentUser.uid}.hand`]: items
+      [`state.players.${auth.currentUser.uid}.hand`]: newHand
     });
   };
 
@@ -81,13 +91,18 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     if (!result.destination || !auth.currentUser) return;
 
     // Local re-ordering of hand
-    if (result.source.droppableId === 'my-hand' && result.destination.droppableId === 'my-hand') {
-      const items = Array.from(localHand);
-      const [reorderedItem] = items.splice(result.source.index, 1);
-      items.splice(result.destination.index, 0, reorderedItem);
+    if (result.source.droppableId.startsWith('my-hand-') && result.destination.droppableId.startsWith('my-hand-')) {
+      const sourceIdx = parseInt(result.source.droppableId.split('-')[2]);
+      const destIdx = parseInt(result.destination.droppableId.split('-')[2]);
+      
+      const items = [...localHand];
+      const itemToMove = items[sourceIdx];
+      const itemAtDest = items[destIdx];
+      
+      items[destIdx] = itemToMove;
+      items[sourceIdx] = itemAtDest;
       
       setLocalHand(items);
-      // We also need to save this sorting to Firestore to persist it across reloads
       await updateDoc(doc(db, 'games', game.id), {
         [`state.players.${auth.currentUser.uid}.hand`]: items
       });
@@ -95,7 +110,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     }
 
     // Discarding a card
-    if (result.source.droppableId === 'my-hand' && result.destination.droppableId === 'discard-pile') {
+    if (result.source.droppableId.startsWith('my-hand-') && result.destination.droppableId === 'discard-pile') {
       const isMyTurn = game.state.playerIds[game.state.turnIndex] === auth.currentUser.uid;
       const isPlayPhase = game.state.turnPhase === 'play';
       
@@ -105,12 +120,14 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
         return;
       }
 
-      const items = Array.from(localHand);
-      const [discardedCard] = items.splice(result.source.index, 1);
+      const items = [...localHand];
+      const sourceIdx = parseInt(result.source.droppableId.split('-')[2]);
+      const discardedCard = items[sourceIdx];
+      items[sourceIdx] = null;
       
       setLocalHand(items); // Optimistic UI
 
-      const isWin = items.length === 0;
+      const isWin = items.filter(c => c !== null).length === 0;
       const nextTurnIndex = (game.state.turnIndex + 1) % game.state.playerIds.length;
 
       const updates: any = {
@@ -141,7 +158,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     }
 
     // Attaching a card to a meld
-    if (result.source.droppableId === 'my-hand' && result.destination.droppableId.startsWith('meld-')) {
+    if (result.source.droppableId.startsWith('my-hand-') && result.destination.droppableId.startsWith('meld-')) {
       const isMyTurn = game.state.playerIds[game.state.turnIndex] === auth.currentUser.uid;
       const isPlayPhase = game.state.turnPhase === 'play';
       
@@ -157,8 +174,9 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
         return;
       }
 
-      const items = Array.from(localHand);
-      if (items.length === 1) {
+      const items = [...localHand];
+      const nonNulls = items.filter(c => c !== null);
+      if (nonNulls.length === 1) {
         setErrorMsg("You cannot attach your last card. You must keep one card to discard (Inchidere).");
         return;
       }
@@ -168,7 +186,8 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       if (meldIndex === -1) return;
 
       const targetMeld = game.state.melds[meldIndex];
-      const cardToAttach = items[result.source.index];
+      const sourceIdx = parseInt(result.source.droppableId.split('-')[2]);
+      const cardToAttach = items[sourceIdx];
 
       const attachCheck = canAttachToMeld(targetMeld.cards, cardToAttach);
       const swapCheck = canSwapJoker(targetMeld.cards, cardToAttach);
@@ -181,14 +200,15 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       let updatedMeldCards = targetMeld.cards;
       if (swapCheck.isValid) {
         updatedMeldCards = swapCheck.newMeldCards!;
-        items.splice(result.source.index, 1);
+        items[sourceIdx] = null;
         const originalJoker = targetMeld.cards.find((c: any) => c.isJoker && !updatedMeldCards.includes(c));
         if (originalJoker) {
-           items.push(originalJoker);
+           const emptyIdx = items.findIndex(c => c === null);
+           if (emptyIdx !== -1) items[emptyIdx] = originalJoker;
         }
       } else {
         updatedMeldCards = attachCheck.newCards!;
-        items.splice(result.source.index, 1);
+        items[sourceIdx] = null;
       }
 
       setLocalHand(items); // Optimistic UI
@@ -218,7 +238,9 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     const drawnCard = deck.shift();
     if (!drawnCard) return;
 
-    const newHand = [...localHand, drawnCard];
+    const newHand = [...localHand];
+    const emptyIdx = newHand.findIndex(c => c === null);
+    if (emptyIdx !== -1) newHand[emptyIdx] = drawnCard;
     setLocalHand(newHand); // Optimistic UI
 
     await updateDoc(doc(db, 'games', game.id), {
@@ -239,7 +261,9 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     const drawnCard = discardPile.pop(); // Take the top card
     if (!drawnCard) return;
 
-    const newHand = [...localHand, drawnCard];
+    const newHand = [...localHand];
+    const emptyIdx = newHand.findIndex(c => c === null);
+    if (emptyIdx !== -1) newHand[emptyIdx] = drawnCard;
     setLocalHand(newHand); // Optimistic UI
 
     await updateDoc(doc(db, 'games', game.id), {
@@ -269,14 +293,19 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     }
 
     setStagedMelds([...stagedMelds, { cards: cardsToMeld, type: result.type!, points: result.points }]);
-    setLocalHand(localHand.filter(c => !selectedCards.includes(c.id)));
+    setLocalHand(localHand.map(c => c && selectedCards.includes(c.id) ? null : c));
     setSelectedCards([]);
     setErrorMsg(null);
   };
 
   const cancelStagedMelds = () => {
     const returningCards = stagedMelds.flatMap(m => m.cards);
-    setLocalHand([...localHand, ...returningCards]);
+    const newHand = [...localHand];
+    returningCards.forEach(c => {
+      const emptyIdx = newHand.findIndex(item => item === null);
+      if (emptyIdx !== -1) newHand[emptyIdx] = c;
+    });
+    setLocalHand(newHand);
     setStagedMelds([]);
     setErrorMsg(null);
   };
@@ -307,7 +336,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       'state.melds': [...game.state.melds, ...newMelds]
     };
 
-    if (localHand.length === 0) {
+    if (localHand.filter(c => c !== null).length === 0) {
       updates.status = 'finished';
       updates.winner = auth.currentUser.uid;
     }
@@ -338,7 +367,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                 )}
               </div>
               <span className="text-[10px] text-emerald-100 mt-0.5">
-                {game.state.players[uid]?.hand?.length || 0} cards
+                {game.state.players[uid]?.hand?.filter((c: any) => c !== null).length || 0} cards
               </span>
             </div>
           ))}
@@ -416,7 +445,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                 {/* Discard Pile */}
                 <div className="flex flex-col items-center">
                   <Droppable droppableId="discard-pile">
-                    {(provided, snapshot) => (
+                    {(provided: any, snapshot: any) => (
                       <div 
                         ref={provided.innerRef}
                         {...provided.droppableProps}
@@ -450,7 +479,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                   <div className="flex flex-wrap gap-4">
                     {game.state.melds.map((meld: any) => (
                       <Droppable key={meld.id} droppableId={`meld-${meld.id}`} direction="horizontal">
-                        {(provided, snapshot) => (
+                        {(provided: any, snapshot: any) => (
                           <div 
                             ref={provided.innerRef}
                             {...provided.droppableProps}
@@ -523,37 +552,41 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                     </button>
                   </div>
                 )}
-                <Droppable droppableId="my-hand" direction="horizontal">
-                  {(provided) => (
-                    <div 
-                      ref={provided.innerRef} 
-                      {...provided.droppableProps}
-                      className="flex gap-1.5 sm:gap-2 h-full min-w-min px-2 pt-2"
-                    >
-                      {localHand.map((card: any, index: number) => (
-                        <Draggable key={card.id} draggableId={card.id} index={index}>
-                          {(provided, snapshot) => (
-                            <div
-                              ref={provided.innerRef}
-                              {...provided.draggableProps}
-                              {...provided.dragHandleProps}
-                              className={`h-full transition-transform ${snapshot.isDragging ? 'z-50 scale-105' : ''} ${selectedCards.includes(card.id) ? '-translate-y-3' : ''}`}
-                            >
-                              <Card 
-                                face={card} 
-                                isSelected={selectedCards.includes(card.id)}
-                                onClick={() => {
-                                  if (isMyTurn && turnPhase === 'play') toggleCardSelection(card.id);
-                                }}
-                              />
-                            </div>
+                <div className="grid grid-cols-[repeat(15,minmax(0,1fr))] grid-rows-2 gap-1.5 sm:gap-2 h-full w-max px-2 pt-2 pb-2">
+                  {localHand.map((card: any, index: number) => (
+                    <Droppable key={`my-hand-${index}`} droppableId={`my-hand-${index}`}>
+                      {(provided: any, snapshot: any) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.droppableProps}
+                          className={`w-10 sm:w-12 h-16 sm:h-20 rounded-xl transition-colors ${snapshot.isDraggingOver ? 'bg-white/20 ring-2 ring-white/50' : 'bg-black/20'}`}
+                        >
+                          {card && (
+                            <Draggable draggableId={card.id} index={0}>
+                              {(provided: any, snapshot: any) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  {...provided.dragHandleProps}
+                                  className={`h-full transition-transform ${snapshot.isDragging ? 'z-50 scale-105' : ''} ${selectedCards.includes(card.id) ? '-translate-y-3' : ''}`}
+                                >
+                                  <Card 
+                                    face={card} 
+                                    isSelected={selectedCards.includes(card.id)}
+                                    onClick={() => {
+                                      if (isMyTurn && turnPhase === 'play') toggleCardSelection(card.id);
+                                    }}
+                                  />
+                                </div>
+                              )}
+                            </Draggable>
                           )}
-                        </Draggable>
-                      ))}
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
+                          <div className="hidden">{provided.placeholder}</div>
+                        </div>
+                      )}
+                    </Droppable>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -563,32 +596,37 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
   );
 }
 
-// Sub-component for rendering a card
+// Sub-component for rendering a Rummy Tile
+const VALUE_MAP: Record<string, string> = {
+  'A': '1', '2': '2', '3': '3', '4': '4', '5': '5', '6': '6', '7': '7', '8': '8', '9': '9', '10': '10', 'J': '11', 'Q': '12', 'K': '13'
+};
+
 function Card({ face, isSelected, onClick }: { face: any, isSelected?: boolean, onClick?: () => void }) {
-  const isRed = face.suit === 'H' || face.suit === 'D';
-  const colorClass = face.isJoker ? 'text-purple-600' : (isRed ? 'text-red-600' : 'text-slate-900');
-  
-  let SuitIcon = '';
-  if (face.suit === 'H') SuitIcon = '♥';
-  if (face.suit === 'D') SuitIcon = '♦';
-  if (face.suit === 'C') SuitIcon = '♣';
-  if (face.suit === 'S') SuitIcon = '♠';
+  if (!face) return <div className="w-10 sm:w-12 h-full opacity-0" />;
+
+  let colorClass = 'text-slate-900';
+  if (face.isJoker) colorClass = 'text-purple-600';
+  else if (face.suit === 'H') colorClass = 'text-red-600';
+  else if (face.suit === 'D') colorClass = 'text-amber-500';
+  else if (face.suit === 'C') colorClass = 'text-blue-600';
+  else if (face.suit === 'S') colorClass = 'text-zinc-900';
 
   return (
     <div 
       onClick={onClick}
-      className={`w-12 sm:w-16 h-full bg-white rounded-lg shadow-md border ${isSelected ? 'border-yellow-400 ring-4 ring-yellow-400/50' : 'border-zinc-200'} flex flex-col items-center justify-center select-none cursor-pointer ${colorClass}`}
+      className={`w-10 sm:w-12 h-full bg-[#fdfbf7] rounded-xl shadow-[2px_4px_8px_rgba(0,0,0,0.2),inset_0px_0px_2px_rgba(255,255,255,1)] border-b-4 border-r-2 ${isSelected ? 'border-yellow-400 ring-4 ring-yellow-400/50' : 'border-[#e0d6c8]'} flex flex-col items-center justify-center select-none cursor-pointer ${colorClass}`}
     >
       {face.isJoker ? (
-        <div className="font-bold text-center flex flex-col items-center">
-          <span className="text-xs uppercase">Joker</span>
-          <span className="text-2xl mt-1">🤡</span>
+        <div className="font-bold text-center flex flex-col items-center mt-1">
+          <span className="text-[8px] uppercase font-black tracking-widest text-purple-400 mb-0.5">Joker</span>
+          <span className="text-2xl filter drop-shadow-sm">🤡</span>
         </div>
       ) : (
-        <>
-          <div className="text-lg sm:text-xl font-bold -mb-1">{face.value}</div>
-          <div className="text-2xl sm:text-3xl">{SuitIcon}</div>
-        </>
+        <div className="flex flex-col items-center justify-center h-full">
+           <span className="text-2xl sm:text-3xl font-black filter drop-shadow-sm leading-none">
+             {VALUE_MAP[face.value] || face.value}
+           </span>
+        </div>
       )}
     </div>
   );

@@ -40,9 +40,11 @@ export default function TicTacToe({ game, userMap, onBack }: TicTacToeProps) {
     let newStatus = game.status;
     let winner = game.winner;
 
+    let newScores = game.state.scores || { X: 0, O: 0 };
     if (winnerData) {
       newStatus = 'finished';
       winner = game.state.players[winnerData.winner];
+      newScores = { ...newScores, [winnerData.winner]: (newScores[winnerData.winner as 'X' | 'O'] || 0) + 1 };
     } else if (!newBoard.includes(null)) {
       newStatus = 'finished'; // Draw
     }
@@ -50,8 +52,18 @@ export default function TicTacToe({ game, userMap, onBack }: TicTacToeProps) {
     await updateDoc(doc(db, 'games', game.id), {
       'state.board': newBoard,
       'state.xIsNext': !game.state.xIsNext,
+      'state.scores': newScores,
       status: newStatus,
       winner: winner
+    });
+  };
+
+  const handleNextRound = async () => {
+    if (!auth.currentUser) return;
+    await updateDoc(doc(db, 'games', game.id), {
+      'state.board': Array(9).fill(null),
+      status: 'playing',
+      winner: null
     });
   };
 
@@ -86,6 +98,7 @@ export default function TicTacToe({ game, userMap, onBack }: TicTacToeProps) {
           <div className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">
             {game.state.players.X ? userMap[game.state.players.X]?.name : 'Waiting...'}
           </div>
+          <div className="text-xs font-bold text-zinc-500 mt-1">Score: {game.state.scores?.X || 0}</div>
         </div>
         
         <div className="text-sm font-bold text-zinc-300 dark:text-zinc-700">VS</div>
@@ -95,6 +108,7 @@ export default function TicTacToe({ game, userMap, onBack }: TicTacToeProps) {
           <div className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">
             {game.state.players.O ? userMap[game.state.players.O]?.name : 'Waiting...'}
           </div>
+          <div className="text-xs font-bold text-zinc-500 mt-1">Score: {game.state.scores?.O || 0}</div>
         </div>
       </div>
 
@@ -114,9 +128,14 @@ export default function TicTacToe({ game, userMap, onBack }: TicTacToeProps) {
           </p>
         )}
         {game.status === 'finished' && (
-          <p className="font-bold text-xl text-emerald-500">
-            {game.winner ? `${userMap[game.winner]?.name} Wins!` : "It's a Draw!"}
-          </p>
+          <div className="flex items-center gap-4">
+            <p className="font-bold text-xl text-emerald-500">
+              {game.winner ? `${userMap[game.winner]?.name} Wins!` : "It's a Draw!"}
+            </p>
+            <button onClick={handleNextRound} className="px-4 py-1.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded-full text-sm font-bold transition-colors">
+              Next Round
+            </button>
+          </div>
         )}
       </div>
 

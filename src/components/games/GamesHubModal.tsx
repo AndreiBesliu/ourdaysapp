@@ -87,7 +87,8 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
         initialState = {
           board: Array(9).fill(null),
           xIsNext: true,
-          players: { X: auth.currentUser.uid, O: null }
+          players: { X: auth.currentUser.uid, O: null },
+          scores: { X: 0, O: 0 }
         };
       } else if (gameType === 'rummy-45') {
         initialState = {
