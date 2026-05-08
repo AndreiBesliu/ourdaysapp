@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db, storage } from '../firebase';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, where, getDocs } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, where } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, listAll } from 'firebase/storage';
 import { Wallet as WalletIcon, Plus, Image as ImageIcon, Trash2, Users, User, HeartPulse, Home, Car, DollarSign, Settings2, Folder, Edit2, Check, X, ScanLine, QrCode } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import BarcodeScanner from '../components/BarcodeScanner';
@@ -242,18 +242,25 @@ export default function Wallet() {
     if (!auth.currentUser) return;
     setLoading(true);
     try {
-      const q = query(collection(db, 'events'), where('ownerId', '==', auth.currentUser.uid));
-      const snap = await getDocs(q);
       const urls = new Set<string>();
-      snap.docs.forEach(doc => {
-        const data = doc.data();
-        if (data.imageUrl) urls.add(data.imageUrl);
-        if (data.checklistItems) {
-          data.checklistItems.forEach((item: any) => {
-            if (item.assetUrl) urls.add(item.assetUrl);
-          });
+      
+      const assetsRef = ref(storage, `assets/${auth.currentUser.uid}`);
+      const eventsRef = ref(storage, `events/${auth.currentUser.uid}`);
+      
+      const fetchUrlsFromRef = async (folderRef: any) => {
+        try {
+          const res = await listAll(folderRef);
+          await Promise.all(res.items.map(async (itemRef) => {
+            const url = await getDownloadURL(itemRef);
+            urls.add(url);
+          }));
+        } catch (e) {
+          console.warn("Folder might not exist or be empty", e);
         }
-      });
+      };
+
+      await Promise.all([fetchUrlsFromRef(assetsRef), fetchUrlsFromRef(eventsRef)]);
+      
       setPastImages(Array.from(urls));
       setShowPastImages(true);
     } catch (e) {

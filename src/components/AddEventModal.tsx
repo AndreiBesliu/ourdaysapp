@@ -261,9 +261,19 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     const lowerText = text.toLowerCase();
     const userWords = lowerText.split(/\s+/).filter((w: string) => w.length > 2);
     
+    // Grocery keywords to trigger supermarket card suggestions
+    const groceryKeywords = ['milk', 'lapte', 'bread', 'paine', 'apa', 'water', 'carne', 'meat', 'oua', 'eggs', 'branza', 'cheese', 'fructe', 'legume', 'rosii', 'cartofi', 'bere', 'suc'];
+    const supermarkets = ['mega', 'auchan', 'penny', 'kaufland', 'carrefour', 'lidl', 'profi'];
+    const hasGroceryWord = userWords.some(w => groceryKeywords.includes(w.toLowerCase()));
+    
     const matchedAsset = assets.find(a => {
       const assetNameLower = a.name.toLowerCase();
       const assetWords = assetNameLower.split(/\s+/).filter((w: string) => w.length > 2);
+      
+      // If it's a grocery item, aggressively match ANY supermarket card
+      if (hasGroceryWord && supermarkets.some(sm => assetNameLower.includes(sm))) {
+        return true;
+      }
       
       // Match if the typed text matches the asset name, or if any word matches
       return assetNameLower.includes(lowerText) || 
@@ -285,9 +295,34 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     // Chrono natural language date parsing with Romanian support
     if (!editEvent) {
       let parseableTitle = newTitle.toLowerCase();
+      
+      // Keywords
       parseableTitle = parseableTitle.replace(/\bmaine\b/g, 'tomorrow');
       parseableTitle = parseableTitle.replace(/\bazi\b/g, 'today');
       parseableTitle = parseableTitle.replace(/\bpoimaine\b/g, 'in 2 days');
+      
+      // Days of week
+      parseableTitle = parseableTitle.replace(/\bluni\b/g, 'monday');
+      parseableTitle = parseableTitle.replace(/\bmarti\b/g, 'tuesday');
+      parseableTitle = parseableTitle.replace(/\bmiercuri\b/g, 'wednesday');
+      parseableTitle = parseableTitle.replace(/\bjoi\b/g, 'thursday');
+      parseableTitle = parseableTitle.replace(/\bvineri\b/g, 'friday');
+      parseableTitle = parseableTitle.replace(/\bsambata\b/g, 'saturday');
+      parseableTitle = parseableTitle.replace(/\bduminica\b/g, 'sunday');
+      
+      // Months
+      parseableTitle = parseableTitle.replace(/\bianuarie\b/g, 'january');
+      parseableTitle = parseableTitle.replace(/\bfebruarie\b/g, 'february');
+      parseableTitle = parseableTitle.replace(/\bmartie\b/g, 'march');
+      parseableTitle = parseableTitle.replace(/\baprilie\b/g, 'april');
+      parseableTitle = parseableTitle.replace(/\bmai\b/g, 'may');
+      parseableTitle = parseableTitle.replace(/\biunie\b/g, 'june');
+      parseableTitle = parseableTitle.replace(/\biulie\b/g, 'july');
+      parseableTitle = parseableTitle.replace(/\baugust\b/g, 'august');
+      parseableTitle = parseableTitle.replace(/\bseptembrie\b/g, 'september');
+      parseableTitle = parseableTitle.replace(/\boctombrie\b/g, 'october');
+      parseableTitle = parseableTitle.replace(/\bnoiembrie\b/g, 'november');
+      parseableTitle = parseableTitle.replace(/\bdecembrie\b/g, 'december');
       
       const parsed = chrono.parse(parseableTitle);
       if (parsed && parsed.length > 0) {

@@ -49,7 +49,7 @@ function hexToHSL(hex: string): string {
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { primaryColor, isDarkMode, setTheme, backgroundImage, backgroundStyle, backgroundOverlay, setAdvancedTheme } = useThemeStore();
+  const { primaryColor, isDarkMode, setTheme, backgroundImage, backgroundStyle, backgroundOverlay, language, setAdvancedTheme } = useThemeStore();
   const [photoURL, setPhotoURL] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingBg, setUploadingBg] = useState(false);
@@ -206,7 +206,30 @@ export default function Settings() {
           </div>
         </section>
 
-
+        {/* General Settings */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider pl-1">General</h2>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+            <div className="p-4 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800">
+              <div>
+                <p className="font-medium text-zinc-900 dark:text-zinc-100">App Language (AI & Content)</p>
+                <p className="text-sm text-zinc-500">Language for AI suggestions</p>
+              </div>
+              <select 
+                value={language || 'en-US'}
+                onChange={(e) => handleAdvancedThemeUpdate({ language: e.target.value })}
+                className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2"
+              >
+                <option value="en-US">English</option>
+                <option value="ro-RO">Română</option>
+                <option value="fr-FR">Français</option>
+                <option value="es-ES">Español</option>
+                <option value="it-IT">Italiano</option>
+                <option value="de-DE">Deutsch</option>
+              </select>
+            </div>
+          </div>
+        </section>
 
         {/* Appearance Section */}
         <section className="space-y-3">

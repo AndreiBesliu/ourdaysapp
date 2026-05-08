@@ -6,6 +6,7 @@ interface ThemeState {
   backgroundImage?: string | null;
   backgroundStyle?: 'stretch' | 'repeat' | 'contain';
   backgroundOverlay?: number;
+  language?: string;
   setTheme: (color: string, isDark: boolean) => void;
   setAdvancedTheme: (theme: Partial<ThemeState>) => void;
 }
@@ -16,6 +17,7 @@ export const useThemeStore = create<ThemeState>((set) => ({
   backgroundImage: null,
   backgroundStyle: 'stretch',
   backgroundOverlay: 50,
+  language: 'en-US',
   setTheme: (color, isDark) => set({ primaryColor: color, isDarkMode: isDark }),
   setAdvancedTheme: (theme) => set((state) => ({ ...state, ...theme })),
 }));

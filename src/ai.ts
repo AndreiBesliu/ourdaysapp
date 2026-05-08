@@ -1,12 +1,13 @@
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { app } from "./firebase";
+import { useThemeStore } from "./store";
 
 export const isAIEnabled = () => true;
 
 export async function generateChecklistForTask(title: string, description: string): Promise<string[]> {
   const functions = getFunctions(app);
   const generateAIChecklist = httpsCallable(functions, 'generateAIChecklist');
-  const language = typeof navigator !== 'undefined' ? navigator.language : 'en-US';
+  const language = useThemeStore.getState().language || 'en-US';
   
   try {
     const result = await generateAIChecklist({ title, description, language });
