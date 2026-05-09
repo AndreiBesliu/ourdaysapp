@@ -3,6 +3,7 @@ import { X, Gamepad2, Play, Clock, Trash2 } from 'lucide-react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
 import TicTacToe from './TicTacToe';
+import Connect4 from './Connect4';
 import RummyGame from './rummy/RummyGame';
 import { format } from 'date-fns';
 
@@ -89,6 +90,14 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
           xIsNext: true,
           players: { X: auth.currentUser.uid, O: null },
           scores: { X: 0, O: 0 }
+        };
+      } else if (gameType === 'connect-4') {
+        initialState = {
+          board: Array(6).fill(null).map(() => Array(7).fill(null)),
+          p1IsNext: true,
+          players: { P1: auth.currentUser.uid, P2: null },
+          scores: { P1: 0, P2: 0 },
+          winningCells: null
         };
       } else if (gameType === 'rummy-45') {
         initialState = {
@@ -184,6 +193,9 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
               {activeGame.gameType === 'tic-tac-toe' && (
                 <TicTacToe game={activeGame} userMap={userMap} onBack={() => setPlayingGameId(null)} />
               )}
+              {activeGame.gameType === 'connect-4' && (
+                <Connect4 game={activeGame} userMap={userMap} onBack={() => setPlayingGameId(null)} />
+              )}
               {activeGame.gameType === 'rummy-45' && (
                 <RummyGame game={activeGame} userMap={userMap} onBack={() => setPlayingGameId(null)} />
               )}
@@ -214,16 +226,28 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                     <h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">Start a New Game</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Tic Tac Toe Card */}
-                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors cursor-pointer group" onClick={() => handleCreateGame('tic-tac-toe')}>
+                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors cursor-pointer group flex flex-col h-full" onClick={() => handleCreateGame('tic-tac-toe')}>
                         <div className="w-12 h-12 bg-blue-100 dark:bg-blue-500/20 text-blue-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                           <div className="text-xl font-bold font-mono">X O</div>
                         </div>
                         <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Tic-Tac-Toe</h5>
-                        <p className="text-sm text-zinc-500">A classic 2-player game. First to get 3 in a row wins!</p>
+                        <p className="text-sm text-zinc-500 flex-1">A classic 2-player game. First to get 3 in a row wins!</p>
+                      </div>
+
+                      {/* Connect 4 Card */}
+                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors cursor-pointer group flex flex-col h-full" onClick={() => handleCreateGame('connect-4')}>
+                        <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform flex-wrap p-2 gap-1">
+                          <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                          <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
+                          <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
+                          <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                        </div>
+                        <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Connect 4</h5>
+                        <p className="text-sm text-zinc-500 flex-1">Drop discs to get 4 in a row. Strategic and fast-paced!</p>
                       </div>
 
                       {/* Rummy 45 Card */}
-                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors cursor-pointer group" onClick={() => handleCreateGame('rummy-45')}>
+                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors cursor-pointer group flex flex-col h-full" onClick={() => handleCreateGame('rummy-45')}>
                         <div className="w-12 h-12 bg-red-100 dark:bg-red-500/20 text-red-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                           <div className="text-xl font-bold font-mono">45</div>
                         </div>
