@@ -335,3 +335,9 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 > Prompt: "ok, i restored the devlog myself, i don't want the session log to ever be erased, just update the progress and conversations"
 > Plan: Properly restructure the DEVLOG with roadmap and completed features headers while strictly preserving all historical session logs. Sync the final May 9 entries.
 
+
+**2026-05-09 09:20 - Task Started**
+> Prompt: "Rummy 45 — Tabla UI Polish"
+> Plan: Overhaul the Rummy 45 visual design — premium tile rendering with color-coded suit indicators, improved board/tabla layout, better spacing, and a polished game-over screen.
+
+**2026-05-09 09:25 - Task Completed**: Rummy 45 Tabla UI Polish deployed. Premium tile design with colored suit dots, gradient table background, active player highlights, cleaner deck/discard area, improved meld display, and a game-over results screen with ranked scores.

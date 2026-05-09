@@ -332,7 +332,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                         <div 
                           className={`px-3 py-2 text-xs border-b border-black/10 dark:border-white/10 opacity-80 cursor-pointer hover:opacity-100 transition-opacity ${isMe ? 'bg-black/5' : 'bg-zinc-100 dark:bg-zinc-700/50'}`}
                         >
-                          <p className="font-semibold">{userMap[parentMsg.senderId]?.name || 'Unknown'}</p>
+                          <p className="font-semibold">{parentMsg.senderId === auth.currentUser?.uid ? 'You' : (userMap[parentMsg.senderId]?.name || userMap[parentMsg.senderId]?.email?.split('@')[0] || 'Unknown')}</p>
                           <p className="truncate line-clamp-1">{parentMsg.text || 'Photo'}</p>
                         </div>
                       )}
@@ -386,7 +386,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                                 ? 'bg-primary/20 border-primary/30 text-primary' 
                                 : 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300'
                             }`}
-                            title={users.map((uid: string) => userMap[uid]?.name || 'Someone').join(', ')}
+                            title={users.map((uid: string) => uid === auth.currentUser?.uid ? 'You' : (userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || 'Someone')).join(', ')}
                           >
                             <span>{emoji}</span>
                             <span className="font-medium">{users.length}</span>
@@ -459,7 +459,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
               <div className="flex items-center gap-2 overflow-hidden">
                 <Reply className="w-4 h-4 text-primary shrink-0" />
                 <div className="flex flex-col overflow-hidden">
-                  <span className="text-[10px] font-bold text-primary">Replying to {userMap[replyingTo.senderId]?.name || 'Unknown'}</span>
+                  <span className="text-[10px] font-bold text-primary">Replying to {replyingTo.senderId === auth.currentUser?.uid ? 'You' : (userMap[replyingTo.senderId]?.name || userMap[replyingTo.senderId]?.email?.split('@')[0] || 'Unknown')}</span>
                   <span className="text-xs text-zinc-500 truncate">{replyingTo.text || 'Photo'}</span>
                 </div>
               </div>
