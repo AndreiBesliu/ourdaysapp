@@ -8,6 +8,8 @@ import BarcodeScanner from '../components/BarcodeScanner';
 import Barcode from 'react-barcode';
 import QRCode from 'react-qr-code';
 import ExpensesTab from '../components/ExpensesTab';
+import { useThemeStore } from '../store';
+import { t } from '../utils/i18n';
 
 export default function Wallet() {
   const [assets, setAssets] = useState<any[]>([]);
@@ -40,6 +42,7 @@ export default function Wallet() {
   const [transferToUserId, setTransferToUserId] = useState('');
   const [keepCopy, setKeepCopy] = useState(true);
   const [sharedUsers, setSharedUsers] = useState<any[]>([]);
+  const { language } = useThemeStore();
 
   const navigate = useNavigate();
 
@@ -445,9 +448,9 @@ export default function Wallet() {
             <Home className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2 text-emerald-500">
-            <WalletIcon className="w-6 h-6" />
-            <h1 className="text-xl font-bold text-zinc-900 dark:text-white">Wallet</h1>
-          </div>
+          <WalletIcon className="w-6 h-6" />
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-white">{t('wallet', language)}</h1>
+        </div>
         </div>
         {activeTab === 'assets' && (
           <button 

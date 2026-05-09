@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Moon, Sun, Palette, LogOut, Settings as SettingsIcon, Camera, Home, Image as ImageIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { auth, db, storage } from '../firebase';
 import { signOut } from 'firebase/auth';
@@ -150,7 +151,7 @@ export default function Settings() {
         </button>
         <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
           <SettingsIcon className="w-6 h-6" />
-          <h1 className="text-xl font-bold text-zinc-900 dark:text-white">Settings</h1>
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-white">{t('settings', language)}</h1>
         </div>
       </header>
 
@@ -158,7 +159,7 @@ export default function Settings() {
         
         {/* Account Section */}
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider pl-1">Account</h2>
+          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider pl-1">{t('account', language)}</h2>
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
             <div className="p-4 flex flex-col sm:flex-row items-center gap-4 border-b border-zinc-200 dark:border-zinc-800">
               
@@ -200,7 +201,7 @@ export default function Settings() {
               onClick={handleSignOut}
               className="w-full p-4 flex items-center justify-between text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
             >
-              <span className="font-medium">Sign Out</span>
+              <span className="font-medium">{t('signOut', language)}</span>
               <LogOut className="w-5 h-5" />
             </button>
           </div>
@@ -208,12 +209,12 @@ export default function Settings() {
 
         {/* General Settings */}
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider pl-1">General</h2>
+          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider pl-1">{t('general', language)}</h2>
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
             <div className="p-4 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800">
               <div>
-                <p className="font-medium text-zinc-900 dark:text-zinc-100">App Language (AI & Content)</p>
-                <p className="text-sm text-zinc-500">Language for AI suggestions</p>
+                <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('languageLabel', language)}</p>
+                <p className="text-sm text-zinc-500">Choose your preferred language</p>
               </div>
               <select 
                 value={language || 'en-US'}
@@ -233,7 +234,7 @@ export default function Settings() {
 
         {/* Appearance Section */}
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider pl-1">Appearance</h2>
+          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider pl-1">{t('appearance', language)}</h2>
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
             
             {/* Dark Mode Toggle */}
@@ -243,7 +244,7 @@ export default function Settings() {
                   {isDarkMode ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
                 </div>
                 <div>
-                  <p className="font-medium text-zinc-900 dark:text-zinc-100">Dark Mode</p>
+                  <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('darkMode', language)}</p>
                   <p className="text-sm text-zinc-500">Toggle dark theme</p>
                 </div>
               </div>
@@ -265,7 +266,7 @@ export default function Settings() {
                   <Palette className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="font-medium text-zinc-900 dark:text-zinc-100">Accent Color</p>
+                  <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('accentColor', language)}</p>
                   <p className="text-sm text-zinc-500">Choose your primary theme color</p>
                 </div>
               </div>
@@ -298,7 +299,7 @@ export default function Settings() {
                     <ImageIcon className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-medium text-zinc-900 dark:text-zinc-100">Background</p>
+                    <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('background', language)}</p>
                     <p className="text-sm text-zinc-500">Set a custom app background</p>
                   </div>
                 </div>

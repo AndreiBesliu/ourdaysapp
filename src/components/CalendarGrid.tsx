@@ -3,6 +3,8 @@ import { ChevronLeft, ChevronRight, Briefcase, Heart, Wrench, Calendar as Calend
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useModalBack } from '../hooks/useModalBack';
+import { useThemeStore } from '../store';
+import { getDateLocale } from '../utils/i18n';
 
 interface CalendarGridProps {
   currentDate: Date;
@@ -20,6 +22,8 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
   const [isDayModalOpen, setIsDayModalOpen] = useState(false);
   const [modalDay, setModalDay] = useState<Date | null>(null);
   const [isWeekView, setIsWeekView] = useState(false);
+  const { language } = useThemeStore();
+  const dateLocale = getDateLocale(language);
 
   useModalBack(isDayModalOpen, () => setIsDayModalOpen(false));
 
@@ -126,7 +130,10 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
     return (
       <div className="flex justify-between items-center mb-4 px-2">
         <h2 className="text-xl font-bold text-zinc-800 dark:text-zinc-100 flex items-center gap-2">
-          {format(isWeekView && selectedDate ? selectedDate : currentDate, 'MMMM yyyy')}
+          {isWeekView 
+            ? `${format(startOfWeek(selectedDate || currentDate, { locale: dateLocale }), 'd MMM', { locale: dateLocale })} - ${format(endOfWeek(selectedDate || currentDate, { locale: dateLocale }), 'd MMM, yyyy', { locale: dateLocale })}`
+            : format(currentDate, 'MMMM yyyy', { locale: dateLocale })
+          }
           <button 
             onClick={() => setIsWeekView(!isWeekView)} 
             className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-colors"
@@ -149,16 +156,16 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
 
   const renderDays = () => {
     const days = [];
-    const startDate = startOfWeek(currentDate);
+    let startDate = startOfWeek(currentDate, { locale: dateLocale });
 
     for (let i = 0; i < 7; i++) {
       days.push(
-        <div key={i} className="text-center font-semibold text-sm text-zinc-500 dark:text-zinc-400 py-2">
-          {format(addDays(startDate, i), 'EEE')}
+        <div key={i} className="text-center text-xs font-bold text-zinc-400 dark:text-zinc-600 uppercase tracking-widest py-2">
+          {format(addDays(startDate, i), 'EEE', { locale: dateLocale })}
         </div>
       );
     }
-    return <div className="grid grid-cols-7 mb-2">{days}</div>;
+    return <div className="grid grid-cols-7">{days}</div>;
   };
 
   const renderCells = () => {
@@ -343,8 +350,8 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
         <div onClick={() => setIsDayModalOpen(false)} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm max-h-[80vh] flex flex-col shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
-              <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100">
-                {format(modalDay, 'EEEE, MMMM d')}
+              <h3 className="text-xl font-bold text-zinc-900 dark:text-white">
+                {modalDay && format(modalDay, 'EEEE, d MMMM', { locale: dateLocale })}
               </h3>
               <button onClick={() => setIsDayModalOpen(false)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 rounded-full transition-colors">
                 <X className="w-4 h-4" />

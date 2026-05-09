@@ -16,6 +16,8 @@ import NotificationsDropdown from '../components/NotificationsDropdown';
 import GroupChatWidget from '../components/GroupChatWidget';
 import GamesHubModal from '../components/games/GamesHubModal';
 import { useNavigate } from 'react-router-dom';
+import { useThemeStore } from '../store';
+import { t, getDateLocale } from '../utils/i18n';
 
 export default function CalendarHome() {
   const [activeGroupId, setActiveGroupId] = useState<string | 'personal'>('personal');
@@ -40,6 +42,8 @@ export default function CalendarHome() {
   const [activeGames, setActiveGames] = useState<any[]>([]);
   const [isFabExpanded, setIsFabExpanded] = useState(false);
   const navigate = useNavigate();
+  const { language } = useThemeStore();
+  const dateLocale = getDateLocale(language);
 
   // Pull to refresh states
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -305,12 +309,12 @@ export default function CalendarHome() {
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
             <div>
-              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Today's Overview</h2>
-              <p className="text-sm text-zinc-500">Here is what is on the agenda for today.</p>
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{t('todayOverview', language)}</h2>
+              <p className="text-sm text-zinc-500">{t('agendaDesc', language)}</p>
             </div>
             <div className="sm:text-right">
-              <p className="text-sm font-semibold text-primary">{format(new Date(), 'EEEE')}</p>
-              <p className="text-xs text-zinc-500">{format(new Date(), 'MMMM d, yyyy')}</p>
+              <p className="text-sm font-semibold text-primary">{format(new Date(), 'EEEE', { locale: dateLocale })}</p>
+              <p className="text-xs text-zinc-500">{format(new Date(), 'MMMM d, yyyy', { locale: dateLocale })}</p>
             </div>
           </div>
           
@@ -319,7 +323,7 @@ export default function CalendarHome() {
               onClick={() => setOverviewModalType('total')}
               className="bg-primary/5 border border-primary/20 rounded-lg p-3 flex flex-col justify-center cursor-pointer hover:bg-primary/10 transition-colors"
             >
-              <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Total Events</p>
+              <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">{t('totalEvents', language)}</p>
               <div className="flex items-center justify-between">
                 <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                   {events.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date())).length}
@@ -339,7 +343,7 @@ export default function CalendarHome() {
               onClick={() => setOverviewModalType('pending')}
               className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 flex flex-col justify-center cursor-pointer hover:bg-amber-500/10 transition-colors"
             >
-              <p className="text-xs font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-wider mb-1">Tasks Pending</p>
+              <p className="text-xs font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-wider mb-1">{t('tasksPending', language)}</p>
               <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                 {events.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date()) && ev.isTask && ev.taskStatus !== 'completed').length}
               </p>
@@ -348,7 +352,7 @@ export default function CalendarHome() {
               onClick={() => setOverviewModalType('completed')}
               className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 flex flex-col justify-center cursor-pointer hover:bg-emerald-500/10 transition-colors"
             >
-              <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-500 uppercase tracking-wider mb-1">Tasks Completed</p>
+              <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-500 uppercase tracking-wider mb-1">{t('tasksCompleted', language)}</p>
               <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                 {events.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date()) && ev.isTask && ev.taskStatus === 'completed').length}
               </p>
@@ -463,7 +467,7 @@ export default function CalendarHome() {
                 onClick={() => setIsGamesHubOpen(true)}
                 className="px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
               >
-                <Gamepad2 className="w-4 h-4" /> Games
+                <Gamepad2 className="w-4 h-4" /> {t('games', language)}
               </button>
               
               <button 

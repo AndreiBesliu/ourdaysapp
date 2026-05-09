@@ -330,3 +330,5 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 **2026-05-09 08:39 - Task Completed**: Added a comprehensive manual/game rules system to the Games Hub. Added info buttons on arcade cards and active games to open a rules modal.
 
 **2026-05-09 08:46 - Task Completed**: Added full internationalization (i18n) support to the Game Rules modal based on the user's active language preference.
+
+**2026-05-09 08:57 - Task Completed**: Implemented full application internationalization. Calendar, dashboard, wallet, and settings now fully support localization for English, Romanian, French, Spanish, Italian, and German.
