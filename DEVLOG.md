@@ -318,3 +318,9 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 > Plan: Implement Message Reactions for the chat widget, and update DEVLOG.
 
 **2026-05-09 08:10 - Task Completed**: Added emoji reactions (like, love, laugh, surprise, sad, pray) to messages in GroupChatWidget.tsx. Used a 'hover-to-reveal' inline button. State synced in real-time via Firestore. Build and deploy successful.
+
+**2026-05-09 08:18 - Task Started**
+> Prompt: "next"
+> Plan: Implement Threaded Replies for the chat widget to finalize Chat Enhancements.
+
+**2026-05-09 08:18 - Task Completed**: Added threaded replies to messages. Hovering over a message shows a 'Reply' button. Clicking it opens a reply banner above the text input. Sent messages that are replies render the parent message snippet at the top of the bubble.

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck } from 'lucide-react';
+import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck, Reply } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
@@ -25,6 +25,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeReactionMsg, setActiveReactionMsg] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<any | null>(null);
 
   const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -167,11 +168,13 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
         imageUrl: imageUrl || null,
         senderId: auth.currentUser.uid,
         createdAt: serverTimestamp(),
-        seenBy: [auth.currentUser.uid]
+        seenBy: [auth.currentUser.uid],
+        replyToId: replyingTo ? replyingTo.id : null
       });
 
       setNewMessage('');
       clearImage();
+      setReplyingTo(null);
       
       // Stop typing indicator immediately when sending
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -288,6 +291,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                 const isMe = msg.senderId === auth.currentUser?.uid;
                 const sender = userMap[msg.senderId] || { name: 'Unknown' };
                 const status = getSeenStatus(msg);
+                const parentMsg = msg.replyToId ? messages.find(m => m.id === msg.replyToId) : null;
 
                 return (
                   <div 
@@ -301,44 +305,73 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                       </span>
                     )}
                     <div className={`relative w-full flex items-center gap-2 ${isMe ? 'justify-end' : ''}`}>
-                      {/* Reaction Toggle Button (Others) */}
+                      {/* Interaction Buttons (Others) */}
                       {!isMe && (
-                        <button
-                          onClick={() => setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
-                          title="Add reaction"
-                        >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/><path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14"/><path d="M9 9H9.01"/><path d="M15 9H15.01"/></svg>
-                        </button>
+                        <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id)}
+                            className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
+                            title="Add reaction"
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/><path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14"/><path d="M9 9H9.01"/><path d="M15 9H15.01"/></svg>
+                          </button>
+                          <button
+                            onClick={() => setReplyingTo(msg)}
+                            className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
+                            title="Reply"
+                          >
+                            <Reply className="w-4 h-4" />
+                          </button>
+                        </div>
                       )}
                       
-                      <div className={`rounded-2xl text-sm overflow-hidden flex-1 ${isMe ? 'bg-primary rounded-br-sm max-w-[calc(100%-32px)]' : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-bl-sm max-w-[calc(100%-32px)]'}`}
+                      <div className={`rounded-2xl text-sm flex-1 flex flex-col ${isMe ? 'bg-primary rounded-br-sm max-w-[calc(100%-48px)]' : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-bl-sm max-w-[calc(100%-48px)]'}`}
                            onDoubleClick={() => handleReaction(msg.id, '❤️')}
                       >
-                      {msg.imageUrl && (
-                        <img
-                          src={msg.imageUrl}
-                          alt="Shared image"
-                          className="max-w-full rounded-t-xl object-cover max-h-48 w-full"
-                          onClick={() => window.open(msg.imageUrl, '_blank')}
-                          style={{ cursor: 'pointer' }}
-                        />
+                      {parentMsg && (
+                        <div 
+                          className={`px-3 py-2 text-xs border-b border-black/10 dark:border-white/10 opacity-80 cursor-pointer hover:opacity-100 transition-opacity ${isMe ? 'bg-black/5' : 'bg-zinc-100 dark:bg-zinc-700/50'}`}
+                        >
+                          <p className="font-semibold">{userMap[parentMsg.senderId]?.name || 'Unknown'}</p>
+                          <p className="truncate line-clamp-1">{parentMsg.text || 'Photo'}</p>
+                        </div>
                       )}
-                      {msg.text && (
-                        <p className="px-3 py-2">{msg.text}</p>
-                      )}
+                      <div className="overflow-hidden rounded-b-2xl">
+                        {msg.imageUrl && (
+                          <img
+                            src={msg.imageUrl}
+                            alt="Shared image"
+                            className={`max-w-full object-cover max-h-48 w-full ${!parentMsg && 'rounded-t-2xl'}`}
+                            onClick={() => window.open(msg.imageUrl, '_blank')}
+                            style={{ cursor: 'pointer' }}
+                          />
+                        )}
+                        {msg.text && (
+                          <p className="px-3 py-2">{msg.text}</p>
+                        )}
+                      </div>
                       </div>
 
-                      {/* Reaction Toggle Button (Me) */}
+                      {/* Interaction Buttons (Me) */}
                       {isMe && (
-                        <button
-                          onClick={() => setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
-                          title="Add reaction"
-                        >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/><path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14"/><path d="M9 9H9.01"/><path d="M15 9H15.01"/></svg>
-                        </button>
+                        <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => setReplyingTo(msg)}
+                            className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
+                            title="Reply"
+                          >
+                            <Reply className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id)}
+                            className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
+                            title="Add reaction"
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/><path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14"/><path d="M9 9H9.01"/><path d="M15 9H15.01"/></svg>
+                          </button>
+                        </div>
                       )}
+                      {/* Removed individual buttons, replaced by Interaction Buttons block */}
                     </div>
                     
                     {/* Reactions Display */}
@@ -417,6 +450,22 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
               <span className="text-[10px] text-zinc-500 italic animate-pulse">
                 {typingUsers.map(id => userMap[id]?.name?.split(' ')[0] || 'Someone').join(', ')} {typingUsers.length > 1 ? 'are' : 'is'} typing...
               </span>
+            </div>
+          )}
+
+          {/* Reply Banner */}
+          {replyingTo && (
+            <div className="px-4 py-2 bg-zinc-50 dark:bg-zinc-800/80 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <Reply className="w-4 h-4 text-primary shrink-0" />
+                <div className="flex flex-col overflow-hidden">
+                  <span className="text-[10px] font-bold text-primary">Replying to {userMap[replyingTo.senderId]?.name || 'Unknown'}</span>
+                  <span className="text-xs text-zinc-500 truncate">{replyingTo.text || 'Photo'}</span>
+                </div>
+              </div>
+              <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full text-zinc-500 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
             </div>
           )}
 
