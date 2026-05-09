@@ -193,6 +193,17 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     );
     if (seenByReply) return 'seen';
 
+    // Secondary: If ANY message AFTER this one is considered "seen", then this one is also seen
+    const seenBySubsequent = messages.some(m => {
+      const time = m.createdAt?.toMillis?.() ?? 0;
+      if (time <= myMsgTime) return false;
+      if (m.seenBy && m.seenBy.length > 1 && otherMemberIds.length > 0) {
+        return otherMemberIds.every((id: string) => m.seenBy.includes(id));
+      }
+      return false;
+    });
+    if (seenBySubsequent) return 'seen';
+
     // Fallback: explicit seenBy array
     if (msg.seenBy && msg.seenBy.length > 1) {
       const allSeen = otherMemberIds.length > 0 && otherMemberIds.every((id: string) => msg.seenBy.includes(id));
