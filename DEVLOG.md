@@ -290,3 +290,18 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 > Plan: Rummy 45 Visual Overhaul (Tiles & Tabla) & Tic-Tac-Toe Polish (Scores & New Round)
 
 **~23:25 - Task Completed**: Tic-Tac-Toe now supports score tracking and multiple rounds. Rummy 45 now uses tiles (mapped from standard cards) and a 30-slot grid 'Tabla' layout. Deployed to Firebase.
+---
+
+## ?? Session Log: May 9, 2026
+
+**2026-05-09 07:23 - Task Started**
+> Prompt: "first, i we have a problem, the app just loads a white screen now"
+> Plan: Debug the white screen issue, which is caused by a missing .env file leading to a Firebase API key initialization error. Reconstruct the .env from google-services.json, build, and deploy.
+
+**2026-05-09 07:37 - Task Completed**: Recreated .env, ran npm run build, and deployed to Firebase Hosting.
+
+**2026-05-09 07:41 - Task Started**
+> Prompt: "ok, did you read the devlog, there are rules there that we will need to follow"
+> Plan: Read DEVLOG rules. Revert the .env git tracking to comply with Rule 6 (Secret Management), restore .gitignore, and log all actions to DEVLOG.md.
+
+**2026-05-09 07:44 - Task Completed**: Removed .env from git cache, restored .gitignore exclusion, committed, and pushed. Updated DEVLOG with missing entries.
