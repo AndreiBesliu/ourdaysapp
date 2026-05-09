@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, arrayUnion } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 
@@ -22,6 +22,8 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [lastRead, setLastRead] = useState<number>(Date.now());
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Other members in the group (excluding me)
   const otherMemberIds = groupMembers.filter(id => id !== auth.currentUser?.uid);
@@ -51,7 +53,25 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
       }
     });
 
-    return () => unsubscribe();
+    // Listen to typing status
+    const typingQuery = query(collection(db, `groups/${groupId}/typing`));
+    const unsubTyping = onSnapshot(typingQuery, (snapshot) => {
+      const currentlyTyping: string[] = [];
+      const now = Date.now();
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        // Only show typing if updated within last 5 seconds
+        if (docSnap.id !== auth.currentUser?.uid && data.updatedAt && (now - data.updatedAt.toMillis()) < 5000) {
+          currentlyTyping.push(docSnap.id);
+        }
+      });
+      setTypingUsers(currentlyTyping);
+    });
+
+    return () => {
+      unsubscribe();
+      unsubTyping();
+    };
   }, [groupId, isOpen]);
 
   // Mark messages as seen when chat opens
@@ -85,6 +105,23 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     if (!file) return;
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+    
+    if (!auth.currentUser) return;
+    
+    // Set typing to true
+    setDoc(doc(db, `groups/${groupId}/typing`, auth.currentUser.uid), {
+      updatedAt: serverTimestamp()
+    }).catch(console.error);
+
+    // Clear typing after 3 seconds of inactivity
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      deleteDoc(doc(db, `groups/${groupId}/typing`, auth.currentUser!.uid)).catch(console.error);
+    }, 3000);
   };
 
   const clearImage = () => {
@@ -132,6 +169,11 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
 
       setNewMessage('');
       clearImage();
+      
+      // Stop typing indicator immediately when sending
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      deleteDoc(doc(db, `groups/${groupId}/typing`, auth.currentUser.uid)).catch(console.error);
+      
     } catch (err) {
       console.error('Failed to send message:', err);
     } finally {
@@ -261,6 +303,15 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
             </div>
           )}
 
+          {/* Typing Indicator */}
+          {typingUsers.length > 0 && (
+            <div className="px-4 py-1 pb-2 bg-zinc-50/50 dark:bg-zinc-900/50">
+              <span className="text-[10px] text-zinc-500 italic animate-pulse">
+                {typingUsers.map(id => userMap[id]?.name?.split(' ')[0] || 'Someone').join(', ')} {typingUsers.length > 1 ? 'are' : 'is'} typing...
+              </span>
+            </div>
+          )}
+
           {/* Input */}
           <form onSubmit={handleSend} className="p-3 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex gap-2 items-center shrink-0">
             <input
@@ -280,7 +331,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
             <input
               type="text"
               value={newMessage}
-              onChange={e => setNewMessage(e.target.value)}
+              onChange={handleTyping}
               placeholder="Type a message..."
               className="flex-1 px-3 py-2 bg-zinc-100 dark:bg-zinc-800 border-none rounded-full text-sm outline-none focus:ring-2 focus:ring-primary/50"
             />
