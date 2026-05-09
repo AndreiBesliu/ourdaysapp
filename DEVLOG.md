@@ -41,6 +41,7 @@
 - **Rapid List Entry**: Implement auto-focus and 'Enter-to-add' mechanics for checklist items to allow keyboard-only rapid entry.
 - **Collapsible Week View**: Upgrade `CalendarGrid` to allow swiping/toggling between full Month view and condensed Week view to save vertical space.
 - **Pull-to-Refresh & Sticky Headers**: Add a native-feeling pull-to-refresh mechanism on the home screen and sticky date headers for scrollable lists.
+- **Chat Enhancements**: Developing the chat further (e.g., typing indicators, reactions, or threaded replies).
 
 > **UI/UX Design Constraints (Explicit User Preferences)**
 > 🚫 NO Swipe Actions (e.g. no swiping left/right to delete/complete items).
@@ -305,3 +306,9 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 > Plan: Read DEVLOG rules. Revert the .env git tracking to comply with Rule 6 (Secret Management), restore .gitignore, and log all actions to DEVLOG.md.
 
 **2026-05-09 07:44 - Task Completed**: Removed .env from git cache, restored .gitignore exclusion, committed, and pushed. Updated DEVLOG with missing entries.
+
+**2026-05-09 07:55 - Task Started**
+> Prompt: "add to the roadmap developing the chat further and you can start with point 1"
+> Plan: Add Chat enhancements to roadmap. Implement Smart Asset Auto-Linking by comparing event titles against wallet assets and suggesting linked assets in AddEventModal.
+
+**2026-05-09 07:58 - Task Completed**: Added typing indicators to GroupChatWidget.tsx using Firestore onSnapshot. Typing state clears dynamically after 3s of inactivity or upon sending. Fixed a TypeScript timeout reference error, built, and deployed to Firebase.
