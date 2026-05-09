@@ -312,3 +312,9 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 > Plan: Add Chat enhancements to roadmap. Implement Smart Asset Auto-Linking by comparing event titles against wallet assets and suggesting linked assets in AddEventModal.
 
 **2026-05-09 07:58 - Task Completed**: Added typing indicators to GroupChatWidget.tsx using Firestore onSnapshot. Typing state clears dynamically after 3s of inactivity or upon sending. Fixed a TypeScript timeout reference error, built, and deployed to Firebase.
+
+**2026-05-09 08:10 - Task Started**
+> Prompt: "ok, next"
+> Plan: Implement Message Reactions for the chat widget, and update DEVLOG.
+
+**2026-05-09 08:10 - Task Completed**: Added emoji reactions (like, love, laugh, surprise, sad, pray) to messages in GroupChatWidget.tsx. Used a 'hover-to-reveal' inline button. State synced in real-time via Firestore. Build and deploy successful.

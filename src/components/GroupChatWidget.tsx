@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 
@@ -24,6 +24,9 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   const [lastRead, setLastRead] = useState<number>(Date.now());
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [activeReactionMsg, setActiveReactionMsg] = useState<string | null>(null);
+
+  const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
   // Other members in the group (excluding me)
   const otherMemberIds = groupMembers.filter(id => id !== auth.currentUser?.uid);
@@ -213,6 +216,33 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     return 'sent';
   };
 
+  const handleReaction = async (msgId: string, emoji: string) => {
+    const msg = messages.find(m => m.id === msgId);
+    if (!msg || !auth.currentUser) return;
+    
+    const currentReactions = msg.reactions || {};
+    let usersForEmoji = currentReactions[emoji] || [];
+    
+    const uid = auth.currentUser.uid;
+    if (usersForEmoji.includes(uid)) {
+      usersForEmoji = usersForEmoji.filter((id: string) => id !== uid);
+    } else {
+      usersForEmoji = [...usersForEmoji, uid];
+    }
+    
+    const newReactions = { ...currentReactions };
+    if (usersForEmoji.length === 0) {
+      delete newReactions[emoji];
+    } else {
+      newReactions[emoji] = usersForEmoji;
+    }
+    
+    await updateDoc(doc(db, `groups/${groupId}/messages`, msgId), {
+      reactions: newReactions
+    });
+    setActiveReactionMsg(null);
+  };
+
   return (
     <div className="fixed bottom-[104px] right-8 z-40 flex flex-col items-end">
       {isOpen && (
@@ -260,13 +290,31 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                 const status = getSeenStatus(msg);
 
                 return (
-                  <div key={msg.id} className={`flex flex-col max-w-[80%] ${isMe ? 'self-end items-end' : 'self-start items-start'}`}>
+                  <div 
+                    key={msg.id} 
+                    className={`flex flex-col max-w-[80%] relative group ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
+                    onMouseLeave={() => setActiveReactionMsg(null)}
+                  >
                     {!isMe && (
                       <span className="text-[10px] text-zinc-500 ml-1 mb-0.5">
                         {sender.name || sender.email?.split('@')[0]}
                       </span>
                     )}
-                    <div className={`rounded-2xl text-sm overflow-hidden ${isMe ? 'bg-primary rounded-br-sm' : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-bl-sm'}`}>
+                    <div className={`relative w-full flex items-center gap-2 ${isMe ? 'justify-end' : ''}`}>
+                      {/* Reaction Toggle Button (Others) */}
+                      {!isMe && (
+                        <button
+                          onClick={() => setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
+                          title="Add reaction"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/><path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14"/><path d="M9 9H9.01"/><path d="M15 9H15.01"/></svg>
+                        </button>
+                      )}
+                      
+                      <div className={`rounded-2xl text-sm overflow-hidden flex-1 ${isMe ? 'bg-primary rounded-br-sm max-w-[calc(100%-32px)]' : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-bl-sm max-w-[calc(100%-32px)]'}`}
+                           onDoubleClick={() => handleReaction(msg.id, '❤️')}
+                      >
                       {msg.imageUrl && (
                         <img
                           src={msg.imageUrl}
@@ -279,7 +327,56 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                       {msg.text && (
                         <p className="px-3 py-2">{msg.text}</p>
                       )}
+                      </div>
+
+                      {/* Reaction Toggle Button (Me) */}
+                      {isMe && (
+                        <button
+                          onClick={() => setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
+                          title="Add reaction"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/><path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14"/><path d="M9 9H9.01"/><path d="M15 9H15.01"/></svg>
+                        </button>
+                      )}
                     </div>
+                    
+                    {/* Reactions Display */}
+                    {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                      <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                        {Object.entries(msg.reactions).map(([emoji, users]: [string, any]) => (
+                          <button
+                            key={emoji}
+                            onClick={() => handleReaction(msg.id, emoji)}
+                            className={`px-1.5 py-0.5 rounded-full text-[10px] flex items-center gap-1 border ${
+                              users.includes(auth.currentUser?.uid) 
+                                ? 'bg-primary/20 border-primary/30 text-primary' 
+                                : 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300'
+                            }`}
+                            title={users.map((uid: string) => userMap[uid]?.name || 'Someone').join(', ')}
+                          >
+                            <span>{emoji}</span>
+                            <span className="font-medium">{users.length}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Active Reaction Picker */}
+                    {activeReactionMsg === msg.id && (
+                      <div className={`absolute z-10 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-xl rounded-full px-2 py-1 flex items-center gap-1 -mt-8 ${isMe ? 'right-0' : 'left-0'}`}>
+                        {EMOJIS.map(emoji => (
+                          <button
+                            key={emoji}
+                            onClick={() => handleReaction(msg.id, emoji)}
+                            className="w-8 h-8 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-full transition-transform hover:scale-125"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
                     {/* Sent/Seen indicator */}
                     {isMe && status && (
                       <div className="flex items-center gap-0.5 mt-0.5 mr-1">
