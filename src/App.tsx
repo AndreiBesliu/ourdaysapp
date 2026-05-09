@@ -101,7 +101,8 @@ function App() {
               setAdvancedTheme({
                 backgroundImage: data.backgroundImage || null,
                 backgroundStyle: data.backgroundStyle || 'stretch',
-                backgroundOverlay: data.backgroundOverlay ?? 50
+                backgroundOverlay: data.backgroundOverlay ?? 50,
+                language: data.language || 'en-US'
               });
             }
           }
