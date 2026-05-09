@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Gamepad2, Play, Clock, Trash2 } from 'lucide-react';
+import { X, Gamepad2, Play, Clock, Trash2, Info } from 'lucide-react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
 import TicTacToe from './TicTacToe';
@@ -16,11 +16,45 @@ interface GamesHubModalProps {
   selectedDate: Date | null;
 }
 
+const GAME_RULES: Record<string, { title: string, rules: string[] }> = {
+  'tic-tac-toe': {
+    title: 'Tic-Tac-Toe',
+    rules: [
+      'The game is played on a grid that is 3 squares by 3 squares.',
+      'You are X, your friend is O. Players take turns putting their marks in empty squares.',
+      'The first player to get 3 of their marks in a row (up, down, across, or diagonally) is the winner.',
+      'When all 9 squares are full, the game is over. If no player has 3 marks in a row, the game ends in a tie.'
+    ]
+  },
+  'connect-4': {
+    title: 'Connect 4',
+    rules: [
+      'The game is played on a vertical board with 7 columns and 6 rows.',
+      'Players take turns dropping their colored discs from the top into a column.',
+      'The disc will fall straight down, occupying the lowest available space within the column.',
+      'The objective of the game is to be the first to form a horizontal, vertical, or diagonal line of four of your own discs.'
+    ]
+  },
+  'rummy-45': {
+    title: 'Rummy 45',
+    rules: [
+      'The goal is to meld all your cards into sets (same value, different suits) or runs (consecutive cards in the same suit).',
+      'On your turn, you must draw a card from the deck or the discard pile.',
+      'To play your first melds to the board, their combined value must be at least 45 points AND must include at least one run.',
+      'Card values: 2-9 are 5 pts, 10-K are 10 pts, Aces are 25 pts, Jokers are 50 pts.',
+      'After your initial 45pt meld, you can attach cards to any existing meld on the board.',
+      'You can swap a Joker from the board if you have the exact card the Joker represents.',
+      'To win the round (Inchidere), you must meld all your cards EXCEPT one, which must be discarded.'
+    ]
+  }
+};
+
 export default function GamesHubModal({ isOpen, onClose, groupId, groupName, userMap, selectedDate }: GamesHubModalProps) {
   const [activeGames, setActiveGames] = useState<any[]>([]);
   const [playingGameId, setPlayingGameId] = useState<string | null>(null);
   const [view, setView] = useState<'arcade' | 'leaderboard'>('arcade');
   const [leaderboard, setLeaderboard] = useState<{uid: string, wins: number, points?: number}[]>([]);
+  const [showRulesFor, setShowRulesFor] = useState<string | null>(null);
 
   // Daily Games Query
   useEffect(() => {
@@ -178,12 +212,23 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
               {playingGameId ? "Playing Game" : `${groupName} Arcade`}
             </h3>
           </div>
-          <button 
-            onClick={() => playingGameId ? setPlayingGameId(null) : onClose()} 
-            className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {playingGameId && activeGame && (
+              <button
+                onClick={() => setShowRulesFor(activeGame.gameType)}
+                className="p-1.5 text-zinc-400 hover:text-blue-500 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors mr-2"
+                title="How to play"
+              >
+                <Info className="w-5 h-5" />
+              </button>
+            )}
+            <button 
+              onClick={() => playingGameId ? setPlayingGameId(null) : onClose()} 
+              className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -226,33 +271,48 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                     <h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">Start a New Game</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Tic Tac Toe Card */}
-                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors cursor-pointer group flex flex-col h-full" onClick={() => handleCreateGame('tic-tac-toe')}>
-                        <div className="w-12 h-12 bg-blue-100 dark:bg-blue-500/20 text-blue-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                          <div className="text-xl font-bold font-mono">X O</div>
+                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors group flex flex-col h-full relative">
+                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('tic-tac-toe'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title="How to play">
+                          <Info className="w-4 h-4" />
+                        </button>
+                        <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('tic-tac-toe')}>
+                          <div className="w-12 h-12 bg-blue-100 dark:bg-blue-500/20 text-blue-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                            <div className="text-xl font-bold font-mono">X O</div>
+                          </div>
+                          <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Tic-Tac-Toe</h5>
+                          <p className="text-sm text-zinc-500 flex-1">A classic 2-player game. First to get 3 in a row wins!</p>
                         </div>
-                        <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Tic-Tac-Toe</h5>
-                        <p className="text-sm text-zinc-500 flex-1">A classic 2-player game. First to get 3 in a row wins!</p>
                       </div>
 
                       {/* Connect 4 Card */}
-                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors cursor-pointer group flex flex-col h-full" onClick={() => handleCreateGame('connect-4')}>
-                        <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform flex-wrap p-2 gap-1">
-                          <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                          <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
-                          <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
-                          <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors group flex flex-col h-full relative">
+                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('connect-4'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title="How to play">
+                          <Info className="w-4 h-4" />
+                        </button>
+                        <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('connect-4')}>
+                          <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform flex-wrap p-2 gap-1">
+                            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                            <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
+                            <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
+                            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                          </div>
+                          <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Connect 4</h5>
+                          <p className="text-sm text-zinc-500 flex-1">Drop discs to get 4 in a row. Strategic and fast-paced!</p>
                         </div>
-                        <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Connect 4</h5>
-                        <p className="text-sm text-zinc-500 flex-1">Drop discs to get 4 in a row. Strategic and fast-paced!</p>
                       </div>
 
                       {/* Rummy 45 Card */}
-                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors cursor-pointer group flex flex-col h-full" onClick={() => handleCreateGame('rummy-45')}>
-                        <div className="w-12 h-12 bg-red-100 dark:bg-red-500/20 text-red-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                          <div className="text-xl font-bold font-mono">45</div>
+                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors group flex flex-col h-full relative">
+                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('rummy-45'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title="How to play">
+                          <Info className="w-4 h-4" />
+                        </button>
+                        <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('rummy-45')}>
+                          <div className="w-12 h-12 bg-red-100 dark:bg-red-500/20 text-red-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                            <div className="text-xl font-bold font-mono">45</div>
+                          </div>
+                          <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Rummy 45</h5>
+                          <p className="text-sm text-zinc-500">The ultimate family card game. Form runs and sets to win.</p>
                         </div>
-                        <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Rummy 45</h5>
-                        <p className="text-sm text-zinc-500">The ultimate family card game. Form runs and sets to win.</p>
                       </div>
                     </div>
                   </div>
@@ -364,6 +424,36 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
           )}
         </div>
       </div>
+
+      {/* Rules Modal Overlay */}
+      {showRulesFor && GAME_RULES[showRulesFor] && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200" onClick={() => setShowRulesFor(null)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-2xl flex flex-col border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-blue-50 dark:bg-blue-900/20 rounded-t-2xl">
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                <Info className="w-5 h-5" />
+                <h3 className="font-bold text-lg">How to Play: {GAME_RULES[showRulesFor].title}</h3>
+              </div>
+              <button onClick={() => setShowRulesFor(null)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-white dark:bg-zinc-800 rounded-full transition-colors shadow-sm">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6">
+              <ul className="space-y-3">
+                {GAME_RULES[showRulesFor].rules.map((rule, idx) => (
+                  <li key={idx} className="flex gap-3 text-sm text-zinc-600 dark:text-zinc-300">
+                    <span className="shrink-0 w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs mt-0.5">{idx + 1}</span>
+                    <span>{rule}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 rounded-b-2xl flex justify-end">
+              <button onClick={() => setShowRulesFor(null)} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all">Got it!</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
