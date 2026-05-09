@@ -59,7 +59,12 @@
     scrollbar-color: hsl(var(--primary)) hsl(var(--secondary));
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground transition-colors duration-300 ease-in-out;
+  }
+  
+  /* Make sure most common surface elements transition smoothly when dark mode changes */
+  div, span, button, input, header, main, section, svg, p, h1, h2, h3, h4, h5, h6 {
+    @apply transition-colors duration-300 ease-in-out;
   }
 
   /* Custom Scrollbar */
