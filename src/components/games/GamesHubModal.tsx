@@ -6,6 +6,7 @@ import TicTacToe from './TicTacToe';
 import Connect4 from './Connect4';
 import RummyGame from './rummy/RummyGame';
 import { format } from 'date-fns';
+import { useThemeStore } from '../../store';
 
 interface GamesHubModalProps {
   isOpen: boolean;
@@ -16,37 +17,203 @@ interface GamesHubModalProps {
   selectedDate: Date | null;
 }
 
-const GAME_RULES: Record<string, { title: string, rules: string[] }> = {
-  'tic-tac-toe': {
-    title: 'Tic-Tac-Toe',
-    rules: [
-      'The game is played on a grid that is 3 squares by 3 squares.',
-      'You are X, your friend is O. Players take turns putting their marks in empty squares.',
-      'The first player to get 3 of their marks in a row (up, down, across, or diagonally) is the winner.',
-      'When all 9 squares are full, the game is over. If no player has 3 marks in a row, the game ends in a tie.'
-    ]
-  },
-  'connect-4': {
-    title: 'Connect 4',
-    rules: [
-      'The game is played on a vertical board with 7 columns and 6 rows.',
-      'Players take turns dropping their colored discs from the top into a column.',
-      'The disc will fall straight down, occupying the lowest available space within the column.',
-      'The objective of the game is to be the first to form a horizontal, vertical, or diagonal line of four of your own discs.'
-    ]
-  },
-  'rummy-45': {
-    title: 'Rummy 45',
-    rules: [
-      'The goal is to meld all your cards into sets (same value, different suits) or runs (consecutive cards in the same suit).',
-      'On your turn, you must draw a card from the deck or the discard pile.',
-      'To play your first melds to the board, their combined value must be at least 45 points AND must include at least one run.',
-      'Card values: 2-9 are 5 pts, 10-K are 10 pts, Aces are 25 pts, Jokers are 50 pts.',
-      'After your initial 45pt meld, you can attach cards to any existing meld on the board.',
-      'You can swap a Joker from the board if you have the exact card the Joker represents.',
-      'To win the round (Inchidere), you must meld all your cards EXCEPT one, which must be discarded.'
-    ]
-  }
+const getGameRules = (lang: string = 'en-US'): Record<string, { title: string, rules: string[] }> => {
+  const translations: Record<string, Record<string, { title: string, rules: string[] }>> = {
+    'en-US': {
+      'tic-tac-toe': {
+        title: 'Tic-Tac-Toe',
+        rules: [
+          'The game is played on a grid that is 3 squares by 3 squares.',
+          'You are X, your friend is O. Players take turns putting their marks in empty squares.',
+          'The first player to get 3 of their marks in a row (up, down, across, or diagonally) is the winner.',
+          'When all 9 squares are full, the game is over. If no player has 3 marks in a row, the game ends in a tie.'
+        ]
+      },
+      'connect-4': {
+        title: 'Connect 4',
+        rules: [
+          'The game is played on a vertical board with 7 columns and 6 rows.',
+          'Players take turns dropping their colored discs from the top into a column.',
+          'The disc will fall straight down, occupying the lowest available space within the column.',
+          'The objective of the game is to be the first to form a horizontal, vertical, or diagonal line of four of your own discs.'
+        ]
+      },
+      'rummy-45': {
+        title: 'Rummy 45',
+        rules: [
+          'The goal is to meld all your cards into sets (same value, different suits) or runs (consecutive cards in the same suit).',
+          'On your turn, you must draw a card from the deck or the discard pile.',
+          'To play your first melds to the board, their combined value must be at least 45 points AND must include at least one run.',
+          'Card values: 2-9 are 5 pts, 10-K are 10 pts, Aces are 25 pts, Jokers are 50 pts.',
+          'After your initial 45pt meld, you can attach cards to any existing meld on the board.',
+          'You can swap a Joker from the board if you have the exact card the Joker represents.',
+          'To win the round (Inchidere), you must meld all your cards EXCEPT one, which must be discarded.'
+        ]
+      }
+    },
+    'ro-RO': {
+      'tic-tac-toe': {
+        title: 'X și 0',
+        rules: [
+          'Jocul se joacă pe o grilă de 3x3.',
+          'Tu ești X, oponentul tău este O. Jucătorii își pun pe rând semnele în pătratele goale.',
+          'Primul jucător care aliniază 3 semne (orizontal, vertical sau diagonal) câștigă.',
+          'Când toate cele 9 pătrate sunt pline, jocul se termină. Dacă niciun jucător nu are 3 semne la rând, este remiză.'
+        ]
+      },
+      'connect-4': {
+        title: 'Conectează 4',
+        rules: [
+          'Jocul se desfășoară pe o tablă verticală cu 7 coloane și 6 rânduri.',
+          'Jucătorii introduc pe rând discuri colorate prin partea de sus a unei coloane.',
+          'Discul va cădea drept în jos, ocupând cel mai de jos spațiu disponibil.',
+          'Obiectivul este de a fi primul care formează o linie orizontală, verticală sau diagonală din patru discuri.'
+        ]
+      },
+      'rummy-45': {
+        title: 'Remi 45',
+        rules: [
+          'Scopul este de a etala toate cărțile în suite (valori identice, culori diferite) sau terțe (cărți consecutive de aceeași culoare).',
+          'La rândul tău, trebuie să tragi o carte din pachet sau din teancul de decartare.',
+          'Pentru a face prima etalare, valoarea combinată trebuie să fie de minim 45 de puncte ȘI să conțină cel puțin o terță curată.',
+          'Valori: 2-9 au 5 pct, 10-K au 10 pct, Așii au 25 pct, Jokerii au 50 pct.',
+          'După etalarea inițială de 45 de puncte, poți lipi cărți la orice etalare existentă pe masă.',
+          'Poți schimba un Joker de pe masă dacă ai cartea exactă pe care Jokerul o înlocuiește.',
+          'Pentru a câștiga runda (Inchidere), trebuie să etalezi/lipești toate cărțile CU EXCEPȚIA uneia, care trebuie decartată.'
+        ]
+      }
+    },
+    'fr-FR': {
+      'tic-tac-toe': {
+        title: 'Morpion',
+        rules: [
+          'Le jeu se joue sur une grille de 3 cases sur 3.',
+          'Vous êtes X, votre ami est O. Les joueurs placent à tour de rôle leurs marques dans des cases vides.',
+          'Le premier joueur à aligner 3 de ses marques (horizontalement, verticalement ou diagonalement) est le gagnant.',
+          'Quand les 9 cases sont pleines, le jeu est terminé. S\'il n\'y a pas d\'alignement, c\'est un match nul.'
+        ]
+      },
+      'connect-4': {
+        title: 'Puissance 4',
+        rules: [
+          'Le jeu se joue sur un plateau vertical de 7 colonnes et 6 rangées.',
+          'Les joueurs font tomber tour à tour un de leurs jetons de couleur dans la colonne de leur choix.',
+          'Le jeton tombe vers le bas, occupant le premier espace disponible.',
+          'L\'objectif est d\'être le premier à aligner quatre jetons de sa couleur.'
+        ]
+      },
+      'rummy-45': {
+        title: 'Rami 45',
+        rules: [
+          'Le but est de poser toutes vos cartes en brelans (même valeur, couleurs différentes) ou en suites (cartes consécutives de même couleur).',
+          'À votre tour, vous devez piocher une carte dans le talon ou la défausse.',
+          'Pour votre première pose, la valeur combinée doit être d\'au moins 45 points ET inclure au moins une suite.',
+          'Valeurs: 2-9 = 5 pts, 10-K = 10 pts, As = 25 pts, Jokers = 50 pts.',
+          'Après la pose de 45 pts, vous pouvez ajouter des cartes aux combinaisons existantes sur le plateau.',
+          'Vous pouvez remplacer un Joker sur le plateau si vous avez la carte exacte qu\'il représente.',
+          'Pour gagner, vous devez poser toutes vos cartes SAUF une, qui doit être défaussée.'
+        ]
+      }
+    },
+    'es-ES': {
+      'tic-tac-toe': {
+        title: 'Tres en Raya',
+        rules: [
+          'El juego se desarrolla en una cuadrícula de 3x3.',
+          'Tú eres X, tu amigo es O. Los jugadores se turnan para poner sus marcas en casillas vacías.',
+          'El primer jugador en conseguir 3 de sus marcas en fila (arriba, abajo, a través, o en diagonal) es el ganador.',
+          'Cuando las 9 casillas están llenas, el juego termina. Si ningún jugador tiene 3 en raya, hay un empate.'
+        ]
+      },
+      'connect-4': {
+        title: 'Conecta 4',
+        rules: [
+          'El juego se juega en un tablero vertical con 7 columnas y 6 filas.',
+          'Los jugadores se turnan para dejar caer sus fichas de colores por una columna.',
+          'La ficha caerá hacia abajo, ocupando el espacio disponible más bajo.',
+          'El objetivo del juego es ser el primero en formar una línea de cuatro de tus propias fichas.'
+        ]
+      },
+      'rummy-45': {
+        title: 'Rummy 45',
+        rules: [
+          'El objetivo es combinar todas tus cartas en tríos (mismo valor, diferentes palos) o escaleras (cartas consecutivas del mismo palo).',
+          'En tu turno, debes robar una carta del mazo o de la pila de descartes.',
+          'Para tu primera combinación, el valor total debe ser de al menos 45 puntos Y debe incluir al menos una escalera.',
+          'Valores: 2-9 son 5 pts, 10-K son 10 pts, Ases son 25 pts, Comodines son 50 pts.',
+          'Después de tu combinación de 45 pts, puedes añadir cartas a cualquier combinación existente en la mesa.',
+          'Puedes intercambiar un comodín de la mesa si tienes la carta exacta que representa.',
+          'Para ganar la ronda, debes combinar todas tus cartas EXCEPTO una, que debe ser descartada.'
+        ]
+      }
+    },
+    'it-IT': {
+      'tic-tac-toe': {
+        title: 'Tris',
+        rules: [
+          'Il gioco si svolge su una griglia di 3 quadrati per 3.',
+          'Tu sei X, il tuo amico è O. I giocatori fanno a turno per mettere i loro segni nei quadrati vuoti.',
+          'Il primo giocatore ad ottenere 3 dei suoi segni in fila vince.',
+          'Quando tutti e 9 i quadrati sono pieni, la partita è finita. Se nessun giocatore ha 3 segni di fila, c\'è un pareggio.'
+        ]
+      },
+      'connect-4': {
+        title: 'Forza 4',
+        rules: [
+          'Il gioco si svolge su una tavola verticale con 7 colonne e 6 righe.',
+          'I giocatori, a turno, lasciano cadere i loro dischi colorati in una colonna.',
+          'Il disco cadrà verso il basso, occupando lo spazio disponibile più basso.',
+          'L\'obiettivo è essere il primo a formare una linea di quattro dei propri dischi.'
+        ]
+      },
+      'rummy-45': {
+        title: 'Ramino 45',
+        rules: [
+          'L\'obiettivo è combinare tutte le tue carte in tris o scale.',
+          'Al tuo turno, devi pescare una carta dal mazzo o dagli scarti.',
+          'Per la tua prima combinazione, il valore deve essere di almeno 45 punti E includere una scala.',
+          'Valori: 2-9 sono 5 punti, 10-K sono 10 punti, Assi 25, Jolly 50.',
+          'Dopo l\'apertura da 45 punti, puoi attaccare le carte alle combinazioni sul tavolo.',
+          'Puoi scambiare un jolly se hai la carta esatta che sostituisce.',
+          'Per chiudere e vincere, devi combinare o attaccare tutte le carte TRANNE una da scartare.'
+        ]
+      }
+    },
+    'de-DE': {
+      'tic-tac-toe': {
+        title: 'Tic-Tac-Toe',
+        rules: [
+          'Das Spiel wird auf einem Raster von 3x3 Feldern gespielt.',
+          'Du bist X, dein Freund ist O. Die Spieler setzen abwechselnd ihre Markierungen in leere Felder.',
+          'Der erste Spieler, der 3 seiner Markierungen in einer Reihe (horizontal, vertikal oder diagonal) hat, gewinnt.',
+          'Wenn alle 9 Felder voll sind, ist das Spiel beendet. Ohne 3 in einer Reihe gibt es ein Unentschieden.'
+        ]
+      },
+      'connect-4': {
+        title: 'Vier Gewinnt',
+        rules: [
+          'Das Spiel wird auf einem senkrechten Brett mit 7 Spalten und 6 Reihen gespielt.',
+          'Die Spieler werfen abwechselnd ihre farbigen Scheiben von oben in eine Spalte.',
+          'Die Scheibe fällt nach unten und besetzt den untersten verfügbaren Platz.',
+          'Ziel ist es, als Erster eine Linie aus vier eigenen Scheiben zu bilden.'
+        ]
+      },
+      'rummy-45': {
+        title: 'Rommé 45',
+        rules: [
+          'Das Ziel ist es, alle Karten in Sätzen (gleicher Wert, verschiedene Farben) oder Folgen (gleiche Farbe, fortlaufend) auszulegen.',
+          'Bist du an der Reihe, ziehst du eine Karte vom Stapel oder Ablagestapel.',
+          'Für deine erste Auslage muss der kombinierte Wert mindestens 45 Punkte betragen UND mindestens eine Folge enthalten.',
+          'Kartenwerte: 2-9 = 5 Pkt, 10-K = 10 Pkt, Asse = 25 Pkt, Joker = 50 Pkt.',
+          'Nach den 45 Pkt kannst du Karten an bestehende Auslagen anlegen.',
+          'Du kannst einen Joker austauschen, wenn du die genaue Karte hast.',
+          'Um die Runde zu gewinnen, musst du alle Karten bis auf eine ablegen, welche abgeworfen wird.'
+        ]
+      }
+    }
+  };
+
+  return translations[lang] || translations['en-US'];
 };
 
 export default function GamesHubModal({ isOpen, onClose, groupId, groupName, userMap, selectedDate }: GamesHubModalProps) {
@@ -55,6 +222,8 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
   const [view, setView] = useState<'arcade' | 'leaderboard'>('arcade');
   const [leaderboard, setLeaderboard] = useState<{uid: string, wins: number, points?: number}[]>([]);
   const [showRulesFor, setShowRulesFor] = useState<string | null>(null);
+  const { language } = useThemeStore();
+  const gameRules = getGameRules(language);
 
   // Daily Games Query
   useEffect(() => {
@@ -426,13 +595,13 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
       </div>
 
       {/* Rules Modal Overlay */}
-      {showRulesFor && GAME_RULES[showRulesFor] && (
+      {showRulesFor && gameRules[showRulesFor] && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200" onClick={() => setShowRulesFor(null)}>
           <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-2xl flex flex-col border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-blue-50 dark:bg-blue-900/20 rounded-t-2xl">
               <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
                 <Info className="w-5 h-5" />
-                <h3 className="font-bold text-lg">How to Play: {GAME_RULES[showRulesFor].title}</h3>
+                <h3 className="font-bold text-lg">{gameRules[showRulesFor].title}</h3>
               </div>
               <button onClick={() => setShowRulesFor(null)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-white dark:bg-zinc-800 rounded-full transition-colors shadow-sm">
                 <X className="w-4 h-4" />
@@ -440,7 +609,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
             </div>
             <div className="p-6">
               <ul className="space-y-3">
-                {GAME_RULES[showRulesFor].rules.map((rule, idx) => (
+                {gameRules[showRulesFor].rules.map((rule, idx) => (
                   <li key={idx} className="flex gap-3 text-sm text-zinc-600 dark:text-zinc-300">
                     <span className="shrink-0 w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs mt-0.5">{idx + 1}</span>
                     <span>{rule}</span>
@@ -449,7 +618,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
               </ul>
             </div>
             <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 rounded-b-2xl flex justify-end">
-              <button onClick={() => setShowRulesFor(null)} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all">Got it!</button>
+              <button onClick={() => setShowRulesFor(null)} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all">OK</button>
             </div>
           </div>
         </div>

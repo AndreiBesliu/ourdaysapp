@@ -328,3 +328,5 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 **2026-05-09 08:34 - Task Completed**: Implemented Connect 4 minigame. Added to GamesHubModal. Features full gravity logic, win detection, and responsive UI.
 
 **2026-05-09 08:39 - Task Completed**: Added a comprehensive manual/game rules system to the Games Hub. Added info buttons on arcade cards and active games to open a rules modal.
+
+**2026-05-09 08:46 - Task Completed**: Added full internationalization (i18n) support to the Game Rules modal based on the user's active language preference.
