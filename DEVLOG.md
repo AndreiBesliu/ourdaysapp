@@ -345,3 +345,5 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 **2026-05-14 22:03 - Task Started**
 > Prompt: "UI Refinement" -> "go ahead"
 > Plan: Replace `transition-transform` with `transition-all` to fix dark mode snapping, and update GroupChatWidget/GamesHubModal for mobile responsiveness.
+
+**2026-05-14 22:09 - Task Completed**: Replaced `transition-transform` with `transition-all` across all components (Settings, GamesHub, AddEventModal, Wallet, Calendar Grid, GroupChat) to fix abrupt color snapping during dark mode toggles. Restyled `GroupChatWidget` and `GamesHubModal` to use dynamic viewport widths and heights for a responsive mobile experience. App successfully built, deployed to Firebase Hosting, and pushed to Git.
