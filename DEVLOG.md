@@ -11,13 +11,15 @@
 
 ---
 
-## ðŸ“œ Workflow Rules (Permanent)
-> âš ï¸� These rules apply to EVERY session and EVERY task, no exceptions.
+## 📜 Workflow Rules (Permanent)
+> ⚠️ These rules apply to EVERY session and EVERY task, no exceptions.
 
-1.  **Start-of-Task Logging** â€” Before writing any code, append a `Task Started` entry to the **Session Log section of this file** (not just in chat). The entry must include:
+1.  **Start-of-Task Logging** 📝 Before writing any code, append a `Task Started` entry to the **Session Log section of this file** (not just in chat). The entry must include:
     - Date & time (local)
     - The exact user prompt that triggered the task
     - A one-line summary of what the model intends to do
+2.  **End-of-Task Logging** ✅ Upon completing a task, append a `Task Completed` entry immediately following its 'Started' entry in the **Session Log**. Detail exactly what was changed, including specific file names and the core logic adjusted.
+3.  **Deployment & Sync Rule** 🚀 Always update Firebase Hosting (`npm run build` & `firebase deploy`) and GitHub (`git commit` & `git push`) immediately after completing a task to ensure progress is never lost.
     - Format:
       ```
       **YYYY-MM-DD HH:MM - Task Started**
@@ -353,3 +355,9 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 > Plan: Debug and fix the bug preventing Connect 4 from initializing when the user clicks 'Join'.
 
 **2026-05-14 22:16 - Task Completed**: Root cause identified as a Firebase Firestore restriction which strictly forbids saving nested arrays (i.e. `Array(6).map(() => Array(7))`). Refactored the `initialState.board` in `GamesHubModal.tsx` and the `handleNextRound` logic in `Connect4.tsx` to store the 2D grid as a 1D mapping object (`{ 0: [...], 1: [...] }`). This inherently fixes the Firestore sync issue while maintaining 100% compatibility with the frontend's grid-mapping logic `board[r][c]`. App built, deployed to Firebase Hosting, and pushed to GitHub.
+
+**2026-05-14 22:54 - Task Started**
+> Prompt: Expansion update (Memory Minigame, PWA, Sounds/Haptics, Theme Overhaul)
+> Plan: Implement Memory Match using Lucide icons, setup PWA via manifest/SW, build WebAudio synthesizer and Haptics wrapper, and completely overhaul Settings to separate default Dark Mode from Custom Themes.
+
+**2026-05-14 23:02 - Task Completed**: Successfully overhauled the Theme system allowing independent Custom Colors/Overlays from the default Master Dark Mode. Built and injected a Web Audio API synthesizer for custom haptics and sounds (`src/utils/sounds.ts`, `src/utils/haptics.ts`) into Group Chat and Connect 4. Added full PWA Support (`manifest.json`, `sw.js`). Created the new `Memory Match` minigame utilizing 16 Lucide icon cards and integrated it cleanly into `GamesHubModal.tsx`.

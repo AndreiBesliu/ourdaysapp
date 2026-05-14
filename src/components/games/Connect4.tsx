@@ -1,6 +1,8 @@
 import { doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
 import { ArrowLeft } from 'lucide-react';
+import { playTone } from '../../utils/sounds';
+import { triggerHaptic } from '../../utils/haptics';
 
 interface Connect4Props {
   game: any;
@@ -85,6 +87,19 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
       status: newStatus,
       winner: winner
     });
+
+    if (newStatus === 'finished') {
+      if (winner === auth.currentUser.uid) {
+        playTone('success');
+        triggerHaptic('success');
+      } else {
+        playTone('error');
+        triggerHaptic('heavy');
+      }
+    } else {
+      playTone('click');
+      triggerHaptic('light');
+    }
   };
 
   const handleNextRound = async () => {

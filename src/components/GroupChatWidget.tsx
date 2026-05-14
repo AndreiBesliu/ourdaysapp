@@ -3,6 +3,8 @@ import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck, Reply } 
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
+import { playTone } from '../utils/sounds';
+import { triggerHaptic } from '../utils/haptics';
 
 interface GroupChatWidgetProps {
   groupId: string;
@@ -171,6 +173,9 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
         seenBy: [auth.currentUser.uid],
         replyToId: replyingTo ? replyingTo.id : null
       });
+
+      playTone('click');
+      triggerHaptic('light');
 
       setNewMessage('');
       clearImage();

@@ -50,7 +50,7 @@ function hexToHSL(hex: string): string {
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { primaryColor, isDarkMode, setTheme, backgroundImage, backgroundStyle, backgroundOverlay, language, setAdvancedTheme } = useThemeStore();
+  const { primaryColor, isDarkMode, customThemeIsDark, backgroundColor, overlayColor, soundEnabled, hapticsEnabled, setTheme, backgroundImage, backgroundOverlay, language, setAdvancedTheme } = useThemeStore();
   const [photoURL, setPhotoURL] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingBg, setUploadingBg] = useState(false);
@@ -232,6 +232,33 @@ export default function Settings() {
           </div>
         </section>
 
+        {/* Preferences Section */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider pl-1">Preferences</h2>
+          <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
+            <div className="p-4 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800">
+              <div>
+                <p className="font-medium text-zinc-900 dark:text-zinc-100">Sound Effects</p>
+                <p className="text-sm text-zinc-500">Play sounds for actions</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" className="sr-only peer" checked={soundEnabled} onChange={(e) => handleAdvancedThemeUpdate({ soundEnabled: e.target.checked })} />
+                <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/30 dark:peer-focus:ring-primary/50 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-600 peer-checked:bg-primary"></div>
+              </label>
+            </div>
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <p className="font-medium text-zinc-900 dark:text-zinc-100">Haptic Feedback</p>
+                <p className="text-sm text-zinc-500">Vibrate on interactions</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" className="sr-only peer" checked={hapticsEnabled} onChange={(e) => handleAdvancedThemeUpdate({ hapticsEnabled: e.target.checked })} />
+                <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/30 dark:peer-focus:ring-primary/50 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-600 peer-checked:bg-primary"></div>
+              </label>
+            </div>
+          </div>
+        </section>
+
         {/* Appearance Section */}
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider pl-1">{t('appearance', language)}</h2>
@@ -291,7 +318,7 @@ export default function Settings() {
               </div>
             </div>
 
-            {/* Background Image */}
+            {/* Custom Theme Settings */}
             <div className="p-4">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
@@ -299,68 +326,102 @@ export default function Settings() {
                     <ImageIcon className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('background', language)}</p>
-                    <p className="text-sm text-zinc-500">Set a custom app background</p>
+                    <p className="font-medium text-zinc-900 dark:text-zinc-100">Custom Theme Engine</p>
+                    <p className="text-sm text-zinc-500">Configure background and overlay</p>
                   </div>
                 </div>
-                {backgroundImage && (
-                  <button onClick={() => handleAdvancedThemeUpdate({ backgroundImage: null })} className="text-sm text-red-500 hover:text-red-600 font-medium bg-red-50 dark:bg-red-500/10 px-3 py-1.5 rounded-lg transition-colors">
-                    Remove
-                  </button>
-                )}
               </div>
 
-              {!backgroundImage ? (
-                <label className="w-full py-4 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                  {uploadingBg ? (
-                    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-                  ) : (
-                    <>
-                      <Camera className="w-6 h-6 text-zinc-400 mb-2" />
-                      <span className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Upload Background</span>
-                    </>
-                  )}
-                  <input type="file" accept="image/*" className="hidden" onChange={handleBgImageUpload} disabled={uploadingBg} />
-                </label>
-              ) : (
-                <div className="space-y-4">
-                  <div className="relative h-32 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700">
-                    <img src={backgroundImage} className="w-full h-full object-cover" />
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">Display Style</p>
-                      <div className="flex gap-2">
-                        {(['stretch', 'contain', 'repeat'] as const).map(style => (
-                          <button
-                            key={style}
-                            onClick={() => handleAdvancedThemeUpdate({ backgroundStyle: style })}
-                            className={`flex-1 py-1.5 text-sm capitalize rounded-lg border font-medium transition-colors ${backgroundStyle === style ? 'bg-primary text-white border-primary' : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400'}`}
-                          >
-                            {style}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <div className="flex justify-between items-center mb-2">
-                        <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Dark/Light Overlay</p>
-                        <span className="text-xs text-zinc-500">{backgroundOverlay ?? 50}%</span>
-                      </div>
-                      <input 
-                        type="range" 
-                        min="0" 
-                        max="100" 
-                        value={backgroundOverlay ?? 50}
-                        onChange={(e) => handleAdvancedThemeUpdate({ backgroundOverlay: parseInt(e.target.value) })}
-                        className="w-full accent-primary"
-                      />
-                    </div>
-                  </div>
+              {!isDarkMode && (
+                <div className="p-3 mb-4 bg-primary/10 border border-primary/20 text-primary rounded-xl text-sm font-medium">
+                  Custom Theme is active! The settings below will be applied to your app.
                 </div>
               )}
+              {isDarkMode && (
+                <div className="p-3 mb-4 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 rounded-xl text-sm font-medium">
+                  Default Dark Mode is overriding these settings. Turn it off above to see changes.
+                </div>
+              )}
+
+              <div className={`space-y-6 ${isDarkMode ? 'opacity-50 pointer-events-none' : ''}`}>
+                
+                {/* Theme UI Base */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-zinc-900 dark:text-zinc-100">Use Dark UI Elements</p>
+                    <p className="text-xs text-zinc-500">Enable dark mode styling for cards and text</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={customThemeIsDark} onChange={(e) => handleAdvancedThemeUpdate({ customThemeIsDark: e.target.checked })} />
+                    <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/30 dark:peer-focus:ring-primary/50 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-600 peer-checked:bg-primary"></div>
+                  </label>
+                </div>
+
+                {/* Solid Background Color */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-zinc-900 dark:text-zinc-100">Solid Background Color</p>
+                    <p className="text-xs text-zinc-500">Used if no image is set</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input type="color" value={backgroundColor || (customThemeIsDark ? '#09090b' : '#ffffff')} onChange={(e) => handleAdvancedThemeUpdate({ backgroundColor: e.target.value })} className="w-8 h-8 rounded cursor-pointer border-0 p-0" />
+                    {backgroundColor && (
+                      <button onClick={() => handleAdvancedThemeUpdate({ backgroundColor: null })} className="text-xs text-red-500 font-medium">Clear</button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Background Image Upload */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-medium text-zinc-900 dark:text-zinc-100">Background Image</p>
+                    {backgroundImage && (
+                      <button onClick={() => handleAdvancedThemeUpdate({ backgroundImage: null })} className="text-xs text-red-500 font-medium">Remove</button>
+                    )}
+                  </div>
+                  {!backgroundImage ? (
+                    <label className="w-full py-4 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                      {uploadingBg ? (
+                        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                      ) : (
+                        <>
+                          <Camera className="w-5 h-5 text-zinc-400 mb-1" />
+                          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Upload Image</span>
+                        </>
+                      )}
+                      <input type="file" accept="image/*" className="hidden" onChange={handleBgImageUpload} disabled={uploadingBg} />
+                    </label>
+                  ) : (
+                    <div className="relative h-24 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700">
+                      <img src={backgroundImage} className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Overlay Settings */}
+                <div className="space-y-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                  <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100">Overlay Settings</p>
+                  
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-zinc-600 dark:text-zinc-400">Color</p>
+                    <div className="flex items-center gap-2">
+                      <input type="color" value={overlayColor || (customThemeIsDark ? '#000000' : '#ffffff')} onChange={(e) => handleAdvancedThemeUpdate({ overlayColor: e.target.value })} className="w-6 h-6 rounded cursor-pointer border-0 p-0" />
+                      {overlayColor && (
+                        <button onClick={() => handleAdvancedThemeUpdate({ overlayColor: null })} className="text-xs text-red-500 font-medium">Reset</button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <p className="text-xs text-zinc-600 dark:text-zinc-400">Opacity</p>
+                      <span className="text-xs text-zinc-500">{backgroundOverlay ?? 50}%</span>
+                    </div>
+                    <input type="range" min="0" max="100" value={backgroundOverlay ?? 50} onChange={(e) => handleAdvancedThemeUpdate({ backgroundOverlay: parseInt(e.target.value) })} className="w-full accent-primary" />
+                  </div>
+                </div>
+
+              </div>
             </div>
 
           </div>

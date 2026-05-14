@@ -5,6 +5,7 @@ import { db, auth } from '../../firebase';
 import TicTacToe from './TicTacToe';
 import Connect4 from './Connect4';
 import RummyGame from './rummy/RummyGame';
+import MemoryMatch from './MemoryMatch';
 import { format } from 'date-fns';
 import { useThemeStore } from '../../store';
 
@@ -48,6 +49,16 @@ const getGameRules = (lang: string = 'en-US'): Record<string, { title: string, r
           'After your initial 45pt meld, you can attach cards to any existing meld on the board.',
           'You can swap a Joker from the board if you have the exact card the Joker represents.',
           'To win the round (Inchidere), you must meld all your cards EXCEPT one, which must be discarded.'
+        ]
+      },
+      'memory-match': {
+        title: 'Memory Match',
+        rules: [
+          'A classic memory game played with 16 cards (8 pairs).',
+          'On your turn, tap two cards to flip them over.',
+          'If the symbols match, you score a point and get another turn!',
+          'If they don\'t match, they flip back and it\'s the other player\'s turn.',
+          'The player with the most pairs when all cards are matched wins.'
         ]
       }
     },
@@ -323,6 +334,20 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
           status: 'waiting',
           winner: null
         };
+      } else if (gameType === 'memory-match') {
+        const ICONS = ['Gamepad2', 'Rocket', 'Star', 'Heart', 'Flame', 'Zap', 'Camera', 'Music'];
+        const deck = [...ICONS, ...ICONS];
+        for (let i = deck.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [deck[i], deck[j]] = [deck[j], deck[i]];
+        }
+        initialState = {
+          board: deck.map((icon, idx) => ({ id: idx, iconName: icon, isMatched: false })),
+          flippedIndices: [],
+          p1IsNext: true,
+          players: { P1: auth.currentUser.uid, P2: null },
+          scores: { P1: 0, P2: 0 }
+        };
       }
 
       const docRef = await addDoc(collection(db, 'games'), {
@@ -420,6 +445,9 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
               {activeGame.gameType === 'rummy-45' && (
                 <RummyGame game={activeGame} userMap={userMap} onBack={() => setPlayingGameId(null)} />
               )}
+              {activeGame.gameType === 'memory-match' && (
+                <MemoryMatch game={activeGame} userMap={userMap} onBack={() => setPlayingGameId(null)} />
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-8">
@@ -488,6 +516,20 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                           </div>
                           <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Rummy 45</h5>
                           <p className="text-sm text-zinc-500">The ultimate family card game. Form runs and sets to win.</p>
+                        </div>
+                      </div>
+
+                      {/* Memory Match Card */}
+                      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors group flex flex-col h-full relative">
+                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('memory-match'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title="How to play">
+                          <Info className="w-4 h-4" />
+                        </button>
+                        <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('memory-match')}>
+                          <div className="w-12 h-12 bg-amber-100 dark:bg-amber-500/20 text-amber-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-all">
+                            <Gamepad2 className="w-6 h-6" />
+                          </div>
+                          <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Memory Match</h5>
+                          <p className="text-sm text-zinc-500 flex-1">Find the matching pairs. Test your memory!</p>
                         </div>
                       </div>
                     </div>
