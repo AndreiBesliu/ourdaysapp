@@ -38,6 +38,10 @@
 ## ðŸš€ Active Roadmap & Backlog
 
 ### 1. In Progress / Upcoming
+- **Games**: Chess, Backgammon
+- **More AI functionality**
+- **Push Notifications**
+- **Add more to the chat**
 - **Rummy 45 (Phase 4)**: Finalize game-ending logic, point calculation, and UI polish for the "Tabla" grid.
 - **Chat Reactions**: Add emoji reactions to chat messages.
 - **Typing Indicators**: Show when someone is typing in the group chat.
