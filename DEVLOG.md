@@ -31,7 +31,9 @@
 3.  **Roadmap Sync** â€” Move completed features from "Roadmap" to "Completed Features".
 4.  **Build Before Deploy** â€” Always run `npm run build` successfully before deploying.
 5.  **Deploy After Every Feature** â€” Deploy to hosting and push to Git after each feature.
-6.  **Secret Management** â€” NEVER hardcode API keys. Use `.env` or Firebase Secrets.
+6.  **Secret Management** — NEVER hardcode API keys. Use `.env` or Firebase Secrets.
+7.  **AI Model Attribution** 🤖 Every `Task Started` and `Task Completed` entry **must** state which AI model performed the task (e.g. `Model: Claude Sonnet 4.5`, `Model: Gemini 2.5 Pro`). This ensures full traceability of who wrote what.
+
 
 ---
 
