@@ -275,13 +275,13 @@ export default function Settings() {
                   <button
                     key={color.name}
                     onClick={() => handleThemeChange(color.value, isDarkMode)}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform ${color.class} ${primaryColor === color.value ? 'scale-110 ring-2 ring-offset-2 dark:ring-offset-zinc-900 ring-zinc-400' : 'hover:scale-105'}`}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${color.class} ${primaryColor === color.value ? 'scale-110 ring-2 ring-offset-2 dark:ring-offset-zinc-900 ring-zinc-400' : 'hover:scale-105'}`}
                     title={color.name}
                   >
                     {primaryColor === color.value && <div className="w-2 h-2 bg-white rounded-full"></div>}
                   </button>
                 ))}
-                <label className="w-10 h-10 rounded-full flex items-center justify-center bg-[conic-gradient(from_90deg,red,yellow,green,blue,magenta,red)] hover:scale-105 transition-transform cursor-pointer shadow-sm border-2 border-white dark:border-zinc-800">
+                <label className="w-10 h-10 rounded-full flex items-center justify-center bg-[conic-gradient(from_90deg,red,yellow,green,blue,magenta,red)] hover:scale-105 transition-all cursor-pointer shadow-sm border-2 border-white dark:border-zinc-800">
                   <input 
                     type="color" 
                     className="opacity-0 absolute w-0 h-0"

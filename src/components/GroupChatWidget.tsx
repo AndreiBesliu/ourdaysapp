@@ -247,9 +247,9 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   };
 
   return (
-    <div className="fixed bottom-[104px] right-8 z-40 flex flex-col items-end">
+    <div className="fixed bottom-[104px] right-4 sm:right-8 z-40 flex flex-col items-end">
       {isOpen && (
-        <div className="mb-4 w-80 sm:w-96 h-[450px] bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden">
+        <div className="mb-4 w-[calc(100vw-2rem)] sm:w-96 h-[60vh] sm:h-[450px] bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden">
           {/* Header */}
           <div className="p-3 bg-primary flex items-center justify-between shrink-0">
             <div className="flex-1 min-w-0">
@@ -402,7 +402,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                           <button
                             key={emoji}
                             onClick={() => handleReaction(msg.id, emoji)}
-                            className="w-8 h-8 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-full transition-transform hover:scale-125"
+                            className="w-8 h-8 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-full transition-all hover:scale-125"
                           >
                             {emoji}
                           </button>

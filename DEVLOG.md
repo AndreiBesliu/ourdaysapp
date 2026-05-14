@@ -1,6 +1,6 @@
 # Our Days App - Development Log
 
-## 🏗 Project Infrastructure (Permanent)
+## ðŸ�— Project Infrastructure (Permanent)
 *   **GitHub Repository**: [AndreiBesliu/ourdaysapp](https://github.com/AndreiBesliu/ourdaysapp.git)
 *   **Firebase Project ID**: `our-days-2a939`
 *   **Firebase Hosting URL**: [https://our-days-2a939.web.app](https://our-days-2a939.web.app)
@@ -11,10 +11,10 @@
 
 ---
 
-## 📜 Workflow Rules (Permanent)
-> ⚠️ These rules apply to EVERY session and EVERY task, no exceptions.
+## ðŸ“œ Workflow Rules (Permanent)
+> âš ï¸� These rules apply to EVERY session and EVERY task, no exceptions.
 
-1.  **Start-of-Task Logging** — Before writing any code, append a `Task Started` entry to the **Session Log section of this file** (not just in chat). The entry must include:
+1.  **Start-of-Task Logging** â€” Before writing any code, append a `Task Started` entry to the **Session Log section of this file** (not just in chat). The entry must include:
     - Date & time (local)
     - The exact user prompt that triggered the task
     - A one-line summary of what the model intends to do
@@ -25,15 +25,15 @@
       > Prompt: "<exact user prompt>"
       > Plan: <one-line description of what will be done>
       ```
-2.  **End-of-Task Logging** — After deploying, append a `Task Completed` entry summarising what changed.
-3.  **Roadmap Sync** — Move completed features from "Roadmap" to "Completed Features".
-4.  **Build Before Deploy** — Always run `npm run build` successfully before deploying.
-5.  **Deploy After Every Feature** — Deploy to hosting and push to Git after each feature.
-6.  **Secret Management** — NEVER hardcode API keys. Use `.env` or Firebase Secrets.
+2.  **End-of-Task Logging** â€” After deploying, append a `Task Completed` entry summarising what changed.
+3.  **Roadmap Sync** â€” Move completed features from "Roadmap" to "Completed Features".
+4.  **Build Before Deploy** â€” Always run `npm run build` successfully before deploying.
+5.  **Deploy After Every Feature** â€” Deploy to hosting and push to Git after each feature.
+6.  **Secret Management** â€” NEVER hardcode API keys. Use `.env` or Firebase Secrets.
 
 ---
 
-## 🚀 Active Roadmap & Backlog
+## ðŸš€ Active Roadmap & Backlog
 
 ### 1. In Progress / Upcoming
 - **Rummy 45 (Phase 4)**: Finalize game-ending logic, point calculation, and UI polish for the "Tabla" grid.
@@ -42,10 +42,10 @@
 - **Android Compilation**: Wrap the app into a native APK using Capacitor.
 
 > **UI/UX Design Constraints (Explicit User Preferences)**
-> 🚫 NO Swipe Actions.
-> 🚫 NO Confetti/heavy animations.
-> ⚠️ Haptics should be used subtly.
-> ✅ YES to clean, power-user premium UX.
+> ðŸš« NO Swipe Actions.
+> ðŸš« NO Confetti/heavy animations.
+> âš ï¸� Haptics should be used subtly.
+> âœ… YES to clean, power-user premium UX.
 
 ### 2. Backlog
 - **UI Refinement**: Continue polishing dark mode transitions and mobile responsiveness.
@@ -53,7 +53,7 @@
 
 ---
 
-## ✅ Completed Features
+## âœ… Completed Features
 - **Transferable Assets**: Hand over ownership of wallet assets with an optional "Keep Copy" feature.
 - **Autosave Engine**: Prevents data loss by saving event drafts to `localStorage`.
 - **Task Assignment Constraints**: Logic to filter assignees based on active group/calendar type.
@@ -71,14 +71,14 @@
 
 ---
 
-## 📅 Session Log: May 5, 2026
+## ðŸ“… Session Log: May 5, 2026
 
 **~18:10 - Task Started**: Implementing Task Assignment Constraints and Autosave Engine.
 **~18:15 - Task Completed**: Constraints enforced in `AddEventModal` and `EventDetailsModal`. Autosave draft logic added to `AddEventModal`. Build verified. Deployed.
 
 ---
 
-## 📅 Session Log: May 8, 2026
+## ðŸ“… Session Log: May 8, 2026
 
 **~09:50 - Task Started**
 > Prompt: "something happened to the AI suggestion option" & "ok, can we make it work as before?"
@@ -99,7 +99,7 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 **~18:52 - Task Started**: Auto-contrast text color on primary backgrounds.
 **~19:01 - Task Completed**: WCAG luminance calculation added to `App.tsx`. CSS rule added to `index.css`. Fixed threshold bug (Amber at 50% L was incorrectly getting white text). Deployed.
 
-**~19:07 - Task Started**: Chat enhancements — image sending and sent/seen status.
+**~19:07 - Task Started**: Chat enhancements â€” image sending and sent/seen status.
 **~19:14 - Task Completed**: `GroupChatWidget` rewritten with image upload (Firebase Storage), `seenBy` array, and sent/seen indicators. Dark mode default for new users added. Deployed.
 
 **~19:14 - Task Started**: Chat header member avatars + retroactive seen marking.
@@ -112,14 +112,14 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 **~19:20 - Task Completed**: `userMap` now fetches current user's Firestore doc (was skipped before). Removed stale `auth.currentUser.photoURL` fallbacks in modals. Deployed.
 
 **~19:26 - Task Started**: Fix chat "Seen" status not updating reliably.
-**~19:27 - Task Completed**: Switched from purely `seenBy`-array-based detection to reply-ordering inference — if someone replied after your message, it's marked Seen. `seenBy` array kept as fallback. Deployed.
+**~19:27 - Task Completed**: Switched from purely `seenBy`-array-based detection to reply-ordering inference â€” if someone replied after your message, it's marked Seen. `seenBy` array kept as fallback. Deployed.
 
 **~19:27 - Task Started**: Update DEVLOG with all session tasks and strengthen workflow rules.
 **~19:27 - Task Completed**: Full session log written. Workflow rules clarified to require file edits (not just chat mentions).
 
 ---
 
-## 📅 Session Log: May 5, 2026 (continued)
+## ðŸ“… Session Log: May 5, 2026 (continued)
 
 **2026-05-05 22:27 - Task Started**
 > Prompt: "it seems that the devlog is not being updated as it says in the rules, are the rules not well established or written?"
@@ -137,7 +137,7 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 
 ---
 
-## 📅 Session Log: May 6, 2026
+## ðŸ“… Session Log: May 6, 2026
 
 **2026-05-06 08:50 - Task Started**
 > Prompt: "here are some goals, sync them with the devlog road map and update it, also read the devlog follow those rules"
@@ -254,7 +254,7 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 
 ---
 
-## 📅 Session Log: May 7, 2026
+## ðŸ“… Session Log: May 7, 2026
 
 **2026-05-07 09:02 - Task Started**
 > Prompt: "check the ourdayapp folder"
@@ -337,7 +337,11 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 
 
 **2026-05-09 09:20 - Task Started**
-> Prompt: "Rummy 45 � Tabla UI Polish"
-> Plan: Overhaul the Rummy 45 visual design � premium tile rendering with color-coded suit indicators, improved board/tabla layout, better spacing, and a polished game-over screen.
+> Prompt: "Rummy 45 — Tabla UI Polish"
+> Plan: Overhaul the Rummy 45 visual design — premium tile rendering with color-coded suit indicators, improved board/tabla layout, better spacing, and a polished game-over screen.
 
 **2026-05-09 09:25 - Task Completed**: Rummy 45 Tabla UI Polish deployed. Premium tile design with colored suit dots, gradient table background, active player highlights, cleaner deck/discard area, improved meld display, and a game-over results screen with ranked scores.
+
+**2026-05-14 22:03 - Task Started**
+> Prompt: "UI Refinement" -> "go ahead"
+> Plan: Replace `transition-transform` with `transition-all` to fix dark mode snapping, and update GroupChatWidget/GamesHubModal for mobile responsiveness.

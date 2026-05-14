@@ -1190,9 +1190,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                       >
                         <div className="aspect-square bg-zinc-100 dark:bg-zinc-900 relative flex items-center justify-center">
                           {asset.imageUrl ? (
-                            <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300" />
                           ) : (
-                            <Wallet className="w-10 h-10 text-zinc-400 opacity-50 group-hover:scale-110 transition-transform duration-300" />
+                            <Wallet className="w-10 h-10 text-zinc-400 opacity-50 group-hover:scale-110 transition-all duration-300" />
                           )}
                           <div className="absolute inset-0 bg-emerald-500/0 group-hover:bg-emerald-500/10 transition-colors"></div>
                         </div>

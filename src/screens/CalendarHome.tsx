@@ -290,7 +290,7 @@ export default function CalendarHome() {
 
       {/* Main Content */}
       <main 
-        className="flex-1 max-w-5xl w-full mx-auto p-4 flex flex-col gap-6 pb-24 transition-transform relative"
+        className="flex-1 max-w-5xl w-full mx-auto p-4 flex flex-col gap-6 pb-24 transition-all relative"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}

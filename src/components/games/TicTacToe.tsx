@@ -156,7 +156,7 @@ export default function TicTacToe({ game, userMap, onBack }: TicTacToeProps) {
                   ${isWinningCell ? 'bg-emerald-100 dark:bg-emerald-500/20 shadow-none' : ''}
                 `}
               >
-                <span className={`transform transition-transform ${cell ? 'scale-100' : 'scale-0'} 
+                <span className={`transform transition-all ${cell ? 'scale-100' : 'scale-0'} 
                   ${cell === 'X' ? 'text-blue-500' : 'text-red-500'}
                   ${isWinningCell ? 'text-emerald-500' : ''}
                 `}>

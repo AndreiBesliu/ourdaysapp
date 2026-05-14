@@ -370,7 +370,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
       onClick={onClose}
     >
       <div 
-        className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-2xl shadow-xl flex flex-col h-[80vh] overflow-hidden border border-zinc-200 dark:border-zinc-800 relative"
+        className="bg-white dark:bg-zinc-900 rounded-none sm:rounded-2xl w-full max-w-2xl shadow-xl flex flex-col h-full sm:h-[80vh] overflow-hidden border border-zinc-200 dark:border-zinc-800 relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -445,7 +445,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                           <Info className="w-4 h-4" />
                         </button>
                         <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('tic-tac-toe')}>
-                          <div className="w-12 h-12 bg-blue-100 dark:bg-blue-500/20 text-blue-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                          <div className="w-12 h-12 bg-blue-100 dark:bg-blue-500/20 text-blue-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-all">
                             <div className="text-xl font-bold font-mono">X O</div>
                           </div>
                           <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Tic-Tac-Toe</h5>
@@ -459,7 +459,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                           <Info className="w-4 h-4" />
                         </button>
                         <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('connect-4')}>
-                          <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform flex-wrap p-2 gap-1">
+                          <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-500/20 text-indigo-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-all flex-wrap p-2 gap-1">
                             <div className="w-3 h-3 bg-red-500 rounded-full"></div>
                             <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
                             <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
@@ -476,7 +476,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                           <Info className="w-4 h-4" />
                         </button>
                         <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('rummy-45')}>
-                          <div className="w-12 h-12 bg-red-100 dark:bg-red-500/20 text-red-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                          <div className="w-12 h-12 bg-red-100 dark:bg-red-500/20 text-red-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-all">
                             <div className="text-xl font-bold font-mono">45</div>
                           </div>
                           <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Rummy 45</h5>

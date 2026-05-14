@@ -572,7 +572,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                                   ref={provided.innerRef}
                                   {...provided.draggableProps}
                                   {...provided.dragHandleProps}
-                                  className={`h-full transition-transform ${snapshot.isDragging ? 'z-50 scale-105' : ''} ${selectedCards.includes(card.id) ? '-translate-y-3' : ''}`}
+                                  className={`h-full transition-all ${snapshot.isDragging ? 'z-50 scale-105' : ''} ${selectedCards.includes(card.id) ? '-translate-y-3' : ''}`}
                                 >
                                   <Card 
                                     face={card} 

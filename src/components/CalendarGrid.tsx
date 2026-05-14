@@ -257,7 +257,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                   <button 
                     key={idx} 
                     onClick={(e) => { e.stopPropagation(); onEventClick && onEventClick(ev); }}
-                    className={`relative p-1 rounded-md transition-transform hover:scale-110 ${colorClass}`}
+                    className={`relative p-1 rounded-md transition-all hover:scale-110 ${colorClass}`}
                     title={ev.title}
                   >
                     <Icon className="w-3.5 h-3.5" />

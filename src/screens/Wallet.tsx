@@ -217,7 +217,7 @@ export default function Wallet() {
   };
 
   const getCategoryIcon = (catName: string, active: boolean) => {
-    const className = `w-7 h-7 mb-2 transition-transform ${active ? 'scale-110' : 'group-hover:scale-110'}`;
+    const className = `w-7 h-7 mb-2 transition-all ${active ? 'scale-110' : 'group-hover:scale-110'}`;
     switch(catName) {
       case 'Home & Living': return <Home className={className} />;
       case 'Health & Medical': return <HeartPulse className={className} />;
@@ -365,7 +365,7 @@ export default function Wallet() {
         >
           {asset.imageUrl ? (
             <>
-              <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover transition-transform group-hover/img:scale-105" />
+              <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover transition-all group-hover/img:scale-105" />
               <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-colors flex items-center justify-center">
                 <span className="opacity-0 group-hover/img:opacity-100 text-white font-medium text-sm drop-shadow-md">View</span>
               </div>
@@ -789,7 +789,7 @@ export default function Wallet() {
                       }}
                       className="group cursor-pointer bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden hover:border-emerald-500 hover:shadow-md transition-all relative aspect-square"
                     >
-                      <img src={url} alt="Past upload" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                      <img src={url} alt="Past upload" className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300" />
                       <div className="absolute inset-0 bg-emerald-500/0 group-hover:bg-emerald-500/20 transition-colors flex items-center justify-center">
                         <Check className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transform scale-50 group-hover:scale-100 transition-all drop-shadow-md" />
                       </div>
