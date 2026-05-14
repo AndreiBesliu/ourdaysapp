@@ -351,11 +351,27 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                       className={`flex flex-col max-w-[80%] relative group ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
                     onMouseLeave={() => setActiveReactionMsg(null)}
                   >
-                    {!isMe && (
-                      <span className="text-[10px] text-zinc-500 ml-1 mb-0.5">
-                        {sender.name || sender.email?.split('@')[0]}
-                      </span>
-                    )}
+                    <div className={`flex items-center gap-1.5 text-[10px] text-zinc-500 mb-0.5 px-1 w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
+                      {!isMe && (
+                        <span className="font-medium">
+                          {sender.name || sender.email?.split('@')[0]}
+                        </span>
+                      )}
+                      {!isMe && <span>•</span>}
+                      <span>{format(msgDate, 'HH:mm')}</span>
+                      {isMe && status && (
+                        <div 
+                          className="flex items-center ml-0.5"
+                          title={status === 'seen' && msg.seenBy ? msg.seenBy.filter((id: string) => id !== auth.currentUser?.uid).map((id: string) => userMap[id]?.name || userMap[id]?.email?.split('@')[0] || 'Unknown').join(', ') : ''}
+                        >
+                          {status === 'seen' ? (
+                            <CheckCheck className="w-3.5 h-3.5 text-blue-400" />
+                          ) : (
+                            <Check className="w-3.5 h-3.5" />
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <div className="relative w-full flex flex-col gap-1">
                       <div className={`rounded-2xl text-sm flex flex-col w-fit max-w-full relative ${isMe ? 'bg-primary rounded-br-sm self-end' : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-bl-sm self-start'}`}
                            onDoubleClick={() => !msg.isDeleted && handleReaction(msg.id, '❤️')}
@@ -386,44 +402,10 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                               />
                             )}
                             {msg.text && (
-                              <div className={`px-2 py-1.5 flex flex-wrap items-end justify-end gap-x-2 ${msg.imageUrl && !msg.text ? 'absolute bottom-1 right-1 bg-black/50 rounded-full backdrop-blur-md text-white !py-0.5 !px-1.5' : ''}`}>
-                                <p className="text-left flex-1 min-w-[50px] whitespace-pre-wrap break-words">
-                                  {msg.text}
-                                  {msg.isEdited && <span className="text-[10px] italic opacity-60 ml-1">(edited)</span>}
-                                </p>
-                                <div className={`flex items-center gap-0.5 text-[9px] opacity-70 shrink-0 mb-0.5 ${msg.imageUrl && !msg.text ? 'text-white' : ''}`}>
-                                  <span>{format(msgDate, 'HH:mm')}</span>
-                                  {isMe && status && (
-                                    <div 
-                                      className="flex items-center ml-0.5"
-                                      title={status === 'seen' && msg.seenBy ? msg.seenBy.filter((id: string) => id !== auth.currentUser?.uid).map((id: string) => userMap[id]?.name || userMap[id]?.email?.split('@')[0] || 'Unknown').join(', ') : ''}
-                                    >
-                                      {status === 'seen' ? (
-                                        <CheckCheck className={`w-3 h-3 ${msg.imageUrl && !msg.text ? 'text-blue-400' : 'text-current'}`} />
-                                      ) : (
-                                        <Check className="w-3 h-3" />
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                            {msg.imageUrl && !msg.text && (
-                                <div className="absolute bottom-1 right-1 bg-black/50 rounded-full backdrop-blur-md text-white py-0.5 px-1.5 flex items-center gap-0.5 text-[9px] opacity-90 shrink-0 z-10">
-                                  <span>{format(msgDate, 'HH:mm')}</span>
-                                  {isMe && status && (
-                                    <div 
-                                      className="flex items-center ml-0.5"
-                                      title={status === 'seen' && msg.seenBy ? msg.seenBy.filter((id: string) => id !== auth.currentUser?.uid).map((id: string) => userMap[id]?.name || userMap[id]?.email?.split('@')[0] || 'Unknown').join(', ') : ''}
-                                    >
-                                      {status === 'seen' ? (
-                                        <CheckCheck className="w-3 h-3 text-blue-400" />
-                                      ) : (
-                                        <Check className="w-3 h-3" />
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
+                              <p className="px-3 py-2 text-left whitespace-pre-wrap break-words">
+                                {msg.text}
+                                {msg.isEdited && <span className="text-[10px] italic opacity-60 ml-2">(edited)</span>}
+                              </p>
                             )}
                           </div>
                         </>
@@ -546,6 +528,22 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                 </div>
               </div>
               <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full text-zinc-500 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Edit Banner */}
+          {editingMsg && (
+            <div className="px-4 py-2 bg-zinc-50 dark:bg-zinc-800/80 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <Pencil className="w-4 h-4 text-primary shrink-0" />
+                <div className="flex flex-col overflow-hidden">
+                  <span className="text-[10px] font-bold text-primary">Editing message</span>
+                  <span className="text-xs text-zinc-500 truncate">{editingMsg.text || 'Photo'}</span>
+                </div>
+              </div>
+              <button onClick={() => { setEditingMsg(null); setNewMessage(''); }} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full text-zinc-500 transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
