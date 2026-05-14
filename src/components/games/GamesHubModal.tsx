@@ -296,7 +296,14 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
         };
       } else if (gameType === 'connect-4') {
         initialState = {
-          board: Array(6).fill(null).map(() => Array(7).fill(null)),
+          board: {
+            0: Array(7).fill(null),
+            1: Array(7).fill(null),
+            2: Array(7).fill(null),
+            3: Array(7).fill(null),
+            4: Array(7).fill(null),
+            5: Array(7).fill(null)
+          },
           p1IsNext: true,
           players: { P1: auth.currentUser.uid, P2: null },
           scores: { P1: 0, P2: 0 },

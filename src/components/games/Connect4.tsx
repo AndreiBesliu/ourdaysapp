@@ -89,7 +89,14 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
 
   const handleNextRound = async () => {
     if (!auth.currentUser) return;
-    const emptyBoard = Array(ROWS).fill(null).map(() => Array(COLS).fill(null));
+    const emptyBoard = {
+      0: Array(COLS).fill(null),
+      1: Array(COLS).fill(null),
+      2: Array(COLS).fill(null),
+      3: Array(COLS).fill(null),
+      4: Array(COLS).fill(null),
+      5: Array(COLS).fill(null)
+    };
     await updateDoc(doc(db, 'games', game.id), {
       'state.board': emptyBoard,
       'state.winningCells': null,
