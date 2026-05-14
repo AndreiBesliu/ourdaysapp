@@ -357,7 +357,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                       </span>
                     )}
                     <div className="relative w-full flex flex-col gap-1">
-                      <div className={`rounded-2xl text-sm flex flex-col w-fit max-w-full ${isMe ? 'bg-primary rounded-br-sm self-end' : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-bl-sm self-start'}`}
+                      <div className={`rounded-2xl text-sm flex flex-col w-fit max-w-full relative ${isMe ? 'bg-primary rounded-br-sm self-end' : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-bl-sm self-start'}`}
                            onDoubleClick={() => !msg.isDeleted && handleReaction(msg.id, '❤️')}
                       >
                       {msg.isDeleted ? (
@@ -430,9 +430,9 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                       )}
                       </div>
 
-                      {/* Interaction Buttons (Below) */}
+                      {/* Interaction Buttons (Floating) */}
                       {!msg.isDeleted && (
-                        <div className={`flex items-center opacity-0 group-hover:opacity-100 transition-opacity ${isMe ? 'self-end' : 'self-start'}`}>
+                        <div className={`absolute -top-4 ${isMe ? 'right-2' : 'left-2'} flex items-center opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-sm rounded-full px-1 z-10`}>
                           {isMe && (
                             <>
                               <button
@@ -440,30 +440,30 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                                 className="p-1 text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-full shrink-0"
                                 title="Delete"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => startEditing(msg)}
-                                className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
+                                className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full shrink-0"
                                 title="Edit"
                               >
-                                <Pencil className="w-4 h-4" />
+                                <Pencil className="w-3.5 h-3.5" />
                               </button>
                             </>
                           )}
                           <button
                             onClick={() => setReplyingTo(msg)}
-                            className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
+                            className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full shrink-0"
                             title="Reply"
                           >
-                            <Reply className="w-4 h-4" />
+                            <Reply className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id)}
-                            className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
+                            className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full shrink-0"
                             title="Add reaction"
                           >
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/><path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14"/><path d="M9 9H9.01"/><path d="M15 9H15.01"/></svg>
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/><path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14"/><path d="M9 9H9.01"/><path d="M15 9H15.01"/></svg>
                           </button>
                         </div>
                       )}
