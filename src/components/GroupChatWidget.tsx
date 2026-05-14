@@ -356,28 +356,8 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                         {sender.name || sender.email?.split('@')[0]}
                       </span>
                     )}
-                    <div className={`relative w-full flex items-center gap-2 ${isMe ? 'justify-end' : ''}`}>
-                      {/* Interaction Buttons (Others) */}
-                      {!isMe && (
-                        <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id)}
-                            className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
-                            title="Add reaction"
-                          >
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/><path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14"/><path d="M9 9H9.01"/><path d="M15 9H15.01"/></svg>
-                          </button>
-                          <button
-                            onClick={() => setReplyingTo(msg)}
-                            className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
-                            title="Reply"
-                          >
-                            <Reply className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-                      
-                      <div className={`rounded-2xl text-sm flex-1 flex flex-col ${isMe ? 'bg-primary rounded-br-sm max-w-[calc(100%-48px)]' : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-bl-sm max-w-[calc(100%-48px)]'}`}
+                    <div className="relative w-full flex flex-col gap-1">
+                      <div className={`rounded-2xl text-sm flex flex-col w-fit max-w-full ${isMe ? 'bg-primary rounded-br-sm self-end' : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-bl-sm self-start'}`}
                            onDoubleClick={() => !msg.isDeleted && handleReaction(msg.id, '❤️')}
                       >
                       {msg.isDeleted ? (
@@ -450,23 +430,27 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                       )}
                       </div>
 
-                      {/* Interaction Buttons (Me) */}
-                      {isMe && !msg.isDeleted && (
-                        <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => handleDelete(msg.id)}
-                            className="p-1 text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-full shrink-0"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => startEditing(msg)}
-                            className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
-                            title="Edit"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
+                      {/* Interaction Buttons (Below) */}
+                      {!msg.isDeleted && (
+                        <div className={`flex items-center opacity-0 group-hover:opacity-100 transition-opacity ${isMe ? 'self-end' : 'self-start'}`}>
+                          {isMe && (
+                            <>
+                              <button
+                                onClick={() => handleDelete(msg.id)}
+                                className="p-1 text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-full shrink-0"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => startEditing(msg)}
+                                className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
+                                title="Edit"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                           <button
                             onClick={() => setReplyingTo(msg)}
                             className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
@@ -483,7 +467,6 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                           </button>
                         </div>
                       )}
-                      {/* Removed individual buttons, replaced by Interaction Buttons block */}
                     </div>
                     
                     {/* Reactions Display */}
