@@ -365,3 +365,9 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 > Plan: Implement Memory Match using Lucide icons, setup PWA via manifest/SW, build WebAudio synthesizer and Haptics wrapper, and completely overhaul Settings to separate default Dark Mode from Custom Themes.
 
 **2026-05-14 23:02 - Task Completed**: Successfully overhauled the Theme system allowing independent Custom Colors/Overlays from the default Master Dark Mode. Built and injected a Web Audio API synthesizer for custom haptics and sounds (`src/utils/sounds.ts`, `src/utils/haptics.ts`) into Group Chat and Connect 4. Added full PWA Support (`manifest.json`, `sw.js`). Created the new `Memory Match` minigame utilizing 16 Lucide icon cards and integrated it cleanly into `GamesHubModal.tsx`.
+
+**2026-05-14 23:30 - Task Started**
+> Prompt: "chat" -> "leave the tombstone and we will stick to native image for now"
+> Plan: Enhance `GroupChatWidget.tsx` with date separators, message timestamps, edit/delete capabilities with tombstones, and rich read receipts.
+
+**2026-05-14 23:40 - Task Completed**: Significantly upgraded the chat experience. Implemented `date-fns` for clean date grouping and inline `HH:mm` timestamps. Added state tracking for editing (`isEdited`) and deleting (`isDeleted`) messages, rendering a neat tombstone when deleted. Enhanced the "Seen" indicator to show a tooltip containing the specific names of group members who read the message on hover. App built, deployed, and pushed.

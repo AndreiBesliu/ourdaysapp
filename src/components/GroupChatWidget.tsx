@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck, Reply } from 'lucide-react';
+import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck, Reply, Pencil, Trash2, Ban } from 'lucide-react';
+import { format, isSameDay, isToday, isYesterday } from 'date-fns';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
@@ -28,6 +29,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeReactionMsg, setActiveReactionMsg] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<any | null>(null);
+  const [editingMsg, setEditingMsg] = useState<any | null>(null);
 
   const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -165,14 +167,25 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
       batch.commit().catch(console.error);
     }
 
-    await addDoc(collection(db, `groups/${groupId}/messages`), {
-        text: newMessage.trim() || null,
-        imageUrl: imageUrl || null,
-        senderId: auth.currentUser.uid,
-        createdAt: serverTimestamp(),
-        seenBy: [auth.currentUser.uid],
-        replyToId: replyingTo ? replyingTo.id : null
-      });
+      if (editingMsg) {
+        await updateDoc(doc(db, `groups/${groupId}/messages`, editingMsg.id), {
+          text: newMessage.trim() || null,
+          imageUrl: imageUrl || editingMsg.imageUrl || null,
+          isEdited: true
+        });
+        setEditingMsg(null);
+      } else {
+        await addDoc(collection(db, `groups/${groupId}/messages`), {
+          text: newMessage.trim() || null,
+          imageUrl: imageUrl || null,
+          senderId: auth.currentUser.uid,
+          createdAt: serverTimestamp(),
+          seenBy: [auth.currentUser.uid],
+          replyToId: replyingTo ? replyingTo.id : null,
+          isDeleted: false,
+          isEdited: false
+        });
+      }
 
       playTone('click');
       triggerHaptic('light');
@@ -190,6 +203,22 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleDelete = async (msgId: string) => {
+    if (confirm("Are you sure you want to delete this message?")) {
+      await updateDoc(doc(db, `groups/${groupId}/messages`, msgId), {
+        isDeleted: true,
+        text: null,
+        imageUrl: null
+      });
+    }
+  };
+
+  const startEditing = (msg: any) => {
+    setEditingMsg(msg);
+    setNewMessage(msg.text || '');
+    setReplyingTo(null);
   };
 
   const getSeenStatus = (msg: any) => {
@@ -292,16 +321,34 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
             {messages.length === 0 ? (
               <p className="text-center text-xs text-zinc-400 mt-10">Start the conversation!</p>
             ) : (
-              messages.map(msg => {
+              messages.map((msg, index) => {
                 const isMe = msg.senderId === auth.currentUser?.uid;
                 const sender = userMap[msg.senderId] || { name: 'Unknown' };
                 const status = getSeenStatus(msg);
                 const parentMsg = msg.replyToId ? messages.find(m => m.id === msg.replyToId) : null;
+                const msgDate = msg.createdAt ? msg.createdAt.toDate() : new Date();
+                const prevMsg = index > 0 ? messages[index - 1] : null;
+                const prevDate = prevMsg?.createdAt ? prevMsg.createdAt.toDate() : null;
+                
+                const showDateSeparator = !prevDate || !isSameDay(msgDate, prevDate);
+                let dateLabel = '';
+                if (showDateSeparator) {
+                  if (isToday(msgDate)) dateLabel = 'Today';
+                  else if (isYesterday(msgDate)) dateLabel = 'Yesterday';
+                  else dateLabel = format(msgDate, 'MMMM d, yyyy');
+                }
 
                 return (
-                  <div 
-                    key={msg.id} 
-                    className={`flex flex-col max-w-[80%] relative group ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
+                  <React.Fragment key={msg.id}>
+                    {showDateSeparator && (
+                      <div className="flex justify-center my-4">
+                        <span className="px-3 py-1 bg-zinc-200 dark:bg-zinc-800 text-[10px] uppercase font-bold text-zinc-500 rounded-full">
+                          {dateLabel}
+                        </span>
+                      </div>
+                    )}
+                    <div 
+                      className={`flex flex-col max-w-[80%] relative group ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
                     onMouseLeave={() => setActiveReactionMsg(null)}
                   >
                     {!isMe && (
@@ -331,35 +378,61 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                       )}
                       
                       <div className={`rounded-2xl text-sm flex-1 flex flex-col ${isMe ? 'bg-primary rounded-br-sm max-w-[calc(100%-48px)]' : 'bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-bl-sm max-w-[calc(100%-48px)]'}`}
-                           onDoubleClick={() => handleReaction(msg.id, '❤️')}
+                           onDoubleClick={() => !msg.isDeleted && handleReaction(msg.id, '❤️')}
                       >
-                      {parentMsg && (
-                        <div 
-                          className={`px-3 py-2 text-xs border-b border-black/10 dark:border-white/10 opacity-80 cursor-pointer hover:opacity-100 transition-opacity ${isMe ? 'bg-black/5' : 'bg-zinc-100 dark:bg-zinc-700/50'}`}
-                        >
-                          <p className="font-semibold">{parentMsg.senderId === auth.currentUser?.uid ? 'You' : (userMap[parentMsg.senderId]?.name || userMap[parentMsg.senderId]?.email?.split('@')[0] || 'Unknown')}</p>
-                          <p className="truncate line-clamp-1">{parentMsg.text || 'Photo'}</p>
+                      {msg.isDeleted ? (
+                        <div className="px-3 py-2 text-zinc-500/80 italic flex items-center gap-1.5 text-xs">
+                          <Ban className="w-3.5 h-3.5" />
+                          This message was deleted
                         </div>
+                      ) : (
+                        <>
+                          {parentMsg && (
+                            <div 
+                              className={`px-3 py-2 text-xs border-b border-black/10 dark:border-white/10 opacity-80 cursor-pointer hover:opacity-100 transition-opacity ${isMe ? 'bg-black/5' : 'bg-zinc-100 dark:bg-zinc-700/50'}`}
+                            >
+                              <p className="font-semibold">{parentMsg.senderId === auth.currentUser?.uid ? 'You' : (userMap[parentMsg.senderId]?.name || userMap[parentMsg.senderId]?.email?.split('@')[0] || 'Unknown')}</p>
+                              <p className="truncate line-clamp-1">{parentMsg.isDeleted ? 'Deleted message' : (parentMsg.text || 'Photo')}</p>
+                            </div>
+                          )}
+                          <div className="overflow-hidden rounded-b-2xl">
+                            {msg.imageUrl && (
+                              <img
+                                src={msg.imageUrl}
+                                alt="Shared image"
+                                className={`max-w-full object-cover max-h-48 w-full ${!parentMsg && 'rounded-t-2xl'}`}
+                                onClick={() => window.open(msg.imageUrl, '_blank')}
+                                style={{ cursor: 'pointer' }}
+                              />
+                            )}
+                            {msg.text && (
+                              <p className="px-3 py-2">
+                                {msg.text}
+                                {msg.isEdited && <span className="text-[10px] italic opacity-60 ml-2">(edited)</span>}
+                              </p>
+                            )}
+                          </div>
+                        </>
                       )}
-                      <div className="overflow-hidden rounded-b-2xl">
-                        {msg.imageUrl && (
-                          <img
-                            src={msg.imageUrl}
-                            alt="Shared image"
-                            className={`max-w-full object-cover max-h-48 w-full ${!parentMsg && 'rounded-t-2xl'}`}
-                            onClick={() => window.open(msg.imageUrl, '_blank')}
-                            style={{ cursor: 'pointer' }}
-                          />
-                        )}
-                        {msg.text && (
-                          <p className="px-3 py-2">{msg.text}</p>
-                        )}
-                      </div>
                       </div>
 
                       {/* Interaction Buttons (Me) */}
-                      {isMe && (
+                      {isMe && !msg.isDeleted && (
                         <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => handleDelete(msg.id)}
+                            className="p-1 text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-full shrink-0"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => startEditing(msg)}
+                            className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
+                            title="Edit"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => setReplyingTo(msg)}
                             className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded-full shrink-0"
@@ -415,20 +488,29 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                       </div>
                     )}
                     
-                    {/* Sent/Seen indicator */}
-                    {isMe && status && (
-                      <div className="flex items-center gap-0.5 mt-0.5 mr-1">
-                        {status === 'seen' ? (
-                          <CheckCheck className="w-3 h-3 text-blue-400" />
-                        ) : (
-                          <Check className="w-3 h-3 text-zinc-400" />
-                        )}
-                        <span className="text-[9px] text-zinc-400">
-                          {status === 'seen' ? 'Seen' : 'Sent'}
-                        </span>
-                      </div>
-                    )}
+                    {/* Sent/Seen indicator and Timestamp */}
+                    <div className={`flex items-center gap-1 mt-0.5 ${isMe ? 'justify-end mr-1' : 'justify-start ml-1'}`}>
+                      <span className="text-[9px] text-zinc-400 font-medium">
+                        {format(msgDate, 'HH:mm')}
+                      </span>
+                      {isMe && status && (
+                        <div 
+                          className="flex items-center gap-0.5"
+                          title={status === 'seen' && msg.seenBy ? msg.seenBy.filter((id: string) => id !== auth.currentUser?.uid).map((id: string) => userMap[id]?.name || userMap[id]?.email?.split('@')[0] || 'Unknown').join(', ') : ''}
+                        >
+                          {status === 'seen' ? (
+                            <CheckCheck className="w-3 h-3 text-blue-400" />
+                          ) : (
+                            <Check className="w-3 h-3 text-zinc-400" />
+                          )}
+                          <span className="text-[9px] text-zinc-400">
+                            {status === 'seen' ? 'Seen' : 'Sent'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  </React.Fragment>
                 );
               })
             )}
