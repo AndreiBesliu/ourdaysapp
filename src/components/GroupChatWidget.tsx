@@ -406,10 +406,44 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                               />
                             )}
                             {msg.text && (
-                              <p className="px-3 py-2">
-                                {msg.text}
-                                {msg.isEdited && <span className="text-[10px] italic opacity-60 ml-2">(edited)</span>}
-                              </p>
+                              <div className={`px-2 py-1.5 flex flex-wrap items-end justify-end gap-x-2 ${msg.imageUrl && !msg.text ? 'absolute bottom-1 right-1 bg-black/50 rounded-full backdrop-blur-md text-white !py-0.5 !px-1.5' : ''}`}>
+                                <p className="text-left flex-1 min-w-[50px] whitespace-pre-wrap break-words">
+                                  {msg.text}
+                                  {msg.isEdited && <span className="text-[10px] italic opacity-60 ml-1">(edited)</span>}
+                                </p>
+                                <div className={`flex items-center gap-0.5 text-[9px] opacity-70 shrink-0 mb-0.5 ${msg.imageUrl && !msg.text ? 'text-white' : ''}`}>
+                                  <span>{format(msgDate, 'HH:mm')}</span>
+                                  {isMe && status && (
+                                    <div 
+                                      className="flex items-center ml-0.5"
+                                      title={status === 'seen' && msg.seenBy ? msg.seenBy.filter((id: string) => id !== auth.currentUser?.uid).map((id: string) => userMap[id]?.name || userMap[id]?.email?.split('@')[0] || 'Unknown').join(', ') : ''}
+                                    >
+                                      {status === 'seen' ? (
+                                        <CheckCheck className={`w-3 h-3 ${msg.imageUrl && !msg.text ? 'text-blue-400' : 'text-current'}`} />
+                                      ) : (
+                                        <Check className="w-3 h-3" />
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {msg.imageUrl && !msg.text && (
+                                <div className="absolute bottom-1 right-1 bg-black/50 rounded-full backdrop-blur-md text-white py-0.5 px-1.5 flex items-center gap-0.5 text-[9px] opacity-90 shrink-0 z-10">
+                                  <span>{format(msgDate, 'HH:mm')}</span>
+                                  {isMe && status && (
+                                    <div 
+                                      className="flex items-center ml-0.5"
+                                      title={status === 'seen' && msg.seenBy ? msg.seenBy.filter((id: string) => id !== auth.currentUser?.uid).map((id: string) => userMap[id]?.name || userMap[id]?.email?.split('@')[0] || 'Unknown').join(', ') : ''}
+                                    >
+                                      {status === 'seen' ? (
+                                        <CheckCheck className="w-3 h-3 text-blue-400" />
+                                      ) : (
+                                        <Check className="w-3 h-3" />
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                             )}
                           </div>
                         </>
@@ -487,28 +521,6 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                         ))}
                       </div>
                     )}
-                    
-                    {/* Sent/Seen indicator and Timestamp */}
-                    <div className={`flex items-center gap-1 mt-0.5 ${isMe ? 'justify-end mr-1' : 'justify-start ml-1'}`}>
-                      <span className="text-[9px] text-zinc-400 font-medium">
-                        {format(msgDate, 'HH:mm')}
-                      </span>
-                      {isMe && status && (
-                        <div 
-                          className="flex items-center gap-0.5"
-                          title={status === 'seen' && msg.seenBy ? msg.seenBy.filter((id: string) => id !== auth.currentUser?.uid).map((id: string) => userMap[id]?.name || userMap[id]?.email?.split('@')[0] || 'Unknown').join(', ') : ''}
-                        >
-                          {status === 'seen' ? (
-                            <CheckCheck className="w-3 h-3 text-blue-400" />
-                          ) : (
-                            <Check className="w-3 h-3 text-zinc-400" />
-                          )}
-                          <span className="text-[9px] text-zinc-400">
-                            {status === 'seen' ? 'Seen' : 'Sent'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
                   </div>
                   </React.Fragment>
                 );
