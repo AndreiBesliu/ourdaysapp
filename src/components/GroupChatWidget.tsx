@@ -108,6 +108,22 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     }
   }, [messages, isOpen]);
 
+  // ESC key: cancel editing or replying
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (editingMsg) {
+          setEditingMsg(null);
+          setNewMessage('');
+        } else if (replyingTo) {
+          setReplyingTo(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editingMsg, replyingTo]);
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -317,7 +333,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 bg-zinc-50/50 dark:bg-zinc-900/50">
+          <div className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col gap-3 bg-zinc-50/50 dark:bg-zinc-900/50">
             {messages.length === 0 ? (
               <p className="text-center text-xs text-zinc-400 mt-10">Start the conversation!</p>
             ) : (

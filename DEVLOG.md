@@ -371,3 +371,15 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 > Plan: Enhance `GroupChatWidget.tsx` with date separators, message timestamps, edit/delete capabilities with tombstones, and rich read receipts.
 
 **2026-05-14 23:40 - Task Completed**: Significantly upgraded the chat experience. Implemented `date-fns` for clean date grouping and inline `HH:mm` timestamps. Added state tracking for editing (`isEdited`) and deleting (`isDeleted`) messages, rendering a neat tombstone when deleted. Enhanced the "Seen" indicator to show a tooltip containing the specific names of group members who read the message on hover. App built, deployed, and pushed.
+
+**2026-05-14 23:47 - Task Started**
+> Prompt: "ok, but this is a lot of wasted space" -> series of chat UI density improvements
+> Plan: Tighten message bubble spacing by inlining timestamps, moving action buttons to a floating overlay, moving timestamps above the bubble inline with sender name, adding an edit cancel banner, ESC key cancel, and blocking scroll bleed-through.
+
+**2026-05-15 00:06 - Task Completed**: Major chat UI polish session. Changes made to GroupChatWidget.tsx:
+- **Timestamp position**: Moved HH:mm and read-receipt checkmarks out of the message bubble entirely; now rendered inline with the sender name row above the bubble (or right-aligned for own messages).
+- **Floating action buttons**: Replaced the side-by-side button layout with an absolute-positioned floating pill toolbar appearing on hover, consuming zero vertical space.
+- **Cancel edit banner**: Added an "Editing message" context banner above the input with an X button to cancel.
+- **ESC key support**: Added a keydown listener that cancels active editing or replying when Escape is pressed.
+- **Scroll bleed fix**: Added overscroll-contain CSS to the messages scroll container, preventing the background app from scrolling when the user reaches the top or bottom of the chat.
+App built, deployed to Firebase Hosting, and pushed to GitHub.
