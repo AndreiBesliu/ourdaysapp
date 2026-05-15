@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { isSameDay, format } from 'date-fns';
+import { isSameDay, format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { auth, db, messaging } from '../firebase';
 import { getToken } from 'firebase/messaging';
 import { collection, query, onSnapshot, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
-import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw } from 'lucide-react';
+import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import CalendarGrid from '../components/CalendarGrid';
 import AddEventModal from '../components/AddEventModal';
@@ -15,9 +15,11 @@ import GroupSettingsModal from '../components/GroupSettingsModal';
 import NotificationsDropdown from '../components/NotificationsDropdown';
 import GroupChatWidget from '../components/GroupChatWidget';
 import GamesHubModal from '../components/games/GamesHubModal';
+import RecurringEventsPanel from '../components/RecurringEventsPanel';
 import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../store';
 import { t, getDateLocale } from '../utils/i18n';
+import { expandRecurringEvents } from '../utils/recurrence';
 
 export default function CalendarHome() {
   const [activeGroupId, setActiveGroupId] = useState<string | 'personal'>('personal');
@@ -41,6 +43,7 @@ export default function CalendarHome() {
   const [userMap, setUserMap] = useState<Record<string, any>>({});
   const [activeGames, setActiveGames] = useState<any[]>([]);
   const [isFabExpanded, setIsFabExpanded] = useState(false);
+  const [isRecurringPanelOpen, setIsRecurringPanelOpen] = useState(false);
   const navigate = useNavigate();
   const { language } = useThemeStore();
   const dateLocale = getDateLocale(language);
@@ -307,8 +310,12 @@ export default function CalendarHome() {
   }, [userMap, activeGroupId, groups]);
 
   const allCalendarEvents = useMemo(() => {
-    return [...events, ...birthdayEvents];
-  }, [events, birthdayEvents]);
+    // Build a 3-month window around currentDate for recurrence expansion
+    const windowStart = subMonths(startOfMonth(currentDate), 1);
+    const windowEnd = addMonths(endOfMonth(currentDate), 2);
+    const expanded = expandRecurringEvents(events, windowStart, windowEnd);
+    return [...expanded, ...birthdayEvents];
+  }, [events, birthdayEvents, currentDate]);
 
   return (
     <div className="min-h-screen bg-transparent flex flex-col relative pt-[60px]">
@@ -320,6 +327,13 @@ export default function CalendarHome() {
         </div>
         
         <div className="flex items-center gap-4">
+          <button
+            onClick={() => setIsRecurringPanelOpen(true)}
+            className="p-2 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-full transition-colors"
+            title="Recurring Events"
+          >
+            <Repeat className="w-5 h-5" />
+          </button>
           <NotificationsDropdown />
           <button 
             onClick={() => navigate('/wallet')}
@@ -881,6 +895,17 @@ export default function CalendarHome() {
         groupName={groups.find(g => g.id === activeGroupId)?.name || ''}
         userMap={userMap}
         selectedDate={selectedDate}
+      />
+
+      <RecurringEventsPanel
+        isOpen={isRecurringPanelOpen}
+        onClose={() => setIsRecurringPanelOpen(false)}
+        events={events}
+        onEditEvent={(ev: any) => {
+          setIsRecurringPanelOpen(false);
+          setEventToEdit(ev);
+          setIsAddModalOpen(true);
+        }}
       />
 
     </div>

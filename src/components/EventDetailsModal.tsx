@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon, Trash2, Edit2, GripVertical, Sparkles } from 'lucide-react';
-import { doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, getDoc, arrayUnion, collection, query as fsQuery, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import Barcode from 'react-barcode';
 import QRCode from 'react-qr-code';
@@ -8,6 +8,7 @@ import { Wallet } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { format } from 'date-fns';
 import { useModalBack } from '../hooks/useModalBack';
+import { getFrequencyLabel } from '../utils/recurrence';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 
 interface EventDetailsModalProps {
@@ -210,15 +211,71 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
 
   const handleDelete = async () => {
     if (!isOwner) return;
-    if (!confirm('Are you sure you want to delete this event?')) return;
-    setLoading(true);
-    try {
-      await deleteDoc(doc(db, 'events', event.id));
-      onClose();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
+
+    // Check if this is a recurring event
+    const isRecurringInstance = event.isRecurringInstance;
+    const parentId = event.parentEventId;
+    const hasRecurrenceRule = !!event.recurrenceRule;
+
+    if (isRecurringInstance && parentId) {
+      // Ask scope: delete this one or all
+      const choice = window.confirm(
+        'Delete ALL events in this recurring series?\n\nPress OK to delete all, or Cancel to delete only this occurrence.'
+      );
+      setLoading(true);
+      try {
+        if (choice) {
+          // Delete parent + any override docs
+          await deleteDoc(doc(db, 'events', parentId));
+          // Also clean up standalone overrides
+          const overridesQuery = fsQuery(collection(db, 'events'), where('overrideOfParent', '==', parentId));
+          const overrideSnap = await getDocs(overridesQuery);
+          for (const d of overrideSnap.docs) {
+            await deleteDoc(doc(db, 'events', d.id));
+          }
+        } else {
+          // Delete just this occurrence — add exception to parent
+          const overrideDate = event.recurrenceDate;
+          if (overrideDate) {
+            await updateDoc(doc(db, 'events', parentId), { recurrenceExceptions: arrayUnion(overrideDate) });
+          }
+        }
+        onClose();
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    } else if (hasRecurrenceRule) {
+      // This is the master event itself
+      if (!confirm('Delete this entire recurring series?')) return;
+      setLoading(true);
+      try {
+        await deleteDoc(doc(db, 'events', event.id));
+        // Clean up overrides
+        const overridesQuery = fsQuery(collection(db, 'events'), where('overrideOfParent', '==', event.id));
+        const overrideSnap = await getDocs(overridesQuery);
+        for (const d of overrideSnap.docs) {
+          await deleteDoc(doc(db, 'events', d.id));
+        }
+        onClose();
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      // Normal non-recurring delete
+      if (!confirm('Are you sure you want to delete this event?')) return;
+      setLoading(true);
+      try {
+        await deleteDoc(doc(db, 'events', event.id));
+        onClose();
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -240,6 +297,11 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                 <CalendarIcon className="w-4 h-4" />
                 {format(new Date(event.date), 'EEEE, MMMM d, yyyy')}
               </p>
+              {(event.isRecurringInstance || event.recurrenceRule) && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-medium rounded-full">
+                  🔁 {getFrequencyLabel(event.recurrenceRule?.frequency || event.parentFrequency || 'weekly')}
+                </span>
+              )}
               {owner && (
                 <div className="relative">
                   <button type="button" onClick={() => setShowOwnerProfile(!showOwnerProfile)} className="w-7 h-7 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 flex items-center justify-center overflow-hidden hover:ring-2 hover:ring-primary transition-all shadow-sm" title="View Owner">

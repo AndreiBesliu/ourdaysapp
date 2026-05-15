@@ -411,3 +411,12 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 **2026-05-15 19:19 - Task Completed**: Added birthday field to user profiles via Settings.tsx. Implemented a dismissible birthday prompt banner on CalendarHome.tsx and injected virtual birthday events dynamically. Added a custom color palette picker to AddEventModal.tsx and updated CalendarGrid.tsx to prioritize event.color overrides. App built successfully. Deployed and pushed to Git.
 > Model: Gemini 2.5 Pro
 
+
+**2026-05-15 22:37 - Task Started**
+> Prompt: "b" (option B for recurring events rework)
+> Plan: Rework recurring events from batch-creation into a proper recurrence engine. Single master event with recurrenceRule, client-side occurrence expansion, edit/delete scope prompts, yearly support, horizon info labels, and a Recurring Events Overview panel.
+> Model: Claude Opus 4.6
+
+**2026-05-15 22:42 - Task Completed**: Replaced batch-creation model with a single-document recurrence engine. Created src/utils/recurrence.ts for occurrence expansion. Updated AddEventModal.tsx with recurrenceRule storage, yearly option, horizon end-date labels, and edit scope prompt. Updated EventDetailsModal.tsx with recurring-aware delete logic and frequency badge. Created RecurringEventsPanel.tsx for managing all recurring series. Updated CalendarHome.tsx with expansion logic and header button. App built successfully. Deployed and pushed to Git.
+> Model: Claude Opus 4.6
+

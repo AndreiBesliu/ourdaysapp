@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, Sparkles, GripVertical, Search, Check } from 'lucide-react';
-import { addDoc, collection, query, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { addDoc, collection, query, getDocs, updateDoc, doc, arrayUnion } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { isAIEnabled, generateChecklistForTask } from '../ai';
 import { onSnapshot } from 'firebase/firestore';
 import { format } from 'date-fns';
+import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
 import { useModalBack } from '../hooks/useModalBack';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -63,7 +64,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   }, [description]);
   const [users, setUsers] = useState<{id: string, name: string}[]>([]);
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
+  const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('none');
+  const [editScope, setEditScope] = useState<'this' | 'all' | null>(null);
   const [visibleTo, setVisibleTo] = useState<string[]>([]);
   
   // Wallet Assets
@@ -524,28 +526,45 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       };
 
       if (editEvent) {
-        await updateDoc(doc(db, 'events', editEvent.id), { ...baseEventData, date: new Date(eventDate).toISOString() });
+        // Determine if we are editing a recurring instance
+        const isRecurringInstance = editEvent.isRecurringInstance;
+        const parentId = editEvent.parentEventId;
+
+        if (isRecurringInstance && parentId) {
+          // Ask user: edit this one or all?
+          const scope = editScope;
+          if (scope === 'this') {
+            // Create a standalone override for this date, add exception to parent
+            const overrideDate = editEvent.recurrenceDate; // e.g. '2026-06-15'
+            await addDoc(collection(db, 'events'), {
+              ...baseEventData,
+              date: new Date(eventDate).toISOString(),
+              createdAt: new Date().toISOString(),
+              overrideOfParent: parentId,
+            });
+            // Add exception to parent
+            const parentRef = doc(db, 'events', parentId);
+            await updateDoc(parentRef, { recurrenceExceptions: arrayUnion(overrideDate) });
+          } else {
+            // Edit the parent (all occurrences)
+            await updateDoc(doc(db, 'events', parentId), { ...baseEventData, date: new Date(eventDate).toISOString() });
+          }
+        } else {
+          // Normal (non-recurring) edit
+          await updateDoc(doc(db, 'events', editEvent.id), { ...baseEventData, date: new Date(eventDate).toISOString() });
+        }
         onClose();
         return; // Early return for edit
       } else {
-        let eventsToCreate = 1;
-        if (repeat === 'daily') eventsToCreate = 14; // next 2 weeks
-        if (repeat === 'weekly') eventsToCreate = 12; // next 12 weeks
-        if (repeat === 'monthly') eventsToCreate = 6; // next 6 months
-
-        for (let i = 0; i < eventsToCreate; i++) {
-          let eventDateObj = new Date(eventDate);
-          if (i > 0) {
-            if (repeat === 'daily') eventDateObj.setDate(eventDateObj.getDate() + i);
-            if (repeat === 'weekly') eventDateObj.setDate(eventDateObj.getDate() + (i * 7));
-            if (repeat === 'monthly') eventDateObj.setMonth(eventDateObj.getMonth() + i);
-          }
-          await addDoc(collection(db, 'events'), {
-            ...baseEventData,
-            date: eventDateObj.toISOString(),
-            createdAt: new Date().toISOString()
-          });
-        }
+        // Create new event
+        const recurrenceRule = repeat !== 'none' ? { frequency: repeat } : null;
+        await addDoc(collection(db, 'events'), {
+          ...baseEventData,
+          date: new Date(eventDate).toISOString(),
+          createdAt: new Date().toISOString(),
+          recurrenceRule,
+          recurrenceExceptions: [],
+        });
         
         // Notify assignees
         const otherAssignees = assigneeIds.filter(id => id !== auth.currentUser?.uid);
@@ -1029,10 +1048,49 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   className="w-full px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
                 >
                   <option value="none">Does not repeat</option>
-                  <option value="daily">Daily (Next 14 days)</option>
-                  <option value="weekly">Weekly (Next 12 weeks)</option>
-                  <option value="monthly">Monthly (Next 6 months)</option>
+                  <option value="daily">Daily — until {eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'daily'), 'MMM d, yyyy') : '...'}</option>
+                  <option value="weekly">Weekly — until {eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'weekly'), 'MMM d, yyyy') : '...'}</option>
+                  <option value="monthly">Monthly — until {eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'monthly'), 'MMM d, yyyy') : '...'}</option>
+                  <option value="yearly">Yearly — until {eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'yearly'), 'MMM d, yyyy') : '...'}</option>
                 </select>
+                {repeat !== 'none' && (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                    🔁 This event will repeat {repeat} until {eventDate ? format(getRecurrenceEndDate(new Date(eventDate), repeat), 'MMMM d, yyyy') : '...'}. Recurrence is not infinite.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Edit scope prompt for recurring events */}
+            {editEvent && (editEvent.isRecurringInstance || editEvent.recurrenceRule) && (
+              <div className="flex flex-col gap-2 border border-indigo-200 dark:border-indigo-700/50 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-500/10">
+                <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+                  🔁 This is a recurring event ({getFrequencyLabel(editEvent.recurrenceRule?.frequency || editEvent.parentFrequency || 'weekly')})
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditScope('this')}
+                    className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                      editScope === 'this'
+                        ? 'bg-indigo-500 text-white'
+                        : 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    This event only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditScope('all')}
+                    className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                      editScope === 'all'
+                        ? 'bg-indigo-500 text-white'
+                        : 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'
+                    }`}
+                  >
+                    All events in series
+                  </button>
+                </div>
               </div>
             )}
 
