@@ -52,6 +52,7 @@ export default function Settings() {
   const navigate = useNavigate();
   const { primaryColor, isDarkMode, customThemeIsDark, backgroundColor, overlayColor, soundEnabled, hapticsEnabled, setTheme, backgroundImage, backgroundOverlay, language, setAdvancedTheme } = useThemeStore();
   const [photoURL, setPhotoURL] = useState<string | null>(null);
+  const [birthday, setBirthday] = useState<string>('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingBg, setUploadingBg] = useState(false);
   useEffect(() => {
@@ -61,6 +62,7 @@ export default function Settings() {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setPhotoURL(data.photoURL || null);
+        setBirthday(data.birthday || '');
       }
     });
     
@@ -90,7 +92,19 @@ export default function Settings() {
     }
   };
 
-
+  const handleBirthdayChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setBirthday(val);
+    if (auth.currentUser) {
+      try {
+        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+          birthday: val || null
+        });
+      } catch (err) {
+        console.error("Failed to update birthday", err);
+      }
+    }
+  };
 
   const handleThemeChange = async (newColor: string, newIsDark: boolean) => {
     setTheme(newColor, newIsDark);
@@ -195,8 +209,21 @@ export default function Settings() {
                   Change Photo
                 </label>
               </div>
-
             </div>
+            
+            <div className="p-4 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800">
+              <div>
+                <p className="font-medium text-zinc-900 dark:text-zinc-100">Birthday</p>
+                <p className="text-sm text-zinc-500">Let your groups know when to celebrate</p>
+              </div>
+              <input
+                type="date"
+                value={birthday}
+                onChange={handleBirthdayChange}
+                className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2 outline-none"
+              />
+            </div>
+
             <button 
               onClick={handleSignOut}
               className="w-full p-4 flex items-center justify-between text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"

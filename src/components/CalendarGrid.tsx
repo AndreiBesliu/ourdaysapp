@@ -228,29 +228,25 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
               <div className="flex flex-wrap gap-1.5 mt-2 justify-center pt-2">
               {dayEvents.slice(0, 4).map((ev: any, idx: number) => {
                 let Icon = Circle;
-                let colorClass = 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800';
-
                 switch (ev.categoryId) {
-                  case 'work': 
-                    Icon = Briefcase; 
-                    colorClass = 'text-blue-500 bg-blue-50 dark:bg-blue-500/10'; 
-                    break;
-                  case 'family': 
-                    Icon = Heart; 
-                    colorClass = 'text-rose-500 bg-rose-50 dark:bg-rose-500/10'; 
-                    break;
-                  case 'chores': 
-                    Icon = Wrench; 
-                    colorClass = 'text-amber-500 bg-amber-50 dark:bg-amber-500/10'; 
-                    break;
-                  case 'appointments': 
-                    Icon = CalendarIcon; 
-                    colorClass = 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10'; 
-                    break;
-                  case 'important': 
-                    Icon = Star; 
-                    colorClass = 'text-violet-500 bg-violet-50 dark:bg-violet-500/10'; 
-                    break;
+                  case 'work': Icon = Briefcase; break;
+                  case 'family': Icon = Heart; break;
+                  case 'chores': Icon = Wrench; break;
+                  case 'appointments': Icon = CalendarIcon; break;
+                  case 'important': Icon = Star; break;
+                }
+
+                let colorClass = 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800';
+                if (ev.color) {
+                  colorClass = `text-${ev.color}-500 bg-${ev.color}-50 dark:bg-${ev.color}-500/10`;
+                } else {
+                  switch (ev.categoryId) {
+                    case 'work': colorClass = 'text-blue-500 bg-blue-50 dark:bg-blue-500/10'; break;
+                    case 'family': colorClass = 'text-rose-500 bg-rose-50 dark:bg-rose-500/10'; break;
+                    case 'chores': colorClass = 'text-amber-500 bg-amber-50 dark:bg-amber-500/10'; break;
+                    case 'appointments': colorClass = 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10'; break;
+                    case 'important': colorClass = 'text-violet-500 bg-violet-50 dark:bg-violet-500/10'; break;
+                  }
                 }
 
                 return (
@@ -377,14 +373,25 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                 <>
                   {events.filter(ev => isSameDay(new Date(ev.date), modalDay)).map((ev: any, idx: number) => {
                     let Icon = Circle;
-                    let colorClass = 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800';
-
                     switch (ev.categoryId) {
-                      case 'work': Icon = Briefcase; colorClass = 'text-blue-500 bg-blue-50 dark:bg-blue-500/10'; break;
-                      case 'family': Icon = Heart; colorClass = 'text-rose-500 bg-rose-50 dark:bg-rose-500/10'; break;
-                      case 'chores': Icon = Wrench; colorClass = 'text-amber-500 bg-amber-50 dark:bg-amber-500/10'; break;
-                      case 'appointments': Icon = CalendarIcon; colorClass = 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10'; break;
-                      case 'important': Icon = Star; colorClass = 'text-violet-500 bg-violet-50 dark:bg-violet-500/10'; break;
+                      case 'work': Icon = Briefcase; break;
+                      case 'family': Icon = Heart; break;
+                      case 'chores': Icon = Wrench; break;
+                      case 'appointments': Icon = CalendarIcon; break;
+                      case 'important': Icon = Star; break;
+                    }
+
+                    let colorClass = 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800';
+                    if (ev.color) {
+                      colorClass = `text-${ev.color}-500 bg-${ev.color}-50 dark:bg-${ev.color}-500/10`;
+                    } else {
+                      switch (ev.categoryId) {
+                        case 'work': colorClass = 'text-blue-500 bg-blue-50 dark:bg-blue-500/10'; break;
+                        case 'family': colorClass = 'text-rose-500 bg-rose-50 dark:bg-rose-500/10'; break;
+                        case 'chores': colorClass = 'text-amber-500 bg-amber-50 dark:bg-amber-500/10'; break;
+                        case 'appointments': colorClass = 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10'; break;
+                        case 'important': colorClass = 'text-violet-500 bg-violet-50 dark:bg-violet-500/10'; break;
+                      }
                     }
 
                     return (

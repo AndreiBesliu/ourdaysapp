@@ -27,27 +27,33 @@
       > Prompt: "<exact user prompt>"
       > Plan: <one-line description of what will be done>
       ```
-2.  **End-of-Task Logging** â€” After deploying, append a `Task Completed` entry summarising what changed.
-3.  **Roadmap Sync** â€” Move completed features from "Roadmap" to "Completed Features".
-4.  **Build Before Deploy** â€” Always run `npm run build` successfully before deploying.
-5.  **Deploy After Every Feature** â€” Deploy to hosting and push to Git after each feature.
-6.  **Secret Management** — NEVER hardcode API keys. Use `.env` or Firebase Secrets.
-7.  **AI Model Attribution** 🤖 Every `Task Started` and `Task Completed` entry **must** state which AI model performed the task (e.g. `Model: Claude Sonnet 4.5`, `Model: Gemini 2.5 Pro`). This ensures full traceability of who wrote what.
+4.  **Roadmap Sync** — Move completed features from "Roadmap" to "Completed Features".
+5.  **Build Before Deploy** — Always run `npm run build` successfully before deploying.
+6.  **Deploy After Every Feature** — Deploy to hosting and push to Git after each feature.
+7.  **Secret Management** — NEVER hardcode API keys. Use `.env` or Firebase Secrets.
+8.  **AI Model Attribution** 🤖 Every `Task Started` and `Task Completed` entry **must** state which AI model performed the task (e.g. `Model: Claude Sonnet 4.5`, `Model: Gemini 2.5 Pro`). This ensures full traceability of who wrote what.
 
 
 ---
 
-## ðŸš€ Active Roadmap & Backlog
+## 🚀 Active Roadmap & Backlog
 
 ### 1. In Progress / Upcoming
 - **Games**: Chess, Backgammon
 - **More AI functionality**
 - **Push Notifications**
 - **Add more to the chat**
-- **Rummy 45 (Phase 4)**: Finalize game-ending logic, point calculation, and UI polish for the "Tabla" grid.
-- **Chat Reactions**: Add emoji reactions to chat messages.
-- **Typing Indicators**: Show when someone is typing in the group chat.
-- **Android Compilation**: Wrap the app into a native APK using Capacitor.
+- **AI Event Type Suggestion**: AI will suggest the type of event to create based on user input.
+- **Smart Birthday Auto-Add**: Automatically detect and add birthdays for users within a group.
+- **Rework Asset Suggestions**: Overhaul the asset suggestion logic for smarter, more contextual recommendations.
+- **Recurring Events**: Repeat events daily / weekly / monthly / yearly
+- **Event RSVPs**: Let group members confirm attendance (Yes / Maybe / No) directly in the event
+- **Custom Reminder Scheduling**: Set per-event notification times
+- **Event Templates**: Save commonly used event structures and re-use them in one tap
+- **Location Attachment**: Pin a map location to an event with a preview
+- **Voice Messages**: Record and send short audio clips in group chat
+- **Message Search**: Full-text search across chat history
+- **Pinned Messages**: Pin important messages to the top of the chat for quick reference
 
 > **UI/UX Design Constraints (Explicit User Preferences)**
 > ðŸš« NO Swipe Actions.
@@ -62,6 +68,10 @@
 ---
 
 ## âœ… Completed Features
+- **Android Compilation**: Wrapped the app into a native APK using Capacitor.
+- **Chat Reactions**: Added inline emoji reactions to chat messages.
+- **Typing Indicators**: Showing when someone is typing in the group chat.
+- **Rummy 45 (Phases 4-5)**: Game-ending logic, point calculation, and "Tabla" UI polish implemented.
 - **Transferable Assets**: Hand over ownership of wallet assets with an optional "Keep Copy" feature.
 - **Autosave Engine**: Prevents data loss by saving event drafts to `localStorage`.
 - **Task Assignment Constraints**: Logic to filter assignees based on active group/calendar type.
@@ -362,6 +372,13 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 
 **2026-05-14 22:16 - Task Completed**: Root cause identified as a Firebase Firestore restriction which strictly forbids saving nested arrays (i.e. `Array(6).map(() => Array(7))`). Refactored the `initialState.board` in `GamesHubModal.tsx` and the `handleNextRound` logic in `Connect4.tsx` to store the 2D grid as a 1D mapping object (`{ 0: [...], 1: [...] }`). This inherently fixes the Firestore sync issue while maintaining 100% compatibility with the frontend's grid-mapping logic `board[r][c]`. App built, deployed to Firebase Hosting, and pushed to GitHub.
 
+**2026-05-15 19:02 - Task Started**
+> Prompt: "ok, let's start developing, let's start with the birthday thing..." and "users should be able to give custom colors to events..."
+> Plan: Implement Smart Birthday Auto-Add by injecting virtual birthday events into the calendar grid and displaying a prompt banner. Implement Custom Event Colors by adding a palette picker to the Add Event Modal and overriding the default category colors in the Calendar.
+> Model: Gemini 2.5 Pro
+
+**2026-05-15 19:19 - Task Completed**: Added `birthday` field to user profiles via `Settings.tsx`. Implemented a dismissible birthday prompt banner on `CalendarHome.tsx` and injected "virtual" birthday events dynamically. Added a custom color palette picker to `AddEventModal.tsx` and updated `CalendarGrid.tsx` to prioritize `event.color` overrides. App built successfully. Deployed and pushed to Git.
+> Model: Gemini 2.5 Pro
 **2026-05-14 22:54 - Task Started**
 > Prompt: Expansion update (Memory Minigame, PWA, Sounds/Haptics, Theme Overhaul)
 > Plan: Implement Memory Match using Lucide icons, setup PWA via manifest/SW, build WebAudio synthesizer and Haptics wrapper, and completely overhaul Settings to separate default Dark Mode from Custom Themes.
@@ -385,3 +402,12 @@ Refactored `src/ai.ts` to call the new Callable Function and pass `navigator.lan
 - **ESC key support**: Added a keydown listener that cancels active editing or replying when Escape is pressed.
 - **Scroll bleed fix**: Added overscroll-contain CSS to the messages scroll container, preventing the background app from scrolling when the user reaches the top or bottom of the chat.
 App built, deployed to Firebase Hosting, and pushed to GitHub.
+
+**2026-05-15 19:02 - Task Started**
+> Prompt: "ok, let's start developing..."
+> Plan: Implement Smart Birthday Auto-Add and Custom Event Colors.
+> Model: Gemini 2.5 Pro
+
+**2026-05-15 19:19 - Task Completed**: Added birthday field to user profiles via Settings.tsx. Implemented a dismissible birthday prompt banner on CalendarHome.tsx and injected virtual birthday events dynamically. Added a custom color palette picker to AddEventModal.tsx and updated CalendarGrid.tsx to prioritize event.color overrides. App built successfully. Deployed and pushed to Git.
+> Model: Gemini 2.5 Pro
+

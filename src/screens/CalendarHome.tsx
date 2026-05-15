@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { isSameDay, format } from 'date-fns';
 import { auth, db, messaging } from '../firebase';
 import { getToken } from 'firebase/messaging';
@@ -261,6 +261,55 @@ export default function CalendarHome() {
     await updateDoc(doc(db, 'group_invites', inviteId), { status: 'declined' });
   };
 
+  const handleDismissBirthdayPrompt = async () => {
+    if (!auth.currentUser) return;
+    try {
+      await updateDoc(doc(db, 'users', auth.currentUser.uid), { hideBirthdayPrompt: true });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const birthdayEvents = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const bEvents: any[] = [];
+    
+    let usersToShow: any[] = [];
+    if (activeGroupId === 'personal') {
+      if (auth.currentUser && userMap[auth.currentUser.uid]) {
+        usersToShow.push(userMap[auth.currentUser.uid]);
+      }
+    } else {
+      const group = groups.find(g => g.id === activeGroupId);
+      if (group && group.members) {
+        usersToShow = group.members.map((id: string) => userMap[id]).filter(Boolean);
+      }
+    }
+
+    usersToShow.forEach(u => {
+      if (u.birthday) {
+        const [, month, day] = u.birthday.split('-');
+        bEvents.push({
+          id: `virtual-birthday-${u.id}`,
+          title: `${u.name || u.email}'s Birthday 🎂`,
+          date: `${currentYear}-${month}-${day}`,
+          categoryId: 'important',
+          color: 'rose',
+          isTask: false,
+          readOnly: true,
+          ownerId: u.id,
+          assigneeIds: [u.id],
+          groupId: activeGroupId === 'personal' ? null : activeGroupId
+        });
+      }
+    });
+    return bEvents;
+  }, [userMap, activeGroupId, groups]);
+
+  const allCalendarEvents = useMemo(() => {
+    return [...events, ...birthdayEvents];
+  }, [events, birthdayEvents]);
+
   return (
     <div className="min-h-screen bg-transparent flex flex-col relative pt-[60px]">
       {/* Header */}
@@ -305,6 +354,35 @@ export default function CalendarHome() {
           </div>
         )}
         
+        {/* Birthday Prompt */}
+        {auth.currentUser && userMap[auth.currentUser.uid] && !userMap[auth.currentUser.uid].birthday && !userMap[auth.currentUser.uid].hideBirthdayPrompt && (
+          <div className="bg-gradient-to-r from-pink-500/10 to-rose-500/10 border border-pink-500/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in slide-in-from-top-4 fade-in mb-2">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-pink-500/20 text-pink-600 dark:text-pink-400 rounded-lg shrink-0">
+                <span className="text-xl">🎂</span>
+              </div>
+              <div>
+                <p className="font-semibold text-zinc-900 dark:text-zinc-100">Add your birthday!</p>
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">Let your groups know when to celebrate you.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => navigate('/settings')}
+                className="flex-1 sm:flex-none px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                Set Birthday
+              </button>
+              <button 
+                onClick={handleDismissBirthdayPrompt}
+                className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+        
         {/* Today's Overview Dashboard */}
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
@@ -326,14 +404,19 @@ export default function CalendarHome() {
               <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">{t('totalEvents', language)}</p>
               <div className="flex items-center justify-between">
                 <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {events.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date())).length}
+                  {allCalendarEvents.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date())).length}
                 </p>
                 <div className="flex -space-x-1">
-                  {events.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date())).slice(0, 5).map((ev, idx) => {
-                    const color = ev.categoryId === 'work' ? 'bg-blue-500' : 
+                  {allCalendarEvents.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date())).slice(0, 5).map((ev, idx) => {
+                    let color = 'bg-zinc-500';
+                    if (ev.color) {
+                      color = `bg-${ev.color}-500`;
+                    } else {
+                      color = ev.categoryId === 'work' ? 'bg-blue-500' : 
                                   ev.categoryId === 'family_time' ? 'bg-emerald-500' : 
                                   ev.categoryId === 'chores' ? 'bg-amber-500' : 
                                   ev.categoryId === 'health' ? 'bg-rose-500' : 'bg-zinc-500';
+                    }
                     return <div key={`${ev.id}-${idx}`} className={`w-3 h-3 rounded-full border border-white dark:border-zinc-900 ${color}`} />
                   })}
                 </div>
@@ -345,7 +428,7 @@ export default function CalendarHome() {
             >
               <p className="text-xs font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-wider mb-1">{t('tasksPending', language)}</p>
               <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                {events.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date()) && ev.isTask && ev.taskStatus !== 'completed').length}
+                {allCalendarEvents.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date()) && ev.isTask && ev.taskStatus !== 'completed').length}
               </p>
             </div>
             <div 
@@ -354,7 +437,7 @@ export default function CalendarHome() {
             >
               <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-500 uppercase tracking-wider mb-1">{t('tasksCompleted', language)}</p>
               <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                {events.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date()) && ev.isTask && ev.taskStatus === 'completed').length}
+                {allCalendarEvents.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date()) && ev.isTask && ev.taskStatus === 'completed').length}
               </p>
             </div>
           </div>
@@ -559,7 +642,7 @@ export default function CalendarHome() {
           setCurrentDate={setCurrentDate} 
           selectedDate={selectedDate} 
           setSelectedDate={setSelectedDate} 
-          events={events}
+          events={allCalendarEvents}
           userMap={userMap}
           view={activeGroupId === 'personal' ? 'personal' : 'family'}
           onEventClick={(ev) => setSelectedEvent(ev)}
@@ -657,7 +740,7 @@ export default function CalendarHome() {
             </div>
             <div className="p-4 overflow-y-auto flex-1 flex flex-col gap-3">
               {(() => {
-                const todayEvents = events.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date()));
+                const todayEvents = allCalendarEvents.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date()));
                 let filtered = todayEvents;
                 if (overviewModalType === 'pending') {
                   filtered = todayEvents.filter(ev => ev.isTask && ev.taskStatus !== 'completed');
@@ -673,12 +756,16 @@ export default function CalendarHome() {
                   let Icon = Circle;
                   let colorClass = 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800';
 
-                  switch (ev.categoryId) {
-                    case 'work': Icon = Briefcase; colorClass = 'text-blue-500 bg-blue-50 dark:bg-blue-500/10'; break;
-                    case 'family': Icon = Heart; colorClass = 'text-rose-500 bg-rose-50 dark:bg-rose-500/10'; break;
-                    case 'chores': Icon = Wrench; colorClass = 'text-amber-500 bg-amber-50 dark:bg-amber-500/10'; break;
-                    case 'appointments': Icon = CalendarIcon; colorClass = 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10'; break;
-                    case 'important': Icon = Star; colorClass = 'text-violet-500 bg-violet-50 dark:bg-violet-500/10'; break;
+                  if (ev.color) {
+                    colorClass = `text-${ev.color}-500 bg-${ev.color}-50 dark:bg-${ev.color}-500/10`;
+                  } else {
+                    switch (ev.categoryId) {
+                      case 'work': Icon = Briefcase; colorClass = 'text-blue-500 bg-blue-50 dark:bg-blue-500/10'; break;
+                      case 'family': Icon = Heart; colorClass = 'text-rose-500 bg-rose-50 dark:bg-rose-500/10'; break;
+                      case 'chores': Icon = Wrench; colorClass = 'text-amber-500 bg-amber-50 dark:bg-amber-500/10'; break;
+                      case 'appointments': Icon = CalendarIcon; colorClass = 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10'; break;
+                      case 'important': Icon = Star; colorClass = 'text-violet-500 bg-violet-50 dark:bg-violet-500/10'; break;
+                    }
                   }
 
                   return (
