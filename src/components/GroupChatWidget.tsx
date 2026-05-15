@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck, Reply, Pencil, Trash2, Ban } from 'lucide-react';
+import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck, Reply, Pencil, Trash2, Ban, Pin, Search, Mic, ChevronUp, ChevronDown, Play, Pause } from 'lucide-react';
 import { format, isSameDay, isToday, isYesterday } from 'date-fns';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -12,6 +12,62 @@ interface GroupChatWidgetProps {
   groupName: string;
   userMap: Record<string, any>;
   groupMembers?: string[];
+}
+
+// Audio Player sub-component for voice messages
+function AudioPlayer({ src, isMe }: { src: string; isMe: boolean }) {
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const audio = new Audio(src);
+    audioRef.current = audio;
+
+    audio.addEventListener('loadedmetadata', () => setDuration(audio.duration));
+    audio.addEventListener('timeupdate', () => {
+      if (audio.duration) setProgress(audio.currentTime / audio.duration);
+    });
+    audio.addEventListener('ended', () => { setPlaying(false); setProgress(0); });
+
+    return () => { audio.pause(); audio.src = ''; };
+  }, [src]);
+
+  const toggle = () => {
+    if (!audioRef.current) return;
+    if (playing) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play();
+    }
+    setPlaying(!playing);
+  };
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, '0')}`;
+  };
+
+  return (
+    <div className={`flex items-center gap-2 px-3 py-2.5 min-w-[180px] ${isMe ? 'text-white' : 'text-zinc-700 dark:text-zinc-200'}`}>
+      <button onClick={toggle} className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors ${isMe ? 'bg-white/20 hover:bg-white/30' : 'bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600'}`}>
+        {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
+      </button>
+      <div className="flex-1 flex flex-col gap-1">
+        <div className={`h-1 rounded-full overflow-hidden ${isMe ? 'bg-white/20' : 'bg-zinc-200 dark:bg-zinc-700'}`}>
+          <div
+            className={`h-full rounded-full transition-all ${isMe ? 'bg-white/80' : 'bg-primary'}`}
+            style={{ width: `${progress * 100}%` }}
+          />
+        </div>
+        <span className="text-[10px] opacity-70">
+          {duration > 0 ? formatTime(playing ? (audioRef.current?.currentTime || 0) : duration) : '...'}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 export default function GroupChatWidget({ groupId, groupName, userMap, groupMembers = [] }: GroupChatWidgetProps) {
@@ -30,6 +86,22 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   const [activeReactionMsg, setActiveReactionMsg] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<any | null>(null);
   const [editingMsg, setEditingMsg] = useState<any | null>(null);
+
+  // Pinned Messages
+  const [showAllPinned, setShowAllPinned] = useState(false);
+
+  // Search
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Voice Messages
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -296,6 +368,138 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     setActiveReactionMsg(null);
   };
 
+  // --- Pinned Messages ---
+  const handlePin = async (msgId: string) => {
+    const msg = messages.find(m => m.id === msgId);
+    if (!msg) return;
+    await updateDoc(doc(db, `groups/${groupId}/messages`, msgId), {
+      isPinned: !msg.isPinned
+    });
+    triggerHaptic('light');
+  };
+
+  const pinnedMessages = messages.filter(m => m.isPinned && !m.isDeleted);
+
+  // --- Search ---
+  const searchResults = searchQuery.trim()
+    ? messages.filter(m => m.text && !m.isDeleted && m.text.toLowerCase().includes(searchQuery.toLowerCase()))
+    : [];
+
+  const scrollToMessage = (msgId: string) => {
+    const el = messageRefs.current[msgId];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  const navigateSearch = (direction: 'up' | 'down') => {
+    if (searchResults.length === 0) return;
+    let newIndex = currentSearchIndex;
+    if (direction === 'down') {
+      newIndex = (currentSearchIndex + 1) % searchResults.length;
+    } else {
+      newIndex = (currentSearchIndex - 1 + searchResults.length) % searchResults.length;
+    }
+    setCurrentSearchIndex(newIndex);
+    scrollToMessage(searchResults[newIndex].id);
+  };
+
+  // --- Voice Messages ---
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+        setRecordingTime(0);
+
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        if (audioBlob.size === 0) return;
+
+        setUploading(true);
+        try {
+          const fileRef = ref(storage, `chat-audio/${groupId}/${Date.now()}.webm`);
+          await uploadBytes(fileRef, audioBlob);
+          const audioUrl = await getDownloadURL(fileRef);
+
+          await addDoc(collection(db, `groups/${groupId}/messages`), {
+            text: null,
+            imageUrl: null,
+            audioUrl,
+            senderId: auth.currentUser!.uid,
+            createdAt: serverTimestamp(),
+            seenBy: [auth.currentUser!.uid],
+            replyToId: null,
+            isDeleted: false,
+            isEdited: false
+          });
+
+          playTone('click');
+          triggerHaptic('light');
+        } catch (e) {
+          console.error('Failed to upload voice message', e);
+        } finally {
+          setUploading(false);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingTime(prev => {
+          if (prev >= 59) {
+            stopRecording();
+            return 0;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch (e) {
+      console.error('Microphone access denied', e);
+      alert('Microphone access is required for voice messages.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+  };
+
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onstop = () => {
+        mediaRecorderRef.current?.stream?.getTracks().forEach(t => t.stop());
+      };
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    setRecordingTime(0);
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+    audioChunksRef.current = [];
+  };
+
   return (
     <div className="fixed bottom-[104px] right-4 sm:right-8 z-40 flex flex-col items-end">
       {isOpen && (
@@ -330,7 +534,79 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
             <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-black/10 rounded-full transition-colors ml-2">
               <X className="w-4 h-4" />
             </button>
+            <button onClick={() => { setIsSearchOpen(!isSearchOpen); setSearchQuery(''); setCurrentSearchIndex(0); }} className="p-1 hover:bg-black/10 rounded-full transition-colors">
+              <Search className="w-4 h-4" />
+            </button>
           </div>
+
+          {/* Search Bar */}
+          {isSearchOpen && (
+            <div className="px-3 py-2 bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700 flex items-center gap-2 shrink-0">
+              <Search className="w-4 h-4 text-zinc-400 shrink-0" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentSearchIndex(0); }}
+                placeholder="Search messages..."
+                autoFocus
+                className="flex-1 bg-transparent text-sm outline-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') navigateSearch('down');
+                  if (e.key === 'Escape') { setIsSearchOpen(false); setSearchQuery(''); }
+                }}
+              />
+              {searchQuery && (
+                <span className="text-[10px] text-zinc-500 whitespace-nowrap">
+                  {searchResults.length > 0 ? `${currentSearchIndex + 1}/${searchResults.length}` : '0 results'}
+                </span>
+              )}
+              <button onClick={() => navigateSearch('up')} className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" disabled={searchResults.length === 0}>
+                <ChevronUp className="w-4 h-4" />
+              </button>
+              <button onClick={() => navigateSearch('down')} className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" disabled={searchResults.length === 0}>
+                <ChevronDown className="w-4 h-4" />
+              </button>
+              <button onClick={() => { setIsSearchOpen(false); setSearchQuery(''); }} className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Pinned Messages Bar */}
+          {pinnedMessages.length > 0 && !isSearchOpen && (
+            <div className="shrink-0 bg-amber-50 dark:bg-amber-500/10 border-b border-amber-200 dark:border-amber-500/20">
+              <button
+                onClick={() => scrollToMessage(pinnedMessages[pinnedMessages.length - 1].id)}
+                className="w-full px-3 py-2 flex items-center gap-2 text-left hover:bg-amber-100/50 dark:hover:bg-amber-500/20 transition-colors"
+              >
+                <Pin className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 rotate-45" />
+                <span className="text-xs text-amber-800 dark:text-amber-300 truncate flex-1 font-medium">
+                  {pinnedMessages[pinnedMessages.length - 1].text || 'Pinned message'}
+                </span>
+                {pinnedMessages.length > 1 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowAllPinned(!showAllPinned); }}
+                    className="text-[10px] text-amber-600 dark:text-amber-400 font-bold hover:underline whitespace-nowrap shrink-0"
+                  >
+                    {showAllPinned ? 'Hide' : `+${pinnedMessages.length - 1} more`}
+                  </button>
+                )}
+              </button>
+              {showAllPinned && pinnedMessages.length > 1 && (
+                <div className="px-3 pb-2 flex flex-col gap-1">
+                  {pinnedMessages.slice(0, -1).reverse().map(pm => (
+                    <button
+                      key={pm.id}
+                      onClick={() => scrollToMessage(pm.id)}
+                      className="text-xs text-amber-700 dark:text-amber-300 truncate text-left pl-5 hover:underline"
+                    >
+                      {pm.text || 'Pinned message'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col gap-3 bg-zinc-50/50 dark:bg-zinc-900/50">
@@ -364,7 +640,14 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                       </div>
                     )}
                     <div 
-                      className={`flex flex-col max-w-[80%] relative group ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
+                      ref={(el) => { messageRefs.current[msg.id] = el; }}
+                      className={`flex flex-col max-w-[80%] relative group ${isMe ? 'self-end items-end' : 'self-start items-start'} ${
+                        searchQuery && searchResults.some(r => r.id === msg.id)
+                          ? searchResults[currentSearchIndex]?.id === msg.id
+                            ? 'ring-2 ring-yellow-400 rounded-xl bg-yellow-50 dark:bg-yellow-500/10'
+                            : 'ring-1 ring-yellow-300/50 rounded-xl'
+                          : ''
+                      }`}
                     onMouseLeave={() => setActiveReactionMsg(null)}
                   >
                     <div className={`flex items-center gap-1.5 text-[10px] text-zinc-500 mb-0.5 px-1 w-full ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -417,6 +700,9 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                                 style={{ cursor: 'pointer' }}
                               />
                             )}
+                            {msg.audioUrl && (
+                              <AudioPlayer src={msg.audioUrl} isMe={isMe} />
+                            )}
                             {msg.text && (
                               <p className="px-3 py-2 text-left whitespace-pre-wrap break-words">
                                 {msg.text}
@@ -424,6 +710,11 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                               </p>
                             )}
                           </div>
+                          {msg.isPinned && (
+                            <div className={`px-2 py-0.5 flex items-center gap-1 text-[10px] ${isMe ? 'text-white/60' : 'text-amber-500'}`}>
+                              <Pin className="w-2.5 h-2.5 rotate-45" /> Pinned
+                            </div>
+                          )}
                         </>
                       )}
                       </div>
@@ -455,6 +746,13 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                             title="Reply"
                           >
                             <Reply className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handlePin(msg.id)}
+                            className={`p-1 rounded-full shrink-0 ${msg.isPinned ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10' : 'text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}
+                            title={msg.isPinned ? 'Unpin' : 'Pin'}
+                          >
+                            <Pin className="w-3.5 h-3.5 rotate-45" />
                           </button>
                           <button
                             onClick={() => setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id)}
@@ -566,39 +864,84 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
           )}
 
           {/* Input */}
-          <form onSubmit={handleSend} className="p-3 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex gap-2 items-center shrink-0">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              id="chat-image-upload"
-              onChange={handleImageChange}
-            />
-            <label
-              htmlFor="chat-image-upload"
-              className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center cursor-pointer hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors shrink-0 text-zinc-500"
-            >
-              <ImageIcon className="w-4 h-4" />
-            </label>
-            <input
-              type="text"
-              value={newMessage}
-              onChange={handleTyping}
-              placeholder="Type a message..."
-              className="flex-1 px-3 py-2 bg-zinc-100 dark:bg-zinc-800 border-none rounded-full text-sm outline-none focus:ring-2 focus:ring-primary/50"
-            />
-            <button
-              type="submit"
-              disabled={(!newMessage.trim() && !imageFile) || uploading}
-              className="w-9 h-9 rounded-full bg-primary flex items-center justify-center disabled:opacity-50 hover:opacity-90 transition-opacity shrink-0"
-            >
-              {uploading
-                ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                : <Send className="w-4 h-4 ml-0.5" />
-              }
-            </button>
-          </form>
+          {isRecording ? (
+            <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex gap-2 items-center shrink-0">
+              <button
+                onClick={cancelRecording}
+                className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors shrink-0"
+                title="Cancel"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <div className="flex-1 flex items-center gap-2 px-3 py-2 bg-red-50 dark:bg-red-500/10 rounded-full">
+                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                <span className="text-sm text-red-600 dark:text-red-400 font-medium">
+                  {String(Math.floor(recordingTime / 60)).padStart(2, '0')}:{String(recordingTime % 60).padStart(2, '0')}
+                </span>
+                <div className="flex-1 flex items-center gap-0.5 h-4 overflow-hidden">
+                  {Array.from({ length: 20 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="w-1 bg-red-400/60 rounded-full transition-all"
+                      style={{ height: `${Math.random() * 100}%`, animationDelay: `${i * 50}ms` }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={stopRecording}
+                className="w-9 h-9 rounded-full bg-red-500 flex items-center justify-center hover:opacity-90 transition-opacity shrink-0 text-white"
+                title="Send voice message"
+              >
+                <Send className="w-4 h-4 ml-0.5" />
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSend} className="p-3 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex gap-2 items-center shrink-0">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                id="chat-image-upload"
+                onChange={handleImageChange}
+              />
+              <label
+                htmlFor="chat-image-upload"
+                className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center cursor-pointer hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors shrink-0 text-zinc-500"
+              >
+                <ImageIcon className="w-4 h-4" />
+              </label>
+              <input
+                type="text"
+                value={newMessage}
+                onChange={handleTyping}
+                placeholder="Type a message..."
+                className="flex-1 px-3 py-2 bg-zinc-100 dark:bg-zinc-800 border-none rounded-full text-sm outline-none focus:ring-2 focus:ring-primary/50"
+              />
+              {newMessage.trim() || imageFile ? (
+                <button
+                  type="submit"
+                  disabled={uploading}
+                  className="w-9 h-9 rounded-full bg-primary flex items-center justify-center disabled:opacity-50 hover:opacity-90 transition-opacity shrink-0"
+                >
+                  {uploading
+                    ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    : <Send className="w-4 h-4 ml-0.5" />
+                  }
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startRecording}
+                  className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors shrink-0 text-zinc-500"
+                  title="Record voice message"
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
+              )}
+            </form>
+          )}
         </div>
       )}
 

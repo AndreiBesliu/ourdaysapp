@@ -420,3 +420,12 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 **2026-05-15 22:42 - Task Completed**: Replaced batch-creation model with a single-document recurrence engine. Created src/utils/recurrence.ts for occurrence expansion. Updated AddEventModal.tsx with recurrenceRule storage, yearly option, horizon end-date labels, and edit scope prompt. Updated EventDetailsModal.tsx with recurring-aware delete logic and frequency badge. Created RecurringEventsPanel.tsx for managing all recurring series. Updated CalendarHome.tsx with expansion logic and header button. App built successfully. Deployed and pushed to Git.
 > Model: Claude Opus 4.6
 
+
+**2026-05-15 23:42 - Task Started**
+> Prompt: Group Chat Enhancements
+> Plan: Implement Pinned Messages, Message Search, and Voice Messages in GroupChatWidget.tsx.
+> Model: Claude Opus 4.6
+
+**2026-05-15 23:46 - Task Completed**: Implemented three major chat features in GroupChatWidget.tsx. Pinned Messages: any member can pin/unpin via toolbar, pinned bar shows at top with expand-all option. Message Search: client-side search with highlighting, match count, up/down navigation. Voice Messages: mic button when input empty, press to record with 60s limit, waveform UI, audio player in bubbles with play/pause and progress bar. App built successfully. Deployed and pushed to Git.
+> Model: Claude Opus 4.6
+
