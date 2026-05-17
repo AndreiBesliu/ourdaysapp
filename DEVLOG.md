@@ -39,22 +39,28 @@
 ## 🚀 Active Roadmap & Backlog
 
 ### 1. In Progress / Upcoming
-- **Games**: Chess, Backgammon
-- **More AI functionality**
-- **Push Notifications**
-- **Add more to the chat**
-- **AI Event Type Suggestion**: AI will suggest the type of event to create based on user input.
-- **Rework Asset Suggestions**: Overhaul the asset suggestion logic for smarter, more contextual recommendations.
-- **Event RSVPs**: Let group members confirm attendance (Yes / Maybe / No) directly in the event
-- **Custom Reminder Scheduling**: Set per-event notification times
-- **Event Templates**: Save commonly used event structures and re-use them in one tap
-- **Location Attachment**: Pin a map location to an event with a preview
+- **AI Superpowers 🧠**
+  - **AI Event Type Suggestion**: AI will suggest the type of event to create based on user input.
+  - **AI Group Digests**: "Ce s-a mai întâmplat?" summaries of missed chat/calendar activity using Gemini.
+  - **Rework Asset Suggestions**: Overhaul the asset suggestion logic for smarter, more contextual recommendations.
+- **Advanced Communications & Maps 📡**
+  - **Remote Push Notifications**: True FCM remote push notifications for chat/calendar alerts (replacing local-only reminders).
+  - **In-App Map Navigation & Geofencing**: Render inline interactive maps in event details and send local notifications when entering geofenced areas.
+- **Arcade Expansion 🎮**
+  - **Games**: Chess, Backgammon.
+  - **Leaderboards & Group Stats**: Persistent game stats and tournament tracking in the Arcade.
+  - **Family Trivia**: Interactive custom trivia creator for group members.
+- **Shared Finance 💳**
+  - **Shared Expenses (Splitwise-in-App)**: Split group bills, log expenses, and settle balances directly inside the Wallet dashboard.
+- **Infrastructure & UX ⚙️**
+  - **Offline-First Support**: Enable Firestore local persistence and disk caching for seamless offline calendar/chat navigation.
+  - **Event Templates**: Save commonly used event structures and re-use them in one tap.
 
 > **UI/UX Design Constraints (Explicit User Preferences)**
-> ðŸš« NO Swipe Actions.
-> ðŸš« NO Confetti/heavy animations.
-> âš ï¸� Haptics should be used subtly.
-> âœ… YES to clean, power-user premium UX.
+> 🚫 NO Swipe Actions.
+> 🚫 NO Confetti/heavy animations.
+> ⚠️ Haptics should be used subtly.
+> ✅ YES to clean, power-user premium UX.
 
 ### 2. Backlog
 - **UI Refinement**: Continue polishing dark mode transitions and mobile responsiveness.
@@ -63,6 +69,7 @@
 ---
 
 ## âœ… Completed Features
+
 - **Android Compilation**: Wrapped the app into a native APK using Capacitor.
 - **Chat Reactions**: Added inline emoji reactions to chat messages.
 - **Typing Indicators**: Showing when someone is typing in the group chat.
@@ -86,6 +93,10 @@
 - **Voice Messages**: Record and send short audio clips in group chat with waveform UI and playback.
 - **Message Search**: Client-side search with highlighting, match count, and navigation.
 - **Pinned Messages**: Pin important messages to the top of the chat for quick reference.
+- **Event RSVPs**: Confirmation of attendance (Yes/Maybe/No) and status summaries.
+- **Custom Reminder Scheduling**: Local alerts via Capacitor local-notifications based on event setups.
+- **Location Attachment**: Embed external Google Maps navigation shortcuts in events.
+- **Mobile UX Refinements**: Compact Today's Overview grid and collapsible hamburger navigation header.
 
 ---
 
