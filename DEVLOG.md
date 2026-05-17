@@ -44,16 +44,11 @@
 - **Push Notifications**
 - **Add more to the chat**
 - **AI Event Type Suggestion**: AI will suggest the type of event to create based on user input.
-- **Smart Birthday Auto-Add**: Automatically detect and add birthdays for users within a group.
 - **Rework Asset Suggestions**: Overhaul the asset suggestion logic for smarter, more contextual recommendations.
-- **Recurring Events**: Repeat events daily / weekly / monthly / yearly
 - **Event RSVPs**: Let group members confirm attendance (Yes / Maybe / No) directly in the event
 - **Custom Reminder Scheduling**: Set per-event notification times
 - **Event Templates**: Save commonly used event structures and re-use them in one tap
 - **Location Attachment**: Pin a map location to an event with a preview
-- **Voice Messages**: Record and send short audio clips in group chat
-- **Message Search**: Full-text search across chat history
-- **Pinned Messages**: Pin important messages to the top of the chat for quick reference
 
 > **UI/UX Design Constraints (Explicit User Preferences)**
 > ðŸš« NO Swipe Actions.
@@ -86,6 +81,11 @@
 - **Collapsible Week View**: Month/Week view toggle in the Calendar.
 - **Pull-to-Refresh**: Native-feeling refresh mechanism on the home screen.
 - **Multiplayer Arcade**: Tic-Tac-Toe, Connect 4, and Rummy 45 (Phases 1-3) implemented with real-time sync.
+- **Smart Birthday Auto-Add**: Automatically detects and adds birthdays for users within a group.
+- **Recurring Events**: Single-document recurrence engine with daily/weekly/monthly/yearly support, edit/delete scope prompts, and overview panel.
+- **Voice Messages**: Record and send short audio clips in group chat with waveform UI and playback.
+- **Message Search**: Client-side search with highlighting, match count, and navigation.
+- **Pinned Messages**: Pin important messages to the top of the chat for quick reference.
 
 ---
 
@@ -429,3 +429,22 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 **2026-05-15 23:46 - Task Completed**: Implemented three major chat features in GroupChatWidget.tsx. Pinned Messages: any member can pin/unpin via toolbar, pinned bar shows at top with expand-all option. Message Search: client-side search with highlighting, match count, up/down navigation. Voice Messages: mic button when input empty, press to record with 60s limit, waveform UI, audio player in bubbles with play/pause and progress bar. App built successfully. Deployed and pushed to Git.
 > Model: Claude Opus 4.6
 
+---
+
+## 📅 Session Log: May 17, 2026
+
+**2026-05-17 10:50 - Task Started**
+> Prompt: "ok, muta-le la complete si hai sa implementam rsvp"
+> Plan: Move 5 completed features to Completed section, then implement Event RSVPs — let group members confirm attendance (Yes / Maybe / No) directly in the event details.
+> Model: Claude Opus 4.6
+
+**2026-05-17 10:57 - Task Completed**: Implemented RSVP functionality. Updated `EventDetailsModal.tsx` with Yes/Maybe/No buttons and a visual summary of attendees. Updated `AddEventModal.tsx` to include an "Enable RSVP" toggle when creating/editing group events. Updated `CalendarGrid.tsx` to show a small badge indicating the user's current RSVP status in the day modal. Successfully built and deployed to Firebase.
+> Model: Gemini 3.1 Pro
+
+**2026-05-17 15:48 - Task Started**
+> Prompt: "yes for both with the mention that in the future we will have both push notifications and in app map navigation"
+> Plan: Implement Custom Reminders via `@capacitor/local-notifications` plugin and Location Attachment as a text field that links to Google Maps.
+> Model: Gemini 3.1 Pro
+
+**2026-05-17 15:52 - Task Completed**: Installed `@capacitor/local-notifications`. Updated `AddEventModal.tsx` with Location input and Reminder dropdown. Updated `EventDetailsModal.tsx` to display the Location as a clickable map link and show Reminder info. Updated `CalendarHome.tsx` to request local notification permissions and actively schedule device-local notifications based on the user's synced calendar events. Build verified and deployed to Firebase Hosting.
+> Model: Gemini 3.1 Pro

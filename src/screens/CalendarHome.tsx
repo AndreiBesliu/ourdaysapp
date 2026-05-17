@@ -5,6 +5,7 @@ import { getToken } from 'firebase/messaging';
 import { collection, query, onSnapshot, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
 import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import CalendarGrid from '../components/CalendarGrid';
 import AddEventModal from '../components/AddEventModal';
 import EventDetailsModal from '../components/EventDetailsModal';
@@ -233,6 +234,62 @@ export default function CalendarHome() {
 
     return () => unsubscribe();
   }, [activeGroupId]);
+
+  // Schedule Local Notifications for Events with Reminders
+  useEffect(() => {
+    const scheduleNotifications = async () => {
+      try {
+        const permStatus = await LocalNotifications.checkPermissions();
+        if (permStatus.display !== 'granted') {
+          const requested = await LocalNotifications.requestPermissions();
+          if (requested.display !== 'granted') return;
+        }
+
+        // Cancel all previously scheduled to avoid duplicates
+        const pending = await LocalNotifications.getPending();
+        if (pending.notifications.length > 0) {
+          await LocalNotifications.cancel({ notifications: pending.notifications });
+        }
+
+        const expandedEvents = expandRecurringEvents(events, new Date(), addMonths(new Date(), 2));
+        const now = new Date();
+        const notificationsToSchedule = [];
+
+        for (const ev of expandedEvents) {
+          if (ev.reminderMinutes !== null && ev.reminderMinutes !== undefined && ev.date) {
+            const evDate = new Date(ev.date);
+            if (ev.time) {
+              const [hours, minutes] = ev.time.split(':').map(Number);
+              evDate.setHours(hours, minutes, 0, 0);
+            }
+            const notifyTime = new Date(evDate.getTime() - ev.reminderMinutes * 60000);
+            
+            if (notifyTime > now) {
+              // Generate a safe numeric ID
+              let numericId = 0;
+              for (let i = 0; i < ev.id.length; i++) numericId += ev.id.charCodeAt(i);
+              numericId = (numericId + (evDate.getTime() % 100000)) % 2147483647;
+
+              notificationsToSchedule.push({
+                id: numericId,
+                title: ev.title,
+                body: ev.reminderMinutes === 0 ? 'Happening now!' : `Starts in ${ev.reminderMinutes >= 60 ? (ev.reminderMinutes / 60) + ' hour(s)' : ev.reminderMinutes + ' minutes'}${ev.location ? ` at ${ev.location}` : ''}`,
+                schedule: { at: notifyTime },
+              });
+            }
+          }
+        }
+
+        if (notificationsToSchedule.length > 0) {
+          await LocalNotifications.schedule({ notifications: notificationsToSchedule });
+        }
+      } catch (err) {
+        console.error('Error scheduling local notifications:', err);
+      }
+    };
+
+    scheduleNotifications();
+  }, [events]);
 
   const handleAcceptInvite = async (eventId: string) => {
     await updateDoc(doc(db, 'events', eventId), { inviteStatus: 'accepted' });

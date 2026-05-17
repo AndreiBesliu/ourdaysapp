@@ -67,6 +67,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('none');
   const [editScope, setEditScope] = useState<'this' | 'all' | null>(null);
   const [visibleTo, setVisibleTo] = useState<string[]>([]);
+  const [rsvpEnabled, setRsvpEnabled] = useState(false);
+  const [location, setLocation] = useState('');
+  const [reminderMinutes, setReminderMinutes] = useState<number | null>(null);
   
   // Wallet Assets
   const [assets, setAssets] = useState<any[]>([]);
@@ -133,6 +136,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setVisibleTo(editEvent.visibleTo || (userMap ? Object.values(userMap).filter((u: any) => u.id !== auth.currentUser?.uid).map((u: any) => u.id) : []));
       setRemoveMainImage(false);
       setSelectedGroupId(editEvent.groupId || 'personal');
+      setRsvpEnabled(!!editEvent.rsvpEnabled);
+      setLocation(editEvent.location || '');
+      setReminderMinutes(editEvent.reminderMinutes || null);
     } else if (isOpen && !editEvent) {
       let loadedDraft = false;
       const draftJSON = localStorage.getItem('ourDays_draftEvent');
@@ -154,6 +160,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             if (parsed.visibleTo) setVisibleTo(parsed.visibleTo);
             if (parsed.selectedGroupId) setSelectedGroupId(parsed.selectedGroupId);
             if (parsed.repeat) setRepeat(parsed.repeat);
+            if (parsed.rsvpEnabled !== undefined) setRsvpEnabled(parsed.rsvpEnabled);
+            if (parsed.location !== undefined) setLocation(parsed.location);
+            if (parsed.reminderMinutes !== undefined) setReminderMinutes(parsed.reminderMinutes);
             loadedDraft = true;
           } else {
             localStorage.removeItem('ourDays_draftEvent');
@@ -173,6 +182,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         setRepeat('none');
         setVisibleTo(userMap ? Object.values(userMap).filter((u: any) => u.id !== auth.currentUser?.uid).map((u: any) => u.id) : []);
         setSelectedGroupId(activeGroupId);
+        setRsvpEnabled(false);
+        setLocation('');
+        setReminderMinutes(null);
       }
       setImageFile(null);
       setSelectedAssetUrl(null);
@@ -186,7 +198,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   useEffect(() => {
     if (isOpen && !editEvent) {
       const draft = {
-        title, eventDate, description, checklistItems, categoryId: category.id, color, isTask, assigneeIds, visibleTo, selectedGroupId, repeat
+        title, eventDate, description, checklistItems, categoryId: category.id, color, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes
       };
       if (title || description || checklistItems.length > 0) {
         localStorage.setItem('ourDays_draftEvent', JSON.stringify(draft));
@@ -194,7 +206,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         localStorage.removeItem('ourDays_draftEvent');
       }
     }
-  }, [title, eventDate, description, checklistItems, category, color, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, isOpen, editEvent]);
+  }, [title, eventDate, description, checklistItems, category, color, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes, isOpen, editEvent]);
 
   // Auto-save edits to Firestore
   useEffect(() => {
@@ -228,7 +240,10 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             assigneeIds,
             assigneeId: assigneeIds[0] || null,
             assetId: removeMainImage ? null : (selectedAssetId || editEvent.assetId),
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            rsvpEnabled: rsvpEnabled,
+            location: location,
+            reminderMinutes: reminderMinutes
           };
 
           await updateDoc(doc(db, 'events', editEvent.id), baseEventData);
@@ -241,7 +256,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       
       return () => clearTimeout(timeoutId);
     }
-  }, [title, eventDate, description, checklistItems, category, color, isTask, assigneeIds, visibleTo, selectedGroupId, removeMainImage, selectedAssetId, selectedAssetUrl, isOpen, editEvent]);
+  }, [title, eventDate, description, checklistItems, category, color, isTask, assigneeIds, visibleTo, selectedGroupId, removeMainImage, selectedAssetId, selectedAssetUrl, rsvpEnabled, location, reminderMinutes, isOpen, editEvent]);
 
   if (!isOpen) return null;
 
@@ -522,7 +537,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         assigneeIds: assigneeIds,
         assigneeId: assigneeIds[0] || null,
         assetId: removeMainImage ? null : (selectedAssetId || (editEvent ? editEvent.assetId : null)),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        rsvpEnabled: rsvpEnabled
       };
 
       if (editEvent) {
@@ -564,6 +580,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           createdAt: new Date().toISOString(),
           recurrenceRule,
           recurrenceExceptions: [],
+          rsvps: rsvpEnabled && auth.currentUser ? { [auth.currentUser.uid]: 'yes' } : {}
         });
         
         // Notify assignees
@@ -595,6 +612,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setColor(null);
       setIsTask(false);
       setRepeat('none');
+      setRsvpEnabled(false);
       onClose();
     } catch (error) {
       console.error("Error adding event: ", error);
@@ -710,6 +728,33 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               rows={1}
               className="w-full px-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none resize-none overflow-hidden min-h-[42px]"
             />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Location</label>
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="e.g., Central Park"
+                className="w-full px-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Reminder</label>
+              <select
+                value={reminderMinutes === null ? '' : reminderMinutes}
+                onChange={(e) => setReminderMinutes(e.target.value === '' ? null : parseInt(e.target.value))}
+                className="w-full px-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
+              >
+                <option value="">No Reminder</option>
+                <option value="0">At time of event</option>
+                <option value="15">15 minutes before</option>
+                <option value="60">1 hour before</option>
+                <option value="1440">1 day before</option>
+              </select>
+            </div>
           </div>
 
           <div className="space-y-3 bg-zinc-50 dark:bg-zinc-800/30 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700">
@@ -1109,6 +1154,24 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/30 dark:peer-focus:ring-primary/50 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-600 peer-checked:bg-primary"></div>
               </label>
             </div>
+
+            {selectedGroupId !== 'personal' && (
+              <div className="flex items-center justify-between p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Enable RSVP</p>
+                  <p className="text-xs text-zinc-500">Ask members to confirm attendance</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    className="sr-only peer" 
+                    checked={rsvpEnabled}
+                    onChange={(e) => setRsvpEnabled(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-500/30 dark:peer-focus:ring-emerald-500/50 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-600 peer-checked:bg-emerald-500"></div>
+                </label>
+              </div>
+            )}
 
             {selectedGroupId !== 'personal' && userMap && Object.keys(userMap).length > 1 && (
               <div className="flex flex-col border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">

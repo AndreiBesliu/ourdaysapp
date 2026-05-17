@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon, Trash2, Edit2, GripVertical, Sparkles } from 'lucide-react';
+import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon, Trash2, Edit2, GripVertical, Sparkles, Users, ThumbsUp, HelpCircle, ThumbsDown, MapPin, Bell } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, getDoc, arrayUnion, collection, query as fsQuery, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import Barcode from 'react-barcode';
@@ -279,6 +279,37 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     }
   };
 
+  // RSVP handling
+  const rsvps: Record<string, string> = event.rsvps || {};
+  const currentUserId = auth.currentUser?.uid || '';
+  const myRsvp = rsvps[currentUserId] || null;
+  const rsvpEnabled = !!event.rsvpEnabled;
+
+  const handleRsvp = async (status: 'yes' | 'maybe' | 'no') => {
+    if (!auth.currentUser) return;
+    const newRsvps = { ...rsvps };
+    if (myRsvp === status) {
+      // Toggle off
+      delete newRsvps[currentUserId];
+    } else {
+      newRsvps[currentUserId] = status;
+    }
+    try {
+      // For recurring instances, update the parent if editing "all", or create an override
+      const docId = event.isRecurringInstance ? event.parentEventId : event.id;
+      if (docId) {
+        await updateDoc(doc(db, 'events', docId), { rsvps: newRsvps });
+      }
+    } catch (e) {
+      console.error('Failed to update RSVP', e);
+    }
+  };
+
+  const getRsvpUsers = (status: string) => Object.entries(rsvps).filter(([, s]) => s === status).map(([uid]) => uid);
+  const yesUsers = getRsvpUsers('yes');
+  const maybeUsers = getRsvpUsers('maybe');
+  const noUsers = getRsvpUsers('no');
+
   const ownerId = event?.ownerId;
   const owner = ownerId ? (userMap[ownerId] || null) : null;
 
@@ -454,6 +485,124 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                     </>
                   )}
                 </div>
+            </div>
+          )}
+
+          {/* Location & Reminder */}
+          {(event.location || event.reminderMinutes !== null && event.reminderMinutes !== undefined) && (
+            <div className="flex flex-col gap-3">
+              {event.location && (
+                <a 
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer group"
+                >
+                  <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                    <MapPin className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{event.location}</p>
+                    <p className="text-xs text-zinc-500 group-hover:text-blue-500 transition-colors">Tap to open map</p>
+                  </div>
+                </a>
+              )}
+              {event.reminderMinutes !== null && event.reminderMinutes !== undefined && (
+                <div className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                  <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                    <Bell className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      {event.reminderMinutes === 0 ? 'At time of event' : 
+                       event.reminderMinutes === 15 ? '15 minutes before' : 
+                       event.reminderMinutes === 60 ? '1 hour before' : 
+                       event.reminderMinutes === 1440 ? '1 day before' : 
+                       `${event.reminderMinutes} minutes before`}
+                    </p>
+                    <p className="text-xs text-zinc-500">Reminder set</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* RSVP Section */}
+          {rsvpEnabled && (
+            <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-700">
+              <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3 flex items-center gap-1.5">
+                <Users className="w-4 h-4" /> RSVP — Are you going?
+              </p>
+              
+              {/* RSVP Buttons */}
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => handleRsvp('yes')}
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                    myRsvp === 'yes'
+                      ? 'bg-emerald-500 text-white shadow-md ring-2 ring-emerald-500/30'
+                      : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20'
+                  }`}
+                >
+                  <ThumbsUp className="w-4 h-4" /> Yes
+                </button>
+                <button
+                  onClick={() => handleRsvp('maybe')}
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                    myRsvp === 'maybe'
+                      ? 'bg-amber-500 text-white shadow-md ring-2 ring-amber-500/30'
+                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-500/20'
+                  }`}
+                >
+                  <HelpCircle className="w-4 h-4" /> Maybe
+                </button>
+                <button
+                  onClick={() => handleRsvp('no')}
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                    myRsvp === 'no'
+                      ? 'bg-red-500 text-white shadow-md ring-2 ring-red-500/30'
+                      : 'bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 border border-red-500/20'
+                  }`}
+                >
+                  <ThumbsDown className="w-4 h-4" /> No
+                </button>
+              </div>
+
+              {/* RSVP Summary */}
+              {(yesUsers.length > 0 || maybeUsers.length > 0 || noUsers.length > 0) && (
+                <div className="space-y-2">
+                  {yesUsers.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                      <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">Going ({yesUsers.length})</span>{' — '}
+                        {yesUsers.map(uid => userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || 'Member').join(', ')}
+                      </span>
+                    </div>
+                  )}
+                  {maybeUsers.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                      <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                        <span className="font-semibold text-amber-600 dark:text-amber-400">Maybe ({maybeUsers.length})</span>{' — '}
+                        {maybeUsers.map(uid => userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || 'Member').join(', ')}
+                      </span>
+                    </div>
+                  )}
+                  {noUsers.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                      <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                        <span className="font-semibold text-red-600 dark:text-red-400">Not going ({noUsers.length})</span>{' — '}
+                        {noUsers.map(uid => userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || 'Member').join(', ')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {yesUsers.length === 0 && maybeUsers.length === 0 && noUsers.length === 0 && (
+                <p className="text-xs text-zinc-400 dark:text-zinc-500 italic">No responses yet. Be the first!</p>
+              )}
             </div>
           )}
 

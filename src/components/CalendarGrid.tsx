@@ -1,6 +1,7 @@
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays } from 'date-fns';
-import { ChevronLeft, ChevronRight, Briefcase, Heart, Wrench, Calendar as CalendarIcon, Star, Circle, CheckCircle2, X, Plus, Clock, ChevronUp, ChevronDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Briefcase, Heart, Wrench, Calendar as CalendarIcon, Star, Circle, CheckCircle2, X, Plus, Clock, ChevronUp, ChevronDown, ThumbsUp, HelpCircle, ThumbsDown } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { auth } from '../firebase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useModalBack } from '../hooks/useModalBack';
 import { useThemeStore } from '../store';
@@ -445,6 +446,17 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                                   return ids.length > 3 && (
                                     <span className="text-xs text-zinc-500">+{ids.length - 3}</span>
                                   );
+                                })()}
+                              </div>
+                            )}
+                            {ev.rsvpEnabled && view !== 'personal' && (
+                              <div className="flex items-center gap-1">
+                                {(() => {
+                                  const myRsvp = ev.rsvps?.[auth.currentUser?.uid || ''];
+                                  if (myRsvp === 'yes') return <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded"><ThumbsUp className="w-3 h-3" /> Going</span>;
+                                  if (myRsvp === 'maybe') return <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded"><HelpCircle className="w-3 h-3" /> Maybe</span>;
+                                  if (myRsvp === 'no') return <span className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-500/10 px-1.5 py-0.5 rounded"><ThumbsDown className="w-3 h-3" /> Not Going</span>;
+                                  return <span className="text-[10px] font-bold text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">Pending RSVP</span>;
                                 })()}
                               </div>
                             )}
