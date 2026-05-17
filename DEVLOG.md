@@ -448,3 +448,11 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-17 15:52 - Task Completed**: Installed `@capacitor/local-notifications`. Updated `AddEventModal.tsx` with Location input and Reminder dropdown. Updated `EventDetailsModal.tsx` to display the Location as a clickable map link and show Reminder info. Updated `CalendarHome.tsx` to request local notification permissions and actively schedule device-local notifications based on the user's synced calendar events. Build verified and deployed to Firebase Hosting.
 > Model: Gemini 3.1 Pro
+
+**2026-05-17 15:56 - Task Started**
+> Prompt: "pe mobil, partea aceasta ocupa prea mult spatiu, o vreau mai compacta" (referring to Today's Overview cards)
+> Plan: Refactor the "Today's Overview" section in `CalendarHome.tsx` to use a compact 3-column grid layout with centered, smaller text for mobile.
+> Model: Gemini 3.1 Pro
+
+**2026-05-17 15:58 - Task Completed**: Replaced the vertical stacked layout of the "Today's Overview" cards with a 3-column horizontal grid (`grid-cols-3`). Adjusted padding, text sizing, and removed the colored event dots to make the dashboard compact and readable on mobile devices. Built, deployed to Firebase, and pushed to Git.
+> Model: Gemini 3.1 Pro

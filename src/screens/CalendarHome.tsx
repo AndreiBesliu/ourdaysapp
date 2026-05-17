@@ -467,47 +467,31 @@ export default function CalendarHome() {
             </div>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2">
             <div 
               onClick={() => setOverviewModalType('total')}
-              className="bg-primary/5 border border-primary/20 rounded-lg p-3 flex flex-col justify-center cursor-pointer hover:bg-primary/10 transition-colors"
+              className="bg-primary/5 border border-primary/20 rounded-lg p-2 flex flex-col items-center justify-center cursor-pointer hover:bg-primary/10 transition-colors text-center"
             >
-              <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">{t('totalEvents', language)}</p>
-              <div className="flex items-center justify-between">
-                <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {allCalendarEvents.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date())).length}
-                </p>
-                <div className="flex -space-x-1">
-                  {allCalendarEvents.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date())).slice(0, 5).map((ev, idx) => {
-                    let color = 'bg-zinc-500';
-                    if (ev.color) {
-                      color = `bg-${ev.color}-500`;
-                    } else {
-                      color = ev.categoryId === 'work' ? 'bg-blue-500' : 
-                                  ev.categoryId === 'family_time' ? 'bg-emerald-500' : 
-                                  ev.categoryId === 'chores' ? 'bg-amber-500' : 
-                                  ev.categoryId === 'health' ? 'bg-rose-500' : 'bg-zinc-500';
-                    }
-                    return <div key={`${ev.id}-${idx}`} className={`w-3 h-3 rounded-full border border-white dark:border-zinc-900 ${color}`} />
-                  })}
-                </div>
-              </div>
+              <p className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-0.5 leading-tight">{t('totalEvents', language)}</p>
+              <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-none">
+                {allCalendarEvents.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date())).length}
+              </p>
             </div>
             <div 
               onClick={() => setOverviewModalType('pending')}
-              className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 flex flex-col justify-center cursor-pointer hover:bg-amber-500/10 transition-colors"
+              className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-2 flex flex-col items-center justify-center cursor-pointer hover:bg-amber-500/10 transition-colors text-center"
             >
-              <p className="text-xs font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-wider mb-1">{t('tasksPending', language)}</p>
-              <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+              <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-wider mb-0.5 leading-tight">{t('tasksPending', language)}</p>
+              <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-none">
                 {allCalendarEvents.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date()) && ev.isTask && ev.taskStatus !== 'completed').length}
               </p>
             </div>
             <div 
               onClick={() => setOverviewModalType('completed')}
-              className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 flex flex-col justify-center cursor-pointer hover:bg-emerald-500/10 transition-colors"
+              className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-2 flex flex-col items-center justify-center cursor-pointer hover:bg-emerald-500/10 transition-colors text-center"
             >
-              <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-500 uppercase tracking-wider mb-1">{t('tasksCompleted', language)}</p>
-              <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+              <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-500 uppercase tracking-wider mb-0.5 leading-tight">{t('tasksCompleted', language)}</p>
+              <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-none">
                 {allCalendarEvents.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date()) && ev.isTask && ev.taskStatus === 'completed').length}
               </p>
             </div>
