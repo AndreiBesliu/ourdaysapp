@@ -456,3 +456,11 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-17 15:58 - Task Completed**: Replaced the vertical stacked layout of the "Today's Overview" cards with a 3-column horizontal grid (`grid-cols-3`). Adjusted padding, text sizing, and removed the colored event dots to make the dashboard compact and readable on mobile devices. Built, deployed to Firebase, and pushed to Git.
 > Model: Gemini 3.1 Pro
+
+**2026-05-17 16:01 - Task Started**
+> Prompt: "pe mobil vreau un meniu colapsible"
+> Plan: Hide the top-right header action icons (Recurring, Wallet, Settings) inside a hamburger dropdown menu specifically on mobile breakpoints to conserve horizontal space, keeping only the Notification bell and the hamburger icon visible.
+> Model: Gemini 3.1 Pro
+
+**2026-05-17 16:03 - Task Completed**: Added `isMobileMenuOpen` state and `Menu` icon to `CalendarHome.tsx`. Wrapped the header buttons in a `.hidden .sm:flex` container and created a new `.sm:hidden` hamburger menu toggle that reveals an absolute-positioned dropdown with the hidden navigation options. Built, deployed to Firebase Hosting, and pushed to Git.
+> Model: Gemini 3.1 Pro

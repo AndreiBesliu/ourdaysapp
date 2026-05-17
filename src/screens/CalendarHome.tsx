@@ -3,7 +3,7 @@ import { isSameDay, format, startOfMonth, endOfMonth, addMonths, subMonths } fro
 import { auth, db, messaging } from '../firebase';
 import { getToken } from 'firebase/messaging';
 import { collection, query, onSnapshot, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
-import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat } from 'lucide-react';
+import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import CalendarGrid from '../components/CalendarGrid';
@@ -23,6 +23,7 @@ import { t, getDateLocale } from '../utils/i18n';
 import { expandRecurringEvents } from '../utils/recurrence';
 
 export default function CalendarHome() {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeGroupId, setActiveGroupId] = useState<string | 'personal'>('personal');
   const [groups, setGroups] = useState<any[]>([]);
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
@@ -383,28 +384,62 @@ export default function CalendarHome() {
           <h1 className="text-xl font-bold text-zinc-900 dark:text-white">Our Days</h1>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1 sm:gap-4">
+          <NotificationsDropdown />
+          
           <button
             onClick={() => setIsRecurringPanelOpen(true)}
-            className="p-2 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-full transition-colors"
+            className="hidden sm:flex p-2 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-full transition-colors"
             title="Recurring Events"
           >
             <Repeat className="w-5 h-5" />
           </button>
-          <NotificationsDropdown />
           <button 
             onClick={() => navigate('/wallet')}
-            className="p-2 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-full transition-colors"
+            className="hidden sm:flex p-2 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-full transition-colors"
             title="Assets"
           >
             <Wallet className="w-5 h-5" />
           </button>
           <button 
             onClick={() => navigate('/settings')}
-            className="p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+            className="hidden sm:flex p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
           >
             <Settings className="w-5 h-5" />
           </button>
+
+          {/* Mobile Menu */}
+          <div className="sm:hidden relative">
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+            >
+              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+
+            {isMobileMenuOpen && (
+              <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg flex flex-col py-2 animate-in fade-in slide-in-from-top-2 origin-top-right z-[110]">
+                <button
+                  onClick={() => { setIsRecurringPanelOpen(true); setIsMobileMenuOpen(false); }}
+                  className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-indigo-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
+                >
+                  <Repeat className="w-4 h-4" /> Recurring
+                </button>
+                <button 
+                  onClick={() => { navigate('/wallet'); setIsMobileMenuOpen(false); }}
+                  className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-emerald-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
+                >
+                  <Wallet className="w-4 h-4" /> Assets
+                </button>
+                <button 
+                  onClick={() => { navigate('/settings'); setIsMobileMenuOpen(false); }}
+                  className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
+                >
+                  <Settings className="w-4 h-4" /> Settings
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
