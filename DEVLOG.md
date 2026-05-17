@@ -46,9 +46,11 @@
 - **Advanced Communications & Maps 📡**
   - **Remote Push Notifications**: True FCM remote push notifications for chat/calendar alerts (replacing local-only reminders).
   - **In-App Map Navigation & Geofencing**: Render inline interactive maps in event details and send local notifications when entering geofenced areas.
+  - **RSVP Notifications**: Integrate RSVP response updates into the app's general notification feed (Firestore `notifications` collection).
 - **Arcade Expansion 🎮**
   - **Games**: Chess, Backgammon.
   - **Leaderboards & Group Stats**: Persistent game stats and tournament tracking in the Arcade.
+  - **Game-End / Session Stopping System**: Implement a formal ending/stopping mechanism for games (Tic-Tac-Toe, Connect 4, Rummy) to trigger leaderboard updates upon game completion.
   - **Family Trivia**: Interactive custom trivia creator for group members.
 - **Shared Finance 💳**
   - **Shared Expenses (Splitwise-in-App)**: Split group bills, log expenses, and settle balances directly inside the Wallet dashboard.
