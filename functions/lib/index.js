@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
+exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -202,6 +202,34 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
     }
     catch (error) {
         console.error("AI Generation Error", error);
+        throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
+    }
+});
+exports.suggestEventCategory = (0, https_1.onCall)(async (request) => {
+    const { title, description } = request.data;
+    if (!title) {
+        throw new https_1.HttpsError('invalid-argument', 'Title is required.');
+    }
+    try {
+        const key = process.env.GEMINI_API_KEY_LOCAL;
+        if (!key) {
+            throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
+        }
+        const genAI = new generative_ai_1.GoogleGenerativeAI(key);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+        const prompt = `You are a helpful AI Assistant. Given an event title and optional description, categorize it into exactly one of the following category IDs: "work", "family_time", "chores", "health", "other".
+Title: "${title}"
+${description ? `Description: "${description}"` : ""}
+
+Return ONLY the category ID string, nothing else. No markdown formatting.`;
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().trim().toLowerCase();
+        const validCategories = ["work", "family_time", "chores", "health", "other"];
+        const matchedCategory = validCategories.find(c => text.includes(c)) || "other";
+        return { categoryId: matchedCategory };
+    }
+    catch (error) {
+        console.error("AI Category Suggestion Error", error);
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });

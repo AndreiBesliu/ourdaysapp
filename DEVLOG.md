@@ -477,3 +477,8 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-17 16:03 - Task Completed**: Added `isMobileMenuOpen` state and `Menu` icon to `CalendarHome.tsx`. Wrapped the header buttons in a `.hidden .sm:flex` container and created a new `.sm:hidden` hamburger menu toggle that reveals an absolute-positioned dropdown with the hidden navigation options. Built, deployed to Firebase Hosting, and pushed to Git.
 > Model: Gemini 3.1 Pro
+
+**2026-05-18 11:01 - Task Started**
+> Prompt: "1"
+> Plan: Implement AI Event Type Suggestion by creating a new Firebase Callable Function (suggestEventCategory) and connecting it to AddEventModal.
+> Model: Gemini 3.1 Pro

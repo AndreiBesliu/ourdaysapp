@@ -18,3 +18,17 @@ export async function generateChecklistForTask(title: string, description: strin
     throw new Error(`AI Error: ${error.message || 'Unknown error'}`);
   }
 }
+
+export async function suggestEventCategoryAI(title: string, description: string = ''): Promise<string> {
+  const functions = getFunctions(app);
+  const suggestEventCategory = httpsCallable(functions, 'suggestEventCategory');
+  
+  try {
+    const result = await suggestEventCategory({ title, description });
+    const data = result.data as { categoryId: string };
+    return data.categoryId || 'other';
+  } catch (error: any) {
+    console.error("AI Category Suggestion Error", error);
+    return 'other';
+  }
+}

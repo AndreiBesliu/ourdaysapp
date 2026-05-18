@@ -3,7 +3,7 @@ import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckC
 import { addDoc, collection, query, getDocs, updateDoc, doc, arrayUnion } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
-import { isAIEnabled, generateChecklistForTask } from '../ai';
+import { isAIEnabled, generateChecklistForTask, suggestEventCategoryAI } from '../ai';
 import { onSnapshot } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
@@ -53,6 +53,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [isSuggestingCategory, setIsSuggestingCategory] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
 
@@ -351,6 +352,22 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         const parsedDate = parsed[0].start.date();
         setEventDate(format(parsedDate, 'yyyy-MM-dd'));
       }
+    }
+  };
+
+  const handleTitleBlur = async () => {
+    if (!title.trim() || !isAIEnabled() || editEvent) return;
+    setIsSuggestingCategory(true);
+    try {
+      const suggestedCategoryId = await suggestEventCategoryAI(title, description);
+      if (suggestedCategoryId) {
+        const cat = CATEGORIES.find(c => c.id === suggestedCategoryId);
+        if (cat) setCategory(cat);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSuggestingCategory(false);
     }
   };
 
@@ -707,11 +724,15 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Event Title</label>
+            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center gap-2">
+              Event Title
+              {isSuggestingCategory && <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>}
+            </label>
             <input
               type="text"
               value={title}
               onChange={handleTitleChange}
+              onBlur={handleTitleBlur}
               placeholder="e.g., Dentist Appointment"
               required
               className="w-full px-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none"
