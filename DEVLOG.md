@@ -490,3 +490,6 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > Prompt: "yes"
 > Plan: Implement AI Group Digests. Create a Callable Cloud Function to fetch recent messages and events, use Gemini to summarize them, and add a UI button in the Group Chat to request and display the digest.
 > Model: Gemini 3.1 Pro
+
+**2026-05-18 11:50 - Task Completed**: Implemented AI Group Digests. Created the `generateGroupDigest` Cloud Function using Gemini 2.5 Flash Lite to query recent messages and upcoming events for a group and generate a localized summary. Added a "Ce s-a mai întâmplat?" Sparkles button to the `GroupChatWidget` header, which displays the generated digest in a dismissible styled banner directly within the chat widget. Built, pushed to Git, and deployed to Firebase Hosting and Functions.
+> Model: Gemini 3.1 Pro
