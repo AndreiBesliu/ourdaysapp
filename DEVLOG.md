@@ -498,3 +498,6 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > Prompt: "ok, go on"
 > Plan: Rework Asset Suggestion Logic using AI. Create a new Cloud Function `suggestAssetForEvent` that uses Gemini to intelligently match user input (titles or checklist items) to the best available asset, instead of relying on rigid substring matching.
 > Model: Gemini 3.1 Pro
+
+**2026-05-18 13:05 - Task Completed**: Reworked Asset Suggestion logic using AI. Replaced the rigid client-side substring matching with `suggestAssetForText` Cloud Function powered by Gemini 2.5 Flash Lite. The AI is now invoked intelligently on `blur` for the event title, and when adding or editing a checklist item. Built, pushed to Git, and deployed to Firebase Hosting & Functions.
+> Model: Gemini 3.1 Pro
