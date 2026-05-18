@@ -3,7 +3,7 @@ import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckC
 import { addDoc, collection, query, getDocs, updateDoc, doc, arrayUnion } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
-import { isAIEnabled, generateChecklistForTask, suggestEventCategoryAI } from '../ai';
+import { isAIEnabled, generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
 import { onSnapshot } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
@@ -279,41 +279,24 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
 
 
-  const checkForAssetSuggestions = (text: string) => {
-    if (!text || selectedAssetId) return; // already linked
-    const lowerText = text.toLowerCase();
-    const userWords = lowerText.split(/\s+/).filter((w: string) => w.length > 2);
-    
-    // Grocery keywords to trigger supermarket card suggestions
-    const groceryKeywords = ['milk', 'lapte', 'bread', 'paine', 'apa', 'water', 'carne', 'meat', 'oua', 'eggs', 'branza', 'cheese', 'fructe', 'legume', 'rosii', 'cartofi', 'bere', 'suc'];
-    const supermarkets = ['mega', 'auchan', 'penny', 'kaufland', 'carrefour', 'lidl', 'profi'];
-    const hasGroceryWord = userWords.some(w => groceryKeywords.includes(w.toLowerCase()));
-    
-    const matchedAsset = assets.find(a => {
-      const assetNameLower = a.name.toLowerCase();
-      const assetWords = assetNameLower.split(/\s+/).filter((w: string) => w.length > 2);
-      
-      // If it's a grocery item, aggressively match ANY supermarket card
-      if (hasGroceryWord && supermarkets.some(sm => assetNameLower.includes(sm))) {
-        return true;
+  const checkForAssetSuggestionsAI = async (text: string) => {
+    if (!text || selectedAssetId || !isAIEnabled() || assets.length === 0) return;
+    try {
+      const assetId = await suggestAssetForTextAI(text, assets);
+      if (assetId) {
+        const matchedAsset = assets.find(a => a.id === assetId);
+        if (matchedAsset && suggestedAsset?.id !== matchedAsset.id) {
+          setSuggestedAsset(matchedAsset);
+        }
       }
-      
-      // Match if the typed text matches the asset name, or if any word matches
-      return assetNameLower.includes(lowerText) || 
-             lowerText.includes(assetNameLower) || 
-             userWords.some((uw: string) => assetNameLower.includes(uw)) || 
-             assetWords.some((aw: string) => lowerText.includes(aw));
-    });
-    
-    if (matchedAsset && suggestedAsset?.id !== matchedAsset.id) {
-      setSuggestedAsset(matchedAsset);
+    } catch (e) {
+      console.error(e);
     }
   };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTitle = e.target.value;
     setTitle(newTitle);
-    checkForAssetSuggestions(newTitle);
     
     // Chrono natural language date parsing with Romanian support
     if (!editEvent) {
@@ -364,6 +347,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         const cat = CATEGORIES.find(c => c.id === suggestedCategoryId);
         if (cat) setCategory(cat);
       }
+      await checkForAssetSuggestionsAI(title);
     } catch (e) {
       console.error(e);
     } finally {
@@ -371,18 +355,19 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     }
   };
 
-  const handleAddChecklistItem = (e?: React.FormEvent) => {
+  const handleAddChecklistItem = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!newItemText.trim()) return;
+    const addedText = newItemText;
     const newId = Date.now().toString();
     setChecklistItems([
       ...checklistItems, 
-      { id: newId, text: newItemText, isCompleted: false }
+      { id: newId, text: addedText, isCompleted: false }
     ]);
     setNewItemText('');
     setLastAddedItemId(newId);
     Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
-    checkForAssetSuggestions(newItemText);
+    await checkForAssetSuggestionsAI(addedText);
   };
 
   const handleGenerateChecklist = async () => {
@@ -843,7 +828,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                                     e.target.style.height = 'auto';
                                     e.target.style.height = `${e.target.scrollHeight}px`;
                                     handleEditChecklistText(item.id, e.target.value);
-                                    checkForAssetSuggestions(e.target.value);
+                                  }}
+                                  onBlur={async (e) => {
+                                    await checkForAssetSuggestionsAI(e.target.value);
                                   }}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') {

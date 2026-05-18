@@ -493,3 +493,8 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-18 11:50 - Task Completed**: Implemented AI Group Digests. Created the `generateGroupDigest` Cloud Function using Gemini 2.5 Flash Lite to query recent messages and upcoming events for a group and generate a localized summary. Added a "Ce s-a mai întâmplat?" Sparkles button to the `GroupChatWidget` header, which displays the generated digest in a dismissible styled banner directly within the chat widget. Built, pushed to Git, and deployed to Firebase Hosting and Functions.
 > Model: Gemini 3.1 Pro
+
+**2026-05-18 13:00 - Task Started**
+> Prompt: "ok, go on"
+> Plan: Rework Asset Suggestion Logic using AI. Create a new Cloud Function `suggestAssetForEvent` that uses Gemini to intelligently match user input (titles or checklist items) to the best available asset, instead of relying on rigid substring matching.
+> Model: Gemini 3.1 Pro

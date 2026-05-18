@@ -48,3 +48,20 @@ export async function generateGroupDigestAI(groupId: string): Promise<string> {
   }
 }
 
+export async function suggestAssetForTextAI(text: string, assets: any[]): Promise<string | null> {
+  if (!isAIEnabled() || !text || assets.length === 0) return null;
+  const functions = getFunctions(app);
+  const suggestAsset = httpsCallable(functions, 'suggestAssetForText');
+  
+  const availableAssets = assets.map(a => ({ id: a.id, name: a.name }));
+  
+  try {
+    const result = await suggestAsset({ text, availableAssets });
+    const data = result.data as { assetId: string | null };
+    return data.assetId;
+  } catch (error: any) {
+    console.error("AI Asset Suggestion Error", error);
+    return null;
+  }
+}
+

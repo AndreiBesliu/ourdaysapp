@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
+exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -308,6 +308,42 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
     }
     catch (error) {
         console.error("AI Group Digest Error", error);
+        throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
+    }
+});
+exports.suggestAssetForText = (0, https_1.onCall)(async (request) => {
+    const { text, availableAssets } = request.data;
+    if (!text || !availableAssets || !Array.isArray(availableAssets)) {
+        throw new https_1.HttpsError('invalid-argument', 'text and availableAssets are required.');
+    }
+    try {
+        const key = process.env.GEMINI_API_KEY_LOCAL;
+        if (!key) {
+            throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
+        }
+        const genAI = new generative_ai_1.GoogleGenerativeAI(key);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+        const prompt = `You are an AI that maps text to the most relevant asset card.
+Text: "${text}"
+
+Available Assets:
+${availableAssets.map((a) => `- ID: ${a.id}, Name: ${a.name}`).join('\n')}
+
+Rules:
+1. If the text clearly implies groceries, supermarkets, or food shopping, match a supermarket/loyalty card if one exists (e.g. Kaufland, Mega Image, Lidl, Carrefour, Profi, Auchan, Penny).
+2. If the text implies health, doctor, or medical, match a health card (e.g. SanoPass, Medicover, Regina Maria).
+3. If it implies gym or fitness, match a gym card (e.g. 7Card, WorldClass).
+4. Return ONLY the exact string ID of the best matching asset.
+5. If no asset matches reasonably well, return the exact string "none".
+Do not include any other text or markdown formatting.`;
+        const result = await model.generateContent(prompt);
+        const resultText = result.response.text().trim();
+        // Validate that the returned ID is actually in the list, unless it's "none"
+        const matchedAsset = availableAssets.find((a) => a.id === resultText);
+        return { assetId: matchedAsset ? matchedAsset.id : null };
+    }
+    catch (error) {
+        console.error("AI Asset Suggestion Error", error);
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
