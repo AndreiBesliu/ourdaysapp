@@ -482,3 +482,6 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > Prompt: "1"
 > Plan: Implement AI Event Type Suggestion by creating a new Firebase Callable Function (suggestEventCategory) and connecting it to AddEventModal.
 > Model: Gemini 3.1 Pro
+
+**2026-05-18 11:06 - Task Completed**: Implemented AI Event Type Suggestion. Added `suggestEventCategory` Cloud Function (using Gemini 2.5 Flash Lite) and wrapped it in `ai.ts`. Updated `AddEventModal.tsx` to call this function `onBlur` of the Event Title input, displaying a loading spinner and automatically assigning the matched category. App built, pushed to Git, and deployed to Firebase Hosting & Functions.
+> Model: Gemini 3.1 Pro
