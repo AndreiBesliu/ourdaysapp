@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck, Reply, Pencil, Trash2, Ban, Pin, Search, Mic, ChevronUp, ChevronDown, Play, Pause } from 'lucide-react';
+import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck, Reply, Pencil, Trash2, Ban, Pin, Search, Mic, ChevronUp, ChevronDown, Play, Pause, Sparkles } from 'lucide-react';
 import { format, isSameDay, isToday, isYesterday } from 'date-fns';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { playTone } from '../utils/sounds';
 import { triggerHaptic } from '../utils/haptics';
+import { generateGroupDigestAI, isAIEnabled } from '../ai';
 
 interface GroupChatWidgetProps {
   groupId: string;
@@ -102,6 +103,10 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // AI Digest
+  const [isGeneratingDigest, setIsGeneratingDigest] = useState(false);
+  const [digestText, setDigestText] = useState<string | null>(null);
 
   const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -500,6 +505,19 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     audioChunksRef.current = [];
   };
 
+  const handleGenerateDigest = async () => {
+    setIsGeneratingDigest(true);
+    try {
+      const digest = await generateGroupDigestAI(groupId);
+      setDigestText(digest);
+    } catch (e) {
+      console.error(e);
+      alert("Failed to generate digest.");
+    } finally {
+      setIsGeneratingDigest(false);
+    }
+  };
+
   return (
     <div className="fixed bottom-[104px] right-4 sm:right-8 z-40 flex flex-col items-end">
       {isOpen && (
@@ -531,13 +549,46 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                 })}
               </div>
             </div>
-            <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-black/10 rounded-full transition-colors ml-2">
-              <X className="w-4 h-4" />
-            </button>
-            <button onClick={() => { setIsSearchOpen(!isSearchOpen); setSearchQuery(''); setCurrentSearchIndex(0); }} className="p-1 hover:bg-black/10 rounded-full transition-colors">
-              <Search className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1 ml-2">
+              {isAIEnabled() && (
+                <button 
+                  onClick={handleGenerateDigest} 
+                  disabled={isGeneratingDigest}
+                  className="p-1 hover:bg-black/10 rounded-full transition-colors"
+                  title="Ce s-a mai întâmplat? (AI Digest)"
+                >
+                  {isGeneratingDigest ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <Sparkles className="w-4 h-4 text-white" />
+                  )}
+                </button>
+              )}
+              <button onClick={() => { setIsSearchOpen(!isSearchOpen); setSearchQuery(''); setCurrentSearchIndex(0); }} className="p-1 hover:bg-black/10 rounded-full transition-colors">
+                <Search className="w-4 h-4" />
+              </button>
+              <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-black/10 rounded-full transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
+
+          {/* AI Digest Bar */}
+          {digestText && (
+            <div className="shrink-0 bg-indigo-50 dark:bg-indigo-500/10 border-b border-indigo-200 dark:border-indigo-500/20 p-3 relative shadow-inner z-10">
+              <button 
+                onClick={() => setDigestText(null)} 
+                className="absolute top-2 right-2 p-1 text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 rounded-full"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span className="text-xs font-bold text-indigo-800 dark:text-indigo-300">Ce s-a mai întâmplat? (AI Digest)</span>
+              </div>
+              <p className="text-xs text-indigo-700 dark:text-indigo-200 whitespace-pre-wrap pr-4">{digestText}</p>
+            </div>
+          )}
 
           {/* Search Bar */}
           {isSearchOpen && (

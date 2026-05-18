@@ -32,3 +32,19 @@ export async function suggestEventCategoryAI(title: string, description: string 
     return 'other';
   }
 }
+
+export async function generateGroupDigestAI(groupId: string): Promise<string> {
+  const functions = getFunctions(app);
+  const generateGroupDigest = httpsCallable(functions, 'generateGroupDigest');
+  const language = useThemeStore.getState().language || 'en-US';
+  
+  try {
+    const result = await generateGroupDigest({ groupId, language });
+    const data = result.data as { digest: string };
+    return data.digest || 'No recent activity.';
+  } catch (error: any) {
+    console.error("AI Group Digest Error", error);
+    throw new Error(`AI Error: ${error.message || 'Unknown error'}`);
+  }
+}
+

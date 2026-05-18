@@ -260,3 +260,91 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
     throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
   }
 });
+
+export const generateGroupDigest = onCall(async (request) => {
+  const { groupId, language = 'en-US' } = request.data;
+  if (!groupId) {
+    throw new HttpsError('invalid-argument', 'groupId is required.');
+  }
+
+  try {
+    const key = process.env.GEMINI_API_KEY_LOCAL;
+    if (!key) {
+      throw new HttpsError('failed-precondition', 'AI is not configured on the server.');
+    }
+
+    const db = admin.firestore();
+    const groupDoc = await db.collection('groups').doc(groupId).get();
+    const groupName = groupDoc.exists ? (groupDoc.data()?.name || "The Group") : "The Group";
+
+    // Get messages from last 48 hours
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - 2);
+    
+    const messagesSnapshot = await db.collection(`groups/${groupId}/messages`)
+      .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(pastDate))
+      .orderBy('createdAt', 'asc')
+      .limit(50)
+      .get();
+      
+    let chatHistory = "Recent Chat Messages:\n";
+    if (messagesSnapshot.empty) {
+      chatHistory += "(No recent messages)\n";
+    } else {
+      for (const docSnap of messagesSnapshot.docs) {
+        const d = docSnap.data();
+        let senderName = "Someone";
+        if (d.senderId) {
+          const userDoc = await db.collection('users').doc(d.senderId).get();
+          senderName = userDoc.data()?.name || userDoc.data()?.email?.split('@')[0] || "Someone";
+        }
+        chatHistory += `- ${senderName}: ${d.text || (d.imageUrl ? '[Image]' : '[Audio]')}\n`;
+      }
+    }
+
+    // Get upcoming events
+    const now = new Date();
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    
+    const eventsSnapshot = await db.collection('events')
+      .where('groupId', '==', groupId)
+      .where('date', '>=', now.toISOString())
+      .where('date', '<=', nextWeek.toISOString())
+      .orderBy('date', 'asc')
+      .limit(10)
+      .get();
+      
+    let upcomingEvents = "Upcoming Events (Next 7 days):\n";
+    if (eventsSnapshot.empty) {
+      upcomingEvents += "(No upcoming events)\n";
+    } else {
+      eventsSnapshot.docs.forEach(docSnap => {
+        const d = docSnap.data();
+        upcomingEvents += `- ${d.title} on ${d.date.split('T')[0]}\n`;
+      });
+    }
+
+    const genAI = new GoogleGenerativeAI(key);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+
+    const prompt = `You are a helpful AI Assistant for a family/group organization app.
+Summarize the recent activity and upcoming events for the group "${groupName}".
+Translate your summary to this exact locale language: "${language}".
+
+${chatHistory}
+
+${upcomingEvents}
+
+Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highlights what happened recently and what is coming up. Keep it concise. No markdown headers.`;
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+    
+    return { digest: text };
+  } catch (error: any) {
+    console.error("AI Group Digest Error", error);
+    throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
+  }
+});
+

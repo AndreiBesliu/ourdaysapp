@@ -485,3 +485,8 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-18 11:06 - Task Completed**: Implemented AI Event Type Suggestion. Added `suggestEventCategory` Cloud Function (using Gemini 2.5 Flash Lite) and wrapped it in `ai.ts`. Updated `AddEventModal.tsx` to call this function `onBlur` of the Event Title input, displaying a loading spinner and automatically assigning the matched category. App built, pushed to Git, and deployed to Firebase Hosting & Functions.
 > Model: Gemini 3.1 Pro
+
+**2026-05-18 11:45 - Task Started**
+> Prompt: "yes"
+> Plan: Implement AI Group Digests. Create a Callable Cloud Function to fetch recent messages and events, use Gemini to summarize them, and add a UI button in the Group Chat to request and display the digest.
+> Model: Gemini 3.1 Pro

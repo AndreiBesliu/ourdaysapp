@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
+exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -230,6 +230,84 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
     }
     catch (error) {
         console.error("AI Category Suggestion Error", error);
+        throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
+    }
+});
+exports.generateGroupDigest = (0, https_1.onCall)(async (request) => {
+    var _a, _b, _c, _d;
+    const { groupId, language = 'en-US' } = request.data;
+    if (!groupId) {
+        throw new https_1.HttpsError('invalid-argument', 'groupId is required.');
+    }
+    try {
+        const key = process.env.GEMINI_API_KEY_LOCAL;
+        if (!key) {
+            throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
+        }
+        const db = admin.firestore();
+        const groupDoc = await db.collection('groups').doc(groupId).get();
+        const groupName = groupDoc.exists ? (((_a = groupDoc.data()) === null || _a === void 0 ? void 0 : _a.name) || "The Group") : "The Group";
+        // Get messages from last 48 hours
+        const pastDate = new Date();
+        pastDate.setDate(pastDate.getDate() - 2);
+        const messagesSnapshot = await db.collection(`groups/${groupId}/messages`)
+            .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(pastDate))
+            .orderBy('createdAt', 'asc')
+            .limit(50)
+            .get();
+        let chatHistory = "Recent Chat Messages:\n";
+        if (messagesSnapshot.empty) {
+            chatHistory += "(No recent messages)\n";
+        }
+        else {
+            for (const docSnap of messagesSnapshot.docs) {
+                const d = docSnap.data();
+                let senderName = "Someone";
+                if (d.senderId) {
+                    const userDoc = await db.collection('users').doc(d.senderId).get();
+                    senderName = ((_b = userDoc.data()) === null || _b === void 0 ? void 0 : _b.name) || ((_d = (_c = userDoc.data()) === null || _c === void 0 ? void 0 : _c.email) === null || _d === void 0 ? void 0 : _d.split('@')[0]) || "Someone";
+                }
+                chatHistory += `- ${senderName}: ${d.text || (d.imageUrl ? '[Image]' : '[Audio]')}\n`;
+            }
+        }
+        // Get upcoming events
+        const now = new Date();
+        const nextWeek = new Date();
+        nextWeek.setDate(nextWeek.getDate() + 7);
+        const eventsSnapshot = await db.collection('events')
+            .where('groupId', '==', groupId)
+            .where('date', '>=', now.toISOString())
+            .where('date', '<=', nextWeek.toISOString())
+            .orderBy('date', 'asc')
+            .limit(10)
+            .get();
+        let upcomingEvents = "Upcoming Events (Next 7 days):\n";
+        if (eventsSnapshot.empty) {
+            upcomingEvents += "(No upcoming events)\n";
+        }
+        else {
+            eventsSnapshot.docs.forEach(docSnap => {
+                const d = docSnap.data();
+                upcomingEvents += `- ${d.title} on ${d.date.split('T')[0]}\n`;
+            });
+        }
+        const genAI = new generative_ai_1.GoogleGenerativeAI(key);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+        const prompt = `You are a helpful AI Assistant for a family/group organization app.
+Summarize the recent activity and upcoming events for the group "${groupName}".
+Translate your summary to this exact locale language: "${language}".
+
+${chatHistory}
+
+${upcomingEvents}
+
+Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highlights what happened recently and what is coming up. Keep it concise. No markdown headers.`;
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().trim();
+        return { digest: text };
+    }
+    catch (error) {
+        console.error("AI Group Digest Error", error);
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
