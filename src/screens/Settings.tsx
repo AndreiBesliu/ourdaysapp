@@ -213,8 +213,8 @@ export default function Settings() {
             
             <div className="p-4 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800">
               <div>
-                <p className="font-medium text-zinc-900 dark:text-zinc-100">Birthday</p>
-                <p className="text-sm text-zinc-500">Let your groups know when to celebrate</p>
+                <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('birthday', language)}</p>
+                <p className="text-sm text-zinc-500">{t('birthdayDesc', language)}</p>
               </div>
               <input
                 type="date"
@@ -261,12 +261,12 @@ export default function Settings() {
 
         {/* Preferences Section */}
         <section className="space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider pl-1">Preferences</h2>
+          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider pl-1">{t('preferences', language)}</h2>
           <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
             <div className="p-4 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800">
               <div>
-                <p className="font-medium text-zinc-900 dark:text-zinc-100">Sound Effects</p>
-                <p className="text-sm text-zinc-500">Play sounds for actions</p>
+                <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('soundEffects', language)}</p>
+                <p className="text-sm text-zinc-500">{t('soundEffectsDesc', language)}</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" className="sr-only peer" checked={soundEnabled} onChange={(e) => handleAdvancedThemeUpdate({ soundEnabled: e.target.checked })} />
@@ -275,8 +275,8 @@ export default function Settings() {
             </div>
             <div className="p-4 flex items-center justify-between">
               <div>
-                <p className="font-medium text-zinc-900 dark:text-zinc-100">Haptic Feedback</p>
-                <p className="text-sm text-zinc-500">Vibrate on interactions</p>
+                <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('hapticFeedback', language)}</p>
+                <p className="text-sm text-zinc-500">{t('hapticFeedbackDesc', language)}</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" className="sr-only peer" checked={hapticsEnabled} onChange={(e) => handleAdvancedThemeUpdate({ hapticsEnabled: e.target.checked })} />
@@ -353,8 +353,8 @@ export default function Settings() {
                     <ImageIcon className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-medium text-zinc-900 dark:text-zinc-100">Custom Theme Engine</p>
-                    <p className="text-sm text-zinc-500">Configure background and overlay</p>
+                    <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('customThemeEngine', language)}</p>
+                    <p className="text-sm text-zinc-500">{t('customThemeEngineDesc', language)}</p>
                   </div>
                 </div>
               </div>
@@ -375,8 +375,8 @@ export default function Settings() {
                 {/* Theme UI Base */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-zinc-900 dark:text-zinc-100">Use Dark UI Elements</p>
-                    <p className="text-xs text-zinc-500">Enable dark mode styling for cards and text</p>
+                    <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('useDarkUIElements', language)}</p>
+                    <p className="text-xs text-zinc-500">{t('useDarkUIElementsDesc', language)}</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" className="sr-only peer" checked={customThemeIsDark} onChange={(e) => handleAdvancedThemeUpdate({ customThemeIsDark: e.target.checked })} />
@@ -387,8 +387,8 @@ export default function Settings() {
                 {/* Solid Background Color */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-medium text-zinc-900 dark:text-zinc-100">Solid Background Color</p>
-                    <p className="text-xs text-zinc-500">Used if no image is set</p>
+                    <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('solidBackgroundColor', language)}</p>
+                    <p className="text-xs text-zinc-500">{t('solidBackgroundColorDesc', language)}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <input type="color" value={backgroundColor || (customThemeIsDark ? '#09090b' : '#ffffff')} onChange={(e) => handleAdvancedThemeUpdate({ backgroundColor: e.target.value })} className="w-8 h-8 rounded cursor-pointer border-0 p-0" />
@@ -401,9 +401,9 @@ export default function Settings() {
                 {/* Background Image Upload */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="font-medium text-zinc-900 dark:text-zinc-100">Background Image</p>
+                    <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('backgroundImage', language)}</p>
                     {backgroundImage && (
-                      <button onClick={() => handleAdvancedThemeUpdate({ backgroundImage: null })} className="text-xs text-red-500 font-medium">Remove</button>
+                      <button onClick={() => handleAdvancedThemeUpdate({ backgroundImage: null })} className="text-xs text-red-500 font-medium">{t('remove', language)}</button>
                     )}
                   </div>
                   {!backgroundImage ? (
@@ -427,21 +427,21 @@ export default function Settings() {
 
                 {/* Overlay Settings */}
                 <div className="space-y-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-800">
-                  <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100">Overlay Settings</p>
+                  <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100">{t('overlaySettings', language)}</p>
                   
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-zinc-600 dark:text-zinc-400">Color</p>
+                    <p className="text-xs text-zinc-600 dark:text-zinc-400">{t('color', language)}</p>
                     <div className="flex items-center gap-2">
                       <input type="color" value={overlayColor || (customThemeIsDark ? '#000000' : '#ffffff')} onChange={(e) => handleAdvancedThemeUpdate({ overlayColor: e.target.value })} className="w-6 h-6 rounded cursor-pointer border-0 p-0" />
                       {overlayColor && (
-                        <button onClick={() => handleAdvancedThemeUpdate({ overlayColor: null })} className="text-xs text-red-500 font-medium">Reset</button>
+                        <button onClick={() => handleAdvancedThemeUpdate({ overlayColor: null })} className="text-xs text-red-500 font-medium">{t('reset', language)}</button>
                       )}
                     </div>
                   </div>
 
                   <div>
                     <div className="flex justify-between items-center mb-1">
-                      <p className="text-xs text-zinc-600 dark:text-zinc-400">Opacity</p>
+                      <p className="text-xs text-zinc-600 dark:text-zinc-400">{t('opacity', language)}</p>
                       <span className="text-xs text-zinc-500">{backgroundOverlay ?? 50}%</span>
                     </div>
                     <input type="range" min="0" max="100" value={backgroundOverlay ?? 50} onChange={(e) => handleAdvancedThemeUpdate({ backgroundOverlay: parseInt(e.target.value) })} className="w-full accent-primary" />

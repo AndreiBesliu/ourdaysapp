@@ -733,3 +733,11 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-22 21:17 - Task Completed**: Added the missing translation strings (Target Calendar, Assign Members, Repeat, Make Task, RSVP, Visibility, Upload Photo) to the `i18n.ts` dictionary for all 6 supported languages. Updated `AddEventModal.tsx` to use the `t()` function. Confirmed that the RSVP option is intentionally hidden when "Personal Calendar" is selected, as RSVP is only applicable to shared group events. Built successfully, committed, and pushed to Git.
 > Model: Gemini 3.1 Pro
+
+**2026-05-22 21:20 - Task Started**
+> Prompt: "problema de limba nu s-a schimbat" (plus screenshots)
+> Plan: Thoroughly localize the remaining hardcoded strings across `AddEventModal.tsx` (top half), `Settings.tsx`, and `CalendarGrid.tsx`/`CalendarHome.tsx` to ensure 100% translation coverage for the UI.
+> Model: Gemini 3.1 Pro
+
+**2026-05-22 21:24 - Task Completed**: Implemented comprehensive translation coverage. Added over 30 new translation keys to `i18n.ts` for all 6 supported languages. Replaced hardcoded English text in `AddEventModal.tsx` (Event Title, Location, Checklist, Category, Custom Color), `Settings.tsx` (Birthday, Preferences, Haptic Feedback, Custom Theme Engine, Background Image, Overlay Settings), and `CalendarGrid.tsx` ("No events scheduled" and "Add Event" in the Day Modal). Built successfully, committed, and pushed to Git.
+> Model: Gemini 3.1 Pro

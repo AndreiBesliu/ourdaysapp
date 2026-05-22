@@ -5,7 +5,7 @@ import { auth } from '../firebase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useModalBack } from '../hooks/useModalBack';
 import { useThemeStore } from '../store';
-import { getDateLocale } from '../utils/i18n';
+import { getDateLocale, t } from '../utils/i18n';
 
 interface CalendarGridProps {
   currentDate: Date;
@@ -357,7 +357,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
             <div className="p-4 overflow-y-auto flex-1 flex flex-col gap-3">
               {events.filter(ev => isSameDay(new Date(ev.date), modalDay)).length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-sm text-zinc-500 mb-4">No events scheduled for this day.</p>
+                  <p className="text-sm text-zinc-500 mb-4">{t('noEventsScheduled', language)}</p>
                   <button 
                     onClick={() => { 
                       setIsDayModalOpen(false); 
@@ -367,7 +367,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                     }}
                     className="px-4 py-2 bg-primary hover:bg-primary/90 text-white text-sm font-medium rounded-lg transition-colors inline-flex items-center gap-2"
                   >
-                    <Plus className="w-4 h-4" /> Add Event
+                    <Plus className="w-4 h-4" /> {t('addEvent', language)}
                   </button>
                 </div>
               ) : (

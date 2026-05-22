@@ -639,7 +639,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
           <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
             <CalendarIcon className="w-5 h-5 text-primary" />
-            {editEvent ? 'Edit Event' : 'Add New Event'}
+            {editEvent ? t('edit', language) : t('addNewEvent', language)}
           </h3>
           <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
             <X className="w-5 h-5" />
@@ -713,7 +713,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center gap-2">
-              Event Title
+              {t('eventTitle', language)}
               {isSuggestingCategory && <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>}
             </label>
             <input
@@ -721,19 +721,19 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               value={title}
               onChange={handleTitleChange}
               onBlur={handleTitleBlur}
-              placeholder="e.g., Dentist Appointment"
+              placeholder={t('eventTitlePh', language)}
               required
               className="w-full px-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Description / Notes</label>
+            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('descNotes', language)}</label>
             <textarea
               ref={descriptionRef}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g., Don't forget to call..."
+              placeholder={t('descNotesPh', language)}
               rows={1}
               className="w-full px-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none resize-none overflow-hidden min-h-[42px]"
             />
@@ -741,17 +741,17 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Location</label>
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('location', language)}</label>
               <input
                 type="text"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                placeholder="e.g., Central Park"
+                placeholder={t('locationPh', language)}
                 className="w-full px-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Reminder</label>
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('reminder', language)}</label>
               <select
                 value={reminderMinutes === null ? '' : reminderMinutes}
                 onChange={(e) => setReminderMinutes(e.target.value === '' ? null : parseInt(e.target.value))}
@@ -767,7 +767,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           </div>
 
           <div className="space-y-3 bg-zinc-50 dark:bg-zinc-800/30 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Interactive Checklist</label>
+            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('interactiveChecklist', language)}</label>
             
             <div className="flex gap-2">
               <input
@@ -797,7 +797,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 {isGeneratingAI ? (
                   <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div> Generating Magic Checklist...</>
                 ) : (
-                  <><Sparkles className="w-4 h-4" /> Auto-suggest Checklist via AI</>
+                  <><Sparkles className="w-4 h-4" /> {t('autoSuggestAI', language)}</>
                 )}
               </button>
             )}
@@ -976,7 +976,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 </div>
               </div>
             )}
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Category</label>
+            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('category', language)}</label>
             <div className="grid grid-cols-2 gap-2">
               {CATEGORIES.map((cat) => (
                 <button
@@ -996,7 +996,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             </div>
 
             <div className="mt-4 border-t border-zinc-100 dark:border-zinc-800 pt-3">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Custom Color</label>
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('customColor', language)}</label>
               <div className="flex flex-wrap gap-2 mt-2">
                 <button
                   type="button"
@@ -1007,7 +1007,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                       : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
                   }`}
                 >
-                  Default Category Color
+                  {t('defaultCategoryColor', language)}
                 </button>
                 {['red', 'orange', 'amber', 'emerald', 'blue', 'indigo', 'violet', 'fuchsia', 'pink', 'rose'].map((c) => (
                   <button
