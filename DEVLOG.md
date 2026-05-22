@@ -741,3 +741,13 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-22 21:24 - Task Completed**: Implemented comprehensive translation coverage. Added over 30 new translation keys to `i18n.ts` for all 6 supported languages. Replaced hardcoded English text in `AddEventModal.tsx` (Event Title, Location, Checklist, Category, Custom Color), `Settings.tsx` (Birthday, Preferences, Haptic Feedback, Custom Theme Engine, Background Image, Overlay Settings), and `CalendarGrid.tsx` ("No events scheduled" and "Add Event" in the Day Modal). Built successfully, committed, and pushed to Git.
 > Model: Gemini 3.1 Pro
+
+**2026-05-22 21:30 - Follow-up Fix**: The user noted that the transition was incomplete. They had viewed the app before the deployment of the previous fix, but they were also right about missing strings in `CalendarHome.tsx`. Applied the translation helper to "Personal", "New Group", "Invite", and "Edit Group" buttons on the main dashboard. Re-built and pushed to GitHub.
+> Model: Gemini 3.1 Pro
+
+**2026-05-22 21:40 - Task Started**:
+> Prompt: "ok, ce urmeaza" & "B" (Approval for visual grid emoji picker)
+> Plan: Implement custom Emoji Event Icons. Add `PREDEFINED_EMOJIS` grid in `AddEventModal.tsx`, update Firestore schema to save the `emoji` field, and render it in `CalendarGrid.tsx` and `EventDetailsModal.tsx` instead of standard category icons.
+
+**2026-05-22 21:45 - Task Completed**: Implemented Emoji Picker in `AddEventModal.tsx`. Modified `CalendarGrid.tsx` to render custom emoji text inside the category color bubbles in the calendar and Day Events list. Added the emoji to the header in `EventDetailsModal.tsx`. Built, pushed to Git, and deployed to Firebase.
+> Model: Gemini 3.1 Pro

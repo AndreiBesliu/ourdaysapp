@@ -322,7 +322,10 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
         {/* Header */}
         <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-start">
           <div>
-            <h3 className="font-semibold text-xl text-zinc-900 dark:text-zinc-100">{event.title}</h3>
+            <h3 className="font-semibold text-xl text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              {event.emoji && <span>{event.emoji}</span>}
+              {event.title}
+            </h3>
             <div className="flex items-center gap-3 mt-1 relative">
               <p className="text-sm text-primary font-medium flex items-center gap-1">
                 <CalendarIcon className="w-4 h-4" />

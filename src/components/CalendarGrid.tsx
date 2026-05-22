@@ -252,12 +252,14 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
 
                 return (
                   <button 
-                    key={idx} 
+                    key={ev.id || idx} 
                     onClick={(e) => { e.stopPropagation(); onEventClick && onEventClick(ev); }}
                     className={`relative p-1 rounded-md transition-all hover:scale-110 ${colorClass}`}
                     title={ev.title}
                   >
-                    <Icon className="w-3.5 h-3.5" />
+                    <div className="w-4 h-4 flex items-center justify-center">
+                      {ev.emoji ? <span className="text-[10px] leading-none">{ev.emoji}</span> : <Icon className="w-2.5 h-2.5" />}
+                    </div>
                     {ev.isTask && ev.taskStatus === 'completed' && (
                       <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-zinc-900 rounded-md">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
@@ -406,8 +408,8 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                         }}
                         className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors border border-zinc-200 dark:border-zinc-700"
                       >
-                        <div className={`p-2 rounded-lg ${colorClass}`}>
-                          <Icon className="w-4 h-4" />
+                        <div className={`w-8 h-8 flex items-center justify-center rounded-lg shrink-0 ${colorClass}`}>
+                          {ev.emoji ? <span className="text-lg leading-none">{ev.emoji}</span> : <Icon className="w-4 h-4" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-zinc-900 dark:text-zinc-100 text-sm flex items-center gap-2">

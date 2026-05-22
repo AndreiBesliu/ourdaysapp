@@ -43,6 +43,13 @@ const CATEGORIES = [
   { id: 'other', label: 'Other', color: 'bg-zinc-500', defaultShared: false },
 ];
 
+const PREDEFINED_EMOJIS = [
+  '🎂', '🎉', '🥂', '⚽', '🛒', '💼', '✈️', '🚗', '⚕️', '💊',
+  '📚', '🎓', '🎬', '🍿', '🎵', '🎮', '🧩', '🔧', '🧹', '🧺',
+  '🍔', '🍕', '☕', '🍷', '🌿', '🐾', '💰', '💳', '🎁', '📅',
+  '❤️', '⭐', '🔥', '💡', '📌'
+];
+
 export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent, initialTemplate, userMap = {}, activeGroupId = 'personal', groups = [] }: AddEventModalProps) {
   const { language } = useThemeStore();
   const [title, setTitle] = useState('');
@@ -52,6 +59,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const [newItemText, setNewItemText] = useState('');
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [color, setColor] = useState<string | null>(null);
+  const [emoji, setEmoji] = useState<string | null>(null);
   const [isTask, setIsTask] = useState(false);
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -135,6 +143,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setChecklistItems(editEvent.checklistItems || []);
       setCategory(CATEGORIES.find(c => c.id === editEvent.categoryId) || CATEGORIES[0]);
       setColor(editEvent.color || null);
+      setEmoji(editEvent.emoji || null);
       setIsTask(editEvent.isTask || false);
       setAssigneeIds(editEvent.assigneeIds || (editEvent.assigneeId ? [editEvent.assigneeId] : []));
       setVisibleTo(editEvent.visibleTo || (userMap ? Object.values(userMap).filter((u: any) => u.id !== auth.currentUser?.uid).map((u: any) => u.id) : []));
@@ -159,6 +168,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               if (cat) setCategory(cat);
             }
             if (parsed.color !== undefined) setColor(parsed.color);
+            if (parsed.emoji !== undefined) setEmoji(parsed.emoji);
             if (parsed.isTask !== undefined) setIsTask(parsed.isTask);
             if (parsed.assigneeIds) setAssigneeIds(parsed.assigneeIds);
             if (parsed.visibleTo) setVisibleTo(parsed.visibleTo);
@@ -181,6 +191,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         setChecklistItems([]);
         setCategory(initialTemplate?.category ? CATEGORIES.find(c => c.id === initialTemplate.category) || CATEGORIES[0] : CATEGORIES[0]);
         setColor(initialTemplate?.color || null);
+        setEmoji(initialTemplate?.emoji || null);
         setIsTask(initialTemplate?.isTask || false);
         setAssigneeIds(initialTemplate?.assigneeIds || []);
         setRepeat('none');
@@ -202,7 +213,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   useEffect(() => {
     if (isOpen && !editEvent) {
       const draft = {
-        title, eventDate, description, checklistItems, categoryId: category.id, color, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes
+        title, eventDate, description, checklistItems, categoryId: category.id, color, emoji, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes
       };
       if (title || description || checklistItems.length > 0) {
         localStorage.setItem('ourDays_draftEvent', JSON.stringify(draft));
@@ -210,7 +221,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         localStorage.removeItem('ourDays_draftEvent');
       }
     }
-  }, [title, eventDate, description, checklistItems, category, color, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes, isOpen, editEvent]);
+  }, [title, eventDate, description, checklistItems, category, color, emoji, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes, isOpen, editEvent]);
 
   // Auto-save edits to Firestore
   useEffect(() => {
@@ -532,6 +543,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         checklistItems: uploadedChecklistItems,
         categoryId: category.id,
         color: color,
+        emoji: emoji || null,
         ownerId: editEvent ? editEvent.ownerId : auth.currentUser.uid,
         groupId: selectedGroupId !== 'personal' ? selectedGroupId : null,
         sharedWithFamily: editEvent ? editEvent.sharedWithFamily : false, // Legacy fallback
@@ -993,6 +1005,39 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   {cat.label}
                 </button>
               ))}
+            </div>
+
+            <div className="mt-4 border-t border-zinc-100 dark:border-zinc-800 pt-3">
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Event Emoji</label>
+              <div className="flex flex-col gap-2 mt-2">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEmoji(null)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                      emoji === null 
+                        ? 'border-primary bg-primary/10 text-primary' 
+                        : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                    }`}
+                  >
+                    Default Category Icon
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1 max-h-[140px] overflow-y-auto no-scrollbar border border-zinc-200 dark:border-zinc-800 rounded-lg p-2 bg-zinc-50 dark:bg-zinc-900/50">
+                  {PREDEFINED_EMOJIS.map(e => (
+                    <button
+                      key={e}
+                      type="button"
+                      onClick={() => setEmoji(e)}
+                      className={`w-8 h-8 flex items-center justify-center text-lg rounded-md transition-all ${
+                        emoji === e ? 'bg-primary/20 scale-110 shadow-sm' : 'hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:scale-110'
+                      }`}
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="mt-4 border-t border-zinc-100 dark:border-zinc-800 pt-3">
