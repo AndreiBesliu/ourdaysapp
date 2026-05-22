@@ -751,3 +751,6 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-22 21:45 - Task Completed**: Implemented Emoji Picker in `AddEventModal.tsx`. Modified `CalendarGrid.tsx` to render custom emoji text inside the category color bubbles in the calendar and Day Events list. Added the emoji to the header in `EventDetailsModal.tsx`. Built, pushed to Git, and deployed to Firebase.
 > Model: Gemini 3.1 Pro
+
+**2026-05-22 23:25 - Bug Fix**: Connect 4 — board was initialized as an object with numeric keys (`{0: [...], 1: [...]}`) instead of a proper 2D array. Firestore round-trips could corrupt the key types (string vs number), causing the 4th token to silently fail placement. Fix: added `normalizeBoard()` helper that guarantees a clean `(string|null)[][]` array from any Firestore representation. Also converted `handleNextRound` to use `Array.from()` and reset `p1IsNext` to `true`. Added optional chaining in board rendering for safety. Also patched missing i18n keys for "Event Emoji" / "Default Category Icon" labels in all 6 languages.
+> Model: Claude Opus 4.6
