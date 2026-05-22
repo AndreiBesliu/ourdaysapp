@@ -607,7 +607,7 @@ export default function CalendarHome() {
                   : 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-primary/50'
               }`}
             >
-              <User className="w-4 h-4" /> Personal
+              <User className="w-4 h-4" /> {t('personal', language)}
             </button>
             
             {groups.map(group => (
@@ -628,7 +628,7 @@ export default function CalendarHome() {
               onClick={() => setIsCreateGroupModalOpen(true)}
               className="px-4 py-2 rounded-full text-sm font-medium border border-dashed border-zinc-300 dark:border-zinc-700 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:border-zinc-400 dark:hover:border-zinc-500 transition-all flex items-center gap-2"
             >
-              <Plus className="w-4 h-4" /> New Group
+              <Plus className="w-4 h-4" /> {t('newGroup', language)}
             </button>
           </div>
         </div>
@@ -647,14 +647,14 @@ export default function CalendarHome() {
                 onClick={() => setIsInviteModalOpen(true)}
                 className="px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
               >
-                <UserPlus className="w-4 h-4" /> Invite
+                <UserPlus className="w-4 h-4" /> {t('invite', language)}
               </button>
               
               <button 
                 onClick={() => setIsGroupSettingsOpen(true)}
                 className="px-4 py-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-600 dark:text-zinc-300 text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
               >
-                <Settings className="w-4 h-4" /> Edit Group
+                <Settings className="w-4 h-4" /> {t('editGroup', language)}
               </button>
             </div>
             
