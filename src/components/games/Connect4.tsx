@@ -125,7 +125,7 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS - 3; c++) {
         if (board[r][c] && board[r][c] === board[r][c+1] && board[r][c] === board[r][c+2] && board[r][c] === board[r][c+3]) {
-          return { winner: board[r][c], cells: [[r, c], [r, c+1], [r, c+2], [r, c+3]] };
+          return { winner: board[r][c], cells: [{r, c}, {r, c: c+1}, {r, c: c+2}, {r, c: c+3}] };
         }
       }
     }
@@ -133,7 +133,7 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
     for (let r = 0; r < ROWS - 3; r++) {
       for (let c = 0; c < COLS; c++) {
         if (board[r][c] && board[r][c] === board[r+1][c] && board[r][c] === board[r+2][c] && board[r][c] === board[r+3][c]) {
-          return { winner: board[r][c], cells: [[r, c], [r+1, c], [r+2, c], [r+3, c]] };
+          return { winner: board[r][c], cells: [{r, c}, {r: r+1, c}, {r: r+2, c}, {r: r+3, c}] };
         }
       }
     }
@@ -141,7 +141,7 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
     for (let r = 0; r < ROWS - 3; r++) {
       for (let c = 0; c < COLS - 3; c++) {
         if (board[r][c] && board[r][c] === board[r+1][c+1] && board[r][c] === board[r+2][c+2] && board[r][c] === board[r+3][c+3]) {
-          return { winner: board[r][c], cells: [[r, c], [r+1, c+1], [r+2, c+2], [r+3, c+3]] };
+          return { winner: board[r][c], cells: [{r, c}, {r: r+1, c: c+1}, {r: r+2, c: c+2}, {r: r+3, c: c+3}] };
         }
       }
     }
@@ -149,7 +149,7 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
     for (let r = 3; r < ROWS; r++) {
       for (let c = 0; c < COLS - 3; c++) {
         if (board[r][c] && board[r][c] === board[r-1][c+1] && board[r][c] === board[r-2][c+2] && board[r][c] === board[r-3][c+3]) {
-          return { winner: board[r][c], cells: [[r, c], [r-1, c+1], [r-2, c+2], [r-3, c+3]] };
+          return { winner: board[r][c], cells: [{r, c}, {r: r-1, c: c+1}, {r: r-2, c: c+2}, {r: r-3, c: c+3}] };
         }
       }
     }
@@ -159,7 +159,7 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
   const mySymbol = auth.currentUser ? (game.state.players.P1 === auth.currentUser.uid ? 'P1' : (game.state.players.P2 === auth.currentUser.uid ? 'P2' : null)) : null;
   const isWinningCell = (r: number, c: number) => {
     if (!game.state.winningCells) return false;
-    return game.state.winningCells.some((cell: [number, number]) => cell[0] === r && cell[1] === c);
+    return game.state.winningCells.some((cell: {r: number, c: number}) => cell.r === r && cell.c === c);
   };
 
   return (

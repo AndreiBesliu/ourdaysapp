@@ -523,3 +523,10 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 **2026-05-22 20:49 - Task Completed**: Verified codebase status for asset suggestions (AI-powered suggestion is already fully implemented client and server side). Updated the Roadmap in DEVLOG.md: moved completed AI features (Event type suggest, Group digests, Asset suggestions rework) to the Completed section; added the two new tasks (Connect 4 bug fix, Emoji event icons) to the Roadmap. Pushed to Git.
 > Model: Gemini 3.5 Flash
 
+**2026-05-22 20:50 - Task Started**
+> Prompt: "ok, rezolva punctul 2"
+> Plan: Investigate and fix the Connect 4 bug where the 4th token cannot be placed.
+> Model: Gemini 3.1 Pro
+
+**2026-05-22 20:55 - Task Completed**: Identified root cause as a Firebase Firestore restriction against saving multidimensional arrays. When a player aligned 4 tokens, `calculateWinner` returned `winningCells` as `[[r,c], [r,c+1], ...]`, which caused `updateDoc` to fail silently and reject the 4th token placement. Refactored `calculateWinner` and `isWinningCell` to use an array of objects `[{r, c}, ...]` instead. Built, committed, and pushed to Git.
+> Model: Gemini 3.1 Pro
