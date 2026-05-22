@@ -526,7 +526,210 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 **2026-05-22 20:50 - Task Started**
 > Prompt: "ok, rezolva punctul 2"
 > Plan: Investigate and fix the Connect 4 bug where the 4th token cannot be placed.
+**2026-05-09 07:41 - Task Started**
+> Prompt: "ok, did you read the devlog, there are rules there that we will need to follow"
+> Plan: Read DEVLOG rules. Revert the .env git tracking to comply with Rule 6 (Secret Management), restore .gitignore, and log all actions to DEVLOG.md.
+
+**2026-05-09 07:44 - Task Completed**: Removed .env from git cache, restored .gitignore exclusion, committed, and pushed. Updated DEVLOG with missing entries.
+
+**2026-05-09 07:55 - Task Started**
+> Prompt: "add to the roadmap developing the chat further and you can start with point 1"
+> Plan: Add Chat enhancements to roadmap. Implement Smart Asset Auto-Linking by comparing event titles against wallet assets and suggesting linked assets in AddEventModal.
+
+**2026-05-09 07:58 - Task Completed**: Added typing indicators to GroupChatWidget.tsx using Firestore onSnapshot. Typing state clears dynamically after 3s of inactivity or upon sending. Fixed a TypeScript timeout reference error, built, and deployed to Firebase.
+
+**2026-05-09 08:10 - Task Started**
+> Prompt: "ok, next"
+> Plan: Implement Message Reactions for the chat widget, and update DEVLOG.
+
+**2026-05-09 08:10 - Task Completed**: Added emoji reactions (like, love, laugh, surprise, sad, pray) to messages in GroupChatWidget.tsx. Used a 'hover-to-reveal' inline button. State synced in real-time via Firestore. Build and deploy successful.
+
+**2026-05-09 08:18 - Task Started**
+> Prompt: "next"
+> Plan: Implement Threaded Replies for the chat widget to finalize Chat Enhancements.
+
+**2026-05-09 08:18 - Task Completed**: Added threaded replies to messages. Hovering over a message shows a 'Reply' button. Clicking it opens a reply banner above the text input. Sent messages that are replies render the parent message snippet at the top of the bubble.
+
+**2026-05-09 08:34 - Task Completed**: Implemented Connect 4 minigame. Added to GamesHubModal. Features full gravity logic, win detection, and responsive UI.
+
+**2026-05-09 08:39 - Task Completed**: Added a comprehensive manual/game rules system to the Games Hub. Added info buttons on arcade cards and active games to open a rules modal.
+
+**2026-05-09 08:46 - Task Completed**: Added full internationalization (i18n) support to the Game Rules modal based on the user's active language preference.
+
+**2026-05-09 08:57 - Task Completed**: Implemented full application internationalization. Calendar, dashboard, wallet, and settings now fully support localization for English, Romanian, French, Spanish, Italian, and German.
+
+**2026-05-09 09:12 - Task Started**
+> Prompt: "ok, i restored the devlog myself, i don't want the session log to ever be erased, just update the progress and conversations"
+> Plan: Properly restructure the DEVLOG with roadmap and completed features headers while strictly preserving all historical session logs. Sync the final May 9 entries.
+
+
+**2026-05-09 09:20 - Task Started**
+> Prompt: "Rummy 45 — Tabla UI Polish"
+> Plan: Overhaul the Rummy 45 visual design — premium tile rendering with color-coded suit indicators, improved board/tabla layout, better spacing, and a polished game-over screen.
+
+**2026-05-09 09:25 - Task Completed**: Rummy 45 Tabla UI Polish deployed. Premium tile design with colored suit dots, gradient table background, active player highlights, cleaner deck/discard area, improved meld display, and a game-over results screen with ranked scores.
+
+**2026-05-14 22:03 - Task Started**
+> Prompt: "UI Refinement" -> "go ahead"
+> Plan: Replace `transition-transform` with `transition-all` to fix dark mode snapping, and update GroupChatWidget/GamesHubModal for mobile responsiveness.
+
+**2026-05-14 22:09 - Task Completed**: Replaced `transition-transform` with `transition-all` across all components (Settings, GamesHub, AddEventModal, Wallet, Calendar Grid, GroupChat) to fix abrupt color snapping during dark mode toggles. Restyled `GroupChatWidget` and `GamesHubModal` to use dynamic viewport widths and heights for a responsive mobile experience. App successfully built, deployed to Firebase Hosting, and pushed to Git.
+
+**2026-05-14 22:14 - Task Started**
+> Prompt: "connect 4 does not start"
+> Plan: Debug and fix the bug preventing Connect 4 from initializing when the user clicks 'Join'.
+
+**2026-05-14 22:16 - Task Completed**: Root cause identified as a Firebase Firestore restriction which strictly forbids saving nested arrays (i.e. `Array(6).map(() => Array(7))`). Refactored the `initialState.board` in `GamesHubModal.tsx` and the `handleNextRound` logic in `Connect4.tsx` to store the 2D grid as a 1D mapping object (`{ 0: [...], 1: [...] }`). This inherently fixes the Firestore sync issue while maintaining 100% compatibility with the frontend's grid-mapping logic `board[r][c]`. App built, deployed to Firebase Hosting, and pushed to GitHub.
+
+**2026-05-15 19:02 - Task Started**
+> Prompt: "ok, let's start developing, let's start with the birthday thing..." and "users should be able to give custom colors to events..."
+> Plan: Implement Smart Birthday Auto-Add by injecting virtual birthday events into the calendar grid and displaying a prompt banner. Implement Custom Event Colors by adding a palette picker to the Add Event Modal and overriding the default category colors in the Calendar.
+> Model: Gemini 2.5 Pro
+
+**2026-05-15 19:19 - Task Completed**: Added `birthday` field to user profiles via `Settings.tsx`. Implemented a dismissible birthday prompt banner on `CalendarHome.tsx` and injected "virtual" birthday events dynamically. Added a custom color palette picker to `AddEventModal.tsx` and updated `CalendarGrid.tsx` to prioritize `event.color` overrides. App built successfully. Deployed and pushed to Git.
+> Model: Gemini 2.5 Pro
+**2026-05-14 22:54 - Task Started**
+> Prompt: Expansion update (Memory Minigame, PWA, Sounds/Haptics, Theme Overhaul)
+> Plan: Implement Memory Match using Lucide icons, setup PWA via manifest/SW, build WebAudio synthesizer and Haptics wrapper, and completely overhaul Settings to separate default Dark Mode from Custom Themes.
+
+**2026-05-14 23:02 - Task Completed**: Successfully overhauled the Theme system allowing independent Custom Colors/Overlays from the default Master Dark Mode. Built and injected a Web Audio API synthesizer for custom haptics and sounds (`src/utils/sounds.ts`, `src/utils/haptics.ts`) into Group Chat and Connect 4. Added full PWA Support (`manifest.json`, `sw.js`). Created the new `Memory Match` minigame utilizing 16 Lucide icon cards and integrated it cleanly into `GamesHubModal.tsx`.
+
+**2026-05-14 23:30 - Task Started**
+> Prompt: "chat" -> "leave the tombstone and we will stick to native image for now"
+> Plan: Enhance `GroupChatWidget.tsx` with date separators, message timestamps, edit/delete capabilities with tombstones, and rich read receipts.
+
+**2026-05-14 23:40 - Task Completed**: Significantly upgraded the chat experience. Implemented `date-fns` for clean date grouping and inline `HH:mm` timestamps. Added state tracking for editing (`isEdited`) and deleting (`isDeleted`) messages, rendering a neat tombstone when deleted. Enhanced the "Seen" indicator to show a tooltip containing the specific names of group members who read the message on hover. App built, deployed, and pushed.
+
+**2026-05-14 23:47 - Task Started**
+> Prompt: "ok, but this is a lot of wasted space" -> series of chat UI density improvements
+> Plan: Tighten message bubble spacing by inlining timestamps, moving action buttons to a floating overlay, moving timestamps above the bubble inline with sender name, adding an edit cancel banner, ESC key cancel, and blocking scroll bleed-through.
+
+**2026-05-15 00:06 - Task Completed**: Major chat UI polish session. Changes made to GroupChatWidget.tsx:
+- **Timestamp position**: Moved HH:mm and read-receipt checkmarks out of the message bubble entirely; now rendered inline with the sender name row above the bubble (or right-aligned for own messages).
+- **Floating action buttons**: Replaced the side-by-side button layout with an absolute-positioned floating pill toolbar appearing on hover, consuming zero vertical space.
+- **Cancel edit banner**: Added an "Editing message" context banner above the input with an X button to cancel.
+- **ESC key support**: Added a keydown listener that cancels active editing or replying when Escape is pressed.
+- **Scroll bleed fix**: Added overscroll-contain CSS to the messages scroll container, preventing the background app from scrolling when the user reaches the top or bottom of the chat.
+App built, deployed to Firebase Hosting, and pushed to GitHub.
+
+**2026-05-15 19:02 - Task Started**
+> Prompt: "ok, let's start developing..."
+> Plan: Implement Smart Birthday Auto-Add and Custom Event Colors.
+> Model: Gemini 2.5 Pro
+
+**2026-05-15 19:19 - Task Completed**: Added birthday field to user profiles via Settings.tsx. Implemented a dismissible birthday prompt banner on CalendarHome.tsx and injected virtual birthday events dynamically. Added a custom color palette picker to AddEventModal.tsx and updated CalendarGrid.tsx to prioritize event.color overrides. App built successfully. Deployed and pushed to Git.
+> Model: Gemini 2.5 Pro
+
+
+**2026-05-15 22:37 - Task Started**
+> Prompt: "b" (option B for recurring events rework)
+> Plan: Rework recurring events from batch-creation into a proper recurrence engine. Single master event with recurrenceRule, client-side occurrence expansion, edit/delete scope prompts, yearly support, horizon info labels, and a Recurring Events Overview panel.
+> Model: Claude Opus 4.6
+
+**2026-05-15 22:42 - Task Completed**: Replaced batch-creation model with a single-document recurrence engine. Created src/utils/recurrence.ts for occurrence expansion. Updated AddEventModal.tsx with recurrenceRule storage, yearly option, horizon end-date labels, and edit scope prompt. Updated EventDetailsModal.tsx with recurring-aware delete logic and frequency badge. Created RecurringEventsPanel.tsx for managing all recurring series. Updated CalendarHome.tsx with expansion logic and header button. App built successfully. Deployed and pushed to Git.
+> Model: Claude Opus 4.6
+
+
+**2026-05-15 23:42 - Task Started**
+> Prompt: Group Chat Enhancements
+> Plan: Implement Pinned Messages, Message Search, and Voice Messages in GroupChatWidget.tsx.
+> Model: Claude Opus 4.6
+
+**2026-05-15 23:46 - Task Completed**: Implemented three major chat features in GroupChatWidget.tsx. Pinned Messages: any member can pin/unpin via toolbar, pinned bar shows at top with expand-all option. Message Search: client-side search with highlighting, match count, up/down navigation. Voice Messages: mic button when input empty, press to record with 60s limit, waveform UI, audio player in bubbles with play/pause and progress bar. App built successfully. Deployed and pushed to Git.
+> Model: Claude Opus 4.6
+
+---
+
+## 📅 Session Log: May 17, 2026
+
+**2026-05-17 10:50 - Task Started**
+> Prompt: "ok, muta-le la complete si hai sa implementam rsvp"
+> Plan: Move 5 completed features to Completed section, then implement Event RSVPs — let group members confirm attendance (Yes / Maybe / No) directly in the event details.
+> Model: Claude Opus 4.6
+
+**2026-05-17 10:57 - Task Completed**: Implemented RSVP functionality. Updated `EventDetailsModal.tsx` with Yes/Maybe/No buttons and a visual summary of attendees. Updated `AddEventModal.tsx` to include an "Enable RSVP" toggle when creating/editing group events. Updated `CalendarGrid.tsx` to show a small badge indicating the user's current RSVP status in the day modal. Successfully built and deployed to Firebase.
+> Model: Gemini 3.1 Pro
+
+**2026-05-17 15:48 - Task Started**
+> Prompt: "yes for both with the mention that in the future we will have both push notifications and in app map navigation"
+> Plan: Implement Custom Reminders via `@capacitor/local-notifications` plugin and Location Attachment as a text field that links to Google Maps.
+> Model: Gemini 3.1 Pro
+
+**2026-05-17 15:52 - Task Completed**: Installed `@capacitor/local-notifications`. Updated `AddEventModal.tsx` with Location input and Reminder dropdown. Updated `EventDetailsModal.tsx` to display the Location as a clickable map link and show Reminder info. Updated `CalendarHome.tsx` to request local notification permissions and actively schedule device-local notifications based on the user's synced calendar events. Build verified and deployed to Firebase Hosting.
+> Model: Gemini 3.1 Pro
+
+**2026-05-17 15:56 - Task Started**
+> Prompt: "pe mobil, partea aceasta ocupa prea mult spatiu, o vreau mai compacta" (referring to Today's Overview cards)
+> Plan: Refactor the "Today's Overview" section in `CalendarHome.tsx` to use a compact 3-column grid layout with centered, smaller text for mobile.
+> Model: Gemini 3.1 Pro
+
+**2026-05-17 15:58 - Task Completed**: Replaced the vertical stacked layout of the "Today's Overview" cards with a 3-column horizontal grid (`grid-cols-3`). Adjusted padding, text sizing, and removed the colored event dots to make the dashboard compact and readable on mobile devices. Built, deployed to Firebase, and pushed to Git.
+> Model: Gemini 3.1 Pro
+
+**2026-05-17 16:01 - Task Started**
+> Prompt: "pe mobil vreau un meniu colapsible"
+> Plan: Hide the top-right header action icons (Recurring, Wallet, Settings) inside a hamburger dropdown menu specifically on mobile breakpoints to conserve horizontal space, keeping only the Notification bell and the hamburger icon visible.
+> Model: Gemini 3.1 Pro
+
+**2026-05-17 16:03 - Task Completed**: Added `isMobileMenuOpen` state and `Menu` icon to `CalendarHome.tsx`. Wrapped the header buttons in a `.hidden .sm:flex` container and created a new `.sm:hidden` hamburger menu toggle that reveals an absolute-positioned dropdown with the hidden navigation options. Built, deployed to Firebase Hosting, and pushed to Git.
+> Model: Gemini 3.1 Pro
+
+**2026-05-18 11:01 - Task Started**
+> Prompt: "1"
+> Plan: Implement AI Event Type Suggestion by creating a new Firebase Callable Function (suggestEventCategory) and connecting it to AddEventModal.
+> Model: Gemini 3.1 Pro
+
+**2026-05-18 11:06 - Task Completed**: Implemented AI Event Type Suggestion. Added `suggestEventCategory` Cloud Function (using Gemini 2.5 Flash Lite) and wrapped it in `ai.ts`. Updated `AddEventModal.tsx` to call this function `onBlur` of the Event Title input, displaying a loading spinner and automatically assigning the matched category. App built, pushed to Git, and deployed to Firebase Hosting & Functions.
+> Model: Gemini 3.1 Pro
+
+**2026-05-18 11:45 - Task Started**
+> Prompt: "yes"
+> Plan: Implement AI Group Digests. Create a Callable Cloud Function to fetch recent messages and events, use Gemini to summarize them, and add a UI button in the Group Chat to request and display the digest.
+> Model: Gemini 3.1 Pro
+
+**2026-05-18 11:50 - Task Completed**: Implemented AI Group Digests. Created the `generateGroupDigest` Cloud Function using Gemini 2.5 Flash Lite to query recent messages and upcoming events for a group and generate a localized summary. Added a "Ce s-a mai întâmplat?" Sparkles button to the `GroupChatWidget` header, which displays the generated digest in a dismissible styled banner directly within the chat widget. Built, pushed to Git, and deployed to Firebase Hosting and Functions.
+> Model: Gemini 3.1 Pro
+
+**2026-05-18 13:00 - Task Started**
+> Prompt: "ok, go on"
+> Plan: Rework Asset Suggestion Logic using AI. Create a new Cloud Function `suggestAssetForEvent` that uses Gemini to intelligently match user input (titles or checklist items) to the best available asset, instead of relying on rigid substring matching.
+> Model: Gemini 3.1 Pro
+
+**2026-05-18 13:05 - Task Completed**: Reworked Asset Suggestion logic using AI. Replaced the rigid client-side substring matching with `suggestAssetForText` Cloud Function powered by Gemini 2.5 Flash Lite. The AI is now invoked intelligently on `blur` for the event title, and when adding or editing a checklist item. Built, pushed to Git, and deployed to Firebase Hosting & Functions.
+> Model: Gemini 3.1 Pro
+
+---
+
+## 📅 Session Log: May 22, 2026
+
+**2026-05-22 20:40 - Task Started**
+> Prompt: "ourdaysapp, read the devlog and take note of the rules"
+> Plan: Read the devlog and take note of the rules, starting the session.
+> Model: Gemini 3.5 Flash
+
+**2026-05-22 20:43 - Task Completed**: Acknowledged and read the entire DEVLOG.md, including permanent workflow rules and active roadmap. Prepared for future development tasks.
+> Model: Gemini 3.5 Flash
+
+**2026-05-22 20:45 - Task Started**
+> Prompt: "lucruri noi pentru roadmap, dar intai verifica ce este deja implementat"
+> Plan: Verify completed items (AI suggests, assets rework), update DEVLOG.md roadmap, and add new features (Connect 4 bug fix, Emoji event icons) to the active roadmap.
+> Model: Gemini 3.5 Flash
+
+**2026-05-22 20:49 - Task Completed**: Verified codebase status for asset suggestions (AI-powered suggestion is already fully implemented client and server side). Updated the Roadmap in DEVLOG.md: moved completed AI features (Event type suggest, Group digests, Asset suggestions rework) to the Completed section; added the two new tasks (Connect 4 bug fix, Emoji event icons) to the Roadmap. Pushed to Git.
+> Model: Gemini 3.5 Flash
+
+**2026-05-22 20:50 - Task Started**
+> Prompt: "ok, rezolva punctul 2"
+> Plan: Investigate and fix the Connect 4 bug where the 4th token cannot be placed.
 > Model: Gemini 3.1 Pro
 
 **2026-05-22 20:55 - Task Completed**: Identified root cause as a Firebase Firestore restriction against saving multidimensional arrays. When a player aligned 4 tokens, `calculateWinner` returned `winningCells` as `[[r,c], [r,c+1], ...]`, which caused `updateDoc` to fail silently and reject the 4th token placement. Refactored `calculateWinner` and `isWinningCell` to use an array of objects `[{r, c}, ...]` instead. Built, committed, and pushed to Git.
+> Model: Gemini 3.1 Pro
+
+**2026-05-22 21:12 - Task Started**
+> Prompt: "nu tot UI-ul se schimba cand imi aleg o limba si cateodate rsvp-ul nu apare ca optiune"
+> Plan: Fix missing translations in AddEventModal.tsx and investigate the condition that hides the RSVP option.
+> Model: Gemini 3.1 Pro
+
+**2026-05-22 21:17 - Task Completed**: Added the missing translation strings (Target Calendar, Assign Members, Repeat, Make Task, RSVP, Visibility, Upload Photo) to the `i18n.ts` dictionary for all 6 supported languages. Updated `AddEventModal.tsx` to use the `t()` function. Confirmed that the RSVP option is intentionally hidden when "Personal Calendar" is selected, as RSVP is only applicable to shared group events. Built successfully, committed, and pushed to Git.
 > Model: Gemini 3.1 Pro

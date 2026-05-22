@@ -8,6 +8,8 @@ import { onSnapshot } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
 import { useModalBack } from '../hooks/useModalBack';
+import { useThemeStore } from '../store';
+import { t } from '../utils/i18n';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import * as chrono from 'chrono-node';
@@ -42,6 +44,7 @@ const CATEGORIES = [
 ];
 
 export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent, initialTemplate, userMap = {}, activeGroupId = 'personal', groups = [] }: AddEventModalProps) {
+  const { language } = useThemeStore();
   const [title, setTitle] = useState('');
   const [eventDate, setEventDate] = useState<string>('');
   const [description, setDescription] = useState('');
@@ -1025,21 +1028,21 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
           <div className="space-y-3">
             <div className="flex flex-col gap-2 border border-zinc-200 dark:border-zinc-700 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Target Calendar</label>
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('targetCalendar', language)}</label>
               <select 
                 value={selectedGroupId}
                 onChange={(e) => setSelectedGroupId(e.target.value)}
                 className="w-full px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
               >
-                <option value="personal">Personal Calendar</option>
+                <option value="personal">{t('personalCalendar', language)}</option>
                 {groups.map(g => (
-                  <option key={g.id} value={g.id}>{g.name} Calendar</option>
+                  <option key={g.id} value={g.id}>{g.name} {t('calendar', language)}</option>
                 ))}
               </select>
             </div>
 
             <div className="flex flex-col gap-2 border border-zinc-200 dark:border-zinc-700 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Assign Members</label>
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('assignMembers', language)}</label>
               <div className="flex flex-wrap gap-2 mt-1">
                 {auth.currentUser && (
                   <button 
@@ -1094,13 +1097,13 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
             {!editEvent && (
               <div className="flex flex-col gap-2 border border-zinc-200 dark:border-zinc-700 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
-                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Repeat</label>
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('repeat', language)}</label>
                 <select 
                   value={repeat}
                   onChange={(e) => setRepeat(e.target.value as any)}
                   className="w-full px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
                 >
-                  <option value="none">Does not repeat</option>
+                  <option value="none">{t('doesNotRepeat', language)}</option>
                   <option value="daily">Daily — until {eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'daily'), 'MMM d, yyyy') : '...'}</option>
                   <option value="weekly">Weekly — until {eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'weekly'), 'MMM d, yyyy') : '...'}</option>
                   <option value="monthly">Monthly — until {eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'monthly'), 'MMM d, yyyy') : '...'}</option>
@@ -1149,8 +1152,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
             <div className="flex items-center justify-between p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg">
               <div>
-                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Make this a Task</p>
-                <p className="text-xs text-zinc-500">Track progress (Not Started, Completed)</p>
+                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{t('makeTask', language)}</p>
+                <p className="text-xs text-zinc-500">{t('trackProgress', language)}</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input 
@@ -1166,8 +1169,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             {selectedGroupId !== 'personal' && (
               <div className="flex items-center justify-between p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg">
                 <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Enable RSVP</p>
-                  <p className="text-xs text-zinc-500">Ask members to confirm attendance</p>
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{t('enableRSVP', language)}</p>
+                  <p className="text-xs text-zinc-500">{t('askMembersRSVP', language)}</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input 
@@ -1184,8 +1187,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             {selectedGroupId !== 'personal' && userMap && Object.keys(userMap).length > 1 && (
               <div className="flex flex-col border border-zinc-200 dark:border-zinc-700 rounded-lg overflow-hidden">
                 <div className="p-3 bg-zinc-50 dark:bg-zinc-800/30">
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Visibility</p>
-                  <p className="text-xs text-zinc-500">Who in this group can see this event?</p>
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{t('visibility', language)}</p>
+                  <p className="text-xs text-zinc-500">{t('visibilityDesc', language)}</p>
                 </div>
                 <div className="p-3 border-t border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 flex flex-col gap-2">
                   {Object.values(userMap)
@@ -1222,7 +1225,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 />
                 <label htmlFor="file-upload" className="cursor-pointer flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-primary transition-colors h-full">
                   <ImageIcon className="w-5 h-5" />
-                  <span className="text-xs font-medium">{imageFile ? imageFile.name : 'Upload New Photo'}</span>
+                  <span className="text-xs font-medium">{imageFile ? imageFile.name : t('uploadNewPhoto', language)}</span>
                 </label>
               </div>
               
@@ -1233,7 +1236,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   className="flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors w-full h-full"
                 >
                   <Wallet className="w-5 h-5" />
-                  <span className="text-xs font-medium">{selectedAssetUrl || selectedAssetId ? 'Asset Selected' : 'Pick from Assets'}</span>
+                  <span className="text-xs font-medium">{selectedAssetUrl || selectedAssetId ? t('assetSelected', language) : t('pickFromAssets', language)}</span>
                 </button>
               </div>
             </div>
