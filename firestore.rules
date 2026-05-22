@@ -1,0 +1,103 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper Functions ──
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+    function isMemberOfGroup(groupId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/groups/$(groupId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
+    }
+
+    // ── Users ──
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId);
+    }
+
+    // ── Groups ──
+    match /groups/{groupId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.members;
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && request.auth.uid in resource.data.members;
+
+      // Chat messages subcollection
+      match /messages/{messageId} {
+        allow read, create: if isMemberOfGroup(groupId);
+        allow update: if isMemberOfGroup(groupId) &&
+          (request.auth.uid == resource.data.senderId || 
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy', 'reactions', 'isPinned']));
+        allow delete: if false; // soft-delete only (isDeleted flag)
+      }
+
+      // Typing indicators subcollection
+      match /typing/{userId} {
+        allow read: if isMemberOfGroup(groupId);
+        allow write: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+
+    // ── Group Invites ──
+    match /group_invites/{inviteId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() &&
+        (request.auth.token.email == resource.data.toEmail || 
+         request.auth.uid == resource.data.fromUid);
+      allow delete: if isSignedIn() &&
+        (request.auth.token.email == resource.data.toEmail || 
+         request.auth.uid == resource.data.fromUid);
+    }
+
+    // ── Events ──
+    match /events/{eventId} {
+      allow read: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.groupId != null && isMemberOfGroup(resource.data.groupId)) ||
+        (resource.data.assigneeIds != null && request.auth.uid in resource.data.assigneeIds) ||
+        resource.data.assigneeId == request.auth.uid ||
+        resource.data.inviteeId == request.auth.uid ||
+        resource.data.sharedWithFamily == true
+      );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.groupId != null && isMemberOfGroup(resource.data.groupId)) ||
+        (resource.data.assigneeIds != null && request.auth.uid in resource.data.assigneeIds) ||
+        resource.data.assigneeId == request.auth.uid
+      );
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // ── Games ──
+    match /games/{gameId} {
+      allow read: if isSignedIn() && isMemberOfGroup(resource.data.groupId);
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && isMemberOfGroup(resource.data.groupId);
+      allow delete: if isSignedIn() &&
+        resource.data.createdBy == request.auth.uid;
+    }
+
+    // ── Assets (Wallet) ──
+    match /assets/{assetId} {
+      allow read: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // ── Notifications ──
+    match /notifications/{notifId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

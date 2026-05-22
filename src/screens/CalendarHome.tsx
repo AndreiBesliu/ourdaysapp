@@ -189,51 +189,76 @@ export default function CalendarHome() {
 
   useEffect(() => {
     if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const unsubs: (() => void)[] = [];
 
-    // Listen to all events where user is owner OR it is shared with family OR they are invited
-    const q = query(collection(db, 'events'));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const allEvents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      // Filter based on active group
-      const filteredEvents = allEvents.filter((ev: any) => {
-        // If it's a pending invite for me, it goes to the invites list, not the calendar
-        if (ev.inviteeId === auth.currentUser?.uid && ev.inviteStatus === 'pending') {
-          return false;
-        }
+    // Accumulator: merge results from multiple queries, deduplicating by id
+    const eventBuckets: Record<string, Record<string, any>> = { main: {}, assigned: {}, invited: {} };
 
-        if (activeGroupId === 'personal') {
-          // Personal view: show events where owner is me and it has no groupId, OR it's a legacy private event, OR I am an accepted invitee
-          const isAssignee = ev.assigneeIds?.includes(auth.currentUser?.uid) || ev.assigneeId === auth.currentUser?.uid;
-          return ((ev.ownerId === auth.currentUser?.uid && !ev.groupId && !ev.sharedWithFamily) || isAssignee || (ev.inviteeId === auth.currentUser?.uid && ev.inviteStatus === 'accepted'));
-        } else {
-          // Group view: show events belonging to this group, or legacy sharedWithFamily events if I'm in the group
-          const isGroupEvent = ev.groupId === activeGroupId || (ev.sharedWithFamily === true && !ev.groupId);
-          let canSee = true;
-          if (ev.ownerId !== auth.currentUser?.uid && ev.visibleTo && Array.isArray(ev.visibleTo)) {
-            canSee = ev.visibleTo.includes(auth.currentUser?.uid);
-          }
-          return isGroupEvent && canSee;
-        }
+    const mergeAndSet = () => {
+      const merged = new Map<string, any>();
+      Object.values(eventBuckets).forEach(bucket => {
+        Object.values(bucket).forEach(ev => merged.set(ev.id, ev));
       });
-      
+      const allEvents = Array.from(merged.values());
+
+      // Client-side post-filter for visibility and pending invites
+      const filteredEvents = allEvents.filter((ev: any) => {
+        if (ev.inviteeId === uid && ev.inviteStatus === 'pending') return false;
+        if (activeGroupId !== 'personal' && ev.ownerId !== uid && ev.visibleTo && Array.isArray(ev.visibleTo)) {
+          return ev.visibleTo.includes(uid);
+        }
+        return true;
+      });
+
       setEvents(filteredEvents);
 
-      // Set Pending Invites
-      const invites = allEvents.filter((ev: any) => 
-        ev.inviteeId === auth.currentUser?.uid && ev.inviteStatus === 'pending'
+      const invites = allEvents.filter((ev: any) =>
+        ev.inviteeId === uid && ev.inviteStatus === 'pending'
       );
       setPendingInvites(invites);
 
       setSelectedEvent((prev: any) => {
         if (!prev) return null;
-        const updated = filteredEvents.find((e: any) => e.id === prev.id);
-        return updated || prev;
+        return filteredEvents.find((e: any) => e.id === prev.id) || prev;
       });
-    });
+    };
 
-    return () => unsubscribe();
+    // ── Query 1: Main events (owner's own or group's) ──
+    let mainQuery;
+    if (activeGroupId === 'personal') {
+      mainQuery = query(collection(db, 'events'), where('ownerId', '==', uid));
+    } else {
+      mainQuery = query(collection(db, 'events'), where('groupId', '==', activeGroupId));
+    }
+    unsubs.push(onSnapshot(mainQuery, (snapshot) => {
+      eventBuckets.main = {};
+      snapshot.docs.forEach(d => {
+        const ev: any = { id: d.id, ...d.data() };
+        // For personal view, exclude group events from the owner query
+        if (activeGroupId === 'personal' && (ev.groupId || ev.sharedWithFamily)) return;
+        eventBuckets.main[d.id] = ev;
+      });
+      mergeAndSet();
+    }));
+
+    // ── Query 2: Events assigned to me ──
+    const assignedQuery = query(collection(db, 'events'), where('assigneeIds', 'array-contains', uid));
+    unsubs.push(onSnapshot(assignedQuery, (snapshot) => {
+      eventBuckets.assigned = {};
+      snapshot.docs.forEach(d => { eventBuckets.assigned[d.id] = { id: d.id, ...d.data() }; });
+      mergeAndSet();
+    }));
+
+    // ── Query 3: Events where I'm invited ──
+    const invitedQuery = query(collection(db, 'events'), where('inviteeId', '==', uid));
+    unsubs.push(onSnapshot(invitedQuery, (snapshot) => {
+      eventBuckets.invited = {};
+      snapshot.docs.forEach(d => { eventBuckets.invited[d.id] = { id: d.id, ...d.data() }; });
+      mergeAndSet();
+    }));
+
+    return () => unsubs.forEach(u => u());
   }, [activeGroupId]);
 
   // Schedule Local Notifications for Events with Reminders
