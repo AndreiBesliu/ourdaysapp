@@ -13,6 +13,17 @@ interface Connect4Props {
 const ROWS = 6;
 const COLS = 7;
 
+// Normalize board from Firestore (may be object with string keys) to a proper 2D array
+const normalizeBoard = (board: any): (string | null)[][] => {
+  return Array.from({ length: ROWS }, (_, r) => {
+    const row = board?.[r] ?? board?.[String(r)] ?? [];
+    return Array.from({ length: COLS }, (_, c) => {
+      const val = row[c] ?? row[String(c)] ?? null;
+      return val === 'P1' || val === 'P2' ? val : null;
+    });
+  });
+};
+
 export default function Connect4({ game, userMap, onBack }: Connect4Props) {
   const isMyTurn = () => {
     if (game.status === 'finished') return false;
@@ -36,7 +47,7 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
   const handleClick = async (colIndex: number) => {
     if (!isMyTurn() || game.status !== 'playing' || !auth.currentUser) return;
 
-    const newBoard = JSON.parse(JSON.stringify(game.state.board));
+    const newBoard = normalizeBoard(game.state.board);
     
     // Find lowest empty slot in the column
     let rowIndex = -1;
@@ -104,16 +115,10 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
 
   const handleNextRound = async () => {
     if (!auth.currentUser) return;
-    const emptyBoard = {
-      0: Array(COLS).fill(null),
-      1: Array(COLS).fill(null),
-      2: Array(COLS).fill(null),
-      3: Array(COLS).fill(null),
-      4: Array(COLS).fill(null),
-      5: Array(COLS).fill(null)
-    };
+    const emptyBoard = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
     await updateDoc(doc(db, 'games', game.id), {
       'state.board': emptyBoard,
+      'state.p1IsNext': true,
       'state.winningCells': null,
       status: 'playing',
       winner: null
@@ -232,7 +237,8 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
               `} />
               
               {Array(ROWS).fill(0).map((_, r) => {
-                const cell = game.state.board[r][c];
+                const boardRow = game.state.board?.[r] ?? game.state.board?.[String(r)] ?? [];
+                const cell = boardRow?.[c] ?? null;
                 const winning = isWinningCell(r, c);
                 return (
                   <div 

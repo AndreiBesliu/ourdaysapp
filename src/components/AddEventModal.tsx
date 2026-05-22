@@ -1008,7 +1008,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             </div>
 
             <div className="mt-4 border-t border-zinc-100 dark:border-zinc-800 pt-3">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Event Emoji</label>
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('eventEmoji', language)}</label>
               <div className="flex flex-col gap-2 mt-2">
                 <div className="flex gap-2">
                   <button
@@ -1020,7 +1020,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                         : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-800'
                     }`}
                   >
-                    Default Category Icon
+                    {t('defaultIcon', language)}
                   </button>
                 </div>
                 <div className="flex flex-wrap gap-1 max-h-[140px] overflow-y-auto no-scrollbar border border-zinc-200 dark:border-zinc-800 rounded-lg p-2 bg-zinc-50 dark:bg-zinc-900/50">

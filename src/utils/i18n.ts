@@ -90,6 +90,8 @@ export const translations: Translations = {
     opacity: "Opacity",
     reset: "Reset",
     noEventsScheduled: "No events scheduled for this day.",
+    eventEmoji: "Event Emoji",
+    defaultIcon: "Default Category Icon",
   },
   'ro-RO': {
     todayOverview: "Prezentare generală",
@@ -169,6 +171,8 @@ export const translations: Translations = {
     opacity: "Opacitate",
     reset: "Resetează",
     noEventsScheduled: "Niciun eveniment programat pentru această zi.",
+    eventEmoji: "Emoji Eveniment",
+    defaultIcon: "Iconiță Implicită",
   },
   'fr-FR': {
     todayOverview: "Aperçu d'aujourd'hui",
@@ -247,7 +251,9 @@ export const translations: Translations = {
     color: "Couleur",
     opacity: "Opacité",
     reset: "Réinitialiser",
-    noEventsScheduled: "Aucun événement prévu pour cette journée.",
+    noEventsScheduled: "Aucun événement prévu pour ce jour.",
+    eventEmoji: "Émoji de l'Événement",
+    defaultIcon: "Icône par Défaut",
   },
   'es-ES': {
     todayOverview: "Resumen de hoy",
@@ -327,6 +333,8 @@ export const translations: Translations = {
     opacity: "Opacidad",
     reset: "Restablecer",
     noEventsScheduled: "No hay eventos programados para este día.",
+    eventEmoji: "Emoji del Evento",
+    defaultIcon: "Icono por Defecto",
   },
   'it-IT': {
     todayOverview: "Panoramica di oggi",
@@ -406,6 +414,8 @@ export const translations: Translations = {
     opacity: "Opacità",
     reset: "Reimposta",
     noEventsScheduled: "Nessun evento in programma per questo giorno.",
+    eventEmoji: "Emoji dell'Evento",
+    defaultIcon: "Icona Predefinita",
   },
   'de-DE': {
     todayOverview: "Heute im Überblick",
@@ -484,7 +494,9 @@ export const translations: Translations = {
     color: "Farbe",
     opacity: "Deckkraft",
     reset: "Zurücksetzen",
-    noEventsScheduled: "Für diesen Tag sind keine Events geplant.",
+    noEventsScheduled: "Keine Ereignisse für diesen Tag geplant.",
+    eventEmoji: "Ereignis-Emoji",
+    defaultIcon: "Standard-Symbol",
   }
 };
 
