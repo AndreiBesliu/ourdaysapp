@@ -39,22 +39,20 @@
 ## 🚀 Active Roadmap & Backlog
 
 ### 1. In Progress / Upcoming
-- **AI Superpowers 🧠**
-  - **AI Event Type Suggestion**: AI will suggest the type of event to create based on user input.
-  - **AI Group Digests**: "Ce s-a mai întâmplat?" summaries of missed chat/calendar activity using Gemini.
-  - **Rework Asset Suggestions**: Overhaul the asset suggestion logic for smarter, more contextual recommendations.
-- **Advanced Communications & Maps 📡**
-  - **Remote Push Notifications**: True FCM remote push notifications for chat/calendar alerts (replacing local-only reminders).
-  - **In-App Map Navigation & Geofencing**: Render inline interactive maps in event details and send local notifications when entering geofenced areas.
-  - **RSVP Notifications**: Integrate RSVP response updates into the app's general notification feed (Firestore `notifications` collection).
 - **Arcade Expansion 🎮**
+  - **Connect 4 Bug Fix 🔴**: Investigate and resolve the issue where the 4th token/disc is not allowed to be played/registered correctly in the game board.
   - **Games**: Chess, Backgammon.
   - **Leaderboards & Group Stats**: Persistent game stats and tournament tracking in the Arcade.
   - **Game-End / Session Stopping System**: Implement a formal ending/stopping mechanism for games (Tic-Tac-Toe, Connect 4, Rummy) to trigger leaderboard updates upon game completion.
   - **Family Trivia**: Interactive custom trivia creator for group members.
+- **Advanced Communications & Maps 📡**
+  - **Remote Push Notifications**: True FCM remote push notifications for chat/calendar alerts (replacing local-only reminders).
+  - **In-App Map Navigation & Geofencing**: Render inline interactive maps in event details and send local notifications when entering geofenced areas.
+  - **RSVP Notifications**: Integrate RSVP response updates into the app's general notification feed (Firestore `notifications` collection).
 - **Shared Finance 💳**
   - **Shared Expenses (Splitwise-in-App)**: Split group bills, log expenses, and settle balances directly inside the Wallet dashboard.
 - **Infrastructure & UX ⚙️**
+  - **Emoji Event Icons 🎭**: Support choosing an Emoji instead of standard Lucide icons for event categories, with the emoji background/highlight affected by the custom event color.
   - **Offline-First Support**: Enable Firestore local persistence and disk caching for seamless offline calendar/chat navigation.
   - **Event Templates**: Save commonly used event structures and re-use them in one tap.
 
@@ -70,8 +68,11 @@
 
 ---
 
-## âœ… Completed Features
+## ✅ Completed Features
 
+- **AI Event Type Suggestion**: AI suggests the category of event to create on event title blur using Gemini Cloud Functions.
+- **AI Group Digests**: Summarize missed calendar/chat activities with a custom "Ce s-a mai întâmplat?" Sparkles feature.
+- **AI-powered Asset Suggestions**: Smarter, contextual wallet asset matching using Gemini AI.
 - **Android Compilation**: Wrapped the app into a native APK using Capacitor.
 - **Chat Reactions**: Added inline emoji reactions to chat messages.
 - **Typing Indicators**: Showing when someone is typing in the group chat.
@@ -512,5 +513,13 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > Model: Gemini 3.5 Flash
 
 **2026-05-22 20:43 - Task Completed**: Acknowledged and read the entire DEVLOG.md, including permanent workflow rules and active roadmap. Prepared for future development tasks.
+> Model: Gemini 3.5 Flash
+
+**2026-05-22 20:45 - Task Started**
+> Prompt: "lucruri noi pentru roadmap, dar intai verifica ce este deja implementat"
+> Plan: Verify completed items (AI suggests, assets rework), update DEVLOG.md roadmap, and add new features (Connect 4 bug fix, Emoji event icons) to the active roadmap.
+> Model: Gemini 3.5 Flash
+
+**2026-05-22 20:49 - Task Completed**: Verified codebase status for asset suggestions (AI-powered suggestion is already fully implemented client and server side). Updated the Roadmap in DEVLOG.md: moved completed AI features (Event type suggest, Group digests, Asset suggestions rework) to the Completed section; added the two new tasks (Connect 4 bug fix, Emoji event icons) to the Roadmap. Pushed to Git.
 > Model: Gemini 3.5 Flash
 
