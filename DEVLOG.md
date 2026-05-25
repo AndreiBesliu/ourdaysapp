@@ -913,3 +913,12 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-25 - Follow-up Fix**: The custom reminder row overflowed the narrow Memento grid column (the "minutes before" `<select>` couldn't shrink below its content width). Fixed the flexbox overflow: added `min-w-0` to the row + the select, narrowed the number input to `w-16 shrink-0`, and tightened the select padding to `px-2`. Build OK, deployed hosting, committed, pushed.
 > Model: Claude Opus 4.7
+
+**2026-05-25 - Task Started**
+> Prompt: "tot are o problema de asezare si nu se sincronizeaza limba si nu doar acolo nu se schimba" (+ screenshot)
+> Plan: (a) The custom-reminder unit `<select>` still overflowed because its option label ("minutes before") is too long for the narrow column — shorten the unit labels to just the unit word. (b) i18n: several `AddEventModal` strings are hardcoded English and don't follow the language setting — translate the category labels (Work/Group Time/Chores/Health/Other), the reminder dropdown options + units, and the "Me"/"AI Assistant" assignee buttons. Add ~16 i18n keys across all 6 languages; render categories via dynamic `t('cat_'+cat.id)`. (This screen first; other screens may have similar gaps — follow-up.)
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Completed**: (a) Layout — shortened the custom-reminder unit `<select>` options to just the unit word (`unitMinutes/Hours/Days`), which fits the narrow column (combined with the earlier `min-w-0`), fixing the arrow-overlapping-text overflow. (b) i18n — added 16 keys to all 6 languages (`cat_work/family_time/chores/health/other`, `noReminder`, `atTimeOfEvent`, `min15Before`, `hour1Before`, `day1Before`, `customReminder`, `unitMinutes/Hours/Days`, `assignToMe`, `aiAssistant`). In `AddEventModal.tsx`: categories now render `t('cat_'+cat.id, language)`, the reminder dropdown + unit options use `t()`, and the "Me"/"AI Assistant" assignee buttons use `t()`. Build OK, deployed hosting, committed, pushed.
+> KNOWN REMAINING i18n GAPS (follow-up): group names like "Family"/"B&D" are user data (not translatable); the AI-assistant button `title` tooltip and the task-assignment notification body ("New Task Assigned") are still English; other screens/modals may have hardcoded strings — a full app-wide sweep is a separate task.
+> Model: Claude Opus 4.7

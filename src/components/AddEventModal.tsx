@@ -807,12 +807,12 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 }}
                 className="w-full px-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
               >
-                <option value="">No Reminder</option>
-                <option value="0">At time of event</option>
-                <option value="15">15 minutes before</option>
-                <option value="60">1 hour before</option>
-                <option value="1440">1 day before</option>
-                <option value="custom">Custom…</option>
+                <option value="">{t('noReminder', language)}</option>
+                <option value="0">{t('atTimeOfEvent', language)}</option>
+                <option value="15">{t('min15Before', language)}</option>
+                <option value="60">{t('hour1Before', language)}</option>
+                <option value="1440">{t('day1Before', language)}</option>
+                <option value="custom">{t('customReminder', language)}</option>
               </select>
               {customReminder && (
                 <div className="flex gap-2 min-w-0">
@@ -839,9 +839,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                     }}
                     className="flex-1 min-w-0 px-2 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
                   >
-                    <option value="minutes">minutes before</option>
-                    <option value="hours">hours before</option>
-                    <option value="days">days before</option>
+                    <option value="minutes">{t('unitMinutes', language)}</option>
+                    <option value="hours">{t('unitHours', language)}</option>
+                    <option value="days">{t('unitDays', language)}</option>
                   </select>
                 </div>
               )}
@@ -1072,7 +1072,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   }`}
                 >
                   <div className={`w-3 h-3 rounded-full ${cat.color}`} />
-                  {cat.label}
+                  {t('cat_' + cat.id, language)}
                 </button>
               ))}
             </div>
@@ -1169,7 +1169,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                         : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                     }`}
                   >
-                    Me
+                    {t('assignToMe', language)}
                     {assigneeIds.includes(auth.currentUser.uid) && <CheckCircle2 className="w-3 h-3" />}
                   </button>
                 )}
@@ -1185,7 +1185,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   title="Assign to AI Assistant to automatically generate a checklist"
                 >
                   <Sparkles className="w-3 h-3" />
-                  AI Assistant
+                  {t('aiAssistant', language)}
                   {assigneeIds.includes('ai_assistant') && <CheckCircle2 className="w-3 h-3" />}
                 </button>
                 {selectedGroupId !== 'personal' && users.map(u => {
