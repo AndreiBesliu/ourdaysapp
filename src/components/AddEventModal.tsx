@@ -3,7 +3,7 @@ import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckC
 import { addDoc, collection, query, getDocs, updateDoc, doc, arrayUnion } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
-import { isAIEnabled, generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
+import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
 import { onSnapshot } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
@@ -294,7 +294,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
 
   const checkForAssetSuggestionsAI = async (text: string) => {
-    if (!text || selectedAssetId || !isAIEnabled() || assets.length === 0) return;
+    if (!text || selectedAssetId || assets.length === 0) return;
     try {
       const assetId = await suggestAssetForTextAI(text, assets);
       if (assetId) {
@@ -353,7 +353,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   };
 
   const handleTitleBlur = async () => {
-    if (!title.trim() || !isAIEnabled() || editEvent) return;
+    if (!title.trim() || editEvent) return;
     setIsSuggestingCategory(true);
     try {
       const suggestedCategoryId = await suggestEventCategoryAI(title, description);
@@ -799,7 +799,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               </button>
             </div>
 
-            {isAIEnabled() && (
+            {(
               <button
                 type="button"
                 onClick={handleGenerateChecklist}

@@ -771,3 +771,11 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-25 - Task Completed**: Fixed the FCM field-name mismatch that broke remote push on native Android. In `App.tsx`: imported `arrayUnion` from `firebase/firestore` and changed the `PushNotifications` `registration` listener to write `{ fcmTokens: arrayUnion(token.value) }` instead of `{ fcmToken: token.value }`. Cloud Functions and the web path (`CalendarHome.tsx`) already used `fcmTokens` (array), so no function changes were needed. Build verified (`npm run build` OK). Deployed hosting + committed + pushed. NOTE: the Android APK must be rebuilt (`npx cap sync android` + Android Studio build) for the native fix to take effect on the phone — the hosting deploy only updates the web app.
 > Model: Claude Opus 4.7
+
+**2026-05-25 - Task Started**
+> Prompt: "da" (proceed with cleanup #7 + #8)
+> Plan: (#7) Remove the stale, git-tracked `.temp_devlog.md` (52 KB parallel copy of DEVLOG). (#8) Remove the dead `isAIEnabled` toggle that always returns `true`: delete the function in `ai.ts` and simplify all call sites in `ai.ts`, `AddEventModal.tsx`, and `GroupChatWidget.tsx` (drop `!isAIEnabled() ||` guards and unwrap `{isAIEnabled() && (...)}` JSX), plus remove the now-unused imports.
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Completed**: (#7) `git rm`'d `.temp_devlog.md`. (#8) Deleted the `isAIEnabled` function from `ai.ts` and removed all 6 usages: simplified the guard in `ai.ts` (`suggestAssetForTextAI`), removed `!isAIEnabled() ||` from two conditions in `AddEventModal.tsx`, unwrapped the two `{isAIEnabled() && (...)}` JSX blocks (AI checklist button in `AddEventModal.tsx`, AI digest button in `GroupChatWidget.tsx`), and dropped the now-unused `isAIEnabled` import from both component files. Build verified (`npm run build` OK, no TS errors). Deployed hosting + committed + pushed.
+> Model: Claude Opus 4.7

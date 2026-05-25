@@ -6,7 +6,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { playTone } from '../utils/sounds';
 import { triggerHaptic } from '../utils/haptics';
-import { generateGroupDigestAI, isAIEnabled } from '../ai';
+import { generateGroupDigestAI } from '../ai';
 
 interface GroupChatWidgetProps {
   groupId: string;
@@ -550,9 +550,9 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
               </div>
             </div>
             <div className="flex items-center gap-1 ml-2">
-              {isAIEnabled() && (
-                <button 
-                  onClick={handleGenerateDigest} 
+              {(
+                <button
+                  onClick={handleGenerateDigest}
                   disabled={isGeneratingDigest}
                   className="p-1 hover:bg-black/10 rounded-full transition-colors"
                   title="Ce s-a mai întâmplat? (AI Digest)"

@@ -2,8 +2,6 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import { app } from "./firebase";
 import { useThemeStore } from "./store";
 
-export const isAIEnabled = () => true;
-
 export async function generateChecklistForTask(title: string, description: string): Promise<string[]> {
   const functions = getFunctions(app);
   const generateAIChecklist = httpsCallable(functions, 'generateAIChecklist');
@@ -49,7 +47,7 @@ export async function generateGroupDigestAI(groupId: string): Promise<string> {
 }
 
 export async function suggestAssetForTextAI(text: string, assets: any[]): Promise<string | null> {
-  if (!isAIEnabled() || !text || assets.length === 0) return null;
+  if (!text || assets.length === 0) return null;
   const functions = getFunctions(app);
   const suggestAsset = httpsCallable(functions, 'suggestAssetForText');
   
