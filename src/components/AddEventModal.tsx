@@ -815,7 +815,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 <option value="custom">Custom…</option>
               </select>
               {customReminder && (
-                <div className="flex gap-2">
+                <div className="flex gap-2 min-w-0">
                   <input
                     type="number"
                     min={1}
@@ -826,8 +826,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                       const n = parseInt(raw);
                       if (!isNaN(n) && n > 0) setReminderMinutes(n * REMINDER_UNIT_TO_MINUTES[customReminderUnit]);
                     }}
-                    placeholder="e.g. 30"
-                    className="w-24 px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
+                    placeholder="30"
+                    className="w-16 shrink-0 px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
                   />
                   <select
                     value={customReminderUnit}
@@ -837,7 +837,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                       const n = parseInt(customReminderValue);
                       if (!isNaN(n) && n > 0) setReminderMinutes(n * REMINDER_UNIT_TO_MINUTES[unit]);
                     }}
-                    className="flex-1 px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
+                    className="flex-1 min-w-0 px-2 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
                   >
                     <option value="minutes">minutes before</option>
                     <option value="hours">hours before</option>

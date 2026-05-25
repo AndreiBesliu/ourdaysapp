@@ -910,3 +910,6 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-25 - Task Completed**: Added a "Custom…" reminder option in `AddEventModal.tsx`. New module consts `PRESET_REMINDERS` and `REMINDER_UNIT_TO_MINUTES`; new state `customReminder` / `customReminderValue` / `customReminderUnit`; `applyReminder()` helper wired into the editEvent / draft / reset load paths (decomposes a stored `reminderMinutes` into value+unit). The dropdown gained a `custom` option; selecting it defaults to 30 minutes and reveals a number input + unit select (minutes/hours/days before) that recomputes `reminderMinutes`. Stored value stays plain minutes, so existing reminder scheduling is unaffected. Build OK, deployed hosting, committed, pushed.
 > Model: Claude Opus 4.7
+
+**2026-05-25 - Follow-up Fix**: The custom reminder row overflowed the narrow Memento grid column (the "minutes before" `<select>` couldn't shrink below its content width). Fixed the flexbox overflow: added `min-w-0` to the row + the select, narrowed the number input to `w-16 shrink-0`, and tightened the select padding to `px-2`. Build OK, deployed hosting, committed, pushed.
+> Model: Claude Opus 4.7
