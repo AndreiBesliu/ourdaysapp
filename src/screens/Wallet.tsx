@@ -442,7 +442,8 @@ export default function Wallet() {
   return (
     <div className="min-h-screen bg-transparent flex flex-col pb-24 pt-[60px]">
       {/* Header */}
-      <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex items-center justify-between fixed top-0 left-0 right-0 w-full z-[100] shadow-sm">
+      <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 py-3 fixed top-0 left-0 right-0 w-full z-[100] shadow-sm">
+       <div className="max-w-5xl w-full mx-auto px-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/')} className="p-1.5 -ml-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
             <Home className="w-5 h-5" />
@@ -453,13 +454,14 @@ export default function Wallet() {
         </div>
         </div>
         {activeTab === 'assets' && (
-          <button 
+          <button
             onClick={openAddModal}
             className="p-2 bg-emerald-50 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 rounded-lg hover:bg-emerald-100 transition-colors"
           >
             <Plus className="w-5 h-5" />
           </button>
         )}
+       </div>
       </header>
 
       <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-4 pt-2 sticky top-[60px] z-40">
@@ -590,7 +592,7 @@ export default function Wallet() {
                 </div>
               </div>
 
-              <div className="flex gap-2 h-28">
+              <div className="flex gap-2 h-32">
                 <div className="flex-1 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed text-center relative overflow-hidden group">
                   <input type="file" id="asset-upload" className="hidden" accept="image/*" onChange={(e) => {
                     if (e.target.files) {
@@ -618,11 +620,11 @@ export default function Wallet() {
                 </div>
                 
                 <div className="flex-1 flex flex-col gap-2">
-                  <button type="button" onClick={openPastImages} className="flex-1 flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed bg-zinc-50 dark:bg-zinc-800/30">
+                  <button type="button" onClick={openPastImages} className="flex-1 min-h-0 overflow-hidden flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed bg-zinc-50 dark:bg-zinc-800/30">
                     <Folder className="w-4 h-4" />
                     <span className="text-[10px] font-medium leading-tight">Pick from Past<br/>Uploads</span>
                   </button>
-                  <div className="flex-1 p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed text-center flex flex-col justify-center items-center">
+                  <div className="flex-1 min-h-0 overflow-hidden p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed text-center flex flex-col justify-center items-center">
                     {barcodeValue ? (
                       <div className="text-center">
                         <p className="text-[10px] text-emerald-500 font-bold mb-0.5">Scanned!</p>

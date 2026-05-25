@@ -377,7 +377,7 @@ export default function CalendarHome() {
         const [, month, day] = u.birthday.split('-');
         bEvents.push({
           id: `virtual-birthday-${u.id}`,
-          title: `${u.name || u.email}'s Birthday 🎂`,
+          title: `${u.name || u.email?.split('@')[0] || 'User'}'s Birthday 🎂`,
           date: `${currentYear}-${month}-${day}`,
           categoryId: 'important',
           color: 'rose',
@@ -403,12 +403,13 @@ export default function CalendarHome() {
   return (
     <div className="min-h-screen bg-transparent flex flex-col relative pt-[60px]">
       {/* Header */}
-      <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex items-center justify-between fixed top-0 left-0 right-0 w-full z-[100] shadow-sm">
+      <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 py-3 fixed top-0 left-0 right-0 w-full z-[100] shadow-sm">
+       <div className="max-w-5xl w-full mx-auto px-4 flex items-center justify-between">
         <div className="flex items-center gap-2 text-primary">
           <CalendarIcon className="w-6 h-6" />
           <h1 className="text-xl font-bold text-zinc-900 dark:text-white">Our Days</h1>
         </div>
-        
+
         <div className="flex items-center gap-1 sm:gap-4">
           <NotificationsDropdown />
           
@@ -466,6 +467,7 @@ export default function CalendarHome() {
             )}
           </div>
         </div>
+       </div>
       </header>
 
       {/* Main Content */}

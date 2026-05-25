@@ -71,10 +71,8 @@
 ## 🔒 Deferred Security Work (Audit 2026-05-25)
 > A code audit showed that several Firestore collections cannot be safely locked down with simple client-side rules because legitimate flows write documents on behalf of OTHER users. These need backend (Cloud Functions / Admin SDK) refactors before the rules can be tightened. Tracked here so they are not forgotten.
 
-- **`events` — `ownerId` spoofing** 🟠 Cannot enforce `create: ownerId == auth.uid` because:
-  - **Smart Birthday Auto-Add** (`CalendarHome.tsx:386`) creates events with `ownerId` = other group members' IDs.
-  - **Recurrence overrides** (`AddEventModal.tsx:572`) created by a non-owner group member keep the original `ownerId`.
-  - **Fix path:** move birthday auto-add (and ideally override creation) into a Cloud Function (Admin SDK bypasses rules), then add `create: request.resource.data.ownerId == request.auth.uid` for client-created events.
+- **`events` — `ownerId` spoofing** 🟠 Cannot enforce `create: ownerId == auth.uid` because **recurrence overrides** (`AddEventModal.tsx:572`) created by a non-owner group member keep the original `ownerId`. (NB: birthday auto-add is NOT a factor — those events are virtual/in-memory, never written to Firestore.)
+  - **Fix path:** move recurrence-override creation into a Cloud Function (Admin SDK bypasses rules), then add `create: request.resource.data.ownerId == request.auth.uid` for client-created events.
 - **`assets` — `ownerId` spoofing** 🟠 Cannot enforce `create: ownerId == auth.uid` because **asset transfer "Keep Copy"** (`Wallet.tsx:147`) creates an asset with `ownerId` = the recipient.
   - **Fix path:** move asset transfer to a Cloud Function, then tighten `assets` create rule.
 - **`notifications` — anti-spam** 🟠 Current rule only requires honest `createdBy == auth.uid` (attribution). A malicious member can still spam notifications to any `userId`.
@@ -832,3 +830,20 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 **2026-05-25 - Task Completed**: Scoped both asset listeners server-side. `Wallet.tsx:53` and `AddEventModal.tsx:126` now use `query(collection(db,'assets'), where('ownerId','==',uid))` and dropped the redundant client-side filter. This resolves the permission-denied that broke the Wallet asset list and the event asset picker after the security rules landed. Build OK, deployed hosting, committed, pushed.
 > DEFERRED: `sharedWithFamily` asset visibility is now effectively disabled (the `assets` read rule only allows owner reads). Restoring cross-user shared assets needs a proper group-scoped sharing model (e.g. an `allowedUserIds` array + matching rule), tracked under Deferred Security Work.
 > Model: Claude Opus 4.7
+
+**2026-05-25 - Task Started**
+> Prompt: "de ce apare adresa de email la eveniment, si o mica problema de UI in assets, si tot la UI, vreau ca elementele din topbar sa fie restrictionate in latimea maxima 64rem, la fel ca elementele de mai jos" (+ screenshots)
+> Plan: Three UI fixes —
+> (1) Birthday email: virtual birthday event title in `CalendarHome.tsx:380` is `${u.name || u.email}'s Birthday`; when the profile has no `name` it shows the full email. Change fallback to `u.email.split('@')[0]` (shows "besliandrei" not the full address).
+> (2) Assets modal border overlap: in the Edit Asset modal (`Wallet.tsx:593`) the image/scan row has a fixed `h-28`; the right column's two `flex-1` boxes ("Pick from Past Uploads", "Scan Code") are ~52px each and their content overflows, so a border bleeds over the adjacent box. Fix: give the row more height + clip overflow.
+> (3) Topbar width: the fixed headers in `CalendarHome` (406), `Wallet` (445), `Settings` (162) span full width while the content below is `max-w-5xl`/`max-w-2xl` (= 64rem) centered. Wrap each header's inner content in a `max-w-* w-full mx-auto px-4` container so the header items align with the body (bar stays full-width visually).
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Completed**: Three UI fixes shipped.
+> (1) `CalendarHome.tsx:380` birthday title fallback → `u.name || u.email?.split('@')[0] || 'User'` (shows "besliandrei's Birthday" instead of the full email). These birthday events are virtual (useMemo, not stored), so the change takes effect immediately. Root cause: the account has no `name` set; signup/Google paths do set it, but pre-existing/merge-created docs may lack it.
+> (2) Edit Asset modal (`Wallet.tsx:593`): bumped the image/scan row from `h-28` to `h-32` and added `min-h-0 overflow-hidden` to the two right-column boxes so their dashed borders no longer bleed over the adjacent box.
+> (3) Constrained the fixed headers in `CalendarHome` (406), `Wallet` (445) and `Settings` (162): moved `px-4` + flex layout into an inner `max-w-5xl`/`max-w-2xl` `w-full mx-auto` wrapper so header content aligns with the body (the bar still spans full width). Matches each screen's existing content max-width (64rem / 42rem).
+> Build OK, deployed hosting, committed, pushed.
+> Model: Claude Opus 4.7
+
+> CORRECTION to earlier audit (#4 events): birthday auto-add does NOT write events to Firestore (they are virtual/in-memory), so it is NOT a blocker for tightening the `events` create rule. The real remaining blocker for `events` is recurrence overrides created by non-owner group members (`AddEventModal.tsx:572`).

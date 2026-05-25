@@ -159,7 +159,8 @@ export default function Settings() {
   return (
     <div className="min-h-screen bg-transparent flex flex-col transition-colors duration-200 pt-[60px]">
       {/* Header */}
-      <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 px-4 py-3 flex items-center gap-3 fixed top-0 left-0 right-0 w-full z-[100] shadow-sm">
+      <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 py-3 fixed top-0 left-0 right-0 w-full z-[100] shadow-sm">
+       <div className="max-w-2xl w-full mx-auto px-4 flex items-center gap-3">
         <button onClick={() => navigate('/')} className="p-1.5 -ml-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
           <Home className="w-5 h-5" />
         </button>
@@ -167,6 +168,7 @@ export default function Settings() {
           <SettingsIcon className="w-6 h-6" />
           <h1 className="text-xl font-bold text-zinc-900 dark:text-white">{t('settings', language)}</h1>
         </div>
+       </div>
       </header>
 
       <main className="flex-1 max-w-2xl w-full mx-auto p-4 flex flex-col gap-8 mt-4">
