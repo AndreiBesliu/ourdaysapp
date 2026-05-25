@@ -49,15 +49,15 @@ export default function Wallet() {
   useEffect(() => {
     if (!auth.currentUser) return;
     
-    // Fetch assets owned by user OR shared with family
-    const q = query(collection(db, 'assets'));
-    
+    // Fetch the current user's assets. Must be filtered server-side by ownerId:
+    // the Firestore rules only allow reading assets you own, so an unfiltered
+    // query is rejected (permission-denied). (sharedWithFamily assets owned by
+    // others aren't readable under the current rule — see DEVLOG deferred work.)
+    const uid = auth.currentUser.uid;
+    const q = query(collection(db, 'assets'), where('ownerId', '==', uid));
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const allAssets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const myAssets = allAssets.filter((a: any) => 
-        a.ownerId === auth.currentUser?.uid || a.sharedWithFamily
-      );
-      setAssets(myAssets);
+      setAssets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
     const unsubUser = onSnapshot(doc(db, 'users', auth.currentUser.uid), (docSnap) => {

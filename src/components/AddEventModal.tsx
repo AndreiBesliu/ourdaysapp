@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, Sparkles, GripVertical, Search, Check } from 'lucide-react';
-import { addDoc, collection, query, updateDoc, doc, arrayUnion } from 'firebase/firestore';
+import { addDoc, collection, query, where, updateDoc, doc, arrayUnion } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
@@ -122,14 +122,14 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         .filter((user) => user.id && user.id !== auth.currentUser?.uid)
     );
 
-    // Fetch user assets
-    const assetsQuery = query(collection(db, 'assets'));
+    // Fetch the current user's wallet assets. Must be filtered server-side by
+    // ownerId — the Firestore rules only permit reading assets you own, so an
+    // unfiltered query is rejected (permission-denied). (sharedWithFamily assets
+    // owned by others aren't readable under the current rule — see DEVLOG.)
+    const uid = auth.currentUser.uid;
+    const assetsQuery = query(collection(db, 'assets'), where('ownerId', '==', uid));
     const unsubAssets = onSnapshot(assetsQuery, (snapshot) => {
-      const allAssets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const myAssets = allAssets.filter((a: any) => 
-        a.ownerId === auth.currentUser?.uid || a.sharedWithFamily
-      );
-      setAssets(myAssets);
+      setAssets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
     return () => unsubAssets();

@@ -81,6 +81,7 @@
   - **Fix path:** move notification creation (task assignment, RSVP, invites) to a Cloud Function trigger that validates the recipient shares a group with the sender + rate-limits. Then forbid direct client `create`.
 - **#1 `users` read exposure** 🔴 (NEXT TASK) `users` is currently world-readable by any signed-in user (exposes email, fcmTokens, photoURL, prefs). Needs an audit of every place the UI reads other users' docs (chat avatars, member circles, modals) before restricting read to self + shared-group members.
 - **#5 Firebase App Check** 🟠 Callable Gemini functions + Firestore are callable by anyone with the public web config. Add App Check (reCAPTCHA v3 / Play Integrity) + basic rate limiting to prevent abuse and cost spikes.
+- **`assets` — shared visibility** 🟠 `sharedWithFamily` assets owned by other users are no longer readable (asset listeners scoped to `ownerId == uid` to satisfy the rule). Restoring cross-user shared wallet assets needs a real sharing model: e.g. an `allowedUserIds` array on the asset + a read rule `request.auth.uid in resource.data.allowedUserIds`, and queries split into "mine" + "shared with me".
 - **Housekeeping** 🟢 `.firebase/` deploy cache is git-tracked — add to `.gitignore` in a future cleanup.
 
 ---
@@ -821,4 +822,13 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-25 - Task Completed**: (#1 step C) Replaced the global `users` fetch in `AddEventModal.tsx` with a derivation from the `userMap` prop (group/family members already loaded by `CalendarHome`); removed the now-unused `getDocs` import. Assignee picker is now scoped to people the user shares a group with — no more enumeration of all accounts. Build OK, deployed hosting, committed, pushed. Step A (public `profiles` collection + restrict `users` read to owner-only) remains — tracked in "Deferred Security Work".
 > NOTE (separate finding): `AddEventModal.tsx` still listens on `query(collection(db,'assets'))` (all assets) and filters client-side; with the current `assets` read rule (`ownerId == auth.uid`) this listener likely hits permission-denied. Flagged for follow-up — should query with `where('ownerId','==',uid)`.
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Started**
+> Prompt: "Întâi fix asset-uri" (fix the active assets-listener bug found during the #1 audit)
+> Plan: Both `AddEventModal.tsx:126` and `Wallet.tsx:53` listen on the UNFILTERED `query(collection(db,'assets'))` and filter client-side, but the `assets` read rule (`ownerId == auth.uid`) rejects any query that could return other users' docs — so these listeners hit permission-denied (Wallet asset list + event asset picker broken in prod since the security rules landed). Fix: scope both queries with `where('ownerId','==',uid)`. The `sharedWithFamily` branch can't work under the current rule anyway (shared assets owned by others aren't readable) — note as deferred (needs a real sharing model). Add `where` to the AddEventModal firestore import.
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Completed**: Scoped both asset listeners server-side. `Wallet.tsx:53` and `AddEventModal.tsx:126` now use `query(collection(db,'assets'), where('ownerId','==',uid))` and dropped the redundant client-side filter. This resolves the permission-denied that broke the Wallet asset list and the event asset picker after the security rules landed. Build OK, deployed hosting, committed, pushed.
+> DEFERRED: `sharedWithFamily` asset visibility is now effectively disabled (the `assets` read rule only allows owner reads). Restoring cross-user shared assets needs a proper group-scoped sharing model (e.g. an `allowedUserIds` array + matching rule), tracked under Deferred Security Work.
 > Model: Claude Opus 4.7
