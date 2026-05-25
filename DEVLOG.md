@@ -855,3 +855,11 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-25 - Task Completed**: `App.tsx` `onAuthStateChanged` now builds a `profileUpdate` merge object and, when `userDocSnap.data()?.name` is missing and `currentUser.displayName` exists, sets `name: displayName`. The current user's Firestore `users` doc gets "Andrei Besliu" backfilled on next login, so the virtual birthday title resolves via `u.name` instead of the email prefix. Build OK, deployed hosting, committed, pushed. NOTE: requires one login/refresh for the backfill to write + `userMap` to re-read; depends on `displayName` being set in Firebase Auth (it is for this account). Optional follow-up: add an editable Name field in Settings for accounts with no `displayName`.
 > Model: Claude Opus 4.7
+
+**2026-05-25 - Task Started**
+> Prompt: "Da" (add the editable Name field in Settings)
+> Plan: Add an editable "Display Name" field to the Account section of `Settings.tsx`. The name is currently read-only (`auth.currentUser?.displayName`). Make it editable: load from `users/{uid}.name || displayName`, and on blur save to BOTH the Firestore `users` doc (`name`) and Firebase Auth (`updateProfile({ displayName })`) so the birthday/member lists (Firestore) and the Settings header (Auth) stay in sync. Add i18n keys `displayName` / `displayNameDesc` for all 6 languages.
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Completed**: Added an editable "Display Name" row to the Account section in `Settings.tsx`. Imported `updateProfile` from `firebase/auth`; added a `name` state (initialised from `displayName`, synced from `users/{uid}.name` via the existing onSnapshot); `handleNameSave` (onBlur) writes the trimmed value to BOTH Firestore (`name`) and Auth (`updateProfile({ displayName })`), skipping no-op saves. The profile header now reflects the edited name. Added `displayName`/`displayNameDesc` i18n keys to all 6 languages (en/ro/fr/es/it/de). Build OK, deployed hosting, committed, pushed.
+> Model: Claude Opus 4.7

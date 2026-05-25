@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { auth, db, storage } from '../firebase';
-import { signOut } from 'firebase/auth';
+import { signOut, updateProfile } from 'firebase/auth';
 import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
@@ -53,21 +53,37 @@ export default function Settings() {
   const { primaryColor, isDarkMode, customThemeIsDark, backgroundColor, overlayColor, soundEnabled, hapticsEnabled, setTheme, backgroundImage, backgroundOverlay, language, setAdvancedTheme } = useThemeStore();
   const [photoURL, setPhotoURL] = useState<string | null>(null);
   const [birthday, setBirthday] = useState<string>('');
+  const [name, setName] = useState<string>(auth.currentUser?.displayName || '');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingBg, setUploadingBg] = useState(false);
   useEffect(() => {
     if (!auth.currentUser) return;
-    
+
     const unsub = onSnapshot(doc(db, 'users', auth.currentUser.uid), async (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setPhotoURL(data.photoURL || null);
         setBirthday(data.birthday || '');
+        setName(data.name || auth.currentUser?.displayName || '');
       }
     });
-    
+
     return () => unsub();
   }, []);
+
+  const handleNameSave = async () => {
+    if (!auth.currentUser) return;
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === (auth.currentUser.displayName || '')) return;
+    try {
+      // Keep both stores in sync: Firestore `name` (read by member lists /
+      // birthday titles) and Firebase Auth `displayName` (shown in this header).
+      await updateDoc(doc(db, 'users', auth.currentUser.uid), { name: trimmed });
+      await updateProfile(auth.currentUser, { displayName: trimmed });
+    } catch (err) {
+      console.error('Failed to save name:', err);
+    }
+  };
 
   const handleProfileImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0] || !auth.currentUser) return;
@@ -205,7 +221,7 @@ export default function Settings() {
               </div>
 
               <div className="text-center sm:text-left">
-                <p className="font-medium text-lg text-zinc-900 dark:text-zinc-100">{auth.currentUser?.displayName || 'My Profile'}</p>
+                <p className="font-medium text-lg text-zinc-900 dark:text-zinc-100">{name || auth.currentUser?.displayName || 'My Profile'}</p>
                 <p className="text-sm text-zinc-500">{auth.currentUser?.email}</p>
                 <label htmlFor="profile-upload" className="text-xs font-medium text-primary cursor-pointer hover:underline sm:hidden mt-2 inline-block">
                   Change Photo
@@ -213,6 +229,21 @@ export default function Settings() {
               </div>
             </div>
             
+            <div className="p-4 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800">
+              <div>
+                <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('displayName', language)}</p>
+                <p className="text-sm text-zinc-500">{t('displayNameDesc', language)}</p>
+              </div>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={handleNameSave}
+                placeholder={auth.currentUser?.email?.split('@')[0] || ''}
+                className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2 outline-none text-right max-w-[160px]"
+              />
+            </div>
+
             <div className="p-4 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800">
               <div>
                 <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('birthday', language)}</p>
