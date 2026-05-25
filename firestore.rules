@@ -22,6 +22,15 @@ service cloud.firestore {
       allow write: if isOwner(userId);
     }
 
+    // ── Profiles (public, non-sensitive) ──
+    // Mirror of {name, photoURL, birthday} so group members can render names /
+    // avatars / birthdays without reading the full (sensitive) user doc.
+    // Readable by any signed-in user; writable only by the profile owner.
+    match /profiles/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId);
+    }
+
     // ── Groups ──
     match /groups/{groupId} {
       allow read: if isSignedIn() && request.auth.uid in resource.data.members;

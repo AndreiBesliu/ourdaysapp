@@ -5,7 +5,7 @@ import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { auth, db, storage } from '../firebase';
 import { signOut, updateProfile } from 'firebase/auth';
-import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const THEME_COLORS = [
@@ -79,6 +79,7 @@ export default function Settings() {
       // Keep both stores in sync: Firestore `name` (read by member lists /
       // birthday titles) and Firebase Auth `displayName` (shown in this header).
       await updateDoc(doc(db, 'users', auth.currentUser.uid), { name: trimmed });
+      await setDoc(doc(db, 'profiles', auth.currentUser.uid), { name: trimmed }, { merge: true });
       await updateProfile(auth.currentUser, { displayName: trimmed });
     } catch (err) {
       console.error('Failed to save name:', err);
@@ -99,6 +100,7 @@ export default function Settings() {
       await updateDoc(doc(db, 'users', auth.currentUser.uid), {
         photoURL: url
       });
+      await setDoc(doc(db, 'profiles', auth.currentUser.uid), { photoURL: url }, { merge: true });
       setPhotoURL(url);
     } catch (error) {
       console.error("Failed to upload profile picture:", error);
@@ -116,6 +118,7 @@ export default function Settings() {
         await updateDoc(doc(db, 'users', auth.currentUser.uid), {
           birthday: val || null
         });
+        await setDoc(doc(db, 'profiles', auth.currentUser.uid), { birthday: val || null }, { merge: true });
       } catch (err) {
         console.error("Failed to update birthday", err);
       }

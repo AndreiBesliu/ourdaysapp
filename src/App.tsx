@@ -155,6 +155,16 @@ function App() {
             profileUpdate.name = currentUser.displayName;
           }
           await setDoc(userDocRef, profileUpdate, { merge: true });
+
+          // Mirror non-sensitive fields to the public `profiles` collection so
+          // other group members can render this user's name/photo/birthday
+          // without reading the (owner-only) user doc. Self-populates on login.
+          const src: any = { ...(userDocSnap.data() || {}), ...profileUpdate };
+          await setDoc(doc(db, 'profiles', currentUser.uid), {
+            name: src.name || currentUser.displayName || currentUser.email?.split('@')[0] || 'User',
+            photoURL: src.photoURL || null,
+            birthday: src.birthday || null,
+          }, { merge: true }).catch((e) => console.error('Failed to sync profile:', e));
           
           // If the document was just created, it won't have familyMembers, 
           // but we can initialize it if it's completely missing

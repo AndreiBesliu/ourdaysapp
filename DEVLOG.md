@@ -863,3 +863,14 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-25 - Task Completed**: Added an editable "Display Name" row to the Account section in `Settings.tsx`. Imported `updateProfile` from `firebase/auth`; added a `name` state (initialised from `displayName`, synced from `users/{uid}.name` via the existing onSnapshot); `handleNameSave` (onBlur) writes the trimmed value to BOTH Firestore (`name`) and Auth (`updateProfile({ displayName })`), skipping no-op saves. The profile header now reflects the edited name. Added `displayName`/`displayNameDesc` i18n keys to all 6 languages (en/ro/fr/es/it/de). Build OK, deployed hosting, committed, pushed.
 > Model: Claude Opus 4.7
+
+## 📅 Session Log: May 25, 2026 — #1 step A (profiles refactor)
+
+**2026-05-25 - Task Started (Phase 1 of 3)**
+> Prompt: "#1" → step A, chosen sync strategy: client-side
+> Plan: Lock down the world-readable `users` collection via a public `profiles` collection, rolled out in 3 non-breaking phases. PHASE 1 (this task): add `profiles/{uid} = {name, photoURL, birthday}` with rules (read = any signed-in user, write = owner only), and client-side sync that mirrors these fields whenever the owner logs in (`App.tsx` onAuthStateChanged) or edits them (`Settings.tsx` name/photo/birthday handlers). Migration is gradual — each profile is created on that user's next login. Phase 2 will switch cross-user reads (CalendarHome userMap, Wallet sharedUsers, InviteFamilyModal) onto `profiles`; Phase 3 will flip `users` read to owner-only. Fields confirmed needed in profiles by audit: name, photoURL, birthday (email only used for an avatar-initial fallback → will switch those to name initial in Phase 2). `hideBirthdayPrompt` stays in `users` (only read for the current user's own doc).
+> TRANSITION CAVEAT (client-side migration): after Phase 3, a member's name/photo/birthday only appears to others once that member has logged in at least once post-Phase-1 (to create their profile).
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Completed (Phase 1 of 3)**: Added the `profiles` collection foundation. `firestore.rules`: new `profiles/{userId}` block (read = any signed-in user, write = owner only). `App.tsx` onAuthStateChanged now mirrors `{name, photoURL, birthday}` into `profiles/{uid}` on every login (self-population/migration). `Settings.tsx`: `handleNameSave`, `handleProfileImageUpload`, `handleBirthdayChange` now also `setDoc(merge)` the corresponding field into `profiles` for immediate updates (added `setDoc` import). Fixed a TS spread-typing issue (`const src: any`). Build OK, deployed `firestore:rules` + hosting, committed, pushed. NOTHING reads `profiles` yet and `users` read is still open — fully non-breaking. Next: Phase 2 (switch cross-user reads to `profiles`).
+> Model: Claude Opus 4.7
