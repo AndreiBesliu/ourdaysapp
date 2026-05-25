@@ -50,6 +50,12 @@ const PREDEFINED_EMOJIS = [
   '❤️', '⭐', '🔥', '💡', '📌'
 ];
 
+// Reminder presets (minutes before the event) that have their own dropdown
+// option; any other value is treated as a custom reminder.
+const PRESET_REMINDERS = [0, 15, 60, 1440];
+const REMINDER_UNIT_TO_MINUTES = { minutes: 1, hours: 60, days: 1440 } as const;
+type ReminderUnit = keyof typeof REMINDER_UNIT_TO_MINUTES;
+
 export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent, initialTemplate, userMap = {}, activeGroupId = 'personal', groups = [] }: AddEventModalProps) {
   const { language } = useThemeStore();
   const [title, setTitle] = useState('');
@@ -82,6 +88,25 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const [rsvpEnabled, setRsvpEnabled] = useState(false);
   const [location, setLocation] = useState('');
   const [reminderMinutes, setReminderMinutes] = useState<number | null>(null);
+  const [customReminder, setCustomReminder] = useState(false);
+  const [customReminderValue, setCustomReminderValue] = useState('');
+  const [customReminderUnit, setCustomReminderUnit] = useState<ReminderUnit>('minutes');
+
+  // Set reminderMinutes and, for non-preset values, switch the UI into custom
+  // mode decomposed into a value + unit (used on edit/draft/reset loads).
+  const applyReminder = (rm: number | null) => {
+    setReminderMinutes(rm);
+    if (rm !== null && !PRESET_REMINDERS.includes(rm)) {
+      setCustomReminder(true);
+      if (rm % 1440 === 0) { setCustomReminderUnit('days'); setCustomReminderValue(String(rm / 1440)); }
+      else if (rm % 60 === 0) { setCustomReminderUnit('hours'); setCustomReminderValue(String(rm / 60)); }
+      else { setCustomReminderUnit('minutes'); setCustomReminderValue(String(rm)); }
+    } else {
+      setCustomReminder(false);
+      setCustomReminderValue('');
+      setCustomReminderUnit('minutes');
+    }
+  };
   
   // Wallet Assets
   const [assets, setAssets] = useState<any[]>([]);
@@ -151,7 +176,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setSelectedGroupId(editEvent.groupId || 'personal');
       setRsvpEnabled(!!editEvent.rsvpEnabled);
       setLocation(editEvent.location || '');
-      setReminderMinutes(editEvent.reminderMinutes || null);
+      applyReminder(editEvent.reminderMinutes || null);
     } else if (isOpen && !editEvent) {
       let loadedDraft = false;
       const draftJSON = localStorage.getItem('ourDays_draftEvent');
@@ -176,7 +201,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             if (parsed.repeat) setRepeat(parsed.repeat);
             if (parsed.rsvpEnabled !== undefined) setRsvpEnabled(parsed.rsvpEnabled);
             if (parsed.location !== undefined) setLocation(parsed.location);
-            if (parsed.reminderMinutes !== undefined) setReminderMinutes(parsed.reminderMinutes);
+            if (parsed.reminderMinutes !== undefined) applyReminder(parsed.reminderMinutes);
             loadedDraft = true;
           } else {
             localStorage.removeItem('ourDays_draftEvent');
@@ -199,7 +224,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         setSelectedGroupId(activeGroupId);
         setRsvpEnabled(false);
         setLocation('');
-        setReminderMinutes(null);
+        applyReminder(null);
       }
       setImageFile(null);
       setSelectedAssetUrl(null);
@@ -766,8 +791,20 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             <div className="space-y-2">
               <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('reminder', language)}</label>
               <select
-                value={reminderMinutes === null ? '' : reminderMinutes}
-                onChange={(e) => setReminderMinutes(e.target.value === '' ? null : parseInt(e.target.value))}
+                value={customReminder ? 'custom' : (reminderMinutes === null ? '' : String(reminderMinutes))}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === 'custom') {
+                    // Enter custom mode with a sensible non-preset default.
+                    setCustomReminder(true);
+                    setCustomReminderUnit('minutes');
+                    setCustomReminderValue('30');
+                    setReminderMinutes(30);
+                  } else {
+                    setCustomReminder(false);
+                    setReminderMinutes(v === '' ? null : parseInt(v));
+                  }
+                }}
                 className="w-full px-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
               >
                 <option value="">No Reminder</option>
@@ -775,7 +812,39 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 <option value="15">15 minutes before</option>
                 <option value="60">1 hour before</option>
                 <option value="1440">1 day before</option>
+                <option value="custom">Custom…</option>
               </select>
+              {customReminder && (
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    value={customReminderValue}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setCustomReminderValue(raw);
+                      const n = parseInt(raw);
+                      if (!isNaN(n) && n > 0) setReminderMinutes(n * REMINDER_UNIT_TO_MINUTES[customReminderUnit]);
+                    }}
+                    placeholder="e.g. 30"
+                    className="w-24 px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
+                  />
+                  <select
+                    value={customReminderUnit}
+                    onChange={(e) => {
+                      const unit = e.target.value as ReminderUnit;
+                      setCustomReminderUnit(unit);
+                      const n = parseInt(customReminderValue);
+                      if (!isNaN(n) && n > 0) setReminderMinutes(n * REMINDER_UNIT_TO_MINUTES[unit]);
+                    }}
+                    className="flex-1 px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
+                  >
+                    <option value="minutes">minutes before</option>
+                    <option value="hours">hours before</option>
+                    <option value="days">days before</option>
+                  </select>
+                </div>
+              )}
             </div>
           </div>
 

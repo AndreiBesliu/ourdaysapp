@@ -900,3 +900,13 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 **2026-05-25 - Task Completed (Phase 3 of 3)**: Flipped `users` to `allow read, write: if isOwner(userId)` in `firestore.rules`. The `users` collection (email, fcmTokens, preferences) is now readable only by its owner; all member name/photo/birthday rendering comes from the public `profiles` mirror. Build OK, deployed `firestore:rules`, committed, pushed. **#1 step A complete** — the original world-readable `users` finding is resolved. Removed #1 from Deferred Security Work.
 > VERIFY: confirm in the live app that group member names/avatars still render (they read from `profiles`) and your own Settings/Wallet still load (own user doc). The wife's fresh account will populate its profile on first login.
 > Model: Claude Opus 4.7
+
+## 📅 Session Log: May 25, 2026 — Custom reminder time
+
+**2026-05-25 - Task Started**
+> Prompt: "totul pare ok, aici vreau custom time" (+ screenshot of the Reminder dropdown)
+> Plan: Add a "Custom..." option to the reminder (`Memento`) dropdown in `AddEventModal.tsx`. Selecting it reveals a number input + unit select (minutes/hours/days before); `reminderMinutes` is stored as value × unit-multiplier (1/60/1440). Use a `customReminder` boolean for UI mode (so a custom value equal to a preset doesn't snap back). An `applyReminder()` helper decomposes a loaded `reminderMinutes` into value+unit on edit/draft/reset. (The existing preset labels are hardcoded English — keeping the new option consistent; full reminder-dropdown i18n is a separate follow-up.)
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Completed**: Added a "Custom…" reminder option in `AddEventModal.tsx`. New module consts `PRESET_REMINDERS` and `REMINDER_UNIT_TO_MINUTES`; new state `customReminder` / `customReminderValue` / `customReminderUnit`; `applyReminder()` helper wired into the editEvent / draft / reset load paths (decomposes a stored `reminderMinutes` into value+unit). The dropdown gained a `custom` option; selecting it defaults to 30 minutes and reveals a number input + unit select (minutes/hours/days before) that recomputes `reminderMinutes`. Stored value stays plain minutes, so existing reminder scheduling is unaffected. Build OK, deployed hosting, committed, pushed.
+> Model: Claude Opus 4.7
