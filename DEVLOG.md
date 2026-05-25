@@ -77,7 +77,7 @@
   - **Fix path:** move asset transfer to a Cloud Function, then tighten `assets` create rule.
 - **`notifications` — anti-spam** 🟠 Current rule only requires honest `createdBy == auth.uid` (attribution). A malicious member can still spam notifications to any `userId`.
   - **Fix path:** move notification creation (task assignment, RSVP, invites) to a Cloud Function trigger that validates the recipient shares a group with the sender + rate-limits. Then forbid direct client `create`.
-- **#1 `users` read exposure** 🔴 (NEXT TASK) `users` is currently world-readable by any signed-in user (exposes email, fcmTokens, photoURL, prefs). Needs an audit of every place the UI reads other users' docs (chat avatars, member circles, modals) before restricting read to self + shared-group members.
+- ~~**#1 `users` read exposure**~~ ✅ DONE (2026-05-25) Resolved via the `profiles` refactor (Phases 1–3): `users` is now owner-only read/write; member name/photo/birthday render from the public `profiles` mirror. NB: migration is client-side, so a member appears to others only after they have logged in once (profile self-creates on login).
 - **#5 Firebase App Check** 🟠 Callable Gemini functions + Firestore are callable by anyone with the public web config. Add App Check (reCAPTCHA v3 / Play Integrity) + basic rate limiting to prevent abuse and cost spikes.
 - **`assets` — shared visibility** 🟠 `sharedWithFamily` assets owned by other users are no longer readable (asset listeners scoped to `ownerId == uid` to satisfy the rule). Restoring cross-user shared wallet assets needs a real sharing model: e.g. an `allowedUserIds` array on the asset + a read rule `request.auth.uid in resource.data.allowedUserIds`, and queries split into "mine" + "shared with me".
 - **Housekeeping** 🟢 `.firebase/` deploy cache is git-tracked — add to `.gitignore` in a future cleanup.
@@ -890,4 +890,13 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > - `InviteFamilyModal`: removed the `users`-by-email lookup (and the `query`/`where`/`getDocs` imports); invite now writes `toId: null` and relies on `toEmail` (which is how acceptance already works). `toId` was confirmed write-only/never read.
 > - Avatar-initial fallbacks for other members switched to `(name || email)?.charAt(0)` in `CalendarGrid` (x2) and `CalendarHome` (owner-popup fallbacks in EventDetailsModal already preferred `name`).
 > Build OK, deployed hosting, committed, pushed. Still non-breaking — `users` read remains open. Phase 3 (flip `users` read to owner-only) is HELD until profiles are confirmed populated (both users must log in once post-Phase-1).
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Started (Phase 3 of 3)**
+> Prompt: "al meu apare, ea o sa isi faca din nou cont" (my profile shows; wife will create a fresh account)
+> Plan: Flip the `users` read rule from `isSignedIn()` to owner-only. Pre-flip re-audit confirmed every remaining `users` read is the caller's OWN doc (CalendarHome:97 & the self-branch at :117, Settings:62, Wallet:63) and there are no `collection(db,'users')` queries left. Safe because: the current user has a profile; the wife's fresh account will self-create its profile on first login (profiles write is owner-only → allowed for own uid); any lingering old-uid references just render blank (profiles read of a missing doc, no error). This closes the original #1 finding (users collection was world-readable, exposing email/fcmTokens/prefs).
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Completed (Phase 3 of 3)**: Flipped `users` to `allow read, write: if isOwner(userId)` in `firestore.rules`. The `users` collection (email, fcmTokens, preferences) is now readable only by its owner; all member name/photo/birthday rendering comes from the public `profiles` mirror. Build OK, deployed `firestore:rules`, committed, pushed. **#1 step A complete** — the original world-readable `users` finding is resolved. Removed #1 from Deferred Security Work.
+> VERIFY: confirm in the live app that group member names/avatars still render (they read from `profiles`) and your own Settings/Wallet still load (own user doc). The wife's fresh account will populate its profile on first login.
 > Model: Claude Opus 4.7

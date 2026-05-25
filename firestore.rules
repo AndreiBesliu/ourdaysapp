@@ -17,9 +17,10 @@ service cloud.firestore {
     }
 
     // ── Users ──
+    // Owner-only: the full user doc holds sensitive data (email, fcmTokens,
+    // preferences). Other members read the public `profiles` mirror instead.
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isOwner(userId);
+      allow read, write: if isOwner(userId);
     }
 
     // ── Profiles (public, non-sensitive) ──
