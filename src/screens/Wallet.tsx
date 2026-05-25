@@ -77,9 +77,11 @@ export default function Wallet() {
       const fetchedUsers: any[] = [];
       for (const id of Array.from(memberIds)) {
         if (id === auth.currentUser?.uid) continue;
-        const userDoc = await getDoc(doc(db, 'users', id));
-        if (userDoc.exists()) {
-          fetchedUsers.push({ id, ...userDoc.data() });
+        // Read other members from the public `profiles` collection (not the
+        // soon-to-be owner-only `users` collection).
+        const profileDoc = await getDoc(doc(db, 'profiles', id));
+        if (profileDoc.exists()) {
+          fetchedUsers.push({ id, ...profileDoc.data() });
         }
       }
       setSharedUsers(fetchedUsers);

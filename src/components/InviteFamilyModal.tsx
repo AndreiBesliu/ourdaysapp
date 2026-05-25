@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, UserPlus, Mail, AlertCircle, CheckCircle2, Share2 } from 'lucide-react';
 import { db, auth } from '../firebase';
-import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { collection, addDoc } from 'firebase/firestore';
 import { useModalBack } from '../hooks/useModalBack';
 
 interface InviteFamilyModalProps {
@@ -45,18 +45,13 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName 
     setSuccess('');
 
     try {
-      // 1. Find user by email (Optional now)
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('email', '==', email.toLowerCase()));
-      const querySnapshot = await getDocs(q);
-
-      const familyMemberId = querySnapshot.empty ? null : querySnapshot.docs[0].id;
-
-      // 2. Create pending group invite
+      // Create a pending group invite. Acceptance is matched by `toEmail`
+      // (see CalendarHome), so there is no need to look the user up by email —
+      // which also keeps us off the soon-to-be owner-only `users` collection.
       await addDoc(collection(db, 'group_invites'), {
         fromId: auth.currentUser.uid,
         fromEmail: auth.currentUser.email,
-        toId: familyMemberId,
+        toId: null,
         toEmail: email.toLowerCase(),
         groupId: groupId || null,
         groupName: groupName || null,
@@ -64,12 +59,8 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName 
         createdAt: new Date().toISOString()
       });
 
-      if (querySnapshot.empty) {
-        setSuccess(`Invite sent! They will see it when they sign up with ${email}.`);
-      } else {
-        setSuccess(`Invite sent to ${email}!`);
-      }
-      
+      setSuccess(`Invite sent! They will see it when they log in with ${email}.`);
+
       // Removed auto-close so they have time to click Share
 
     } catch (err: any) {

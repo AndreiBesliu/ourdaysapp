@@ -874,3 +874,20 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-25 - Task Completed (Phase 1 of 3)**: Added the `profiles` collection foundation. `firestore.rules`: new `profiles/{userId}` block (read = any signed-in user, write = owner only). `App.tsx` onAuthStateChanged now mirrors `{name, photoURL, birthday}` into `profiles/{uid}` on every login (self-population/migration). `Settings.tsx`: `handleNameSave`, `handleProfileImageUpload`, `handleBirthdayChange` now also `setDoc(merge)` the corresponding field into `profiles` for immediate updates (added `setDoc` import). Fixed a TS spread-typing issue (`const src: any`). Build OK, deployed `firestore:rules` + hosting, committed, pushed. NOTHING reads `profiles` yet and `users` read is still open — fully non-breaking. Next: Phase 2 (switch cross-user reads to `profiles`).
 > Model: Claude Opus 4.7
+
+**2026-05-25 - Task Started (Phase 2 of 3)**
+> Prompt: "da" (proceed to Phase 2)
+> Plan: Switch every cross-user read off `users` onto `profiles` (still non-breaking — `users` read stays open this phase):
+> - `CalendarHome` userMap loop: read the current user's own doc from `users` (needs birthday/hideBirthdayPrompt), but read OTHER members from `profiles/{id}`.
+> - `Wallet` sharedUsers loop: read other members from `profiles/{id}`.
+> - `InviteFamilyModal`: drop the `users`-by-email lookup (impossible once `users` is owner-only and `profiles` has no email); rely on `toEmail` (acceptance already matches on `toEmail`).
+> - Avatar-initial fallbacks that use `email?.charAt(0)` for other members → use `(name || email)?.charAt(0)` since profiles carry `name`, not email.
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Completed (Phase 2 of 3)**: All cross-user reads moved to `profiles`.
+> - `CalendarHome` userMap loop now reads the current user's own doc from `users` and every other member from `profiles/{id}`.
+> - `Wallet` sharedUsers loop reads other members from `profiles/{id}`.
+> - `InviteFamilyModal`: removed the `users`-by-email lookup (and the `query`/`where`/`getDocs` imports); invite now writes `toId: null` and relies on `toEmail` (which is how acceptance already works). `toId` was confirmed write-only/never read.
+> - Avatar-initial fallbacks for other members switched to `(name || email)?.charAt(0)` in `CalendarGrid` (x2) and `CalendarHome` (owner-popup fallbacks in EventDetailsModal already preferred `name`).
+> Build OK, deployed hosting, committed, pushed. Still non-breaking — `users` read remains open. Phase 3 (flip `users` read to owner-only) is HELD until profiles are confirmed populated (both users must log in once post-Phase-1).
+> Model: Claude Opus 4.7

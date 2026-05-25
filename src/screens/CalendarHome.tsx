@@ -111,9 +111,16 @@ export default function CalendarHome() {
       fetchedGroups.forEach((g: any) => g.members?.forEach((id: string) => memberIds.add(id)));
       
       for (const id of Array.from(memberIds)) {
-        const userDoc = await getDoc(doc(db, 'users', id));
-        if (userDoc.exists()) {
-          map[id] = { id, ...userDoc.data() };
+        if (id === auth.currentUser!.uid) {
+          // Own doc: read the full (owner-only) user doc — needed for birthday,
+          // photoURL, hideBirthdayPrompt, etc.
+          const userDoc = await getDoc(doc(db, 'users', id));
+          if (userDoc.exists()) map[id] = { id, ...userDoc.data() };
+        } else {
+          // Other members: read the public profile (name/photoURL/birthday) so
+          // we don't depend on the (soon owner-only) users collection.
+          const profileDoc = await getDoc(doc(db, 'profiles', id));
+          if (profileDoc.exists()) map[id] = { id, ...profileDoc.data() };
         }
       }
       setUserMap(map);
@@ -919,7 +926,7 @@ export default function CalendarHome() {
                                         <img src={userMap[id].photoURL} className="w-full h-full object-cover" />
                                       ) : (
                                         <span className="text-[8px] font-bold text-zinc-500">
-                                          {userMap[id].email?.charAt(0).toUpperCase() || '?'}
+                                          {(userMap[id].name || userMap[id].email)?.charAt(0).toUpperCase() || '?'}
                                         </span>
                                       )}
                                     </div>

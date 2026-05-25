@@ -274,7 +274,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                               {userMap[id].photoURL ? (
                                 <img src={userMap[id].photoURL} className="w-full h-full object-cover" />
                               ) : (
-                                userMap[id].email?.charAt(0).toUpperCase() || '?'
+                                (userMap[id].name || userMap[id].email)?.charAt(0).toUpperCase() || '?'
                               )}
                             </div>
                           ));
@@ -436,7 +436,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                                           <img src={userMap[id].photoURL} className="w-full h-full object-cover" />
                                         ) : (
                                           <span className="text-[8px] font-bold text-zinc-500">
-                                            {userMap[id].email?.charAt(0).toUpperCase() || '?'}
+                                            {(userMap[id].name || userMap[id].email)?.charAt(0).toUpperCase() || '?'}
                                           </span>
                                         )}
                                       </div>
