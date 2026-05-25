@@ -847,3 +847,11 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > Model: Claude Opus 4.7
 
 > CORRECTION to earlier audit (#4 events): birthday auto-add does NOT write events to Firestore (they are virtual/in-memory), so it is NOT a blocker for tightening the `events` create rule. The real remaining blocker for `events` is recurrence overrides created by non-owner group members (`AddEventModal.tsx:572`).
+
+**2026-05-25 - Task Started**
+> Prompt: "la eveniment, tot nu apare numele meu, desi la sotie apare" (+ screenshots)
+> Plan: The birthday title reads `u.name` from the Firestore `users` doc (via `userMap`). Settings shows "Andrei Besliu" but that comes from Firebase Auth `displayName` (`Settings.tsx:208`), NOT the Firestore `name` field — which is empty on this account (the wife's doc has `name`, so hers shows). Fix: in `App.tsx` `onAuthStateChanged`, backfill `users/{uid}.name` from `currentUser.displayName` when the Firestore doc has no `name`. This populates the field for existing accounts so the birthday (and member lists) show the real name.
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Completed**: `App.tsx` `onAuthStateChanged` now builds a `profileUpdate` merge object and, when `userDocSnap.data()?.name` is missing and `currentUser.displayName` exists, sets `name: displayName`. The current user's Firestore `users` doc gets "Andrei Besliu" backfilled on next login, so the virtual birthday title resolves via `u.name` instead of the email prefix. Build OK, deployed hosting, committed, pushed. NOTE: requires one login/refresh for the backfill to write + `userMap` to re-read; depends on `displayName` being set in Firebase Auth (it is for this account). Optional follow-up: add an editable Name field in Settings for accounts with no `displayName`.
+> Model: Claude Opus 4.7

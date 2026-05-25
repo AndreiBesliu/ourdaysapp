@@ -144,11 +144,17 @@ function App() {
             }
           }
 
-          // Save user to DB if not exists
-          await setDoc(userDocRef, {
+          // Save user to DB if not exists. Backfill `name` from the Firebase
+          // Auth displayName when the Firestore doc has none, so member lists
+          // and birthday titles show the real name instead of the email prefix.
+          const profileUpdate: { email: string | null; lastLogin: string; name?: string } = {
             email: currentUser.email,
             lastLogin: new Date().toISOString(),
-          }, { merge: true });
+          };
+          if (!userDocSnap.data()?.name && currentUser.displayName) {
+            profileUpdate.name = currentUser.displayName;
+          }
+          await setDoc(userDocRef, profileUpdate, { merge: true });
           
           // If the document was just created, it won't have familyMembers, 
           // but we can initialize it if it's completely missing
