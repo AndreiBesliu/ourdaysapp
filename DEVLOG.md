@@ -927,7 +927,7 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 > Prompt: "termina aceste traduceri"
 > Plan: Finish the remaining i18n gaps mentioned: AI-assistant button title tooltip, task-assignment notification body ("New Task Assigned"). Perform an app-wide sweep for other hardcoded strings.
-> Model: Antigravity
+> Model: Gemini 3.1 Pro (High)
 
 **2026-05-25 22:01 - Task Completed**: Added missing translations to `i18n.ts` (`aiAssistantTooltip`, `newTaskAssigned`, `taskAssignedBody` and 16 others for tooltips) in all 6 languages. Updated `AddEventModal.tsx` to use them for the AI Assistant button and the task assignment notification. Performed an app-wide regex sweep replacing hardcoded `title="..."` attributes with localized `t(...)` equivalents across all components (e.g. `Wallet.tsx`, `GamesHubModal.tsx`, `GroupChatWidget.tsx`). Added `useThemeStore` and `language` to components where it was missing. Build verified and deployed.
-> Model: Antigravity
+> Model: Gemini 3.1 Pro (High)
