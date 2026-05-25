@@ -759,3 +759,15 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-22 23:50 - Performance Fix**: Refactored `CalendarHome.tsx` events query. Previously used `query(collection(db, 'events'))` which downloaded ALL events from the entire database for ALL users. Replaced with 3 targeted queries: (1) `where('ownerId', '==', uid)` for personal view or `where('groupId', '==', activeGroupId)` for group view, (2) `where('assigneeIds', 'array-contains', uid)` for assigned tasks, (3) `where('inviteeId', '==', uid)` for invitations. Results are merged and deduplicated client-side. This reduces Firestore reads from O(total events in DB) to O(user's own events).
 > Model: Claude Opus 4.6
+
+---
+
+## 📅 Session Log: May 25, 2026
+
+**2026-05-25 - Task Started**
+> Prompt: "haide sa le rezolvam pe rand, cum propui sa procedam?" → chosen: start with #6 push notifications fix
+> Plan: Fix the native (Capacitor/Android) push registration in `App.tsx`, which writes the FCM token to a singular `fcmToken` field, while the Cloud Functions (`onMessageCreated`, `onGameCreated`) read the array field `fcmTokens`. Align `App.tsx` to use `arrayUnion` into `fcmTokens`, matching the web path in `CalendarHome.tsx` and the functions, so remote push works on Android.
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Completed**: Fixed the FCM field-name mismatch that broke remote push on native Android. In `App.tsx`: imported `arrayUnion` from `firebase/firestore` and changed the `PushNotifications` `registration` listener to write `{ fcmTokens: arrayUnion(token.value) }` instead of `{ fcmToken: token.value }`. Cloud Functions and the web path (`CalendarHome.tsx`) already used `fcmTokens` (array), so no function changes were needed. Build verified (`npm run build` OK). Deployed hosting + committed + pushed. NOTE: the Android APK must be rebuilt (`npx cap sync android` + Android Studio build) for the native fix to take effect on the phone — the hosting deploy only updates the web app.
+> Model: Claude Opus 4.7

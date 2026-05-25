@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, setDoc, updateDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, getDoc, arrayUnion } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
@@ -169,8 +169,11 @@ function App() {
               await PushNotifications.register();
               
               PushNotifications.addListener('registration', async (token) => {
+                // Store native FCM tokens in the `fcmTokens` array (matching the
+                // web path in CalendarHome.tsx and what the Cloud Functions read),
+                // so remote push reaches Android devices.
                 await updateDoc(doc(db, 'users', currentUser.uid), {
-                  fcmToken: token.value
+                  fcmTokens: arrayUnion(token.value)
                 });
               });
 
