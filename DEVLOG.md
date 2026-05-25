@@ -922,3 +922,12 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 **2026-05-25 - Task Completed**: (a) Layout — shortened the custom-reminder unit `<select>` options to just the unit word (`unitMinutes/Hours/Days`), which fits the narrow column (combined with the earlier `min-w-0`), fixing the arrow-overlapping-text overflow. (b) i18n — added 16 keys to all 6 languages (`cat_work/family_time/chores/health/other`, `noReminder`, `atTimeOfEvent`, `min15Before`, `hour1Before`, `day1Before`, `customReminder`, `unitMinutes/Hours/Days`, `assignToMe`, `aiAssistant`). In `AddEventModal.tsx`: categories now render `t('cat_'+cat.id, language)`, the reminder dropdown + unit options use `t()`, and the "Me"/"AI Assistant" assignee buttons use `t()`. Build OK, deployed hosting, committed, pushed.
 > KNOWN REMAINING i18n GAPS (follow-up): group names like "Family"/"B&D" are user data (not translatable); the AI-assistant button `title` tooltip and the task-assignment notification body ("New Task Assigned") are still English; other screens/modals may have hardcoded strings — a full app-wide sweep is a separate task.
 > Model: Claude Opus 4.7
+
+**2026-05-25 21:57 - Task Started**
+
+> Prompt: "termina aceste traduceri"
+> Plan: Finish the remaining i18n gaps mentioned: AI-assistant button title tooltip, task-assignment notification body ("New Task Assigned"). Perform an app-wide sweep for other hardcoded strings.
+> Model: Antigravity
+
+**2026-05-25 22:01 - Task Completed**: Added missing translations to `i18n.ts` (`aiAssistantTooltip`, `newTaskAssigned`, `taskAssignedBody` and 16 others for tooltips) in all 6 languages. Updated `AddEventModal.tsx` to use them for the AI Assistant button and the task assignment notification. Performed an app-wide regex sweep replacing hardcoded `title="..."` attributes with localized `t(...)` equivalents across all components (e.g. `Wallet.tsx`, `GamesHubModal.tsx`, `GroupChatWidget.tsx`). Added `useThemeStore` and `language` to components where it was missing. Build verified and deployed.
+> Model: Antigravity
