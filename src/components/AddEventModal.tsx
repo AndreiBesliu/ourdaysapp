@@ -633,8 +633,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               userId,
               createdBy: auth.currentUser?.uid, // attribution: required by Firestore rules
               type: 'task',
-              title: 'New Task Assigned',
-              body: `You have been assigned to: ${title}`,
+              title: t('newTaskAssigned', language),
+              body: `${t('taskAssignedBody', language)}${title}`,
               read: false,
               createdAt: new Date()
             });
@@ -696,7 +696,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               />
               {owner && (
                   <div className="relative">
-                    <button type="button" onClick={() => setShowOwnerProfile(!showOwnerProfile)} className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 flex items-center justify-center overflow-hidden hover:ring-2 hover:ring-primary transition-all shadow-sm" title="View Owner">
+                    <button type="button" onClick={() => setShowOwnerProfile(!showOwnerProfile)} className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 flex items-center justify-center overflow-hidden hover:ring-2 hover:ring-primary transition-all shadow-sm" title={t('viewOwner', language)}>
                       {owner.photoURL ? (
                         <img src={owner.photoURL} alt={owner.name || owner.email} className="w-full h-full object-cover" />
                       ) : (
@@ -956,14 +956,14 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                                     accept="image/*"
                                     onChange={(e) => e.target.files && handleChecklistItemImage(item.id, e.target.files[0])}
                                   />
-                                  <label htmlFor={`file-${item.id}`} className="cursor-pointer p-1 text-zinc-400 hover:text-primary transition-colors" title="Upload New Photo">
+                                  <label htmlFor={`file-${item.id}`} className="cursor-pointer p-1 text-zinc-400 hover:text-primary transition-colors" title={t('uploadNewPhoto', language)}>
                                     <ImageIcon className={`w-4 h-4 ${item.assetFile ? 'text-primary' : ''}`} />
                                   </label>
                                   <button 
                                     type="button" 
                                     onClick={() => setShowAssetPicker(item.id)}
                                     className={`p-1 transition-colors ${item.selectedAssetUrl || item.assetId || (item.assetUrl && !item.assetFile) ? 'text-emerald-500' : 'text-zinc-400 hover:text-emerald-500'}`}
-                                    title="Pick from Assets"
+                                    title={t('pickFromAssets', language)}
                                   >
                                     <Wallet className="w-4 h-4" />
                                   </button>
@@ -972,7 +972,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                                       type="button" 
                                       onClick={() => setChecklistItems(checklistItems.map(i => i.id === item.id ? { ...i, assetUrl: null, selectedAssetUrl: null, assetId: null, assetFile: undefined } : i))}
                                       className="p-1 text-red-400 hover:text-red-500 transition-colors"
-                                      title="Remove Asset"
+                                      title={t('removeAssetTooltip', language)}
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </button>
@@ -1182,7 +1182,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                       ? 'bg-indigo-500 text-white border-indigo-500' 
                       : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/50'
                   }`}
-                  title="Assign to AI Assistant to automatically generate a checklist"
+                  title={t('aiAssistantTooltip', language)}
                 >
                   <Sparkles className="w-3 h-3" />
                   {t('aiAssistant', language)}

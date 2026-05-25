@@ -5,6 +5,9 @@ import { db, auth } from '../firebase';
 import { useState } from 'react';
 import { useModalBack } from '../hooks/useModalBack';
 import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
+import { t } from '../utils/i18n';
+import { useThemeStore } from '../store';
+
 
 interface RecurringEventsPanelProps {
   isOpen: boolean;
@@ -21,6 +24,7 @@ const FREQ_COLORS: Record<string, string> = {
 };
 
 export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEvent }: RecurringEventsPanelProps) {
+  const { language } = useThemeStore();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   
   useModalBack(isOpen, onClose);
@@ -130,7 +134,7 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
                                 <button
                                   onClick={() => onEditEvent(ev)}
                                   className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                                  title="Edit Series"
+                                  title={t('editSeries', language)}
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
@@ -138,7 +142,7 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
                                   onClick={() => handleDeleteSeries(ev)}
                                   disabled={deletingId === ev.id}
                                   className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
-                                  title="Delete Series"
+                                  title={t('deleteSeries', language)}
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>

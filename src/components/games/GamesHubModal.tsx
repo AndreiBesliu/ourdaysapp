@@ -8,6 +8,8 @@ import RummyGame from './rummy/RummyGame';
 import MemoryMatch from './MemoryMatch';
 import { format } from 'date-fns';
 import { useThemeStore } from '../../store';
+import { t } from '../../utils/i18n';
+
 
 interface GamesHubModalProps {
   isOpen: boolean;
@@ -411,7 +413,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
               <button
                 onClick={() => setShowRulesFor(activeGame.gameType)}
                 className="p-1.5 text-zinc-400 hover:text-blue-500 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors mr-2"
-                title="How to play"
+                title={t('howToPlay', language)}
               >
                 <Info className="w-5 h-5" />
               </button>
@@ -469,7 +471,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Tic Tac Toe Card */}
                       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors group flex flex-col h-full relative">
-                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('tic-tac-toe'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title="How to play">
+                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('tic-tac-toe'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title={t('howToPlay', language)}>
                           <Info className="w-4 h-4" />
                         </button>
                         <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('tic-tac-toe')}>
@@ -483,7 +485,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
 
                       {/* Connect 4 Card */}
                       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors group flex flex-col h-full relative">
-                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('connect-4'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title="How to play">
+                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('connect-4'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title={t('howToPlay', language)}>
                           <Info className="w-4 h-4" />
                         </button>
                         <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('connect-4')}>
@@ -500,7 +502,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
 
                       {/* Rummy 45 Card */}
                       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors group flex flex-col h-full relative">
-                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('rummy-45'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title="How to play">
+                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('rummy-45'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title={t('howToPlay', language)}>
                           <Info className="w-4 h-4" />
                         </button>
                         <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('rummy-45')}>
@@ -514,7 +516,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
 
                       {/* Memory Match Card */}
                       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors group flex flex-col h-full relative">
-                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('memory-match'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title="How to play">
+                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('memory-match'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title={t('howToPlay', language)}>
                           <Info className="w-4 h-4" />
                         </button>
                         <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('memory-match')}>
@@ -559,7 +561,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                                 <button 
                                   onClick={(e) => handleCancelGame(game.id, e)}
                                   className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                                  title="Cancel Game"
+                                  title={t('cancelGame', language)}
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>

@@ -2,8 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { Bell, Check, Trash2, MessageCircle, UserPlus } from 'lucide-react';
 import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { db, auth } from '../firebase';
+import { t } from '../utils/i18n';
+import { useThemeStore } from '../store';
+
 
 export default function NotificationsDropdown() {
+  const { language } = useThemeStore();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -67,7 +71,7 @@ export default function NotificationsDropdown() {
       <button 
         onClick={() => setIsOpen(!isOpen)}
         className="p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors relative"
-        title="Notifications"
+        title={t('notificationsTitle', language)}
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (

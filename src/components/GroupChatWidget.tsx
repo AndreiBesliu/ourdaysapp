@@ -7,6 +7,9 @@ import { db, auth, storage } from '../firebase';
 import { playTone } from '../utils/sounds';
 import { triggerHaptic } from '../utils/haptics';
 import { generateGroupDigestAI } from '../ai';
+import { t } from '../utils/i18n';
+import { useThemeStore } from '../store';
+
 
 interface GroupChatWidgetProps {
   groupId: string;
@@ -72,6 +75,7 @@ function AudioPlayer({ src, isMe }: { src: string; isMe: boolean }) {
 }
 
 export default function GroupChatWidget({ groupId, groupName, userMap, groupMembers = [] }: GroupChatWidgetProps) {
+  const { language } = useThemeStore();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -555,7 +559,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                   onClick={handleGenerateDigest}
                   disabled={isGeneratingDigest}
                   className="p-1 hover:bg-black/10 rounded-full transition-colors"
-                  title="Ce s-a mai întâmplat? (AI Digest)"
+                  title={t('aiDigestTooltip', language)}
                 >
                   {isGeneratingDigest ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -778,14 +782,14 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                               <button
                                 onClick={() => handleDelete(msg.id)}
                                 className="p-1 text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-full shrink-0"
-                                title="Delete"
+                                title={t('delete', language)}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => startEditing(msg)}
                                 className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full shrink-0"
-                                title="Edit"
+                                title={t('edit', language)}
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
@@ -794,7 +798,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                           <button
                             onClick={() => setReplyingTo(msg)}
                             className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full shrink-0"
-                            title="Reply"
+                            title={t('replyTooltip', language)}
                           >
                             <Reply className="w-3.5 h-3.5" />
                           </button>
@@ -808,7 +812,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                           <button
                             onClick={() => setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id)}
                             className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full shrink-0"
-                            title="Add reaction"
+                            title={t('addReactionTooltip', language)}
                           >
                             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/><path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14"/><path d="M9 9H9.01"/><path d="M15 9H15.01"/></svg>
                           </button>
@@ -920,7 +924,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
               <button
                 onClick={cancelRecording}
                 className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors shrink-0"
-                title="Cancel"
+                title={t('cancel', language)}
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -942,7 +946,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
               <button
                 onClick={stopRecording}
                 className="w-9 h-9 rounded-full bg-red-500 flex items-center justify-center hover:opacity-90 transition-opacity shrink-0 text-white"
-                title="Send voice message"
+                title={t('sendVoiceMessageTooltip', language)}
               >
                 <Send className="w-4 h-4 ml-0.5" />
               </button>
@@ -986,7 +990,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                   type="button"
                   onClick={startRecording}
                   className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors shrink-0 text-zinc-500"
-                  title="Record voice message"
+                  title={t('recordVoiceMessageTooltip', language)}
                 >
                   <Mic className="w-4 h-4" />
                 </button>

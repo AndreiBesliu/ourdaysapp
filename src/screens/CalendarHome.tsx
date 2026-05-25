@@ -423,14 +423,14 @@ export default function CalendarHome() {
           <button
             onClick={() => setIsRecurringPanelOpen(true)}
             className="hidden sm:flex p-2 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-full transition-colors"
-            title="Recurring Events"
+            title={t('recurringEvents', language)}
           >
             <Repeat className="w-5 h-5" />
           </button>
           <button 
             onClick={() => navigate('/wallet')}
             className="hidden sm:flex p-2 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-full transition-colors"
-            title="Assets"
+            title={t('assetsTitle', language)}
           >
             <Wallet className="w-5 h-5" />
           </button>

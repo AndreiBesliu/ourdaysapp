@@ -10,6 +10,9 @@ import { format } from 'date-fns';
 import { useModalBack } from '../hooks/useModalBack';
 import { getFrequencyLabel } from '../utils/recurrence';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
+import { t } from '../utils/i18n';
+import { useThemeStore } from '../store';
+
 
 interface EventDetailsModalProps {
   isOpen: boolean;
@@ -21,6 +24,7 @@ interface EventDetailsModalProps {
 }
 
 export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}, groups = [], onEdit }: EventDetailsModalProps) {
+  const { language } = useThemeStore();
   const [loading, setLoading] = useState(false);
   // Keep local state for optimistic UI updates of checklist
   const [checklist, setChecklist] = useState<any[]>(event?.checklistItems || []);
@@ -338,7 +342,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
               )}
               {owner && (
                 <div className="relative">
-                  <button type="button" onClick={() => setShowOwnerProfile(!showOwnerProfile)} className="w-7 h-7 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 flex items-center justify-center overflow-hidden hover:ring-2 hover:ring-primary transition-all shadow-sm" title="View Owner">
+                  <button type="button" onClick={() => setShowOwnerProfile(!showOwnerProfile)} className="w-7 h-7 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 flex items-center justify-center overflow-hidden hover:ring-2 hover:ring-primary transition-all shadow-sm" title={t('viewOwner', language)}>
                     {owner.photoURL ? (
                       <img src={owner.photoURL} alt={owner.name || owner.email} className="w-full h-full object-cover" />
                     ) : (
@@ -392,11 +396,11 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           </div>
           <div className="flex items-center gap-1">
             {canEdit && onEdit && (
-              <button onClick={onEdit} className="p-2 text-primary hover:bg-primary/10 transition-colors rounded-full" title="Edit Event">
+              <button onClick={onEdit} className="p-2 text-primary hover:bg-primary/10 transition-colors rounded-full" title={t('edit', language)}>
                 <Edit2 className="w-5 h-5" />
               </button>
             )}
-            <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors bg-zinc-100 dark:bg-zinc-800 rounded-full" title="Close">
+            <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors bg-zinc-100 dark:bg-zinc-800 rounded-full" title={t('closeTooltip', language)}>
               <X className="w-5 h-5" />
             </button>
           </div>

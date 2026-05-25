@@ -398,7 +398,7 @@ export default function Wallet() {
                 setViewingAssetCode(asset);
               }}
               className="absolute -top-6 right-3 bg-white dark:bg-zinc-800 p-2 rounded-full shadow-lg border border-zinc-200 dark:border-zinc-700 text-emerald-500 hover:text-emerald-600 hover:scale-110 transition-all"
-              title="Show Code"
+              title={t('showCode', language)}
             >
               <QrCode className="w-5 h-5" />
             </button>
@@ -419,7 +419,7 @@ export default function Wallet() {
                     openEditModal(asset);
                   }}
                   className="p-1.5 text-zinc-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-lg transition-colors"
-                  title="Edit Asset"
+                  title={t('editAsset', language)}
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
@@ -429,7 +429,7 @@ export default function Wallet() {
                     handleDelete(asset.id, true);
                   }}
                   className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
-                  title="Delete Asset"
+                  title={t('deleteAsset', language)}
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>

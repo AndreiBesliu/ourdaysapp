@@ -3,6 +3,9 @@ import { X, Settings2, Edit2, Check, Trash2, LogOut, UserMinus, AlertTriangle } 
 import { db, auth } from '../firebase';
 import { doc, updateDoc, arrayRemove, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { useModalBack } from '../hooks/useModalBack';
+import { t } from '../utils/i18n';
+import { useThemeStore } from '../store';
+
 
 interface GroupSettingsModalProps {
   isOpen: boolean;
@@ -18,6 +21,7 @@ interface GroupSettingsModalProps {
 export default function GroupSettingsModal({
   isOpen, onClose, groupId, groupName, isOwner, userMap, members, onSuccess
 }: GroupSettingsModalProps) {
+  const { language } = useThemeStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [editedName, setEditedName] = useState(groupName);
@@ -179,7 +183,7 @@ export default function GroupSettingsModal({
                         onClick={() => handleRemoveMember(memberId)}
                         disabled={loading}
                         className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
-                        title="Remove member"
+                        title={t('removeMember', language)}
                       >
                         <UserMinus className="w-4 h-4" />
                       </button>
