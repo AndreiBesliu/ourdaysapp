@@ -606,6 +606,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           otherAssignees.forEach(async (userId) => {
             await addDoc(collection(db, 'notifications'), {
               userId,
+              createdBy: auth.currentUser?.uid, // attribution: required by Firestore rules
               type: 'task',
               title: 'New Task Assigned',
               body: `You have been assigned to: ${title}`,

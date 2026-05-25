@@ -45,15 +45,20 @@ service cloud.firestore {
     }
 
     // ── Group Invites ──
+    // Readable only by the invitee (toEmail), the sender (fromId), or a member
+    // of the target group (covers groupId-scoped cleanup queries on group
+    // delete / leave). Prevents arbitrary enumeration of all invited emails.
+    function canAccessInvite() {
+      return isSignedIn() && (
+        request.auth.token.email == resource.data.toEmail ||
+        request.auth.uid == resource.data.fromId ||
+        (resource.data.groupId != null && isMemberOfGroup(resource.data.groupId))
+      );
+    }
     match /group_invites/{inviteId} {
-      allow read: if isSignedIn();
+      allow read: if canAccessInvite();
       allow create: if isSignedIn();
-      allow update: if isSignedIn() &&
-        (request.auth.token.email == resource.data.toEmail || 
-         request.auth.uid == resource.data.fromUid);
-      allow delete: if isSignedIn() &&
-        (request.auth.token.email == resource.data.toEmail || 
-         request.auth.uid == resource.data.fromUid);
+      allow update, delete: if canAccessInvite();
     }
 
     // ── Events ──
@@ -79,7 +84,11 @@ service cloud.firestore {
     // ── Games ──
     match /games/{gameId} {
       allow read: if isSignedIn() && isMemberOfGroup(resource.data.groupId);
-      allow create: if isSignedIn();
+      // Creator must be the authenticated user and a member of the target group
+      // (prevents spoofing createdBy / creating games in groups you don't belong to).
+      allow create: if isSignedIn() &&
+        request.resource.data.createdBy == request.auth.uid &&
+        isMemberOfGroup(request.resource.data.groupId);
       allow update: if isSignedIn() && isMemberOfGroup(resource.data.groupId);
       allow delete: if isSignedIn() &&
         resource.data.createdBy == request.auth.uid;
@@ -93,9 +102,16 @@ service cloud.firestore {
     }
 
     // ── Notifications ──
+    // Recipient (userId) controls read/update/delete. Creation is allowed for
+    // any signed-in user (notifications are often created FOR another user, e.g.
+    // task assignment) but must record an honest `createdBy == auth.uid` so every
+    // notification is attributable. NOTE: this does not fully prevent a malicious
+    // member from spamming — see "Deferred Security Work" (move creation to a
+    // Cloud Function trigger for real anti-spam + rate limiting).
     match /notifications/{notifId} {
       allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.createdBy == request.auth.uid;
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }

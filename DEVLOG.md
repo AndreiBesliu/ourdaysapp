@@ -68,6 +68,23 @@
 
 ---
 
+## 🔒 Deferred Security Work (Audit 2026-05-25)
+> A code audit showed that several Firestore collections cannot be safely locked down with simple client-side rules because legitimate flows write documents on behalf of OTHER users. These need backend (Cloud Functions / Admin SDK) refactors before the rules can be tightened. Tracked here so they are not forgotten.
+
+- **`events` — `ownerId` spoofing** 🟠 Cannot enforce `create: ownerId == auth.uid` because:
+  - **Smart Birthday Auto-Add** (`CalendarHome.tsx:386`) creates events with `ownerId` = other group members' IDs.
+  - **Recurrence overrides** (`AddEventModal.tsx:572`) created by a non-owner group member keep the original `ownerId`.
+  - **Fix path:** move birthday auto-add (and ideally override creation) into a Cloud Function (Admin SDK bypasses rules), then add `create: request.resource.data.ownerId == request.auth.uid` for client-created events.
+- **`assets` — `ownerId` spoofing** 🟠 Cannot enforce `create: ownerId == auth.uid` because **asset transfer "Keep Copy"** (`Wallet.tsx:147`) creates an asset with `ownerId` = the recipient.
+  - **Fix path:** move asset transfer to a Cloud Function, then tighten `assets` create rule.
+- **`notifications` — anti-spam** 🟠 Current rule only requires honest `createdBy == auth.uid` (attribution). A malicious member can still spam notifications to any `userId`.
+  - **Fix path:** move notification creation (task assignment, RSVP, invites) to a Cloud Function trigger that validates the recipient shares a group with the sender + rate-limits. Then forbid direct client `create`.
+- **#1 `users` read exposure** 🔴 (NEXT TASK) `users` is currently world-readable by any signed-in user (exposes email, fcmTokens, photoURL, prefs). Needs an audit of every place the UI reads other users' docs (chat avatars, member circles, modals) before restricting read to self + shared-group members.
+- **#5 Firebase App Check** 🟠 Callable Gemini functions + Firestore are callable by anyone with the public web config. Add App Check (reCAPTCHA v3 / Play Integrity) + basic rate limiting to prevent abuse and cost spikes.
+- **Housekeeping** 🟢 `.firebase/` deploy cache is git-tracked — add to `.gitignore` in a future cleanup.
+
+---
+
 ## ✅ Completed Features
 
 - **AI Event Type Suggestion**: AI suggests the category of event to create on event title blur using Gemini Cloud Functions.
@@ -778,4 +795,21 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > Model: Claude Opus 4.7
 
 **2026-05-25 - Task Completed**: (#7) `git rm`'d `.temp_devlog.md`. (#8) Deleted the `isAIEnabled` function from `ai.ts` and removed all 6 usages: simplified the guard in `ai.ts` (`suggestAssetForTextAI`), removed `!isAIEnabled() ||` from two conditions in `AddEventModal.tsx`, unwrapped the two `{isAIEnabled() && (...)}` JSX blocks (AI checklist button in `AddEventModal.tsx`, AI digest button in `GroupChatWidget.tsx`), and dropped the now-unused `isAIEnabled` import from both component files. Build verified (`npm run build` OK, no TS errors). Deployed hosting + committed + pushed.
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Started**
+> Prompt: "vreau sa verifici inainte" → after audit, chosen: apply the SAFE subset of #2/#3/#4 + document deferred work
+> Plan: A pre-implementation audit of how `userId`/`ownerId`/`createdBy` are written revealed the naive rule tightening would break real cross-user flows (birthday auto-add, asset transfer keep-copy, recurrence overrides by non-owners, task-assignment notifications, group-deletion invite cleanup). Apply only the safe subset:
+> - (#2) `group_invites` read restricted to OR(toEmail==email, fromId==uid, isMemberOfGroup(groupId)); same OR for update/delete; fix dead `fromUid`→`fromId`.
+> - (#4) `games` create restricted to `createdBy==auth.uid && isMemberOfGroup(groupId)` (createdBy is always the current user).
+> - (#3) `notifications` create gated on `request.resource.data.createdBy == auth.uid` (attribution); add `createdBy: uid` to the client write in `AddEventModal.tsx`.
+> Defer events/assets ownerId tightening + full notification anti-spam to Cloud Functions refactors (logged in "Deferred Security Work" below).
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Completed**: Applied the safe security subset.
+> - `firestore.rules`: (#2) added `canAccessInvite()` helper and restricted `group_invites` read + update + delete to invitee/sender/group-member; fixed dead `fromUid`→`fromId`. (#4) `games` create now requires `createdBy == auth.uid && isMemberOfGroup(groupId)`. (#3) `notifications` create now requires `request.resource.data.createdBy == auth.uid`.
+> - `AddEventModal.tsx`: added `createdBy: auth.currentUser?.uid` to the task-assignment notification write so it passes the new rule (cross-user notifications still work; `userId` stays the recipient).
+> - Verified all real read queries survive the new invite rule: `CalendarHome` (by `toEmail`), `GroupSettingsModal`/`LeaveGroupModal` (by `groupId`, covered by the member branch).
+> - Documented deferred work (events/assets ownerId → Cloud Functions, notifications anti-spam, #1 users read, #5 App Check, .firebase gitignore) in the new "Deferred Security Work" section.
+> - Build OK. Deployed `firestore:rules` + hosting, committed, pushed.
 > Model: Claude Opus 4.7
