@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, Sparkles, GripVertical, Search, Check } from 'lucide-react';
-import { addDoc, collection, query, getDocs, updateDoc, doc, arrayUnion } from 'firebase/firestore';
+import { addDoc, collection, query, updateDoc, doc, arrayUnion } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
@@ -112,15 +112,15 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
   useEffect(() => {
     if (!isOpen || !auth.currentUser) return;
-    const fetchUsers = async () => {
-      const q = query(collection(db, 'users'));
-      const snapshot = await getDocs(q);
-      const fetchedUsers = snapshot.docs
-        .map(doc => ({ id: doc.id, name: doc.data().name || doc.data().email }))
-        .filter(user => user.id !== auth.currentUser?.uid);
-      setUsers(fetchedUsers);
-    };
-    fetchUsers();
+    // Derive the assignee list from the group/family members already loaded by
+    // CalendarHome (userMap) instead of reading the entire `users` collection.
+    // This avoids enumerating every account in the app and keeps assignees
+    // scoped to people the current user actually shares a group/family with.
+    setUsers(
+      Object.values(userMap)
+        .map((u: any) => ({ id: u.id, name: u.name || u.email }))
+        .filter((user) => user.id && user.id !== auth.currentUser?.uid)
+    );
 
     // Fetch user assets
     const assetsQuery = query(collection(db, 'assets'));

@@ -813,3 +813,12 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > - Documented deferred work (events/assets ownerId → Cloud Functions, notifications anti-spam, #1 users read, #5 App Check, .firebase gitignore) in the new "Deferred Security Work" section.
 > - Build OK. Deployed `firestore:rules` + hosting, committed, pushed.
 > Model: Claude Opus 4.7
+
+**2026-05-25 - Task Started**
+> Prompt: "da" (proceed to #1 audit) → chosen path "C now, then A"
+> Plan: (#1 step C — quick win) The assignee picker in `AddEventModal.tsx` fetched the ENTIRE `users` collection (`query(collection(db,'users'))`), enumerating every account in the app. Replace it with deriving the assignee list from the `userMap` prop (group/family members already loaded by `CalendarHome`), scoping assignees to people the user shares a group with. Remove the now-unused `getDocs` import. This kills the main enumeration vector and is more correct, without changing the `users` read rule yet (full lock-down via a public `profiles` collection = step A, next).
+> Model: Claude Opus 4.7
+
+**2026-05-25 - Task Completed**: (#1 step C) Replaced the global `users` fetch in `AddEventModal.tsx` with a derivation from the `userMap` prop (group/family members already loaded by `CalendarHome`); removed the now-unused `getDocs` import. Assignee picker is now scoped to people the user shares a group with — no more enumeration of all accounts. Build OK, deployed hosting, committed, pushed. Step A (public `profiles` collection + restrict `users` read to owner-only) remains — tracked in "Deferred Security Work".
+> NOTE (separate finding): `AddEventModal.tsx` still listens on `query(collection(db,'assets'))` (all assets) and filters client-side; with the current `assets` read rule (`ownerId == auth.uid`) this listener likely hits permission-denied. Flagged for follow-up — should query with `where('ownerId','==',uid)`.
+> Model: Claude Opus 4.7
