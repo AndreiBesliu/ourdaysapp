@@ -956,3 +956,17 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > Other games unaffected: TicTacToe (flat `Array(9)`) and MemoryMatch (flat array of objects) use 1D arrays, which Firestore allows.
 > Build OK (tsc + vite). Deployed, committed, pushed.
 > Model: Claude Opus 4.7
+
+**2026-05-26 - Task Started**
+> Prompt: i18n sweep of the Arcade game components (hardcoded English still present in Connect4, TicTacToe, MemoryMatch, RummyGame, GamesHubModal).
+> Plan: Route ALL user-facing strings through `t(key, language)`. Add ~74 keys to all 6 language blocks in `i18n.ts`; add `useThemeStore`/`language` to the game components that lacked it; complete the missing `memory-match` rules for ro/fr/es/it/de in GamesHubModal's `getGameRules`; convert RummyEngine's English `validateMeld` error strings into i18n `errorKey`s resolved in the UI.
+> Model: Claude Opus 4.7
+
+**2026-05-26 - Task Completed**: Full i18n coverage for the Arcade.
+> - `i18n.ts`: added ~74 keys to all 6 languages — shared game UI (backToArcade, waitingEllipsis, score, vs, yourTurn, waitingForOpponent, nextRound, joinGame, joinGameAs, winsSuffix, itsADraw), GamesHub (playingGame, startNewGame, gamesOn, thisDay, winnerLabel, draw, inProgressLabel, view, allTimeLeaderboard, whoRulesArcadePrefix, noGamesCompleted, startPlayingGetOnBoard, winsLabel, ptsLabel, okLabel, game name + description keys), Memory Match (player1/2, youWon, wonSuffix, playAgain), Rummy (exitLabel, waitingForPlayersJoin, startGame, waitingForHost, drawACard, meldOrDiscard, waitingForPlayer, drawUpper/deckUpper/dropUpper/discardUpper, cardsLeft, noMeldsYet, stagedMeldsLabel, playMeldsToBoard, sortLabel, meldCardsPrefix, cardsWord, gameOver, winsLower, someone, jokerLabel) + 6 Rummy error keys + 5 engine error keys.
+> - `Connect4.tsx`, `TicTacToe.tsx`, `MemoryMatch.tsx`, `RummyGame.tsx`: added `useThemeStore`/`t` and localized every visible string (player placeholders, scores, turn/status lines, win/draw text, lobby/buttons, deck/discard labels, staged melds, hand controls, game-over scoreboard, Joker tile).
+> - `RummyEngine.ts`: `validateMeld` now returns an `errorKey` (i18n key) instead of a hardcoded English `error`; `RummyGame` resolves it via `t(result.errorKey, language)`.
+> - `GamesHubModal.tsx`: localized header, tabs, card titles/descriptions, active-games list (new `gameTypeName()` helper for localized game names), winner/status, View/Join, leaderboard; added the missing `memory-match` rules for ro/fr/es/it/de so the rules modal now opens in every language.
+> Exceptions left untranslated per the i18n rule: real player/group names and the rare `Unknown` name fallback.
+> Build OK (tsc + vite). Deployed, committed, pushed.
+> Model: Claude Opus 4.7

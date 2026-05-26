@@ -4,6 +4,8 @@ import { db, auth } from '../../firebase';
 import { ArrowLeft, Gamepad2, Rocket, Star, Heart, Flame, Zap, Camera, Music, Trophy } from 'lucide-react';
 import { playTone } from '../../utils/sounds';
 import { triggerHaptic } from '../../utils/haptics';
+import { useThemeStore } from '../../store';
+import { t } from '../../utils/i18n';
 
 interface MemoryMatchProps {
   game: any;
@@ -25,6 +27,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 export const ICONS_LIST = Object.keys(ICON_MAP);
 
 export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps) {
+  const { language } = useThemeStore();
   const [processing, setProcessing] = useState(false);
 
   const isMyTurn = () => {
@@ -159,7 +162,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
         <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h2 className="font-bold text-lg text-zinc-900 dark:text-zinc-100">Memory Match</h2>
+        <h2 className="font-bold text-lg text-zinc-900 dark:text-zinc-100">{t('gameMemoryMatch', language)}</h2>
         <div className="w-9" />
       </div>
 
@@ -179,12 +182,12 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
               )}
             </div>
             <div className="text-center">
-              <span className="text-[10px] font-bold uppercase text-zinc-500 block">{p1?.name?.split(' ')[0] || 'Player 1'}</span>
+              <span className="text-[10px] font-bold uppercase text-zinc-500 block">{p1?.name?.split(' ')[0] || t('player1', language)}</span>
               <span className="text-lg font-bold text-primary">{scores?.P1 || 0}</span>
             </div>
           </div>
 
-          <span className="text-xl font-black text-zinc-300 dark:text-zinc-700 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">VS</span>
+          <span className="text-xl font-black text-zinc-300 dark:text-zinc-700 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">{t('vs', language)}</span>
 
           {/* P2 */}
           <div className={`flex flex-col items-center gap-2 p-2 rounded-xl transition-colors ${!p1IsNext && game.status === 'playing' ? 'bg-red-500/10 ring-2 ring-red-500/50' : 'opacity-50'}`}>
@@ -200,7 +203,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
                   )}
                 </div>
                 <div className="text-center">
-                  <span className="text-[10px] font-bold uppercase text-zinc-500 block">{p2?.name?.split(' ')[0] || 'Player 2'}</span>
+                  <span className="text-[10px] font-bold uppercase text-zinc-500 block">{p2?.name?.split(' ')[0] || t('player2', language)}</span>
                   <span className="text-lg font-bold text-red-500">{scores?.P2 || 0}</span>
                 </div>
               </>
@@ -210,7 +213,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
                   onClick={handleJoin}
                   className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-full hover:bg-primary/90 transition-all shadow-md active:scale-95"
                 >
-                  Join Game
+                  {t('joinGame', language)}
                 </button>
               </div>
             )}
@@ -252,14 +255,14 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
             </div>
             <h3 className="text-2xl font-black text-zinc-900 dark:text-white mb-2">
               {game.winner ? (
-                userMap[game.winner]?.uid === auth.currentUser?.uid ? 'You Won!' : `${userMap[game.winner]?.name?.split(' ')[0]} Won!`
-              ) : 'It\'s a Draw!'}
+                userMap[game.winner]?.uid === auth.currentUser?.uid ? t('youWon', language) : `${userMap[game.winner]?.name?.split(' ')[0]} ${t('wonSuffix', language)}`
+              ) : t('itsADraw', language)}
             </h3>
             <button
               onClick={handleNextRound}
               className="mt-4 px-8 py-3 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/30 hover:scale-105 active:scale-95 transition-all"
             >
-              Play Again
+              {t('playAgain', language)}
             </button>
           </div>
         )}

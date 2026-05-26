@@ -99,21 +99,21 @@ export const initializeGame = (playerUids: string[]): GameState => {
 
 export const VALUE_ORDER = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 
-export const validateMeld = (cards: RummyCard[]): { isValid: boolean; type?: 'set' | 'run'; points: number; error?: string } => {
-  if (cards.length < 3) return { isValid: false, points: 0, error: 'Meld must have at least 3 cards.' };
+export const validateMeld = (cards: RummyCard[]): { isValid: boolean; type?: 'set' | 'run'; points: number; errorKey?: string } => {
+  if (cards.length < 3) return { isValid: false, points: 0, errorKey: 'errMeldMin3' };
 
-  if (cards.length < 3) return { isValid: false, points: 0, error: 'Meld must have at least 3 cards.' };
+  if (cards.length < 3) return { isValid: false, points: 0, errorKey: 'errMeldMin3' };
   const naturalCards = cards.filter(c => !c.isJoker);
 
-  if (naturalCards.length < 2) return { isValid: false, points: 0, error: 'Meld must have at least 2 natural cards.' };
+  if (naturalCards.length < 2) return { isValid: false, points: 0, errorKey: 'errMeldMin2Natural' };
 
   // Check if SET (same value, different suits)
   const isSet = naturalCards.every(c => c.value === naturalCards[0].value);
   if (isSet) {
     // Suits must be unique
     const suits = new Set(naturalCards.map(c => c.suit));
-    if (suits.size !== naturalCards.length) return { isValid: false, points: 0, error: 'Sets must have distinct suits.' };
-    if (cards.length > 4) return { isValid: false, points: 0, error: 'Sets cannot have more than 4 cards.' };
+    if (suits.size !== naturalCards.length) return { isValid: false, points: 0, errorKey: 'errSetsDistinctSuits' };
+    if (cards.length > 4) return { isValid: false, points: 0, errorKey: 'errSetsMax4' };
     
     // Valid SET
     return { isValid: true, type: 'set', points: calculateMeldPoints(cards, 'set') };
@@ -168,7 +168,7 @@ export const validateMeld = (cards: RummyCard[]): { isValid: boolean; type?: 'se
     }
   }
 
-  return { isValid: false, points: 0, error: 'Cards do not form a valid Set or Run.' };
+  return { isValid: false, points: 0, errorKey: 'errNotValidSetRun' };
 };
 
 const calculateMeldPoints = (cards: RummyCard[], type: 'set' | 'run', aceAsOne: boolean = false): number => {

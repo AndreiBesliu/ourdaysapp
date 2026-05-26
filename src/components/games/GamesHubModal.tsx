@@ -94,6 +94,16 @@ const getGameRules = (lang: string = 'en-US'): Record<string, { title: string, r
           'Poți schimba un Joker de pe masă dacă ai cartea exactă pe care Jokerul o înlocuiește.',
           'Pentru a câștiga runda (Inchidere), trebuie să etalezi/lipești toate cărțile CU EXCEPȚIA uneia, care trebuie decartată.'
         ]
+      },
+      'memory-match': {
+        title: 'Memorie',
+        rules: [
+          'Un joc clasic de memorie cu 16 cărți (8 perechi).',
+          'La rândul tău, atinge două cărți pentru a le întoarce.',
+          'Dacă simbolurile se potrivesc, primești un punct și încă o tură!',
+          'Dacă nu se potrivesc, se întorc la loc și urmează celălalt jucător.',
+          'Jucătorul cu cele mai multe perechi când toate cărțile sunt potrivite câștigă.'
+        ]
       }
     },
     'fr-FR': {
@@ -125,6 +135,16 @@ const getGameRules = (lang: string = 'en-US'): Record<string, { title: string, r
           'Après la pose de 45 pts, vous pouvez ajouter des cartes aux combinaisons existantes sur le plateau.',
           'Vous pouvez remplacer un Joker sur le plateau si vous avez la carte exacte qu\'il représente.',
           'Pour gagner, vous devez poser toutes vos cartes SAUF une, qui doit être défaussée.'
+        ]
+      },
+      'memory-match': {
+        title: 'Memory',
+        rules: [
+          'Un jeu de mémoire classique avec 16 cartes (8 paires).',
+          'À votre tour, touchez deux cartes pour les retourner.',
+          'Si les symboles correspondent, vous marquez un point et rejouez !',
+          'Sinon, elles se retournent et c\'est au tour de l\'autre joueur.',
+          'Le joueur avec le plus de paires quand toutes les cartes sont trouvées gagne.'
         ]
       }
     },
@@ -158,6 +178,16 @@ const getGameRules = (lang: string = 'en-US'): Record<string, { title: string, r
           'Puedes intercambiar un comodín de la mesa si tienes la carta exacta que representa.',
           'Para ganar la ronda, debes combinar todas tus cartas EXCEPTO una, que debe ser descartada.'
         ]
+      },
+      'memory-match': {
+        title: 'Memoria',
+        rules: [
+          'Un juego de memoria clásico con 16 cartas (8 parejas).',
+          'En tu turno, toca dos cartas para darles la vuelta.',
+          '¡Si los símbolos coinciden, ganas un punto y otro turno!',
+          'Si no coinciden, se voltean de nuevo y es el turno del otro jugador.',
+          'Gana el jugador con más parejas cuando todas las cartas están emparejadas.'
+        ]
       }
     },
     'it-IT': {
@@ -189,6 +219,16 @@ const getGameRules = (lang: string = 'en-US'): Record<string, { title: string, r
           'Dopo l\'apertura da 45 punti, puoi attaccare le carte alle combinazioni sul tavolo.',
           'Puoi scambiare un jolly se hai la carta esatta che sostituisce.',
           'Per chiudere e vincere, devi combinare o attaccare tutte le carte TRANNE una da scartare.'
+        ]
+      },
+      'memory-match': {
+        title: 'Memory',
+        rules: [
+          'Un classico gioco di memoria con 16 carte (8 coppie).',
+          'Al tuo turno, tocca due carte per girarle.',
+          'Se i simboli combaciano, segni un punto e giochi ancora!',
+          'Se non combaciano, si rigirano ed è il turno dell\'altro giocatore.',
+          'Vince chi ha più coppie quando tutte le carte sono abbinate.'
         ]
       }
     },
@@ -222,6 +262,16 @@ const getGameRules = (lang: string = 'en-US'): Record<string, { title: string, r
           'Du kannst einen Joker austauschen, wenn du die genaue Karte hast.',
           'Um die Runde zu gewinnen, musst du alle Karten bis auf eine ablegen, welche abgeworfen wird.'
         ]
+      },
+      'memory-match': {
+        title: 'Memory',
+        rules: [
+          'Ein klassisches Memory-Spiel mit 16 Karten (8 Paare).',
+          'Tippe in deinem Zug zwei Karten an, um sie umzudrehen.',
+          'Wenn die Symbole übereinstimmen, bekommst du einen Punkt und bist nochmal dran!',
+          'Andernfalls werden sie wieder umgedreht und der andere Spieler ist dran.',
+          'Wer die meisten Paare hat, wenn alle Karten gefunden sind, gewinnt.'
+        ]
       }
     }
   };
@@ -237,6 +287,17 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
   const [showRulesFor, setShowRulesFor] = useState<string | null>(null);
   const { language } = useThemeStore();
   const gameRules = getGameRules(language);
+
+  // Localized display name for a game type id (used in the active/past games list)
+  const gameTypeName = (gt: string): string => {
+    switch (gt) {
+      case 'tic-tac-toe': return t('gameTicTacToe', language);
+      case 'connect-4': return t('gameConnect4', language);
+      case 'rummy-45': return t('gameRummy45', language);
+      case 'memory-match': return t('gameMemoryMatch', language);
+      default: return gt.replace(/-/g, ' ');
+    }
+  };
 
   // Daily Games Query
   useEffect(() => {
@@ -407,7 +468,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
           <div className="flex items-center gap-2">
             <Gamepad2 className="w-5 h-5 text-primary" />
             <h3 className="font-bold text-lg text-zinc-900 dark:text-white">
-              {playingGameId ? "Playing Game" : `${groupName} Arcade`}
+              {playingGameId ? t('playingGame', language) : `${groupName} ${t('arcade', language)}`}
             </h3>
           </div>
           <div className="flex items-center gap-2">
@@ -455,13 +516,13 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                   onClick={() => setView('arcade')}
                   className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${view === 'arcade' ? 'bg-white dark:bg-zinc-700 shadow-sm text-primary' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
                 >
-                  Arcade
+                  {t('arcade', language)}
                 </button>
                 <button 
                   onClick={() => setView('leaderboard')}
                   className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${view === 'leaderboard' ? 'bg-white dark:bg-zinc-700 shadow-sm text-primary' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
                 >
-                  Leaderboard
+                  {t('leaderboard', language)}
                 </button>
               </div>
 
@@ -469,7 +530,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                 <>
                   {/* Game Catalog */}
                   <div>
-                    <h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">Start a New Game</h4>
+                    <h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">{t('startNewGame', language)}</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Tic Tac Toe Card */}
                       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors group flex flex-col h-full relative">
@@ -480,8 +541,8 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                           <div className="w-12 h-12 bg-blue-100 dark:bg-blue-500/20 text-blue-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-all">
                             <div className="text-xl font-bold font-mono">X O</div>
                           </div>
-                          <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Tic-Tac-Toe</h5>
-                          <p className="text-sm text-zinc-500 flex-1">A classic 2-player game. First to get 3 in a row wins!</p>
+                          <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">{t('gameTicTacToe', language)}</h5>
+                          <p className="text-sm text-zinc-500 flex-1">{t('descTicTacToe', language)}</p>
                         </div>
                       </div>
 
@@ -497,8 +558,8 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                             <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
                             <div className="w-3 h-3 bg-red-500 rounded-full"></div>
                           </div>
-                          <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Connect 4</h5>
-                          <p className="text-sm text-zinc-500 flex-1">Drop discs to get 4 in a row. Strategic and fast-paced!</p>
+                          <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">{t('gameConnect4', language)}</h5>
+                          <p className="text-sm text-zinc-500 flex-1">{t('descConnect4', language)}</p>
                         </div>
                       </div>
 
@@ -511,8 +572,8 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                           <div className="w-12 h-12 bg-red-100 dark:bg-red-500/20 text-red-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-all">
                             <div className="text-xl font-bold font-mono">45</div>
                           </div>
-                          <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Rummy 45</h5>
-                          <p className="text-sm text-zinc-500">The ultimate family card game. Form runs and sets to win.</p>
+                          <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">{t('gameRummy45', language)}</h5>
+                          <p className="text-sm text-zinc-500">{t('descRummy45', language)}</p>
                         </div>
                       </div>
 
@@ -525,8 +586,8 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                           <div className="w-12 h-12 bg-amber-100 dark:bg-amber-500/20 text-amber-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-all">
                             <Gamepad2 className="w-6 h-6" />
                           </div>
-                          <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">Memory Match</h5>
-                          <p className="text-sm text-zinc-500 flex-1">Find the matching pairs. Test your memory!</p>
+                          <h5 className="font-bold text-zinc-900 dark:text-zinc-100 text-lg mb-1">{t('gameMemoryMatch', language)}</h5>
+                          <p className="text-sm text-zinc-500 flex-1">{t('descMemoryMatch', language)}</p>
                         </div>
                       </div>
                     </div>
@@ -536,7 +597,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                   {activeGames.length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">
-                        Games on {selectedDate ? format(selectedDate, 'MMM d, yyyy') : 'this day'}
+                        {t('gamesOn', language)} {selectedDate ? format(selectedDate, 'MMM d, yyyy') : t('thisDay', language)}
                       </h4>
                       <div className="flex flex-col gap-3">
                         {activeGames.map((game) => (
@@ -546,14 +607,14 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                                 <Gamepad2 className="w-5 h-5" />
                               </div>
                               <div>
-                                <p className="font-bold text-zinc-900 dark:text-zinc-100 capitalize">
-                                  {game.gameType.replace(/-/g, ' ')}
+                                <p className="font-bold text-zinc-900 dark:text-zinc-100">
+                                  {gameTypeName(game.gameType)}
                                 </p>
                                 <p className="text-xs text-zinc-500 flex items-center gap-1">
                                   {game.status === 'finished' ? (
-                                    <>Winner: {game.winner ? userMap[game.winner]?.name : 'Draw'}</>
+                                    <>{t('winnerLabel', language)}: {game.winner ? userMap[game.winner]?.name : t('draw', language)}</>
                                   ) : (
-                                    <><Clock className="w-3 h-3" /> {game.status === 'waiting' ? 'Waiting for opponent' : 'In Progress'}</>
+                                    <><Clock className="w-3 h-3" /> {game.status === 'waiting' ? t('waitingForOpponent', language) : t('inProgressLabel', language)}</>
                                   )}
                                 </p>
                               </div>
@@ -572,7 +633,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                                 onClick={() => setPlayingGameId(game.id)}
                                 className="px-4 py-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors"
                               >
-                                {game.status === 'finished' ? 'View' : <><Play className="w-4 h-4" /> Join</>}
+                                {game.status === 'finished' ? t('view', language) : <><Play className="w-4 h-4" /> {t('join', language)}</>}
                               </button>
                             </div>
                           </div>
@@ -586,14 +647,14 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
               {view === 'leaderboard' && (
                 <div className="flex flex-col gap-4">
                   <div className="text-center mb-4">
-                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">All-Time Leaderboard</h2>
-                    <p className="text-sm text-zinc-500">Who rules the arcade in {groupName}?</p>
+                    <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{t('allTimeLeaderboard', language)}</h2>
+                    <p className="text-sm text-zinc-500">{t('whoRulesArcadePrefix', language)} {groupName}?</p>
                   </div>
 
                   {leaderboard.length === 0 ? (
                     <div className="text-center py-12 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800">
-                      <p className="text-zinc-500">No games have been completed yet.</p>
-                      <p className="text-zinc-400 text-sm mt-1">Start playing to get on the board!</p>
+                      <p className="text-zinc-500">{t('noGamesCompleted', language)}</p>
+                      <p className="text-zinc-400 text-sm mt-1">{t('startPlayingGetOnBoard', language)}</p>
                     </div>
                   ) : (
                     <div className="flex flex-col gap-3">
@@ -623,9 +684,9 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                             </div>
                             <div className="text-right">
                               <p className="text-2xl font-black text-primary">{entry.wins}</p>
-                              <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Wins</p>
+                              <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">{t('winsLabel', language)}</p>
                               {entry.points !== undefined && entry.points < 0 && (
-                                 <p className="text-xs font-bold text-red-500 mt-1">{entry.points} pts</p>
+                                 <p className="text-xs font-bold text-red-500 mt-1">{entry.points} {t('ptsLabel', language)}</p>
                               )}
                             </div>
                           </div>
@@ -664,7 +725,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
               </ul>
             </div>
             <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 rounded-b-2xl flex justify-end">
-              <button onClick={() => setShowRulesFor(null)} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all">OK</button>
+              <button onClick={() => setShowRulesFor(null)} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all">{t('okLabel', language)}</button>
             </div>
           </div>
         </div>

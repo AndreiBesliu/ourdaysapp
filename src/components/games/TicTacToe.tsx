@@ -1,6 +1,8 @@
 import { doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
 import { ArrowLeft } from 'lucide-react';
+import { useThemeStore } from '../../store';
+import { t } from '../../utils/i18n';
 
 interface TicTacToeProps {
   game: any;
@@ -9,6 +11,7 @@ interface TicTacToeProps {
 }
 
 export default function TicTacToe({ game, userMap, onBack }: TicTacToeProps) {
+  const { language } = useThemeStore();
   const isMyTurn = () => {
     if (game.status === 'finished') return false;
     const { xIsNext, players } = game.state;
@@ -88,7 +91,7 @@ export default function TicTacToe({ game, userMap, onBack }: TicTacToeProps) {
   return (
     <div className="flex flex-col items-center flex-1 py-4">
       <button onClick={onBack} className="self-start mb-4 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 flex items-center gap-1 text-sm font-medium transition-colors">
-        <ArrowLeft className="w-4 h-4" /> Back to Arcade
+        <ArrowLeft className="w-4 h-4" /> {t('backToArcade', language)}
       </button>
 
       {/* Players */}
@@ -96,44 +99,44 @@ export default function TicTacToe({ game, userMap, onBack }: TicTacToeProps) {
         <div className={`flex flex-col items-center ${game.state.xIsNext && game.status !== 'finished' ? 'opacity-100 scale-110' : 'opacity-50'} transition-all`}>
           <div className="text-2xl font-bold text-blue-500 mb-1">X</div>
           <div className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">
-            {game.state.players.X ? userMap[game.state.players.X]?.name : 'Waiting...'}
+            {game.state.players.X ? userMap[game.state.players.X]?.name : t('waitingEllipsis', language)}
           </div>
-          <div className="text-xs font-bold text-zinc-500 mt-1">Score: {game.state.scores?.X || 0}</div>
+          <div className="text-xs font-bold text-zinc-500 mt-1">{t('score', language)}: {game.state.scores?.X || 0}</div>
         </div>
         
-        <div className="text-sm font-bold text-zinc-300 dark:text-zinc-700">VS</div>
+        <div className="text-sm font-bold text-zinc-300 dark:text-zinc-700">{t('vs', language)}</div>
 
         <div className={`flex flex-col items-center ${!game.state.xIsNext && game.status !== 'finished' ? 'opacity-100 scale-110' : 'opacity-50'} transition-all`}>
           <div className="text-2xl font-bold text-red-500 mb-1">O</div>
           <div className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">
-            {game.state.players.O ? userMap[game.state.players.O]?.name : 'Waiting...'}
+            {game.state.players.O ? userMap[game.state.players.O]?.name : t('waitingEllipsis', language)}
           </div>
-          <div className="text-xs font-bold text-zinc-500 mt-1">Score: {game.state.scores?.O || 0}</div>
+          <div className="text-xs font-bold text-zinc-500 mt-1">{t('score', language)}: {game.state.scores?.O || 0}</div>
         </div>
       </div>
 
       {/* Game Status Message */}
       <div className="mb-6 h-8 flex items-center justify-center">
         {game.status === 'waiting' && mySymbol === 'X' && (
-          <p className="text-zinc-500 font-medium animate-pulse">Waiting for an opponent to join...</p>
+          <p className="text-zinc-500 font-medium animate-pulse">{t('waitingForOpponentJoin', language)}</p>
         )}
         {game.status === 'waiting' && !mySymbol && (
           <button onClick={handleJoin} className="px-6 py-2 bg-primary hover:bg-primary/90 text-white rounded-full font-bold shadow-md hover:shadow-lg transition-all">
-            Join Game as O
+            {t('joinGameAs', language)} O
           </button>
         )}
         {game.status === 'playing' && (
           <p className={`font-bold text-lg ${isMyTurn() ? 'text-primary' : 'text-zinc-500'}`}>
-            {isMyTurn() ? "It's your turn!" : "Waiting for opponent..."}
+            {isMyTurn() ? t('yourTurn', language) : t('waitingForOpponent', language)}
           </p>
         )}
         {game.status === 'finished' && (
           <div className="flex items-center gap-4">
             <p className="font-bold text-xl text-emerald-500">
-              {game.winner ? `${userMap[game.winner]?.name} Wins!` : "It's a Draw!"}
+              {game.winner ? `${userMap[game.winner]?.name} ${t('winsSuffix', language)}` : t('itsADraw', language)}
             </p>
             <button onClick={handleNextRound} className="px-4 py-1.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded-full text-sm font-bold transition-colors">
-              Next Round
+              {t('nextRound', language)}
             </button>
           </div>
         )}

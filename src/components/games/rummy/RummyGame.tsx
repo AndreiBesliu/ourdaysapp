@@ -4,6 +4,8 @@ import { db, auth } from '../../../firebase';
 import { ArrowLeft, Play } from 'lucide-react';
 import { initializeGame } from './RummyEngine';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { useThemeStore } from '../../../store';
+import { t } from '../../../utils/i18n';
 
 interface RummyGameProps {
   game: any;
@@ -14,6 +16,7 @@ interface RummyGameProps {
 import { validateMeld, canAttachToMeld, calculatePenaltyPoints, canSwapJoker, VALUE_ORDER } from './RummyEngine';
 
 export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
+  const { language } = useThemeStore();
   const [localHand, setLocalHand] = useState<any[]>([]);
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
   const [stagedMelds, setStagedMelds] = useState<{cards: any[], type: 'set'|'run', points: number}[]>([]);
@@ -116,7 +119,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       
       if (!isMyTurn || !isPlayPhase) return;
       if (stagedMelds.length > 0) {
-        setErrorMsg("Please play or cancel your staged melds before discarding.");
+        setErrorMsg(t('errStagedBeforeDiscard', language));
         return;
       }
 
@@ -164,20 +167,20 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       
       if (!isMyTurn || !isPlayPhase) return;
       if (stagedMelds.length > 0) {
-        setErrorMsg("Please play or cancel your staged melds before attaching.");
+        setErrorMsg(t('errStagedBeforeAttach', language));
         return;
       }
 
       const playerState = game.state.players[auth.currentUser.uid];
       if (!playerState.hasMelded) {
-        setErrorMsg("You must play your initial 45-point meld before attaching cards.");
+        setErrorMsg(t('errMustMeldFirst', language));
         return;
       }
 
       const items = [...localHand];
       const nonNulls = items.filter(c => c !== null);
       if (nonNulls.length === 1) {
-        setErrorMsg("You cannot attach your last card. You must keep one card to discard (Inchidere).");
+        setErrorMsg(t('errCannotAttachLast', language));
         return;
       }
 
@@ -193,7 +196,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       const swapCheck = canSwapJoker(targetMeld.cards, cardToAttach);
 
       if (!attachCheck.isValid && !swapCheck.isValid) {
-        setErrorMsg("That card cannot be attached or swapped to this meld.");
+        setErrorMsg(t('errCannotAttachSwap', language));
         return;
       }
 
@@ -287,7 +290,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     const result = validateMeld(cardsToMeld);
     
     if (!result.isValid) {
-      setErrorMsg(result.error || "Invalid meld.");
+      setErrorMsg(result.errorKey ? t(result.errorKey, language) : t('errInvalidMeld', language));
       setSelectedCards([]);
       return;
     }
@@ -319,7 +322,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       const hasRun = stagedMelds.some(m => m.type === 'run');
       
       if (totalPoints < 45 || !hasRun) {
-        setErrorMsg(`Initial meld requires 45 points and at least 1 run. You have ${totalPoints} pts.`);
+        setErrorMsg(`${t('initialMeldRequires', language)} ${totalPoints} ${t('ptsLabel', language)}.`);
         return;
       }
     }
@@ -354,7 +357,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       {/* Top Bar */}
       <div className="bg-black/20 backdrop-blur-sm p-2 sm:p-3 flex items-center justify-between shrink-0 z-10 border-b border-emerald-900/50">
         <button onClick={onBack} className="text-emerald-200 hover:text-white flex items-center gap-1 text-sm font-medium transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Exit
+          <ArrowLeft className="w-4 h-4" /> {t('exitLabel', language)}
         </button>
         <div className="flex items-center gap-3">
           {game.state.playerIds.map((uid: string) => {
@@ -382,15 +385,15 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       {game.status === 'waiting' && (
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <div className="bg-emerald-900/50 p-8 rounded-3xl backdrop-blur-sm border border-emerald-500/30 max-w-sm w-full">
-            <h2 className="text-2xl font-bold text-white mb-2">Rummy 45</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">{t('gameRummy45', language)}</h2>
             <p className="text-emerald-200 mb-6 text-sm">
-              Waiting for players to join... ({game.state.playerIds.length}/4)
+              {t('waitingForPlayersJoin', language)} ({game.state.playerIds.length}/4)
             </p>
             
             <div className="flex flex-col gap-3">
               {!isJoined && (
                 <button onClick={handleJoin} className="w-full py-3 bg-white text-emerald-900 font-bold rounded-xl hover:bg-emerald-50 transition-colors">
-                  Join Game
+                  {t('joinGame', language)}
                 </button>
               )}
               {isOwner && (
@@ -399,11 +402,11 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                   disabled={game.state.playerIds.length < 2}
                   className="w-full py-3 bg-emerald-500 text-white font-bold rounded-xl hover:bg-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  <Play className="w-4 h-4" /> Start Game
+                  <Play className="w-4 h-4" /> {t('startGame', language)}
                 </button>
               )}
               {isJoined && !isOwner && (
-                <p className="text-emerald-300 text-sm italic">Waiting for host to start...</p>
+                <p className="text-emerald-300 text-sm italic">{t('waitingForHost', language)}</p>
               )}
             </div>
           </div>
@@ -420,11 +423,11 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
               {isMyTurn ? (
                 <>
                   <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                  <span className="text-white">{turnPhase === 'draw' ? 'Draw a card' : 'Meld or Discard'}</span>
+                  <span className="text-white">{turnPhase === 'draw' ? t('drawACard', language) : t('meldOrDiscard', language)}</span>
                 </>
               ) : (
                 <span className="text-emerald-400/70">
-                  Waiting for {userMap[game.state.playerIds[game.state.turnIndex]]?.name}...
+                  {t('waitingForPlayer', language)} {userMap[game.state.playerIds[game.state.turnIndex]]?.name}...
                 </span>
               )}
             </div>
@@ -440,9 +443,9 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                     className={`w-14 h-20 sm:w-16 sm:h-24 rounded-lg flex items-center justify-center transition-all ${isMyTurn && turnPhase === 'draw' ? 'cursor-pointer hover:scale-105 ring-2 ring-green-400 shadow-[0_0_12px_rgba(74,222,128,0.3)]' : 'opacity-70'}`}
                     style={{ background: 'linear-gradient(135deg, #1e3a5f, #0f2744)', border: '2px solid #2a5a8a' }}
                   >
-                    <span className="font-bold text-[10px] sm:text-xs text-center px-1 text-blue-200">{isMyTurn && turnPhase === 'draw' ? 'DRAW' : 'DECK'}</span>
+                    <span className="font-bold text-[10px] sm:text-xs text-center px-1 text-blue-200">{isMyTurn && turnPhase === 'draw' ? t('drawUpper', language) : t('deckUpper', language)}</span>
                   </div>
-                  <span className="text-emerald-300/70 text-[10px] font-medium">{game.state.deck?.length} left</span>
+                  <span className="text-emerald-300/70 text-[10px] font-medium">{game.state.deck?.length} {t('cardsLeft', language)}</span>
                 </div>
                 
                 {/* Discard Pile */}
@@ -462,7 +465,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                           </div>
                         ) : (
                           <span className="text-emerald-500/40 text-[10px] text-center px-1 font-medium">
-                            {snapshot.isDraggingOver ? 'DROP' : 'DISCARD'}
+                            {snapshot.isDraggingOver ? t('dropUpper', language) : t('discardUpper', language)}
                           </span>
                         )}
                         <div className="hidden">{provided.placeholder}</div>
@@ -476,7 +479,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
               <div className="flex-1 rounded-xl p-3 overflow-y-auto flex flex-col gap-3" style={{ background: 'rgba(0,0,0,0.12)', border: '1px solid rgba(16,185,129,0.15)' }}>
                 {game.state.melds.length === 0 ? (
                   <div className="flex-1 flex items-center justify-center text-emerald-600/40 text-sm font-medium">
-                    No melds on the board yet.
+                    {t('noMeldsYet', language)}
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-3">
@@ -513,10 +516,10 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
             {stagedMelds.length > 0 && isMyTurn && turnPhase === 'play' && (
               <div className="bg-indigo-950 border-t-2 border-indigo-500 p-3 shadow-lg z-20 shrink-0">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-indigo-300 font-bold text-sm">Staged Melds ({stagedMelds.reduce((sum, m) => sum + m.points, 0)} pts)</span>
+                  <span className="text-indigo-300 font-bold text-sm">{t('stagedMeldsLabel', language)} ({stagedMelds.reduce((sum, m) => sum + m.points, 0)} {t('ptsLabel', language)})</span>
                   <div className="flex gap-2">
-                    <button onClick={cancelStagedMelds} className="px-3 py-1 bg-zinc-800 text-white text-xs rounded shadow hover:bg-zinc-700">Cancel</button>
-                    <button onClick={playMeldsToBoard} className="px-3 py-1 bg-indigo-500 text-white font-bold text-xs rounded shadow hover:bg-indigo-400">Play Melds to Board</button>
+                    <button onClick={cancelStagedMelds} className="px-3 py-1 bg-zinc-800 text-white text-xs rounded shadow hover:bg-zinc-700">{t('cancel', language)}</button>
+                    <button onClick={playMeldsToBoard} className="px-3 py-1 bg-indigo-500 text-white font-bold text-xs rounded shadow hover:bg-indigo-400">{t('playMeldsToBoard', language)}</button>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-4">
@@ -544,7 +547,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
             {isJoined && (
               <div className="h-32 sm:h-40 p-2 sm:p-3 overflow-x-auto overflow-y-hidden shrink-0 relative" style={{ background: 'rgba(0,0,0,0.25)', borderTop: '1px solid rgba(16,185,129,0.15)' }}>
                 <button onClick={sortHand} className="absolute top-2 right-2 z-40 px-3 py-1 text-emerald-300 text-[10px] font-bold rounded-md transition-colors hover:bg-white/10" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(16,185,129,0.2)' }}>
-                  Sort
+                  {t('sortLabel', language)}
                 </button>
                 {isMyTurn && turnPhase === 'play' && selectedCards.length >= 3 && (
                   <div className="absolute top-0 left-0 right-0 flex justify-center -mt-6 z-30">
@@ -552,7 +555,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                       onClick={stageMeld}
                       className="px-6 py-2 bg-yellow-500 text-yellow-950 font-black rounded-full shadow-[0_0_15px_rgba(234,179,8,0.5)] animate-bounce text-sm"
                     >
-                      Meld {selectedCards.length} Cards
+                      {t('meldCardsPrefix', language)} {selectedCards.length} {t('cardsWord', language)}
                     </button>
                   </div>
                 )}
@@ -602,9 +605,9 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <div className="bg-black/30 backdrop-blur-sm p-8 rounded-2xl border border-emerald-500/20 max-w-sm w-full">
             <div className="text-4xl mb-3">🏆</div>
-            <h2 className="text-xl font-bold text-white mb-1">Game Over!</h2>
+            <h2 className="text-xl font-bold text-white mb-1">{t('gameOver', language)}</h2>
             <p className="text-emerald-300 text-sm mb-6">
-              {userMap[game.winner]?.name || 'Someone'} wins!
+              {userMap[game.winner]?.name || t('someone', language)} {t('winsLower', language)}
             </p>
             
             <div className="space-y-2 mb-6">
@@ -627,7 +630,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                         <span className={`text-sm font-medium ${isWinner ? 'text-white' : 'text-emerald-200/70'}`}>{userMap[uid]?.name || uid.slice(0,6)}</span>
                       </div>
                       <span className={`text-sm font-bold ${isWinner ? 'text-yellow-400' : 'text-red-400'}`}>
-                        {isWinner ? '👑 0' : score} pts
+                        {isWinner ? '👑 0' : score} {t('ptsLabel', language)}
                       </span>
                     </div>
                   );
@@ -635,7 +638,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
             </div>
 
             <button onClick={onBack} className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-colors">
-              Back to Arcade
+              {t('backToArcade', language)}
             </button>
           </div>
         </div>
@@ -657,6 +660,7 @@ const SUIT_COLORS: Record<string, { text: string; dot: string; glow: string }> =
 };
 
 function Card({ face, isSelected, onClick }: { face: any, isSelected?: boolean, onClick?: () => void }) {
+  const { language } = useThemeStore();
   if (!face) return <div className="w-10 sm:w-12 h-full opacity-0" />;
 
   const suitStyle = face.isJoker ? null : SUIT_COLORS[face.suit] || SUIT_COLORS['S'];
@@ -679,7 +683,7 @@ function Card({ face, isSelected, onClick }: { face: any, isSelected?: boolean, 
       {face.isJoker ? (
         <div className="h-full flex flex-col items-center justify-center gap-0.5">
           <span className="text-lg sm:text-xl">🃏</span>
-          <span className="text-[7px] font-black uppercase tracking-wider text-purple-500">Joker</span>
+          <span className="text-[7px] font-black uppercase tracking-wider text-purple-500">{t('jokerLabel', language)}</span>
         </div>
       ) : (
         <div className="h-full flex flex-col items-center justify-center relative">
