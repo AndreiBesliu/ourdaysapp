@@ -40,7 +40,6 @@
 
 ### 1. In Progress / Upcoming
 - **Arcade Expansion 🎮**
-  - **Connect 4 Bug Fix 🔴**: Investigate and resolve the issue where the 4th token/disc is not allowed to be played/registered correctly in the game board.
   - **Games**: Chess, Backgammon.
   - **Leaderboards & Group Stats**: Persistent game stats and tournament tracking in the Arcade.
   - **Game-End / Session Stopping System**: Implement a formal ending/stopping mechanism for games (Tic-Tac-Toe, Connect 4, Rummy) to trigger leaderboard updates upon game completion.
@@ -943,5 +942,17 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > - `i18n.ts`: added 35 new keys to all 6 language blocks (markAllRead, noNotificationsYet, recurring, addYourBirthday, addBirthdayPromptDesc, setBirthday, youHave, pendingGroupRequest(+Plural), pendingInvite(+Plural), invitedYouTo, aGroup, accept, decline, lobby, inProgress, gamesRunningTapToView, waitingForPlayers, tapToResume, join, resume, groceryList, newChore, standardEvent, group, todaysEventsTasks, pendingTasksToday, completedTasksToday, noItemsFound, item, itemsPlural, happeningNow, startsIn, atPlace). Also backfilled the 19 missing German keys (showCode, editAsset, deleteAsset, recurringEvents, assetsTitle, editSeries, deleteSeries, notificationsTitle, removeMember, aiDigestTooltip, replyTooltip, addReactionTooltip, sendVoiceMessageTooltip, recordVoiceMessageTooltip, howToPlay, cancelGame, viewOwner, closeTooltip, removeAssetTooltip).
 > - `NotificationsDropdown.tsx`: header title, "Mark all read", empty-state text now use `t()`.
 > - `CalendarHome.tsx`: mobile menu (Recurring/Assets/Settings), birthday prompt (title/desc/button), pending group-request & invite count lines (with singular/plural keys), "invited you to / a group", Accept/Decline, game banner (Lobby/in progress, status line, Join/Resume), FAB templates (Grocery List/New Chore/Standard Event — both button labels and prefilled titles), overview-modal titles, "No items found", item/items plural, the virtual birthday event title (`Name — Birthday 🎂`), and the local-notification body ("Happening now!" / "Starts in X hours/minutes at LOCATION") all localized. Added `language` to the `birthdayEvents` useMemo deps so titles re-render on language change. Brand "Our Days" and personal-name fallbacks (Me/User) left untranslated per the i18n exception rule.
+> Build OK (tsc + vite). Deployed, committed, pushed.
+> Model: Claude Opus 4.7
+
+**2026-05-26 - Task Started**
+> Prompt: "trecem la bug" (Connect 4 — 4th/aligning token cannot be placed)
+> Plan: Re-diagnose the long-standing 🔴 Connect 4 bug. Two prior attempts (Gemini 20:55 fixed `winningCells` nested array → objects; Opus 4.6 23:25 added read-side `normalizeBoard`) left it on the roadmap. Root cause still present: the board is WRITTEN to Firestore as a raw 2D array (`Array.from(...=>Array())`), and Firestore rejects nested arrays — so any board write (notably init, every move, and reset) is invalid. Fix: persist the board as a map of rows ({ "0": [...7], ... }) at all write sites.
+> Model: Claude Opus 4.7
+
+**2026-05-26 - Task Completed**: Fixed the Connect 4 "4th token" bug. Firestore forbids nested arrays (an array element cannot itself be an array), so the 6×7 board stored as `(string|null)[][]` was rejected on write while `winningCells` (already objects) and reads were fine — masking the failure until a write actually mattered.
+> - `Connect4.tsx`: added `boardToMap()` helper (2D array → `{ "0": [...], ... }` map of rows). `handleClick` and `handleNextRound` now write `boardToMap(board)` instead of the raw 2D array. The existing `normalizeBoard()` already reads both the map form and the legacy array form, so the fix is backward-compatible — in-progress games migrate to the map form on the next move.
+> - `GamesHubModal.tsx`: Connect 4 init now seeds `board` as a row map via `Object.fromEntries(...)` instead of `Array.from(... => Array())`.
+> Other games unaffected: TicTacToe (flat `Array(9)`) and MemoryMatch (flat array of objects) use 1D arrays, which Firestore allows.
 > Build OK (tsc + vite). Deployed, committed, pushed.
 > Model: Claude Opus 4.7

@@ -309,7 +309,9 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
         };
       } else if (gameType === 'connect-4') {
         initialState = {
-          board: Array.from({ length: 6 }, () => Array(7).fill(null)),
+          // Firestore rejects nested arrays, so the 6x7 board is stored as a map
+          // of rows ({ "0": [...7], ... }); Connect4's normalizeBoard reads it back.
+          board: Object.fromEntries(Array.from({ length: 6 }, (_, r) => [String(r), Array(7).fill(null)])),
           p1IsNext: true,
           players: { P1: auth.currentUser.uid, P2: null },
           scores: { P1: 0, P2: 0 },

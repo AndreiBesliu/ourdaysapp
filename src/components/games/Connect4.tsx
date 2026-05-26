@@ -24,6 +24,16 @@ const normalizeBoard = (board: any): (string | null)[][] => {
   });
 };
 
+// Firestore does NOT support nested arrays (an array element cannot itself be an
+// array), so a raw 2D board (string|null)[][] is rejected on write — which is why
+// a winning/aligning move silently failed to persist. Persist the board as a map
+// of rows ({ "0": [...7 cells], "1": [...], ... }); normalizeBoard reads it back.
+const boardToMap = (board: (string | null)[][]): Record<string, (string | null)[]> => {
+  const map: Record<string, (string | null)[]> = {};
+  for (let r = 0; r < ROWS; r++) map[String(r)] = board[r];
+  return map;
+};
+
 export default function Connect4({ game, userMap, onBack }: Connect4Props) {
   const isMyTurn = () => {
     if (game.status === 'finished') return false;
@@ -91,7 +101,7 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
     }
 
     await updateDoc(doc(db, 'games', game.id), {
-      'state.board': newBoard,
+      'state.board': boardToMap(newBoard),
       'state.p1IsNext': !game.state.p1IsNext,
       'state.scores': newScores,
       'state.winningCells': winnerData ? winnerData.cells : null,
@@ -117,7 +127,7 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
     if (!auth.currentUser) return;
     const emptyBoard = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
     await updateDoc(doc(db, 'games', game.id), {
-      'state.board': emptyBoard,
+      'state.board': boardToMap(emptyBoard),
       'state.p1IsNext': true,
       'state.winningCells': null,
       status: 'playing',
