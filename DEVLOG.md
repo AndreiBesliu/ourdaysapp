@@ -43,6 +43,13 @@
   - **Games**: Chess, Backgammon.
   - **Leaderboards & Group Stats**: Persistent game stats and tournament tracking in the Arcade.
   - **Game-End / Session Stopping System**: Implement a formal ending/stopping mechanism for games (Tic-Tac-Toe, Connect 4, Rummy) to trigger leaderboard updates upon game completion.
+  - **Rummy UI Overhaul 🃏**: Improve the Rummy 45 board UX (`RummyGame.tsx`). Scope:
+    - *Live meld feedback*: when cards are selected, show the meld type + point total and a valid/invalid (green/red) state BEFORE playing; for the first meld show a progress indicator toward 45 pts (e.g. "32/45 pts — needs a run").
+    - *Card & hand redesign*: real suit symbols (♥♦♣♠) + better contrast (amber-on-cream is hard to read); replace the position-swap reorder with smooth drag-to-insert; larger, more legible cards grouped by suit.
+    - *Turn/phase clarity*: clearer Draw → Meld/Discard phase bar with a subtle highlight only on the actionable element (deck on draw, discard zone on play); consolidate the existing ring styles into one pattern.
+    - *Sorting & multi-round*: "sort by runs" vs "by sets"; cumulative multi-round scoreboard (Rummy 45 is usually played over several hands) — ties into the Game-End/Leaderboard work.
+    - *Constraints*: respect the UX rules below (no swipe, no heavy animations/confetti, subtle haptics, clean premium look).
+  - **Memory Match Depth 🧠**: The current Memory Match is too basic; develop it further (e.g. larger/variable board sizes, difficulty levels, timed mode, streak bonuses, themed icon packs) to make it more engaging.
   - **Family Trivia**: Interactive custom trivia creator for group members.
 - **Advanced Communications & Maps 📡**
   - **Remote Push Notifications**: True FCM remote push notifications for chat/calendar alerts (replacing local-only reminders).
