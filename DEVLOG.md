@@ -931,3 +931,17 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 
 **2026-05-25 22:01 - Task Completed**: Added missing translations to `i18n.ts` (`aiAssistantTooltip`, `newTaskAssigned`, `taskAssignedBody` and 16 others for tooltips) in all 6 languages. Updated `AddEventModal.tsx` to use them for the AI Assistant button and the task assignment notification. Performed an app-wide regex sweep replacing hardcoded `title="..."` attributes with localized `t(...)` equivalents across all components (e.g. `Wallet.tsx`, `GamesHubModal.tsx`, `GroupChatWidget.tsx`). Added `useThemeStore` and `language` to components where it was missing. Build verified and deployed.
 > Model: Gemini 3.1 Pro (High)
+
+## 📅 Session Log: May 26, 2026 — i18n sweep (CalendarHome + Notifications)
+
+**2026-05-26 - Task Started**
+> Prompt: "i18n" (continue the pending i18n task: CalendarHome + NotificationsDropdown)
+> Plan: Sweep the home dashboard + notifications dropdown for hardcoded English. Add ~35 i18n keys across all 6 languages and render via `t(key, language)`. Also fix the German (`de-DE`) block which was missing ~19 keys after `defaultIcon` (showCode … removeAssetTooltip), so it fell back to English.
+> Model: Claude Opus 4.7
+
+**2026-05-26 - Task Completed**: i18n for `CalendarHome.tsx` + `NotificationsDropdown.tsx`.
+> - `i18n.ts`: added 35 new keys to all 6 language blocks (markAllRead, noNotificationsYet, recurring, addYourBirthday, addBirthdayPromptDesc, setBirthday, youHave, pendingGroupRequest(+Plural), pendingInvite(+Plural), invitedYouTo, aGroup, accept, decline, lobby, inProgress, gamesRunningTapToView, waitingForPlayers, tapToResume, join, resume, groceryList, newChore, standardEvent, group, todaysEventsTasks, pendingTasksToday, completedTasksToday, noItemsFound, item, itemsPlural, happeningNow, startsIn, atPlace). Also backfilled the 19 missing German keys (showCode, editAsset, deleteAsset, recurringEvents, assetsTitle, editSeries, deleteSeries, notificationsTitle, removeMember, aiDigestTooltip, replyTooltip, addReactionTooltip, sendVoiceMessageTooltip, recordVoiceMessageTooltip, howToPlay, cancelGame, viewOwner, closeTooltip, removeAssetTooltip).
+> - `NotificationsDropdown.tsx`: header title, "Mark all read", empty-state text now use `t()`.
+> - `CalendarHome.tsx`: mobile menu (Recurring/Assets/Settings), birthday prompt (title/desc/button), pending group-request & invite count lines (with singular/plural keys), "invited you to / a group", Accept/Decline, game banner (Lobby/in progress, status line, Join/Resume), FAB templates (Grocery List/New Chore/Standard Event — both button labels and prefilled titles), overview-modal titles, "No items found", item/items plural, the virtual birthday event title (`Name — Birthday 🎂`), and the local-notification body ("Happening now!" / "Starts in X hours/minutes at LOCATION") all localized. Added `language` to the `birthdayEvents` useMemo deps so titles re-render on language change. Brand "Our Days" and personal-name fallbacks (Me/User) left untranslated per the i18n exception rule.
+> Build OK (tsc + vite). Deployed, committed, pushed.
+> Model: Claude Opus 4.7

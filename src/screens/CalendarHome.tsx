@@ -306,7 +306,7 @@ export default function CalendarHome() {
               notificationsToSchedule.push({
                 id: numericId,
                 title: ev.title,
-                body: ev.reminderMinutes === 0 ? 'Happening now!' : `Starts in ${ev.reminderMinutes >= 60 ? (ev.reminderMinutes / 60) + ' hour(s)' : ev.reminderMinutes + ' minutes'}${ev.location ? ` at ${ev.location}` : ''}`,
+                body: ev.reminderMinutes === 0 ? t('happeningNow', language) : `${t('startsIn', language)} ${ev.reminderMinutes >= 60 ? (ev.reminderMinutes / 60) + ' ' + t('unitHours', language) : ev.reminderMinutes + ' ' + t('unitMinutes', language)}${ev.location ? ` ${t('atPlace', language)} ${ev.location}` : ''}`,
                 schedule: { at: notifyTime },
               });
             }
@@ -384,7 +384,7 @@ export default function CalendarHome() {
         const [, month, day] = u.birthday.split('-');
         bEvents.push({
           id: `virtual-birthday-${u.id}`,
-          title: `${u.name || u.email?.split('@')[0] || 'User'}'s Birthday 🎂`,
+          title: `${u.name || u.email?.split('@')[0] || 'User'} — ${t('birthday', language)} 🎂`,
           date: `${currentYear}-${month}-${day}`,
           categoryId: 'important',
           color: 'rose',
@@ -397,7 +397,7 @@ export default function CalendarHome() {
       }
     });
     return bEvents;
-  }, [userMap, activeGroupId, groups]);
+  }, [userMap, activeGroupId, groups, language]);
 
   const allCalendarEvents = useMemo(() => {
     // Build a 3-month window around currentDate for recurrence expansion
@@ -456,19 +456,19 @@ export default function CalendarHome() {
                   onClick={() => { setIsRecurringPanelOpen(true); setIsMobileMenuOpen(false); }}
                   className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-indigo-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
                 >
-                  <Repeat className="w-4 h-4" /> Recurring
+                  <Repeat className="w-4 h-4" /> {t('recurring', language)}
                 </button>
                 <button 
                   onClick={() => { navigate('/wallet'); setIsMobileMenuOpen(false); }}
                   className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-emerald-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
                 >
-                  <Wallet className="w-4 h-4" /> Assets
+                  <Wallet className="w-4 h-4" /> {t('assetsTitle', language)}
                 </button>
                 <button 
                   onClick={() => { navigate('/settings'); setIsMobileMenuOpen(false); }}
                   className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
                 >
-                  <Settings className="w-4 h-4" /> Settings
+                  <Settings className="w-4 h-4" /> {t('settings', language)}
                 </button>
               </div>
             )}
@@ -502,8 +502,8 @@ export default function CalendarHome() {
                 <span className="text-xl">🎂</span>
               </div>
               <div>
-                <p className="font-semibold text-zinc-900 dark:text-zinc-100">Add your birthday!</p>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">Let your groups know when to celebrate you.</p>
+                <p className="font-semibold text-zinc-900 dark:text-zinc-100">{t('addYourBirthday', language)}</p>
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">{t('addBirthdayPromptDesc', language)}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -511,7 +511,7 @@ export default function CalendarHome() {
                 onClick={() => navigate('/settings')}
                 className="flex-1 sm:flex-none px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-lg text-sm font-medium transition-colors"
               >
-                Set Birthday
+                {t('setBirthday', language)}
               </button>
               <button 
                 onClick={handleDismissBirthdayPrompt}
@@ -572,25 +572,25 @@ export default function CalendarHome() {
           <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 flex flex-col gap-3">
             <div className="flex items-center gap-2 text-primary dark:text-primary font-semibold">
               <Users className="w-5 h-5" />
-              You have {pendingFamilyInvites.length} pending group request{pendingFamilyInvites.length > 1 ? 's' : ''}
+              {t('youHave', language)} {pendingFamilyInvites.length} {pendingFamilyInvites.length > 1 ? t('pendingGroupRequestPlural', language) : t('pendingGroupRequest', language)}
             </div>
             {pendingFamilyInvites.map(invite => (
               <div key={invite.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700">
                 <div>
-                  <p className="font-medium text-zinc-900 dark:text-zinc-100">{invite.fromEmail} invited you to {invite.groupName || 'a group'}</p>
+                  <p className="font-medium text-zinc-900 dark:text-zinc-100">{invite.fromEmail} {t('invitedYouTo', language)} {invite.groupName || t('aGroup', language)}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={() => handleAcceptFamilyInvite(invite)}
                     className="flex-1 sm:flex-none px-3 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-md text-sm font-medium flex items-center justify-center gap-1"
                   >
-                    <Check className="w-4 h-4" /> Accept
+                    <Check className="w-4 h-4" /> {t('accept', language)}
                   </button>
                   <button 
                     onClick={() => handleDeclineFamilyInvite(invite.id)}
                     className="flex-1 sm:flex-none px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-300 rounded-md text-sm font-medium flex items-center justify-center gap-1"
                   >
-                    <X className="w-4 h-4" /> Decline
+                    <X className="w-4 h-4" /> {t('decline', language)}
                   </button>
                 </div>
               </div>
@@ -603,7 +603,7 @@ export default function CalendarHome() {
           <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 flex flex-col gap-3">
             <div className="flex items-center gap-2 text-primary dark:text-primary font-semibold">
               <Bell className="w-5 h-5" />
-              You have {pendingInvites.length} pending invite{pendingInvites.length > 1 ? 's' : ''}
+              {t('youHave', language)} {pendingInvites.length} {pendingInvites.length > 1 ? t('pendingInvitePlural', language) : t('pendingInvite', language)}
             </div>
             {pendingInvites.map(invite => (
               <div key={invite.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700">
@@ -616,13 +616,13 @@ export default function CalendarHome() {
                     onClick={() => handleAcceptInvite(invite.id)}
                     className="flex-1 sm:flex-none px-3 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-md text-sm font-medium flex items-center justify-center gap-1"
                   >
-                    <Check className="w-4 h-4" /> Accept
+                    <Check className="w-4 h-4" /> {t('accept', language)}
                   </button>
                   <button 
                     onClick={() => handleDeclineInvite(invite.id)}
                     className="flex-1 sm:flex-none px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-300 rounded-md text-sm font-medium flex items-center justify-center gap-1"
                   >
-                    <X className="w-4 h-4" /> Decline
+                    <X className="w-4 h-4" /> {t('decline', language)}
                   </button>
                 </div>
               </div>
@@ -720,7 +720,7 @@ export default function CalendarHome() {
               <div>
                 <p className="font-bold text-indigo-700 dark:text-indigo-400 text-sm flex items-center gap-2">
                   {activeGames[0].gameType.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())} 
-                  {activeGames[0].status === 'waiting' ? 'Lobby' : 'in progress'}
+                  {activeGames[0].status === 'waiting' ? t('lobby', language) : t('inProgress', language)}
                   
                   {/* Show who is in the game */}
                   <span className="flex items-center -space-x-1.5 ml-2">
@@ -750,12 +750,12 @@ export default function CalendarHome() {
                   </span>
                 </p>
                 <p className="text-xs text-indigo-600/70 dark:text-indigo-400/70">
-                  {activeGames.length > 1 ? `${activeGames.length} games running. Tap to view.` : (activeGames[0].status === 'waiting' ? 'Waiting for players... Tap to join.' : 'Tap to resume playing.')}
+                  {activeGames.length > 1 ? `${activeGames.length} ${t('gamesRunningTapToView', language)}` : (activeGames[0].status === 'waiting' ? t('waitingForPlayers', language) : t('tapToResume', language))}
                 </p>
               </div>
             </div>
             <button className="px-3 py-1.5 bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-sm">
-              {activeGames[0].status === 'waiting' ? 'Join' : 'Resume'}
+              {activeGames[0].status === 'waiting' ? t('join', language) : t('resume', language)}
             </button>
           </div>
         )}
@@ -782,24 +782,24 @@ export default function CalendarHome() {
             <button
               onClick={() => {
                 setEventToEdit(null);
-                setInitialTemplate({ title: 'Grocery List', category: 'chores', isTask: true });
+                setInitialTemplate({ title: t('groceryList', language), category: 'chores', isTask: true });
                 setIsAddModalOpen(true);
                 setIsFabExpanded(false);
               }}
               className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full shadow-lg text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-all animate-in slide-in-from-bottom-4 fade-in"
             >
-              Grocery List <ShoppingCart className="w-4 h-4 text-emerald-500" />
+              {t('groceryList', language)} <ShoppingCart className="w-4 h-4 text-emerald-500" />
             </button>
             <button
               onClick={() => {
                 setEventToEdit(null);
-                setInitialTemplate({ title: 'New Chore', category: 'chores', isTask: true });
+                setInitialTemplate({ title: t('newChore', language), category: 'chores', isTask: true });
                 setIsAddModalOpen(true);
                 setIsFabExpanded(false);
               }}
               className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full shadow-lg text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-all animate-in slide-in-from-bottom-6 fade-in"
             >
-              New Chore <Wrench className="w-4 h-4 text-amber-500" />
+              {t('newChore', language)} <Wrench className="w-4 h-4 text-amber-500" />
             </button>
             <button
               onClick={() => {
@@ -810,7 +810,7 @@ export default function CalendarHome() {
               }}
               className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full shadow-lg text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-all animate-in slide-in-from-bottom-8 fade-in"
             >
-              Standard Event <CalendarIcon className="w-4 h-4 text-primary" />
+              {t('standardEvent', language)} <CalendarIcon className="w-4 h-4 text-primary" />
             </button>
           </div>
         )}
@@ -830,7 +830,7 @@ export default function CalendarHome() {
       {activeGroupId !== 'personal' && (
         <GroupChatWidget 
           groupId={activeGroupId} 
-          groupName={groups.find(g => g.id === activeGroupId)?.name || 'Group'} 
+          groupName={groups.find(g => g.id === activeGroupId)?.name || t('group', language)}
           userMap={userMap}
           groupMembers={groups.find(g => g.id === activeGroupId)?.members || []}
         />
@@ -854,9 +854,9 @@ export default function CalendarHome() {
           <div onClick={e => e.stopPropagation()} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[80vh] overflow-hidden">
             <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50">
               <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100">
-                {overviewModalType === 'total' && 'Today\'s Events & Tasks'}
-                {overviewModalType === 'pending' && 'Pending Tasks Today'}
-                {overviewModalType === 'completed' && 'Completed Tasks Today'}
+                {overviewModalType === 'total' && t('todaysEventsTasks', language)}
+                {overviewModalType === 'pending' && t('pendingTasksToday', language)}
+                {overviewModalType === 'completed' && t('completedTasksToday', language)}
               </h3>
               <button onClick={() => setOverviewModalType(null)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors">
                 <X className="w-4 h-4" />
@@ -873,7 +873,7 @@ export default function CalendarHome() {
                 }
 
                 if (filtered.length === 0) {
-                  return <p className="text-sm text-zinc-500 text-center py-6">No items found.</p>;
+                  return <p className="text-sm text-zinc-500 text-center py-6">{t('noItemsFound', language)}</p>;
                 }
 
                 return filtered.map((ev: any, idx: number) => {
@@ -906,7 +906,7 @@ export default function CalendarHome() {
                           {ev.title}
                           {ev.checklistItems && ev.checklistItems.length > 0 && (
                             <span className="text-xs text-zinc-500 dark:text-zinc-400 font-normal">
-                              ({ev.checklistItems.length} item{ev.checklistItems.length !== 1 ? 's' : ''})
+                              ({ev.checklistItems.length} {ev.checklistItems.length !== 1 ? t('itemsPlural', language) : t('item', language)})
                             </span>
                           )}
                           {ev.isTask && ev.taskStatus === 'completed' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}

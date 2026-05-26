@@ -82,10 +82,10 @@ export default function NotificationsDropdown() {
       {isOpen && (
         <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-800 z-50 overflow-hidden flex flex-col max-h-[400px]">
           <div className="p-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
-            <h3 className="font-bold text-zinc-900 dark:text-zinc-100">Notifications</h3>
+            <h3 className="font-bold text-zinc-900 dark:text-zinc-100">{t('notificationsTitle', language)}</h3>
             {unreadCount > 0 && (
               <button onClick={markAllAsRead} className="text-xs text-primary hover:underline font-medium">
-                Mark all read
+                {t('markAllRead', language)}
               </button>
             )}
           </div>
@@ -93,7 +93,7 @@ export default function NotificationsDropdown() {
           <div className="overflow-y-auto flex-1">
             {notifications.length === 0 ? (
               <div className="p-6 text-center text-zinc-500 text-sm">
-                No notifications yet.
+                {t('noNotificationsYet', language)}
               </div>
             ) : (
               <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
