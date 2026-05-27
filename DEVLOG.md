@@ -41,7 +41,11 @@
 ### 1. In Progress / Upcoming
 - **Arcade Expansion 🎮**
   - **Games**: Chess, Backgammon.
-  - **Leaderboards & Group Stats**: Persistent game stats and tournament tracking in the Arcade (cross-day history, tournaments) — builds on the Game-End system now in place.
+  - **Leaderboards & Group Stats**: Persistent game stats and tournament tracking in the Arcade (cross-day history, tournaments) — builds on the Game-End system now in place. Scope:
+    - *Per-game visibility*: show WHICH games each player has played and how often (a breakdown by game type — Tic-Tac-Toe / Connect 4 / Rummy 45 / Memory Match — with games-played and wins per game, not just a single combined total).
+    - *Points per game*: show how many points each player has earned THROUGH each game type (e.g. Rummy penalty/points, future per-game scoring), so the leaderboard reflects where points came from.
+    - *Per-player detail view*: tapping a leaderboard entry opens a breakdown (games played, wins, points by game).
+    - Likely needs a denormalised per-player/per-game stats aggregate (or a Cloud Function rollup) rather than recomputing from all finished `games` docs each open.
   - **Rummy UI Overhaul 🃏**: Improve the Rummy 45 board UX (`RummyGame.tsx`).
     - ✅ *Phase 1 done (2026-05-26)*: live meld feedback (selection shows Set/Run + points + valid/invalid green/red, meld button disabled when invalid); first-meld progress chip (`X/45 pts · needs a run`); card redesign with real suit glyphs (♥♦♣♠) + corner indices + better amber/sky contrast; dual sort (by Runs / by Sets).
     - ⏳ *Phase 2 remaining*: replace the position-swap hand reorder with smooth drag-to-insert; cumulative multi-round scoreboard (Rummy 45 is usually played over several hands) — ties into the Game-End/Leaderboard work.
