@@ -1,0 +1,62 @@
+rules_version = '2';
+
+// ── Firebase Storage security rules ──
+// Writes are locked to the uploader's own path. Cross-user ENUMERATION (list)
+// is blocked, while individual GETs stay open to any signed-in user (download
+// URLs carry unguessable tokens and some media is rendered across a group).
+// Group chat media can't verify Firestore group membership from Storage rules,
+// so it's gated on auth + size/type only (true per-group scoping would need a
+// Cloud Function upload path or custom token claims — tracked as future work).
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function isImage() {
+      return request.resource.contentType.matches('image/.*') &&
+             request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // ── Per-user upload folders: <root>/{uid}/<file> ──
+    match /assets/{uid}/{path=**} {
+      allow get: if isSignedIn();
+      allow list: if isOwner(uid);
+      allow write: if isOwner(uid) && isImage();
+    }
+    match /events/{uid}/{path=**} {
+      allow get: if isSignedIn();
+      allow list: if isOwner(uid);
+      allow write: if isOwner(uid) && isImage();
+    }
+    match /checklists/{uid}/{path=**} {
+      allow get: if isSignedIn();
+      allow list: if isOwner(uid);
+      allow write: if isOwner(uid) && isImage();
+    }
+
+    // ── Flat per-user files named "{uid}_{timestamp}" (no enumeration) ──
+    match /profiles/{fileName} {
+      allow get: if isSignedIn();
+      allow write: if isSignedIn() && fileName.matches(request.auth.uid + '_.*') && isImage();
+    }
+    match /backgrounds/{fileName} {
+      allow get: if isSignedIn();
+      allow write: if isSignedIn() && fileName.matches(request.auth.uid + '_.*') && isImage();
+    }
+
+    // ── Group chat media (auth + size/type gated) ──
+    match /chat-images/{groupId}/{path=**} {
+      allow get: if isSignedIn();
+      allow write: if isSignedIn() && isImage();
+    }
+    match /chat-audio/{groupId}/{path=**} {
+      allow get: if isSignedIn();
+      // Audio MIME from MediaRecorder varies, so gate on auth + size only.
+      allow write: if isSignedIn() && request.resource.size < 15 * 1024 * 1024;
+    }
+
+    // ── Default deny ──
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

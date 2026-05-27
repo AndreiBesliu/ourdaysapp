@@ -270,8 +270,12 @@ export default function Wallet() {
         }
       };
 
-      // Start from known root folders to avoid full bucket scan if restricted
-      const roots = ['assets', 'events', 'checklists', 'chat-images', 'backgrounds'].map(path => ref(storage, path));
+      // Only scan the CURRENT user's own upload folders (previously scanned every
+      // user's files across the whole bucket — a privacy leak; also Storage rules
+      // now block cross-user enumeration).
+      const uid = auth.currentUser?.uid;
+      if (!uid) { setLoading(false); return; }
+      const roots = [`assets/${uid}`, `events/${uid}`, `checklists/${uid}`].map(path => ref(storage, path));
       await Promise.all(roots.map(rootRef => fetchAllFromRef(rootRef)));
       
       setPastImages(Array.from(urls));

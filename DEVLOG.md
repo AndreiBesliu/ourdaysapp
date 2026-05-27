@@ -1021,3 +1021,16 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > - Deployed hosting + all functions; set an Artifact Registry cleanup policy (was warning on deploy). Enforcement remains OFF until the manual console steps in "Deferred Security Work #5" are done.
 > Build OK (web tsc+vite, functions tsc). Deployed, committed, pushed.
 > Model: Claude Opus 4.7
+
+**2026-05-26 - Task Started**
+> Prompt: "ma intreb daca aplicatia are mai multe vulnerabilitati de securitate, sau daca ai tu sugestii" → chose Storage rules + Firestore create-rule hardening.
+> Plan: Security pass. Findings: (HIGH) Firebase Storage had NO managed rules (absent from firebase.json, no storage.rules) despite heavy use; (MED) Firestore `create` rules allowed spoofing/injection (events into any group, messages with spoofed senderId, forgeable groups/invites); and the Wallet "past images" picker recursively listed EVERY user's files. Implement the chosen fixes.
+> Model: Claude Opus 4.7
+
+**2026-05-26 - Task Completed**: Storage rules + Firestore create hardening.
+> - New `storage.rules` (+ wired into `firebase.json`): writes locked to the uploader's own path (`{root}/{uid}/…` and flat `{uid}_*` files), cross-user `list` denied, `get` open to signed-in users (download URLs are tokenised), image type + size caps. Group chat media gated on auth + size/type (true per-group scoping needs a Cloud Function upload path — future work).
+> - `firestore.rules` create hardening: **messages** now require `senderId == auth.uid` (no impersonation); **groups** create requires `ownerId == auth.uid` && creator ∈ members; **group_invites** create requires `fromId == auth.uid` (no forged invites); **events** group events require `isMemberOfGroup(groupId)` on create (blocks injecting events into groups you're not in; personal events stay open). `ownerId` on events/assets still deferred (recurrence overrides).
+> - `Wallet.tsx`: the "past images" picker now scans only the current user's own folders (`assets|events|checklists/{uid}`) instead of every user's files bucket-wide — closes a data-harvesting leak.
+> - Reviewed & cleared as non-issues: no `dangerouslySetInnerHTML`/`eval` (no XSS sink); the `AIza…` keys in `google-services.json`/service worker are PUBLIC Firebase keys by design; `.env`/`functions/.env` are gitignored (no committed secrets).
+> Deployed storage + firestore rules + hosting. Build OK (tsc + vite).
+> Model: Claude Opus 4.7

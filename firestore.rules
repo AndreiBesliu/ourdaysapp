@@ -35,12 +35,19 @@ service cloud.firestore {
     // ── Groups ──
     match /groups/{groupId} {
       allow read: if isSignedIn() && request.auth.uid in resource.data.members;
-      allow create: if isSignedIn();
+      // Creator must list themselves as a member and own the group (no creating
+      // groups on behalf of / forcing others in without yourself).
+      allow create: if isSignedIn() &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.auth.uid in request.resource.data.members;
       allow update, delete: if isSignedIn() && request.auth.uid in resource.data.members;
 
       // Chat messages subcollection
       match /messages/{messageId} {
-        allow read, create: if isMemberOfGroup(groupId);
+        allow read: if isMemberOfGroup(groupId);
+        // Sender must be the authenticated user (prevents impersonating a member).
+        allow create: if isMemberOfGroup(groupId) &&
+          request.resource.data.senderId == request.auth.uid;
         allow update: if isMemberOfGroup(groupId) &&
           (request.auth.uid == resource.data.senderId || 
            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy', 'reactions', 'isPinned']));
@@ -67,7 +74,9 @@ service cloud.firestore {
     }
     match /group_invites/{inviteId} {
       allow read: if canAccessInvite();
-      allow create: if isSignedIn();
+      // Sender must be the authenticated user (no forging invites "from" others).
+      allow create: if isSignedIn() &&
+        request.resource.data.fromId == request.auth.uid;
       allow update, delete: if canAccessInvite();
     }
 
@@ -81,7 +90,15 @@ service cloud.firestore {
         resource.data.inviteeId == request.auth.uid ||
         resource.data.sharedWithFamily == true
       );
-      allow create: if isSignedIn();
+      // A group event can only be created by a member of that group (blocks
+      // injecting events into groups you don't belong to). Personal events
+      // (no groupId) stay open. NB: ownerId can't be bound here yet — recurrence
+      // overrides keep the original owner's id (see Deferred Security Work).
+      allow create: if isSignedIn() && (
+        !('groupId' in request.resource.data) ||
+        request.resource.data.groupId == null ||
+        isMemberOfGroup(request.resource.data.groupId)
+      );
       allow update: if isSignedIn() && (
         resource.data.ownerId == request.auth.uid ||
         (resource.data.groupId != null && isMemberOfGroup(resource.data.groupId)) ||
