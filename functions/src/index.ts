@@ -16,22 +16,34 @@ const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 // callables to curb abuse / runaway Gemini cost. The `ai_usage` collection is
 // written only by the Admin SDK here (clients have no matching rule → denied).
 const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 50);
+const NOTIF_DAILY_LIMIT = Number(process.env.NOTIF_DAILY_LIMIT || 100);
+
+// Per-user, per-day quota counter (admin-only `*_usage` collections — clients
+// have no matching rule → denied). Returns true if within today's limit (and
+// records the use), false if over. Shared by the AI callables, the AI trigger,
+// and notification fan-out.
+async function tryConsumeQuota(uid: string, collection: string, limit: number): Promise<boolean> {
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+  const ref = admin.firestore().doc(`${collection}/${uid}`);
+  return admin.firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const data = snap.exists ? snap.data() : undefined;
+    const count = data && data.date === today ? (data.count || 0) : 0;
+    if (count >= limit) return false;
+    tx.set(ref, { date: today, count: count + 1 }, { merge: true });
+    return true;
+  });
+}
+
+// AI callables: require auth + enforce the shared daily AI quota.
 async function assertAiCallerAllowed(request: { auth?: { uid?: string } }): Promise<string> {
   const uid = request.auth?.uid;
   if (!uid) {
     throw new HttpsError("unauthenticated", "You must be signed in to use AI features.");
   }
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
-  const ref = admin.firestore().doc(`ai_usage/${uid}`);
-  await admin.firestore().runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const data = snap.exists ? snap.data() : undefined;
-    const count = data && data.date === today ? (data.count || 0) : 0;
-    if (count >= AI_DAILY_LIMIT) {
-      throw new HttpsError("resource-exhausted", "Daily AI limit reached. Please try again tomorrow.");
-    }
-    tx.set(ref, { date: today, count: count + 1 }, { merge: true });
-  });
+  if (!(await tryConsumeQuota(uid, "ai_usage", AI_DAILY_LIMIT))) {
+    throw new HttpsError("resource-exhausted", "Daily AI limit reached. Please try again tomorrow.");
+  }
   return uid;
 }
 
@@ -50,9 +62,18 @@ export const autoSuggestChecklist = onDocumentCreated({
     return;
   }
 
+  // Rate-limit the trigger by the event owner, sharing the same daily AI quota
+  // as the callables — otherwise this is a free path to spam Gemini by creating
+  // events with the ai_assistant assignee.
+  const ownerId = data.ownerId;
+  if (ownerId && !(await tryConsumeQuota(ownerId, "ai_usage", AI_DAILY_LIMIT))) {
+    console.log(`AI daily quota exceeded for ${ownerId}; skipping auto-checklist.`);
+    return;
+  }
+
   // If there's already a non-empty checklist, we might skip to not overwrite.
   // But maybe the user assigned it just to get suggestions added!
-  
+
   const title = data.title;
   const description = data.description || "";
 
@@ -421,5 +442,64 @@ Do not include any other text or markdown formatting.`;
     console.error("AI Asset Suggestion Error", error);
     throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
   }
+});
+
+// ── Notifications fan-out (anti-spam) ──
+// Clients can no longer write to `notifications` directly (Firestore rule denies
+// create). They call this instead: it requires auth, only lets you notify users
+// you SHARE A GROUP with, rate-limits per sender, and writes via the Admin SDK
+// with a server-set `createdBy`/`createdAt`.
+export const notifyUsers = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+
+  const { recipientIds, type, title, body } = request.data || {};
+  if (!Array.isArray(recipientIds) || recipientIds.length === 0 || !title) {
+    throw new HttpsError("invalid-argument", "recipientIds and title are required.");
+  }
+
+  // De-dupe, drop self, cap fan-out per call.
+  const recipients = [...new Set(recipientIds)]
+    .filter((r) => typeof r === "string" && r !== uid)
+    .slice(0, 20);
+  if (recipients.length === 0) {
+    return { created: 0 };
+  }
+
+  if (!(await tryConsumeQuota(uid, "notif_usage", NOTIF_DAILY_LIMIT))) {
+    throw new HttpsError("resource-exhausted", "Notification limit reached. Please try again later.");
+  }
+
+  const db = admin.firestore();
+
+  // Build the set of users the sender shares a group with.
+  const groupsSnap = await db.collection("groups").where("members", "array-contains", uid).get();
+  const sharedMembers = new Set<string>();
+  groupsSnap.docs.forEach((d) => {
+    (d.data().members || []).forEach((m: string) => sharedMembers.add(m));
+  });
+
+  const batch = db.batch();
+  let created = 0;
+  for (const rid of recipients) {
+    if (!sharedMembers.has(rid)) continue; // only notify users you share a group with
+    const ref = db.collection("notifications").doc();
+    batch.set(ref, {
+      userId: rid,
+      createdBy: uid,
+      type: typeof type === "string" ? type : "info",
+      title: String(title).slice(0, 200),
+      body: typeof body === "string" ? body.slice(0, 500) : "",
+      read: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    created++;
+  }
+  if (created > 0) {
+    await batch.commit();
+  }
+  return { created };
 });
 

@@ -82,8 +82,7 @@
   - **Fix path:** move recurrence-override creation into a Cloud Function (Admin SDK bypasses rules), then add `create: request.resource.data.ownerId == request.auth.uid` for client-created events.
 - **`assets` — `ownerId` spoofing** 🟠 Cannot enforce `create: ownerId == auth.uid` because **asset transfer "Keep Copy"** (`Wallet.tsx:147`) creates an asset with `ownerId` = the recipient.
   - **Fix path:** move asset transfer to a Cloud Function, then tighten `assets` create rule.
-- **`notifications` — anti-spam** 🟠 Current rule only requires honest `createdBy == auth.uid` (attribution). A malicious member can still spam notifications to any `userId`.
-  - **Fix path:** move notification creation (task assignment, RSVP, invites) to a Cloud Function trigger that validates the recipient shares a group with the sender + rate-limits. Then forbid direct client `create`.
+- ~~**`notifications` — anti-spam**~~ ✅ DONE (2026-05-26) Direct client `create` is now forbidden (`allow create: if false`); notifications are created only by the `notifyUsers` callable (Admin SDK), which requires auth, only lets you notify users you **share a group with**, and rate-limits per sender (`notif_usage/{uid}`, default 100/day). `AddEventModal` task-assignment now calls it via `src/notifications.ts`.
 - ~~**#1 `users` read exposure**~~ ✅ DONE (2026-05-25) Resolved via the `profiles` refactor (Phases 1–3): `users` is now owner-only read/write; member name/photo/birthday render from the public `profiles` mirror. NB: migration is client-side, so a member appears to others only after they have logged in once (profile self-creates on login).
 - **#5 Firebase App Check** 🟡 IN PROGRESS (2026-05-26): code is wired up but enforcement is OFF pending manual console setup.
   - DONE: client App Check init (`firebase.ts`, reCAPTCHA v3, env `VITE_APPCHECK_RECAPTCHA_KEY`, debug token in dev, graceful skip if no key); the 4 AI callables now **require auth** + a **per-user daily rate limit** (`ai_usage/{uid}`, default 50/day, `AI_DAILY_LIMIT`) and accept an `enforceAppCheck` flag driven by `APPCHECK_ENFORCE`.
@@ -1033,4 +1032,17 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > - `Wallet.tsx`: the "past images" picker now scans only the current user's own folders (`assets|events|checklists/{uid}`) instead of every user's files bucket-wide — closes a data-harvesting leak.
 > - Reviewed & cleared as non-issues: no `dangerouslySetInnerHTML`/`eval` (no XSS sink); the `AIza…` keys in `google-services.json`/service worker are PUBLIC Firebase keys by design; `.env`/`functions/.env` are gitignored (no committed secrets).
 > Deployed storage + firestore rules + hosting. Build OK (tsc + vite).
+> Model: Claude Opus 4.7
+
+**2026-05-26 - Task Started**
+> Prompt: "ambele" — do both remaining items: notifications anti-spam via Cloud Function + rate-limit the AI trigger.
+> Plan: (1) Move notification creation server-side: a `notifyUsers` callable that requires auth, only lets you notify users you share a group with, and rate-limits per sender; switch the client to it and set `notifications create: if false`. (2) Rate-limit the `autoSuggestChecklist` Firestore trigger by the event owner, sharing the AI quota with the callables.
+> Model: Claude Opus 4.7
+
+**2026-05-26 - Task Completed**: Notifications anti-spam + AI-trigger rate limit.
+> - `functions/src/index.ts`: extracted a generic `tryConsumeQuota(uid, collection, limit)` (per-user/day, admin-only `*_usage` collections); `assertAiCallerAllowed` now uses it. Added `notifyUsers` callable — auth-required, de-dupes/caps recipients (≤20), rate-limited (`notif_usage`, `NOTIF_DAILY_LIMIT`=100), and only writes a notification for recipients who **share a group** with the sender (Admin SDK, server-set `createdBy`/`createdAt`). The `autoSuggestChecklist` trigger now consumes the same `ai_usage` quota by `ownerId` and skips generation when over — closing the free Gemini-spam path via event creation.
+> - `firestore.rules`: `notifications` `create` → `if false` (only the Cloud Function can create).
+> - Client: new `src/notifications.ts` (`notifyUsers` helper) ; `AddEventModal` task-assignment now calls it instead of `addDoc(notifications)`.
+> - Deployed functions (created `notifyUsers`, updated the rest) + firestore rules + hosting. Build OK (web + functions tsc).
+> VERIFY: assign a task to another group member and confirm they receive the in-app notification (now created server-side).
 > Model: Claude Opus 4.7

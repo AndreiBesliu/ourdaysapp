@@ -129,16 +129,14 @@ service cloud.firestore {
     }
 
     // ── Notifications ──
-    // Recipient (userId) controls read/update/delete. Creation is allowed for
-    // any signed-in user (notifications are often created FOR another user, e.g.
-    // task assignment) but must record an honest `createdBy == auth.uid` so every
-    // notification is attributable. NOTE: this does not fully prevent a malicious
-    // member from spamming — see "Deferred Security Work" (move creation to a
-    // Cloud Function trigger for real anti-spam + rate limiting).
+    // Recipient (userId) controls read/update/delete. Direct client CREATE is
+    // forbidden — notifications are created only by the `notifyUsers` Cloud
+    // Function (Admin SDK), which requires auth, restricts you to notifying users
+    // you share a group with, and rate-limits per sender. This closes the spam
+    // vector where any member could write notifications to any userId.
     match /notifications/{notifId} {
       allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() &&
-        request.resource.data.createdBy == request.auth.uid;
+      allow create: if false;
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }

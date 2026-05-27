@@ -4,6 +4,7 @@ import { addDoc, collection, query, where, updateDoc, doc, arrayUnion } from 'fi
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
+import { notifyUsers } from '../notifications';
 import { onSnapshot } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
@@ -625,19 +626,15 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           rsvps: rsvpEnabled && auth.currentUser ? { [auth.currentUser.uid]: 'yes' } : {}
         });
         
-        // Notify assignees
+        // Notify assignees (server-side via the notifyUsers Cloud Function —
+        // clients can't write the notifications collection directly).
         const otherAssignees = assigneeIds.filter(id => id !== auth.currentUser?.uid);
         if (otherAssignees.length > 0 && isTask) {
-          otherAssignees.forEach(async (userId) => {
-            await addDoc(collection(db, 'notifications'), {
-              userId,
-              createdBy: auth.currentUser?.uid, // attribution: required by Firestore rules
-              type: 'task',
-              title: t('newTaskAssigned', language),
-              body: `${t('taskAssignedBody', language)}${title}`,
-              read: false,
-              createdAt: new Date()
-            });
+          await notifyUsers({
+            recipientIds: otherAssignees,
+            type: 'task',
+            title: t('newTaskAssigned', language),
+            body: `${t('taskAssignedBody', language)}${title}`,
           });
         }
       }
