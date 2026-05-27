@@ -6,6 +6,35 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 admin.initializeApp();
 
+// App Check enforcement is toggled via env so it can be switched on AFTER the
+// reCAPTCHA key is registered and verified in monitor mode in the Firebase
+// Console — avoids locking out clients that aren't yet sending tokens. Set
+// APPCHECK_ENFORCE=true (functions env) to require valid App Check tokens.
+const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
+
+// Require a signed-in caller and apply a basic per-user daily quota on the AI
+// callables to curb abuse / runaway Gemini cost. The `ai_usage` collection is
+// written only by the Admin SDK here (clients have no matching rule → denied).
+const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 50);
+async function assertAiCallerAllowed(request: { auth?: { uid?: string } }): Promise<string> {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in to use AI features.");
+  }
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+  const ref = admin.firestore().doc(`ai_usage/${uid}`);
+  await admin.firestore().runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const data = snap.exists ? snap.data() : undefined;
+    const count = data && data.date === today ? (data.count || 0) : 0;
+    if (count >= AI_DAILY_LIMIT) {
+      throw new HttpsError("resource-exhausted", "Daily AI limit reached. Please try again tomorrow.");
+    }
+    tx.set(ref, { date: today, count: count + 1 }, { merge: true });
+  });
+  return uid;
+}
+
 
 
 export const autoSuggestChecklist = onDocumentCreated({
@@ -188,11 +217,12 @@ export const onGameCreated = onDocumentCreated("games/{gameId}", async (event) =
   }
 });
 
-export const generateAIChecklist = onCall(async (request) => {
+export const generateAIChecklist = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const { title, description, language = 'en-US' } = request.data;
   if (!title) {
     throw new HttpsError('invalid-argument', 'Title is required.');
   }
+  await assertAiCallerAllowed(request);
 
   try {
     const key = process.env.GEMINI_API_KEY_LOCAL;
@@ -228,11 +258,12 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
   }
 });
 
-export const suggestEventCategory = onCall(async (request) => {
+export const suggestEventCategory = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const { title, description } = request.data;
   if (!title) {
     throw new HttpsError('invalid-argument', 'Title is required.');
   }
+  await assertAiCallerAllowed(request);
 
   try {
     const key = process.env.GEMINI_API_KEY_LOCAL;
@@ -261,11 +292,12 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
   }
 });
 
-export const generateGroupDigest = onCall(async (request) => {
+export const generateGroupDigest = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const { groupId, language = 'en-US' } = request.data;
   if (!groupId) {
     throw new HttpsError('invalid-argument', 'groupId is required.');
   }
+  await assertAiCallerAllowed(request);
 
   try {
     const key = process.env.GEMINI_API_KEY_LOCAL;
@@ -348,11 +380,12 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
   }
 });
 
-export const suggestAssetForText = onCall(async (request) => {
+export const suggestAssetForText = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const { text, availableAssets } = request.data;
   if (!text || !availableAssets || !Array.isArray(availableAssets)) {
     throw new HttpsError('invalid-argument', 'text and availableAssets are required.');
   }
+  await assertAiCallerAllowed(request);
 
   try {
     const key = process.env.GEMINI_API_KEY_LOCAL;

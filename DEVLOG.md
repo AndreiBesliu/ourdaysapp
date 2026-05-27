@@ -85,7 +85,9 @@
 - **`notifications` — anti-spam** 🟠 Current rule only requires honest `createdBy == auth.uid` (attribution). A malicious member can still spam notifications to any `userId`.
   - **Fix path:** move notification creation (task assignment, RSVP, invites) to a Cloud Function trigger that validates the recipient shares a group with the sender + rate-limits. Then forbid direct client `create`.
 - ~~**#1 `users` read exposure**~~ ✅ DONE (2026-05-25) Resolved via the `profiles` refactor (Phases 1–3): `users` is now owner-only read/write; member name/photo/birthday render from the public `profiles` mirror. NB: migration is client-side, so a member appears to others only after they have logged in once (profile self-creates on login).
-- **#5 Firebase App Check** 🟠 Callable Gemini functions + Firestore are callable by anyone with the public web config. Add App Check (reCAPTCHA v3 / Play Integrity) + basic rate limiting to prevent abuse and cost spikes.
+- **#5 Firebase App Check** 🟡 IN PROGRESS (2026-05-26): code is wired up but enforcement is OFF pending manual console setup.
+  - DONE: client App Check init (`firebase.ts`, reCAPTCHA v3, env `VITE_APPCHECK_RECAPTCHA_KEY`, debug token in dev, graceful skip if no key); the 4 AI callables now **require auth** + a **per-user daily rate limit** (`ai_usage/{uid}`, default 50/day, `AI_DAILY_LIMIT`) and accept an `enforceAppCheck` flag driven by `APPCHECK_ENFORCE`.
+  - TO ENFORCE (manual, Firebase Console): (1) App Check → register the web app with **reCAPTCHA v3**, copy the site key → set `VITE_APPCHECK_RECAPTCHA_KEY` in the web `.env` and rebuild/redeploy; (2) run in **Monitor** mode first and confirm tokens flow; (3) enable **enforcement** for Firestore, Storage and Cloud Functions; (4) set functions env `APPCHECK_ENFORCE=true` and redeploy functions. For the Android (Capacitor) build, add **Play Integrity** as a second provider later.
 - **`assets` — shared visibility** 🟠 `sharedWithFamily` assets owned by other users are no longer readable (asset listeners scoped to `ownerId == uid` to satisfy the rule). Restoring cross-user shared wallet assets needs a real sharing model: e.g. an `allowedUserIds` array on the asset + a read rule `request.auth.uid in resource.data.allowedUserIds`, and queries split into "mine" + "shared with me".
 - **Housekeeping** 🟢 `.firebase/` deploy cache is git-tracked — add to `.gitignore` in a future cleanup.
 
@@ -1005,4 +1007,17 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > - No Firestore rules change needed (group members may already update games).
 > Moved the roadmap item into Completed Features.
 > Build OK (tsc + vite). Deployed, committed, pushed.
+> Model: Claude Opus 4.7
+
+**2026-05-26 - Task Started**
+> Prompt: chose "Firebase App Check" as the next task.
+> Plan: Wire up App Check + abuse protection for the public web config without breaking the live app. Client: init App Check (reCAPTCHA v3) gated behind an env key. Functions: add `enforceAppCheck` (env-flag, default off so it's safe to ship before console setup), require auth on the 4 Gemini callables, and add a basic per-user daily rate limit. Document the manual console steps needed to actually enforce.
+> Model: Claude Opus 4.7
+
+**2026-05-26 - Task Completed**: Firebase App Check scaffolding + AI-callable hardening.
+> - `src/firebase.ts`: `initializeAppCheck` with `ReCaptchaV3Provider`, keyed off `VITE_APPCHECK_RECAPTCHA_KEY` (skips entirely if unset, so dev/builds without it still work); dev debug-token enabled; token auto-refresh on. Shipping this is non-breaking — it only starts attaching App Check tokens once a key is configured; enforcement is a separate server/console toggle.
+> - `functions/src/index.ts`: added `ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === 'true'` and applied `{ enforceAppCheck: ENFORCE_APP_CHECK }` to all 4 callables (`generateAIChecklist`, `suggestEventCategory`, `generateGroupDigest`, `suggestAssetForText`); added `assertAiCallerAllowed()` which **requires `request.auth`** and enforces a **per-user daily quota** (`ai_usage/{uid}`, `AI_DAILY_LIMIT`=50) via a Firestore transaction (admin-only collection). Triggers (autoSuggestChecklist, onMessageCreated, onGameCreated) left unchanged.
+> - `functions/tsconfig.json`: added `"rootDir": "src"` to fix a TS5011 build error surfaced by the newer compiler (also ran `npm install` in functions — deps weren't present in this environment).
+> - Deployed hosting + all functions; set an Artifact Registry cleanup policy (was warning on deploy). Enforcement remains OFF until the manual console steps in "Deferred Security Work #5" are done.
+> Build OK (web tsc+vite, functions tsc). Deployed, committed, pushed.
 > Model: Claude Opus 4.7

@@ -6,6 +6,34 @@ const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const generative_ai_1 = require("@google/generative-ai");
 admin.initializeApp();
+// App Check enforcement is toggled via env so it can be switched on AFTER the
+// reCAPTCHA key is registered and verified in monitor mode in the Firebase
+// Console — avoids locking out clients that aren't yet sending tokens. Set
+// APPCHECK_ENFORCE=true (functions env) to require valid App Check tokens.
+const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
+// Require a signed-in caller and apply a basic per-user daily quota on the AI
+// callables to curb abuse / runaway Gemini cost. The `ai_usage` collection is
+// written only by the Admin SDK here (clients have no matching rule → denied).
+const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 50);
+async function assertAiCallerAllowed(request) {
+    var _a;
+    const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
+    if (!uid) {
+        throw new https_1.HttpsError("unauthenticated", "You must be signed in to use AI features.");
+    }
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+    const ref = admin.firestore().doc(`ai_usage/${uid}`);
+    await admin.firestore().runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const data = snap.exists ? snap.data() : undefined;
+        const count = data && data.date === today ? (data.count || 0) : 0;
+        if (count >= AI_DAILY_LIMIT) {
+            throw new https_1.HttpsError("resource-exhausted", "Daily AI limit reached. Please try again tomorrow.");
+        }
+        tx.set(ref, { date: today, count: count + 1 }, { merge: true });
+    });
+    return uid;
+}
 exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)({
     document: "events/{eventId}"
 }, async (event) => {
@@ -169,11 +197,12 @@ exports.onGameCreated = (0, firestore_1.onDocumentCreated)("games/{gameId}", asy
         console.error("Error sending Game Invite FCM:", error);
     }
 });
-exports.generateAIChecklist = (0, https_1.onCall)(async (request) => {
+exports.generateAIChecklist = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     const { title, description, language = 'en-US' } = request.data;
     if (!title) {
         throw new https_1.HttpsError('invalid-argument', 'Title is required.');
     }
+    await assertAiCallerAllowed(request);
     try {
         const key = process.env.GEMINI_API_KEY_LOCAL;
         if (!key) {
@@ -205,11 +234,12 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
-exports.suggestEventCategory = (0, https_1.onCall)(async (request) => {
+exports.suggestEventCategory = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     const { title, description } = request.data;
     if (!title) {
         throw new https_1.HttpsError('invalid-argument', 'Title is required.');
     }
+    await assertAiCallerAllowed(request);
     try {
         const key = process.env.GEMINI_API_KEY_LOCAL;
         if (!key) {
@@ -233,12 +263,13 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
-exports.generateGroupDigest = (0, https_1.onCall)(async (request) => {
+exports.generateGroupDigest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c, _d;
     const { groupId, language = 'en-US' } = request.data;
     if (!groupId) {
         throw new https_1.HttpsError('invalid-argument', 'groupId is required.');
     }
+    await assertAiCallerAllowed(request);
     try {
         const key = process.env.GEMINI_API_KEY_LOCAL;
         if (!key) {
@@ -311,11 +342,12 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
-exports.suggestAssetForText = (0, https_1.onCall)(async (request) => {
+exports.suggestAssetForText = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     const { text, availableAssets } = request.data;
     if (!text || !availableAssets || !Array.isArray(availableAssets)) {
         throw new https_1.HttpsError('invalid-argument', 'text and availableAssets are required.');
     }
+    await assertAiCallerAllowed(request);
     try {
         const key = process.env.GEMINI_API_KEY_LOCAL;
         if (!key) {
