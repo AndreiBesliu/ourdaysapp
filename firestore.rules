@@ -90,15 +90,16 @@ service cloud.firestore {
         resource.data.inviteeId == request.auth.uid ||
         resource.data.sharedWithFamily == true
       );
-      // A group event can only be created by a member of that group (blocks
-      // injecting events into groups you don't belong to). Personal events
-      // (no groupId) stay open. NB: ownerId can't be bound here yet — recurrence
-      // overrides keep the original owner's id (see Deferred Security Work).
-      allow create: if isSignedIn() && (
-        !('groupId' in request.resource.data) ||
-        request.resource.data.groupId == null ||
-        isMemberOfGroup(request.resource.data.groupId)
-      );
+      // Client-created events must be owned by the caller, and group events
+      // require group membership. The one path that creates an event owned by
+      // someone else — a recurring single-occurrence override — now goes through
+      // the `createEventOverride` Cloud Function (Admin SDK bypasses this rule).
+      allow create: if isSignedIn() &&
+        request.resource.data.ownerId == request.auth.uid && (
+          !('groupId' in request.resource.data) ||
+          request.resource.data.groupId == null ||
+          isMemberOfGroup(request.resource.data.groupId)
+        );
       allow update: if isSignedIn() && (
         resource.data.ownerId == request.auth.uid ||
         (resource.data.groupId != null && isMemberOfGroup(resource.data.groupId)) ||
@@ -122,9 +123,13 @@ service cloud.firestore {
     }
 
     // ── Assets (Wallet) ──
+    // Client-created assets must be owned by the caller. The "keep copy" transfer
+    // (which creates an asset owned by the RECIPIENT) goes through the
+    // `transferAssetCopy` Cloud Function (Admin SDK bypasses this rule). A full
+    // transfer is still a client `update` (allowed — you own the source doc).
     match /assets/{assetId} {
       allow read: if isSignedIn() && resource.data.ownerId == request.auth.uid;
-      allow create: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
       allow update, delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
 

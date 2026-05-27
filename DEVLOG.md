@@ -78,10 +78,8 @@
 ## 🔒 Deferred Security Work (Audit 2026-05-25)
 > A code audit showed that several Firestore collections cannot be safely locked down with simple client-side rules because legitimate flows write documents on behalf of OTHER users. These need backend (Cloud Functions / Admin SDK) refactors before the rules can be tightened. Tracked here so they are not forgotten.
 
-- **`events` — `ownerId` spoofing** 🟠 Cannot enforce `create: ownerId == auth.uid` because **recurrence overrides** (`AddEventModal.tsx:572`) created by a non-owner group member keep the original `ownerId`. (NB: birthday auto-add is NOT a factor — those events are virtual/in-memory, never written to Firestore.)
-  - **Fix path:** move recurrence-override creation into a Cloud Function (Admin SDK bypasses rules), then add `create: request.resource.data.ownerId == request.auth.uid` for client-created events.
-- **`assets` — `ownerId` spoofing** 🟠 Cannot enforce `create: ownerId == auth.uid` because **asset transfer "Keep Copy"** (`Wallet.tsx:147`) creates an asset with `ownerId` = the recipient.
-  - **Fix path:** move asset transfer to a Cloud Function, then tighten `assets` create rule.
+- ~~**`events` — `ownerId` spoofing**~~ ✅ DONE (2026-05-26) `events` create now requires `ownerId == auth.uid` (+ group membership). The one path that creates an event owned by someone else — a recurring single-occurrence override — moved to the `createEventOverride` Cloud Function (validates edit rights on the parent, writes the override with the parent's owner/group, Admin SDK).
+- ~~**`assets` — `ownerId` spoofing**~~ ✅ DONE (2026-05-26) `assets` create now requires `ownerId == auth.uid`. The "Keep Copy" transfer (creates an asset owned by the recipient) moved to the `transferAssetCopy` Cloud Function (requires you own the source + share a group with the recipient).
 - ~~**`notifications` — anti-spam**~~ ✅ DONE (2026-05-26) Direct client `create` is now forbidden (`allow create: if false`); notifications are created only by the `notifyUsers` callable (Admin SDK), which requires auth, only lets you notify users you **share a group with**, and rate-limits per sender (`notif_usage/{uid}`, default 100/day). `AddEventModal` task-assignment now calls it via `src/notifications.ts`.
 - ~~**#1 `users` read exposure**~~ ✅ DONE (2026-05-25) Resolved via the `profiles` refactor (Phases 1–3): `users` is now owner-only read/write; member name/photo/birthday render from the public `profiles` mirror. NB: migration is client-side, so a member appears to others only after they have logged in once (profile self-creates on login).
 - **#5 Firebase App Check** 🟡 IN PROGRESS (2026-05-26): code is wired up but enforcement is OFF pending manual console setup.
@@ -1045,4 +1043,17 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > - Client: new `src/notifications.ts` (`notifyUsers` helper) ; `AddEventModal` task-assignment now calls it instead of `addDoc(notifications)`.
 > - Deployed functions (created `notifyUsers`, updated the rest) + firestore rules + hosting. Build OK (web + functions tsc).
 > VERIFY: assign a task to another group member and confirm they receive the in-app notification (now created server-side).
+> Model: Claude Opus 4.7
+
+**2026-05-26 - Task Started**
+> Prompt: "nu vom face notificari in limba destinatarului, dar vreau sa continuam cu restul de mai sus" → enforce `ownerId` on events/assets via Cloud Functions (App Check enforcement stays blocked on manual console steps; chat-media per-group scoping deferred as low-value/high-cost).
+> Plan: The only two client create-paths with a non-self `ownerId` are the recurring single-occurrence override (`AddEventModal`) and the asset "keep copy" transfer (`Wallet`). Move both to Cloud Functions (Admin SDK), then add `create: ownerId == auth.uid` to the events + assets rules.
+> Model: Claude Opus 4.7
+
+**2026-05-26 - Task Completed**: Enforced `ownerId` on events & assets create.
+> - `functions/src/index.ts`: added `userInGroup` / `usersShareGroup` helpers and two callables: `createEventOverride` (validates the caller may edit the parent — owner / group member / assignee — then writes the override with the parent's `ownerId`+`groupId` and adds the exception date) and `transferAssetCopy` (requires the caller owns the source asset and shares a group with the recipient, then duplicates it to the recipient).
+> - `firestore.rules`: `events` create now requires `ownerId == auth.uid` (kept the group-membership check); `assets` create now requires `ownerId == auth.uid`.
+> - Client: new `src/serverActions.ts` (`createEventOverride`, `transferAssetCopy`); `AddEventModal` single-occurrence edit and `Wallet` keep-copy transfer call them instead of writing foreign-owned docs directly (removed the now-unused `arrayUnion` import).
+> - Deployed both new functions + updated rest + firestore rules + hosting. Build OK (web + functions tsc).
+> VERIFY: (1) edit a SINGLE occurrence of a recurring group event and confirm the override saves + the occurrence is replaced; (2) transfer a wallet asset with "keep copy" to a group member and confirm both keep a copy.
 > Model: Claude Opus 4.7

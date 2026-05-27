@@ -47,6 +47,21 @@ async function assertAiCallerAllowed(request: { auth?: { uid?: string } }): Prom
   return uid;
 }
 
+// Whether `uid` is a member of the given group.
+async function userInGroup(uid: string, groupId: string): Promise<boolean> {
+  if (!groupId) return false;
+  const snap = await admin.firestore().doc(`groups/${groupId}`).get();
+  const members = snap.exists ? snap.data()?.members : undefined;
+  return Array.isArray(members) && members.includes(uid);
+}
+
+// Whether `a` and `b` share at least one group.
+async function usersShareGroup(a: string, b: string): Promise<boolean> {
+  if (a === b) return false;
+  const snap = await admin.firestore().collection("groups").where("members", "array-contains", a).get();
+  return snap.docs.some((d) => (d.data().members || []).includes(b));
+}
+
 
 
 export const autoSuggestChecklist = onDocumentCreated({
@@ -501,5 +516,97 @@ export const notifyUsers = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async 
     await batch.commit();
   }
   return { created };
+});
+
+// ── Recurring-event single-occurrence override ──
+// Clients can't create events they don't own (Firestore: create requires
+// ownerId == auth.uid). A single-occurrence override keeps the ORIGINAL owner,
+// so it's created here: validates the caller may edit the parent, writes the
+// override with the parent's ownerId/groupId (server-authoritative), and adds
+// the exception date to the parent.
+export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+  const { parentId, overrideDate, data } = request.data || {};
+  if (!parentId || !overrideDate || !data || typeof data !== "object") {
+    throw new HttpsError("invalid-argument", "parentId, overrideDate and data are required.");
+  }
+
+  const db = admin.firestore();
+  const parentRef = db.doc(`events/${parentId}`);
+  const parentSnap = await parentRef.get();
+  if (!parentSnap.exists) {
+    throw new HttpsError("not-found", "Parent event not found.");
+  }
+  const p = parentSnap.data() || {};
+
+  const canEdit =
+    p.ownerId === uid ||
+    (!!p.groupId && (await userInGroup(uid, p.groupId))) ||
+    (Array.isArray(p.assigneeIds) && p.assigneeIds.includes(uid));
+  if (!canEdit) {
+    throw new HttpsError("permission-denied", "You can't edit this event.");
+  }
+
+  const overrideRef = db.collection("events").doc();
+  const batch = db.batch();
+  batch.set(overrideRef, {
+    ...data,
+    ownerId: p.ownerId, // server-authoritative (keep original owner)
+    groupId: p.groupId ?? null, // keep within the parent's group
+    overrideOfParent: parentId,
+    createdAt: new Date().toISOString(),
+  });
+  batch.update(parentRef, {
+    recurrenceExceptions: admin.firestore.FieldValue.arrayUnion(overrideDate),
+  });
+  await batch.commit();
+  return { id: overrideRef.id };
+});
+
+// ── Asset transfer "keep copy" ──
+// Creating an asset owned by ANOTHER user can't be a client write (create
+// requires ownerId == auth.uid). The caller must own the source asset and share
+// a group with the recipient; the copy is duplicated server-side from the
+// (already-updated) original so its data is authoritative.
+export const transferAssetCopy = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+  const { assetId, recipientId } = request.data || {};
+  if (!assetId || !recipientId) {
+    throw new HttpsError("invalid-argument", "assetId and recipientId are required.");
+  }
+  if (recipientId === uid) {
+    throw new HttpsError("invalid-argument", "Cannot transfer to yourself.");
+  }
+
+  const db = admin.firestore();
+  const assetSnap = await db.doc(`assets/${assetId}`).get();
+  if (!assetSnap.exists) {
+    throw new HttpsError("not-found", "Asset not found.");
+  }
+  const a = assetSnap.data() || {};
+  if (a.ownerId !== uid) {
+    throw new HttpsError("permission-denied", "You don't own this asset.");
+  }
+  if (!(await usersShareGroup(uid, recipientId))) {
+    throw new HttpsError("permission-denied", "You can only transfer to members of your groups.");
+  }
+
+  // Drop the source owner/timestamp; copy everything else to the recipient.
+  const { ownerId, createdAt, ...rest } = a;
+  void ownerId; void createdAt;
+  const copyRef = db.collection("assets").doc();
+  await copyRef.set({
+    ...rest,
+    ownerId: recipientId,
+    createdAt: new Date().toISOString(),
+    transferredFrom: uid,
+  });
+  return { id: copyRef.id };
 });
 

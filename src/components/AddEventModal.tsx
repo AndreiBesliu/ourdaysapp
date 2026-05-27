@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, Sparkles, GripVertical, Search, Check } from 'lucide-react';
-import { addDoc, collection, query, where, updateDoc, doc, arrayUnion } from 'firebase/firestore';
+import { addDoc, collection, query, where, updateDoc, doc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
 import { notifyUsers } from '../notifications';
+import { createEventOverride } from '../serverActions';
 import { onSnapshot } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
@@ -593,17 +594,15 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           // Ask user: edit this one or all?
           const scope = editScope;
           if (scope === 'this') {
-            // Create a standalone override for this date, add exception to parent
+            // The single-occurrence override keeps the ORIGINAL owner, so it's
+            // created server-side (clients can only create events they own). The
+            // function also adds the exception date to the parent.
             const overrideDate = editEvent.recurrenceDate; // e.g. '2026-06-15'
-            await addDoc(collection(db, 'events'), {
-              ...baseEventData,
-              date: new Date(eventDate).toISOString(),
-              createdAt: new Date().toISOString(),
-              overrideOfParent: parentId,
+            await createEventOverride({
+              parentId,
+              overrideDate,
+              data: { ...baseEventData, date: new Date(eventDate).toISOString() },
             });
-            // Add exception to parent
-            const parentRef = doc(db, 'events', parentId);
-            await updateDoc(parentRef, { recurrenceExceptions: arrayUnion(overrideDate) });
           } else {
             // Edit the parent (all occurrences)
             await updateDoc(doc(db, 'events', parentId), { ...baseEventData, date: new Date(eventDate).toISOString() });

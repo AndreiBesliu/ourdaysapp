@@ -10,6 +10,7 @@ import QRCode from 'react-qr-code';
 import ExpensesTab from '../components/ExpensesTab';
 import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
+import { transferAssetCopy } from '../serverActions';
 
 export default function Wallet() {
   const [assets, setAssets] = useState<any[]>([]);
@@ -144,13 +145,10 @@ export default function Wallet() {
       if (editingAsset) {
         if (transferToUserId) {
           if (keepCopy) {
-            // Update original for current user, duplicate for new user
+            // Apply edits to the kept original, then create the recipient's copy
+            // server-side (clients can only create assets they own).
             await updateDoc(doc(db, 'assets', editingAsset.id), assetData);
-            await addDoc(collection(db, 'assets'), {
-              ...assetData,
-              ownerId: transferToUserId,
-              createdAt: new Date().toISOString()
-            });
+            await transferAssetCopy({ assetId: editingAsset.id, recipientId: transferToUserId });
           } else {
             // Transfer completely
             await updateDoc(doc(db, 'assets', editingAsset.id), { ...assetData, ownerId: transferToUserId });
