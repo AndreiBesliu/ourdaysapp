@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { X, Gamepad2, Play, Clock, Trash2, Info } from 'lucide-react';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
+import { X, Gamepad2, Play, Clock, Trash2, Info, Flag } from 'lucide-react';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, updateDoc, doc } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
 import TicTacToe from './TicTacToe';
 import Connect4 from './Connect4';
@@ -9,6 +9,7 @@ import MemoryMatch from './MemoryMatch';
 import { format } from 'date-fns';
 import { useThemeStore } from '../../store';
 import { t } from '../../utils/i18n';
+import { getSessionWinner, finalizeGameUpdate } from './gameResult';
 
 
 interface GamesHubModalProps {
@@ -285,6 +286,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
   const [view, setView] = useState<'arcade' | 'leaderboard'>('arcade');
   const [leaderboard, setLeaderboard] = useState<{uid: string, wins: number, points?: number}[]>([]);
   const [showRulesFor, setShowRulesFor] = useState<string | null>(null);
+  const [confirmingEndId, setConfirmingEndId] = useState<string | null>(null);
   const { language } = useThemeStore();
   const gameRules = getGameRules(language);
 
@@ -329,9 +331,12 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
       const statsMap: Record<string, { wins: number; points: number }> = {};
       
       games.forEach(g => {
-        if (g.winner) {
-          if (!statsMap[g.winner]) statsMap[g.winner] = { wins: 0, points: 0 };
-          statsMap[g.winner].wins += 1;
+        // Credit the SESSION winner (leader across all rounds), not just the
+        // last round's `winner` field.
+        const sessionWinner = getSessionWinner(g);
+        if (sessionWinner) {
+          if (!statsMap[sessionWinner]) statsMap[sessionWinner] = { wins: 0, points: 0 };
+          statsMap[sessionWinner].wins += 1;
         }
 
         if (g.gameType === 'rummy-45' && g.state && g.state.players) {
@@ -433,6 +438,23 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
       if (playingGameId === gameId) setPlayingGameId(null);
     } catch (err) {
       console.error("Error deleting game:", err);
+    }
+  };
+
+  // Formally end/lock a game session (first tap arms the confirm, second commits)
+  // so an abandoned or finished game is banked to the leaderboard with the
+  // correct session winner and can't be reopened via "Next Round".
+  const handleEndGame = async (game: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirmingEndId !== game.id) {
+      setConfirmingEndId(game.id);
+      return;
+    }
+    setConfirmingEndId(null);
+    try {
+      await updateDoc(doc(db, 'games', game.id), finalizeGameUpdate(game));
+    } catch (err) {
+      console.error("Error ending game:", err);
     }
   };
 
@@ -621,7 +643,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                             </div>
                             <div className="flex items-center gap-2">
                               {game.status === 'waiting' && game.createdBy === auth.currentUser?.uid && (
-                                <button 
+                                <button
                                   onClick={(e) => handleCancelGame(game.id, e)}
                                   className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
                                   title={t('cancelGame', language)}
@@ -629,8 +651,20 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               )}
-                              <button 
-                                onClick={() => setPlayingGameId(game.id)}
+                              {(game.status === 'playing' || game.status === 'finished') && !game.finalized && (
+                                <button
+                                  onClick={(e) => handleEndGame(game, e)}
+                                  title={t('endGame', language)}
+                                  className={`rounded-lg text-xs font-bold flex items-center gap-1 transition-colors ${confirmingEndId === game.id ? 'bg-red-500 text-white px-2.5 py-2' : 'text-red-500 hover:bg-red-500/10 p-2'}`}
+                                >
+                                  <Flag className="w-3.5 h-3.5" />{confirmingEndId === game.id && <span>{t('confirmEnd', language)}</span>}
+                                </button>
+                              )}
+                              {game.finalized && (
+                                <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400 bg-zinc-100 dark:bg-zinc-800 rounded-md">🏁 {t('endedBadge', language)}</span>
+                              )}
+                              <button
+                                onClick={() => { setConfirmingEndId(null); setPlayingGameId(game.id); }}
                                 className="px-4 py-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors"
                               >
                                 {game.status === 'finished' ? t('view', language) : <><Play className="w-4 h-4" /> {t('join', language)}</>}

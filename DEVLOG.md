@@ -41,8 +41,7 @@
 ### 1. In Progress / Upcoming
 - **Arcade Expansion 🎮**
   - **Games**: Chess, Backgammon.
-  - **Leaderboards & Group Stats**: Persistent game stats and tournament tracking in the Arcade.
-  - **Game-End / Session Stopping System**: Implement a formal ending/stopping mechanism for games (Tic-Tac-Toe, Connect 4, Rummy) to trigger leaderboard updates upon game completion.
+  - **Leaderboards & Group Stats**: Persistent game stats and tournament tracking in the Arcade (cross-day history, tournaments) — builds on the Game-End system now in place.
   - **Rummy UI Overhaul 🃏**: Improve the Rummy 45 board UX (`RummyGame.tsx`).
     - ✅ *Phase 1 done (2026-05-26)*: live meld feedback (selection shows Set/Run + points + valid/invalid green/red, meld button disabled when invalid); first-meld progress chip (`X/45 pts · needs a run`); card redesign with real suit glyphs (♥♦♣♠) + corner indices + better amber/sky contrast; dual sort (by Runs / by Sets).
     - ⏳ *Phase 2 remaining*: replace the position-swap hand reorder with smooth drag-to-insert; cumulative multi-round scoreboard (Rummy 45 is usually played over several hands) — ties into the Game-End/Leaderboard work.
@@ -111,6 +110,7 @@
 - **Collapsible Week View**: Month/Week view toggle in the Calendar.
 - **Pull-to-Refresh**: Native-feeling refresh mechanism on the home screen.
 - **Multiplayer Arcade**: Tic-Tac-Toe, Connect 4, and Rummy 45 (Phases 1-3) implemented with real-time sync.
+- **Game-End / Session Stopping**: Formal "End Game" action that locks a session (`finalized`) and banks the correct **session winner** (the leader across all rounds, not just the last round) to the leaderboard. Available on each game's game-over screen and from the Arcade hub (with an inline confirm) to stop abandoned/in-progress games; finalized games hide "Next Round" and show an "Ended" badge. Leaderboard win-credit now uses `getSessionWinner()`.
 - **Smart Birthday Auto-Add**: Automatically detects and adds birthdays for users within a group.
 - **Recurring Events**: Single-document recurrence engine with daily/weekly/monthly/yearly support, edit/delete scope prompts, and overview panel.
 - **Voice Messages**: Record and send short audio clips in group chat with waveform UI and playback.
@@ -985,5 +985,20 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > - `i18n.ts`: +7 keys × 6 languages (meldTypeSet, meldTypeRun, invalidCombo, firstMeldLabel, needsRun, sortRuns, sortSets).
 > - `RummyGame.tsx`: (1) **Live meld feedback** — the floating meld button now validates the current selection in real time: green "Meld · Run · 35 pts" when valid (enabled), red "Invalid combination" when not (disabled), so players no longer stage-then-error. (2) **First-meld progress chip** — under the turn bar, while the player hasn't opened, shows `First meld: X/45 pts · needs a run`, turning emerald once ≥45 pts with a run is staged. (3) **Card redesign** — replaced the plain suit dots with real glyphs (♥♦♣♠) as corner indices (value + suit, top-left and mirrored bottom-right) plus the centre value; bumped Diamonds→amber-600 and Clubs→sky-700 for legibility on the cream tile. (4) **Dual sort** — replaced the single Sort button with "Runs" (group by suit→value) and "Sets" (group by value→suit) via a new `sortHandBy(mode)`.
 > Phase 2 still open: drag-to-insert hand reorder (currently a position swap) and a cumulative multi-round scoreboard.
+> Build OK (tsc + vite). Deployed, committed, pushed.
+> Model: Claude Opus 4.7
+
+**2026-05-26 - Task Started**
+> Prompt: chose "Game-End / Leaderboard" as the next task.
+> Plan: Add a formal game-end/stopping mechanism. Round-loop games (TTT, Connect 4, Memory) loop via "Next Round" and the doc's `winner` only reflects the last round, so the leaderboard can credit the wrong player. Introduce a shared `gameResult.ts` (`getSessionWinner` from cumulative `state.scores` per game type + `finalizeGameUpdate`), add an "End Game" button to each game-over screen + an "End" action in the Arcade hub list (inline confirm) that locks the session (`finalized`, `endedAt`) and banks the session winner, hide "Next Round" once finalized, and switch the leaderboard win-credit to `getSessionWinner`.
+> Model: Claude Opus 4.7
+
+**2026-05-26 - Task Completed**: Game-End / Session Stopping system.
+> - New `src/components/games/gameResult.ts`: `getSessionWinner(game)` (TTT/Connect4 → higher round-win count in `scores`; Memory → more pairs; Rummy → existing `winner`; ties → null) and `finalizeGameUpdate(game)` (`status:'finished'`, `winner:sessionWinner`, `finalized:true`, `endedAt`).
+> - `TicTacToe.tsx`, `Connect4.tsx`, `MemoryMatch.tsx`: game-over screen now shows **End Game** next to Next Round/Play Again; once `finalized`, those are hidden and a "🏁 Game ended" label shows. Added `handleEndGame`.
+> - `GamesHubModal.tsx`: leaderboard win-credit switched to `getSessionWinner` (so multi-round sessions credit the leader, not the last round); active-games list gained an **End** button (Flag icon, two-tap inline confirm) for non-finalized playing/finished games to stop abandoned games, plus an "Ended" badge for finalized ones.
+> - `i18n.ts`: +4 keys × 6 languages (endGame, gameEnded, endedBadge, confirmEnd).
+> - No Firestore rules change needed (group members may already update games).
+> Moved the roadmap item into Completed Features.
 > Build OK (tsc + vite). Deployed, committed, pushed.
 > Model: Claude Opus 4.7

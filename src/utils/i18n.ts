@@ -248,6 +248,10 @@ export const translations: Translations = {
     needsRun: "needs a run",
     sortRuns: "Runs",
     sortSets: "Sets",
+    endGame: "End Game",
+    gameEnded: "Game ended",
+    endedBadge: "Ended",
+    confirmEnd: "Confirm?",
   },
   'ro-RO': {
     todayOverview: "Prezentare generală",
@@ -485,6 +489,10 @@ export const translations: Translations = {
     needsRun: "lipsește o terță",
     sortRuns: "Terțe",
     sortSets: "Suite",
+    endGame: "Termină jocul",
+    gameEnded: "Joc încheiat",
+    endedBadge: "Încheiat",
+    confirmEnd: "Confirmi?",
   },
   'fr-FR': {
     todayOverview: "Aperçu d'aujourd'hui",
@@ -722,6 +730,10 @@ export const translations: Translations = {
     needsRun: "il manque une suite",
     sortRuns: "Suites",
     sortSets: "Brelans",
+    endGame: "Terminer la partie",
+    gameEnded: "Partie terminée",
+    endedBadge: "Terminée",
+    confirmEnd: "Confirmer ?",
   },
   'es-ES': {
     todayOverview: "Resumen de hoy",
@@ -959,6 +971,10 @@ export const translations: Translations = {
     needsRun: "falta una escalera",
     sortRuns: "Escaleras",
     sortSets: "Tríos",
+    endGame: "Terminar partida",
+    gameEnded: "Partida terminada",
+    endedBadge: "Terminada",
+    confirmEnd: "¿Confirmar?",
   },
   'it-IT': {
     todayOverview: "Panoramica di oggi",
@@ -1196,6 +1212,10 @@ export const translations: Translations = {
     needsRun: "manca una scala",
     sortRuns: "Scale",
     sortSets: "Tris",
+    endGame: "Termina partita",
+    gameEnded: "Partita terminata",
+    endedBadge: "Terminata",
+    confirmEnd: "Confermare?",
   },
   'de-DE': {
     todayOverview: "Heute im Überblick",
@@ -1433,6 +1453,10 @@ export const translations: Translations = {
     needsRun: "es fehlt eine Folge",
     sortRuns: "Folgen",
     sortSets: "Sätze",
+    endGame: "Spiel beenden",
+    gameEnded: "Spiel beendet",
+    endedBadge: "Beendet",
+    confirmEnd: "Bestätigen?",
   }
 };
 

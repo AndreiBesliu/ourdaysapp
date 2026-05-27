@@ -6,6 +6,7 @@ import { playTone } from '../../utils/sounds';
 import { triggerHaptic } from '../../utils/haptics';
 import { useThemeStore } from '../../store';
 import { t } from '../../utils/i18n';
+import { finalizeGameUpdate } from './gameResult';
 
 interface MemoryMatchProps {
   game: any;
@@ -151,6 +152,11 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
     playTone('success');
   };
 
+  const handleEndGame = async () => {
+    if (!auth.currentUser) return;
+    await updateDoc(doc(db, 'games', game.id), finalizeGameUpdate(game));
+  };
+
   const { players, p1IsNext, board, flippedIndices, scores } = game.state;
   const p1 = userMap[players.P1];
   const p2 = players.P2 ? userMap[players.P2] : null;
@@ -258,12 +264,24 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
                 userMap[game.winner]?.uid === auth.currentUser?.uid ? t('youWon', language) : `${userMap[game.winner]?.name?.split(' ')[0]} ${t('wonSuffix', language)}`
               ) : t('itsADraw', language)}
             </h3>
-            <button
-              onClick={handleNextRound}
-              className="mt-4 px-8 py-3 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/30 hover:scale-105 active:scale-95 transition-all"
-            >
-              {t('playAgain', language)}
-            </button>
+            {game.finalized ? (
+              <span className="mt-4 text-sm font-bold text-zinc-400 flex items-center gap-1">🏁 {t('gameEnded', language)}</span>
+            ) : (
+              <div className="mt-4 flex items-center gap-2">
+                <button
+                  onClick={handleNextRound}
+                  className="px-6 py-3 bg-primary text-white font-bold rounded-xl shadow-lg shadow-primary/30 hover:scale-105 active:scale-95 transition-all"
+                >
+                  {t('playAgain', language)}
+                </button>
+                <button
+                  onClick={handleEndGame}
+                  className="px-6 py-3 bg-red-500/90 hover:bg-red-600 text-white font-bold rounded-xl transition-all"
+                >
+                  {t('endGame', language)}
+                </button>
+              </div>
+            )}
           </div>
         )}
 

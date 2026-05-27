@@ -5,6 +5,7 @@ import { playTone } from '../../utils/sounds';
 import { triggerHaptic } from '../../utils/haptics';
 import { useThemeStore } from '../../store';
 import { t } from '../../utils/i18n';
+import { finalizeGameUpdate } from './gameResult';
 
 interface Connect4Props {
   game: any;
@@ -138,6 +139,11 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
     });
   };
 
+  const handleEndGame = async () => {
+    if (!auth.currentUser) return;
+    await updateDoc(doc(db, 'games', game.id), finalizeGameUpdate(game));
+  };
+
   const calculateWinner = (board: (string | null)[][]) => {
     // Horizontal
     for (let r = 0; r < ROWS; r++) {
@@ -223,13 +229,22 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
           </p>
         )}
         {game.status === 'finished' && (
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 flex-wrap justify-center">
             <p className="font-bold text-xl text-emerald-500">
               {game.winner ? `${userMap[game.winner]?.name} ${t('winsSuffix', language)}` : t('itsADraw', language)}
             </p>
-            <button onClick={handleNextRound} className="px-4 py-1.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded-full text-sm font-bold transition-colors">
-              {t('nextRound', language)}
-            </button>
+            {game.finalized ? (
+              <span className="text-xs font-bold text-zinc-400 flex items-center gap-1">🏁 {t('gameEnded', language)}</span>
+            ) : (
+              <>
+                <button onClick={handleNextRound} className="px-4 py-1.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 rounded-full text-sm font-bold transition-colors">
+                  {t('nextRound', language)}
+                </button>
+                <button onClick={handleEndGame} className="px-4 py-1.5 bg-red-500/90 hover:bg-red-600 text-white rounded-full text-sm font-bold transition-colors">
+                  {t('endGame', language)}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
