@@ -64,18 +64,25 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     });
   };
 
-  const sortHand = async () => {
+  // Sort the hand to help spot melds: 'runs' groups by suit then value
+  // (consecutive cards line up); 'sets' groups by value then suit (same-value
+  // cards line up). Jokers always pushed to the end.
+  const sortHandBy = async (mode: 'runs' | 'sets') => {
     if (!auth.currentUser) return;
     const items = localHand.filter(c => c !== null);
-    
+    const suitOrder = ['H', 'S', 'D', 'C'];
+
     items.sort((a, b) => {
       if (a.isJoker && !b.isJoker) return 1;
       if (!a.isJoker && b.isJoker) return -1;
       if (a.isJoker && b.isJoker) return 0;
-      
-      const suitOrder = ['H', 'S', 'D', 'C'];
+
+      if (mode === 'sets') {
+        if (a.value !== b.value) return VALUE_ORDER.indexOf(a.value!) - VALUE_ORDER.indexOf(b.value!);
+        return suitOrder.indexOf(a.suit!) - suitOrder.indexOf(b.suit!);
+      }
+      // 'runs'
       if (a.suit !== b.suit) return suitOrder.indexOf(a.suit!) - suitOrder.indexOf(b.suit!);
-      
       return VALUE_ORDER.indexOf(a.value!) - VALUE_ORDER.indexOf(b.value!);
     });
 
@@ -352,6 +359,15 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
   const isMyTurn = game.status === 'playing' && game.state.playerIds[game.state.turnIndex] === auth.currentUser?.uid;
   const turnPhase = game.state.turnPhase;
 
+  // Live meld feedback: validate the currently selected cards as they're picked,
+  // and track first-meld (opening 45-pt) progress so the player isn't guessing.
+  const myPlayer = auth.currentUser ? game.state.players?.[auth.currentUser.uid] : null;
+  const hasMelded = !!myPlayer?.hasMelded;
+  const selectedCardObjs = localHand.filter(c => c && selectedCards.includes(c.id));
+  const selectionValidation = selectedCardObjs.length >= 3 ? validateMeld(selectedCardObjs) : null;
+  const stagedTotal = stagedMelds.reduce((sum, m) => sum + m.points, 0);
+  const stagedHasRun = stagedMelds.some(m => m.type === 'run');
+
   return (
     <div className="flex flex-col h-full overflow-hidden rounded-xl relative" style={{ background: 'linear-gradient(180deg, #1a4d3a 0%, #14532d 50%, #0f3d22 100%)' }}>
       {/* Top Bar */}
@@ -431,6 +447,15 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                 </span>
               )}
             </div>
+
+            {/* First-meld progress — shown until the player lays down their opening 45-pt meld */}
+            {isMyTurn && turnPhase === 'play' && !hasMelded && (
+              <div className="flex justify-center pb-1.5 z-10" style={{ background: 'rgba(0,0,0,0.3)' }}>
+                <span className={`text-[11px] font-semibold px-3 py-0.5 rounded-full transition-colors ${stagedTotal >= 45 && stagedHasRun ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
+                  {t('firstMeldLabel', language)}: {stagedTotal}/45 {t('ptsLabel', language)}{!stagedHasRun ? ` · ${t('needsRun', language)}` : ''}
+                </span>
+              </div>
+            )}
 
             {/* Play Area (Table) */}
             <div className="flex-1 p-4 flex flex-col">
@@ -546,16 +571,25 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
             {/* Current Player Hand */}
             {isJoined && (
               <div className="h-32 sm:h-40 p-2 sm:p-3 overflow-x-auto overflow-y-hidden shrink-0 relative" style={{ background: 'rgba(0,0,0,0.25)', borderTop: '1px solid rgba(16,185,129,0.15)' }}>
-                <button onClick={sortHand} className="absolute top-2 right-2 z-40 px-3 py-1 text-emerald-300 text-[10px] font-bold rounded-md transition-colors hover:bg-white/10" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(16,185,129,0.2)' }}>
-                  {t('sortLabel', language)}
-                </button>
+                <div className="absolute top-2 right-2 z-40 flex items-center gap-1">
+                  <span className="text-emerald-400/50 text-[9px] font-bold uppercase tracking-wider mr-0.5">{t('sortLabel', language)}</span>
+                  <button onClick={() => sortHandBy('runs')} className="px-2 py-1 text-emerald-300 text-[10px] font-bold rounded-md transition-colors hover:bg-white/10" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                    {t('sortRuns', language)}
+                  </button>
+                  <button onClick={() => sortHandBy('sets')} className="px-2 py-1 text-emerald-300 text-[10px] font-bold rounded-md transition-colors hover:bg-white/10" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                    {t('sortSets', language)}
+                  </button>
+                </div>
                 {isMyTurn && turnPhase === 'play' && selectedCards.length >= 3 && (
-                  <div className="absolute top-0 left-0 right-0 flex justify-center -mt-6 z-30">
-                    <button 
+                  <div className="absolute top-0 left-0 right-0 flex justify-center -mt-7 z-30">
+                    <button
                       onClick={stageMeld}
-                      className="px-6 py-2 bg-yellow-500 text-yellow-950 font-black rounded-full shadow-[0_0_15px_rgba(234,179,8,0.5)] animate-bounce text-sm"
+                      disabled={!selectionValidation?.isValid}
+                      className={`px-5 py-2 font-black rounded-full text-sm shadow-lg transition-all ${selectionValidation?.isValid ? 'bg-emerald-500 text-emerald-950 shadow-[0_0_15px_rgba(16,185,129,0.5)]' : 'bg-red-500/90 text-white cursor-not-allowed'}`}
                     >
-                      {t('meldCardsPrefix', language)} {selectedCards.length} {t('cardsWord', language)}
+                      {selectionValidation?.isValid
+                        ? `${t('meldCardsPrefix', language)} · ${selectionValidation.type === 'run' ? t('meldTypeRun', language) : t('meldTypeSet', language)} · ${selectionValidation.points} ${t('ptsLabel', language)}`
+                        : t('invalidCombo', language)}
                     </button>
                   </div>
                 )}
@@ -654,10 +688,13 @@ const VALUE_MAP: Record<string, string> = {
 
 const SUIT_COLORS: Record<string, { text: string; dot: string; glow: string }> = {
   'H': { text: 'text-red-600', dot: 'bg-red-500', glow: 'shadow-red-500/30' },
-  'D': { text: 'text-amber-500', dot: 'bg-amber-400', glow: 'shadow-amber-400/30' },
-  'C': { text: 'text-sky-600', dot: 'bg-sky-500', glow: 'shadow-sky-500/30' },
+  'D': { text: 'text-amber-600', dot: 'bg-amber-500', glow: 'shadow-amber-500/30' },
+  'C': { text: 'text-sky-700', dot: 'bg-sky-500', glow: 'shadow-sky-500/30' },
   'S': { text: 'text-zinc-800', dot: 'bg-zinc-700', glow: 'shadow-zinc-700/30' },
 };
+
+// Real suit glyphs so cards are recognizable at a glance (4-colour Rummy deck).
+const SUIT_SYMBOLS: Record<string, string> = { 'H': '♥', 'D': '♦', 'C': '♣', 'S': '♠' };
 
 function Card({ face, isSelected, onClick }: { face: any, isSelected?: boolean, onClick?: () => void }) {
   const { language } = useThemeStore();
@@ -687,14 +724,20 @@ function Card({ face, isSelected, onClick }: { face: any, isSelected?: boolean, 
         </div>
       ) : (
         <div className="h-full flex flex-col items-center justify-center relative">
-          {/* Suit dot - top left */}
-          <div className={`absolute top-1 left-1 w-2 h-2 rounded-full ${suitStyle!.dot} shadow-sm ${suitStyle!.glow}`} />
-          {/* Number */}
+          {/* Corner index — value + suit glyph (top-left) */}
+          <div className={`absolute top-0.5 left-1 flex flex-col items-center leading-none ${suitStyle!.text}`}>
+            <span className="text-[9px] sm:text-[10px] font-black">{displayValue}</span>
+            <span className="text-[8px] sm:text-[9px]">{SUIT_SYMBOLS[face.suit] || ''}</span>
+          </div>
+          {/* Centre value */}
           <span className={`text-xl sm:text-2xl font-black leading-none ${suitStyle!.text}`} style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
             {displayValue}
           </span>
-          {/* Suit dot - bottom right */}
-          <div className={`absolute bottom-1 right-1 w-2 h-2 rounded-full ${suitStyle!.dot} shadow-sm ${suitStyle!.glow}`} />
+          {/* Corner index — mirrored (bottom-right) */}
+          <div className={`absolute bottom-0.5 right-1 flex flex-col items-center leading-none rotate-180 ${suitStyle!.text}`}>
+            <span className="text-[9px] sm:text-[10px] font-black">{displayValue}</span>
+            <span className="text-[8px] sm:text-[9px]">{SUIT_SYMBOLS[face.suit] || ''}</span>
+          </div>
         </div>
       )}
     </div>
