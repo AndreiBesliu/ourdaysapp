@@ -59,6 +59,7 @@
 - **Shared Finance 💳**
   - **Shared Expenses (Splitwise-in-App)**: Split group bills, log expenses, and settle balances directly inside the Wallet dashboard.
 - **Infrastructure & UX ⚙️**
+  - **Calendar Grid Weekday Alignment 🔴**: The main month grid in `CalendarGrid` / `CalendarHome` renders dates one column to the right of their real weekday — e.g. **May 28, 2026 is a Thursday** (confirmed by the in-app date picker) but shows up under the **Friday (VIN)** column. The whole month is shifted by one day. Likely cause: `getDay()` (Sunday=0) used with a Monday-first column header without offsetting by 1 (or vice-versa). Affects layout only, not stored data.
   - **Emoji Event Icons 🎭**: Support choosing an Emoji instead of standard Lucide icons for event categories, with the emoji background/highlight affected by the custom event color.
   - **Offline-First Support**: Enable Firestore local persistence and disk caching for seamless offline calendar/chat navigation.
   - **Event Templates**: Save commonly used event structures and re-use them in one tap.
