@@ -46,10 +46,8 @@
     - *Points per game*: show how many points each player has earned THROUGH each game type (e.g. Rummy penalty/points, future per-game scoring), so the leaderboard reflects where points came from.
     - *Per-player detail view*: tapping a leaderboard entry opens a breakdown (games played, wins, points by game).
     - Likely needs a denormalised per-player/per-game stats aggregate (or a Cloud Function rollup) rather than recomputing from all finished `games` docs each open.
-  - **Rummy UI Overhaul 🃏**: Improve the Rummy 45 board UX (`RummyGame.tsx`).
-    - ✅ *Phase 1 done (2026-05-26)*: live meld feedback (selection shows Set/Run + points + valid/invalid green/red, meld button disabled when invalid); first-meld progress chip (`X/45 pts · needs a run`); card redesign with real suit glyphs (♥♦♣♠) + corner indices + better amber/sky contrast; dual sort (by Runs / by Sets).
-    - ⏳ *Phase 2 remaining*: replace the position-swap hand reorder with smooth drag-to-insert; cumulative multi-round scoreboard (Rummy 45 is usually played over several hands) — ties into the Game-End/Leaderboard work.
-    - *Constraints*: respect the UX rules below (no swipe, no heavy animations/confetti, subtle haptics, clean premium look).
+    - *Known bug to fix here* (`GamesHubModal.tsx` ~342-348): the leaderboard `points` sum accumulates the **negative** per-hand `score` and ignores `totalScore`, so multi-hand Rummy sessions are undercounted and the sign is inverted. Unify one sign convention (consider storing/showing penalties as positive, lower=better) across `calculatePenaltyPoints`, `getSessionWinner`, the Rummy game-over scoreboard, and this points sum. Currently cosmetic (leaderboard sorts by wins).
+  - **Rummy UI Overhaul 🃏**: ✅ DONE (2026-05-26). Phase 1: live meld feedback (Set/Run + points + valid/invalid, meld disabled when invalid); first-meld progress chip (`X/45 pts · needs a run`); card redesign (♥♦♣♠ glyphs + corner indices + amber/sky contrast); dual sort (Runs / Sets). Phase 2: drag-to-INSERT hand reorder (replacing the swap); cumulative multi-round scoreboard (`totalScore`/`round`, owner "Next Hand", session winner = least cumulative penalty, round badge). See Completed Features.
   - **Memory Match Depth 🧠**: The current Memory Match is too basic; develop it further (e.g. larger/variable board sizes, difficulty levels, timed mode, streak bonuses, themed icon packs) to make it more engaging.
   - **Family Trivia**: Interactive custom trivia creator for group members.
 - **Advanced Communications & Maps 📡**
@@ -73,6 +71,7 @@
 ### 2. Backlog
 - **UI Refinement**: Continue polishing dark mode transitions and mobile responsiveness.
 - **Uno/Other Games**: Expand the Arcade with more simple multiplayer games.
+- **Rummy state single-source-of-truth 🧹**: `status`/`winner` are stored BOTH at the game-doc top level AND inside `GameState` (RummyEngine), but the component + win paths only read/write the top-level copies, leaving `state.status`/`state.winner` stale. Harmless today (nothing reads the nested copies) but a trap for any future lobby/game-list code. Fix: drop `status`/`winner` from `GameState` (rely on top-level), or write both consistently. (Pre-existing; surfaced by the Phase-2 review.)
 
 ---
 
@@ -115,6 +114,7 @@
 - **Pull-to-Refresh**: Native-feeling refresh mechanism on the home screen.
 - **Calendar Weekday Alignment Fix**: The month/week grid rendered every date one column to the right of its real weekday (e.g. Thursday under the Friday column) because `renderCells` computed the grid's week start with `startOfWeek(...)`/`endOfWeek(...)` **without** the locale option (date-fns default Sunday-first) while the weekday header (`renderDays`) used `{ locale: dateLocale }` (Monday-first for `ro`). Fixed by passing `{ locale: dateLocale }` to all four `startOfWeek`/`endOfWeek` calls in `renderCells` (month + week view), so cells and header share one week-start convention across all languages.
 - **Multiplayer Arcade**: Tic-Tac-Toe, Connect 4, and Rummy 45 (Phases 1-3) implemented with real-time sync.
+- **Rummy 45 UI Overhaul (Phase 1 + 2)**: Live meld feedback (Set/Run + points + valid/invalid on the selection, meld disabled when invalid), first-meld 45-pt progress chip, card redesign (real ♥♦♣♠ glyphs + corner indices + contrast), dual sort (by Runs / by Sets), **drag-to-insert** hand reorder (replaced the position swap), and a **cumulative multi-round scoreboard** — each hand banks penalties into a running `totalScore`, the owner starts the **Next Hand** (re-deal + round bump), a round badge shows during play, and the session winner (for the leaderboard) is the least-penalised player across hands.
 - **Game-End / Session Stopping**: Formal "End Game" action that locks a session (`finalized`) and banks the correct **session winner** (the leader across all rounds, not just the last round) to the leaderboard. Available on each game's game-over screen and from the Arcade hub (with an inline confirm) to stop abandoned/in-progress games; finalized games hide "Next Round" and show an "Ended" badge. Leaderboard win-credit now uses `getSessionWinner()`.
 - **Smart Birthday Auto-Add**: Automatically detects and adds birthdays for users within a group.
 - **Recurring Events**: Single-document recurrence engine with daily/weekly/monthly/yearly support, edit/delete scope prompts, and overview panel.
@@ -1070,4 +1070,18 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > - Verification: a 2-agent workflow independently confirmed the root cause + fix (correct & complete, no counterexample, worked across ro/en × month/week views) and swept the codebase. The sweep surfaced a SEPARATE, latent **timezone date-shift** bug (events stored as UTC-midnight via `new Date('yyyy-MM-dd').toISOString()`) — does NOT affect UTC+ users like Bucharest; logged as a new 🟠 roadmap item rather than bundled in.
 > - Browser preview not used: the calendar is auth-gated, so a dev server would only reach the login screen. Verified via build (tsc+vite) + the adversarial workflow + numeric proof.
 > Build OK. Deployed hosting, committed, pushed.
+> Model: Claude Opus 4.8 (1M context)
+
+**2026-05-26 - Task Started**
+> Prompt: "rummy" — implement Rummy UI Overhaul Phase 2 (drag-to-insert + cumulative multi-round scoreboard).
+> Plan: (1) Replace the position-swap hand reorder with drag-to-insert (compact → move → re-pad). (2) Add `totalScore`/`round` to the rummy state (optional, backward-compatible); on hand end compute penalties for both win paths via a shared helper; owner "Next Hand" banks penalties into totals + re-deals + bumps round; game-over shows this-hand + cumulative; `getSessionWinner` returns the least-penalised player for multi-hand games. Adversarial review of the diff before deploy (scoring + drag math are error-prone and unverifiable in-browser since Rummy needs 2 authed players).
+> Model: Claude Opus 4.8 (1M context)
+
+**2026-05-26 - Task Completed**: Rummy Phase 2 (drag-to-insert + multi-round scoring).
+> - `RummyGame.tsx`: drag-to-INSERT reorder (lift card, insert before the card under the cursor / before the next card when the slot is a transient post-discard gap, re-pack front-compacted); `buildPenaltyUpdates` shared by both win paths (the meld-out path previously skipped computing opponents' penalties — fixed); `handleNextHand` (owner) banks `score`→`totalScore`, re-deals, increments `round`; round badge in the top bar; game-over scoreboard shows cumulative + this-hand, ranked by least cumulative penalty, with Next Hand + Back to Arcade.
+> - `RummyEngine.ts`: `PlayerState.totalScore?` + `GameState.round?` (optional, backward-compatible); `initializeGame` seeds `round: 1`.
+> - `gameResult.ts`: `getSessionWinner` for multi-round rummy = least cumulative penalty.
+> - `i18n.ts`: +4 keys × 6 languages (nextHand, roundLabel, thisHandLabel, totalLabel).
+> - **Adversarial review (3-agent workflow) caught a HIGH-severity sign bug I introduced**: `calculatePenaltyPoints` returns NEGATIVE penalties, so "lowest cumulative wins" credited the LOSER and ranked the worst player #1. Fixed: `getSessionWinner` now picks the MAX cumulative (least negative = least penalty) and the game-over sort is descending. Review also confirmed no card loss/dup in drag-to-insert, no penalty double-count, and backward-compat with legacy single-hand docs. Two PRE-EXISTING issues it surfaced (leaderboard `points` negative/ignores totalScore; `status`/`winner` dual source-of-truth) were logged to the roadmap/backlog, not bundled.
+> Build OK (tsc + vite). Browser preview N/A (Rummy is auth-gated + needs 2 players). Deployed hosting, committed, pushed.
 > Model: Claude Opus 4.8 (1M context)

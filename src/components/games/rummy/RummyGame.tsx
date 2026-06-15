@@ -64,6 +64,36 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     });
   };
 
+  // Per-player penalty updates when `winnerUid` closes the hand: winner scores 0,
+  // everyone else is penalised for the cards left in their hand. Used by BOTH win
+  // paths (discard-out and meld-out) so scoring is consistent.
+  const buildPenaltyUpdates = (winnerUid: string): Record<string, number> => {
+    const updates: Record<string, number> = {};
+    game.state.playerIds.forEach((uid: string) => {
+      updates[`state.players.${uid}.score`] =
+        uid === winnerUid ? 0 : calculatePenaltyPoints(game.state.players[uid]?.hand || []);
+    });
+    return updates;
+  };
+
+  // Start the next hand (owner only): bank each player's current-hand penalty into
+  // their cumulative total, re-deal fresh hands, and bump the round counter.
+  const handleNextHand = async () => {
+    if (!isOwner) return;
+    const fresh = initializeGame(game.state.playerIds); // fresh hands, scores reset to 0
+    const players: Record<string, any> = { ...fresh.players };
+    game.state.playerIds.forEach((uid: string) => {
+      const prevTotal = game.state.players[uid]?.totalScore || 0;
+      const handScore = game.state.players[uid]?.score || 0;
+      players[uid] = { ...players[uid], totalScore: prevTotal + handScore };
+    });
+    await updateDoc(doc(db, 'games', game.id), {
+      state: { ...fresh, players, round: (game.state.round || 1) + 1 },
+      status: 'playing',
+      winner: null,
+    });
+  };
+
   // Sort the hand to help spot melds: 'runs' groups by suit then value
   // (consecutive cards line up); 'sets' groups by value then suit (same-value
   // cards line up). Jokers always pushed to the end.
@@ -100,18 +130,39 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
   const onDragEnd = async (result: any) => {
     if (!result.destination || !auth.currentUser) return;
 
-    // Local re-ordering of hand
+    // Local re-ordering of hand — drag-to-INSERT (not swap): lift the dragged
+    // card out and re-insert it before the card under the cursor, shifting the
+    // rest along; the hand is re-packed front-compacted so no stray gaps form.
     if (result.source.droppableId.startsWith('my-hand-') && result.destination.droppableId.startsWith('my-hand-')) {
       const sourceIdx = parseInt(result.source.droppableId.split('-')[2]);
       const destIdx = parseInt(result.destination.droppableId.split('-')[2]);
-      
-      const items = [...localHand];
-      const itemToMove = items[sourceIdx];
-      const itemAtDest = items[destIdx];
-      
-      items[destIdx] = itemToMove;
-      items[sourceIdx] = itemAtDest;
-      
+      if (sourceIdx === destIdx) return;
+
+      const movedCard = localHand[sourceIdx];
+      if (!movedCard) return;
+
+      const cards = localHand.filter(c => c !== null);
+      const fromIdx = cards.findIndex(c => c.id === movedCard.id);
+      if (fromIdx === -1) return;
+
+      const reordered = [...cards];
+      reordered.splice(fromIdx, 1);
+
+      // Insert before the card under the cursor. If that slot is a transient
+      // empty gap (post-discard), aim at the next actual card after it so the
+      // drop lands where the user pointed instead of jumping to the end.
+      const anchorCard = localHand[destIdx] || localHand.slice(destIdx + 1).find(c => c !== null);
+      if (!anchorCard) {
+        reordered.push(movedCard); // dropped past the last card → end of hand
+      } else {
+        let toIdx = cards.findIndex(c => c.id === anchorCard.id);
+        if (fromIdx < toIdx) toIdx -= 1; // compensate for the removed card
+        reordered.splice(toIdx, 0, movedCard);
+      }
+
+      const items = Array(30).fill(null);
+      reordered.forEach((c, i) => { items[i] = c; });
+
       setLocalHand(items);
       await updateDoc(doc(db, 'games', game.id), {
         [`state.players.${auth.currentUser.uid}.hand`]: items
@@ -148,16 +199,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       if (isWin) {
         updates.status = 'finished';
         updates.winner = auth.currentUser.uid;
-
-        // Calculate penalty points for all players
-        game.state.playerIds.forEach((uid: string) => {
-          if (uid === auth.currentUser!.uid) {
-            updates[`state.players.${uid}.score`] = 0; // Winner has 0 penalty
-          } else {
-            const loserHand = uid === auth.currentUser!.uid ? items : game.state.players[uid].hand;
-            updates[`state.players.${uid}.score`] = calculatePenaltyPoints(loserHand);
-          }
-        });
+        Object.assign(updates, buildPenaltyUpdates(auth.currentUser.uid));
       } else {
         updates['state.turnIndex'] = nextTurnIndex;
         updates['state.turnPhase'] = 'draw';
@@ -349,6 +391,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     if (localHand.filter(c => c !== null).length === 0) {
       updates.status = 'finished';
       updates.winner = auth.currentUser.uid;
+      Object.assign(updates, buildPenaltyUpdates(auth.currentUser.uid));
     }
 
     await updateDoc(doc(db, 'games', game.id), updates);
@@ -375,6 +418,11 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
         <button onClick={onBack} className="text-emerald-200 hover:text-white flex items-center gap-1 text-sm font-medium transition-colors">
           <ArrowLeft className="w-4 h-4" /> {t('exitLabel', language)}
         </button>
+        {game.status !== 'waiting' && (
+          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/80 bg-black/30 px-2.5 py-1 rounded-full border border-emerald-500/20">
+            {t('roundLabel', language)} {game.state.round || 1}
+          </span>
+        )}
         <div className="flex items-center gap-3">
           {game.state.playerIds.map((uid: string) => {
             const isActive = game.status === 'playing' && game.state.playerIds[game.state.turnIndex] === uid;
@@ -640,20 +688,26 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
           <div className="bg-black/30 backdrop-blur-sm p-8 rounded-2xl border border-emerald-500/20 max-w-sm w-full">
             <div className="text-4xl mb-3">🏆</div>
             <h2 className="text-xl font-bold text-white mb-1">{t('gameOver', language)}</h2>
-            <p className="text-emerald-300 text-sm mb-6">
+            <p className="text-emerald-300 text-sm mb-1">
               {userMap[game.winner]?.name || t('someone', language)} {t('winsLower', language)}
             </p>
-            
+            <p className="text-emerald-400/60 text-xs mb-5">{t('roundLabel', language)} {game.state.round || 1}</p>
+
             <div className="space-y-2 mb-6">
-              {game.state.playerIds
-                .sort((a: string, b: string) => (game.state.players[a]?.score || 0) - (game.state.players[b]?.score || 0))
+              {[...game.state.playerIds]
+                // Penalties are negative, so least penalty = highest cumulative.
+                // Sort descending so the session leader (least penalty) is #1.
+                .sort((a: string, b: string) =>
+                  ((game.state.players[b]?.totalScore || 0) + (game.state.players[b]?.score || 0)) -
+                  ((game.state.players[a]?.totalScore || 0) + (game.state.players[a]?.score || 0)))
                 .map((uid: string, idx: number) => {
-                  const score = game.state.players[uid]?.score || 0;
+                  const handScore = game.state.players[uid]?.score || 0;
+                  const cumulative = (game.state.players[uid]?.totalScore || 0) + handScore;
                   const isWinner = uid === game.winner;
                   return (
                     <div key={uid} className={`flex items-center justify-between p-3 rounded-xl transition-all ${isWinner ? 'bg-yellow-500/15 border border-yellow-500/30' : 'bg-white/5 border border-white/5'}`}>
                       <div className="flex items-center gap-3">
-                        <span className={`text-sm font-bold ${isWinner ? 'text-yellow-400' : 'text-emerald-400/60'}`}>#{idx + 1}</span>
+                        <span className={`text-sm font-bold ${idx === 0 ? 'text-yellow-400' : 'text-emerald-400/60'}`}>#{idx + 1}</span>
                         <div className={`w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden ${isWinner ? 'ring-2 ring-yellow-400' : ''}`}>
                           {userMap[uid]?.photoURL ? (
                             <img src={userMap[uid].photoURL} className="w-full h-full object-cover" />
@@ -661,19 +715,27 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
                             <span className="text-[10px] font-bold text-white">{userMap[uid]?.name?.charAt(0) || '?'}</span>
                           )}
                         </div>
-                        <span className={`text-sm font-medium ${isWinner ? 'text-white' : 'text-emerald-200/70'}`}>{userMap[uid]?.name || uid.slice(0,6)}</span>
+                        <span className={`text-sm font-medium ${isWinner ? 'text-white' : 'text-emerald-200/70'}`}>{userMap[uid]?.name || uid.slice(0,6)}{isWinner ? ' 👑' : ''}</span>
                       </div>
-                      <span className={`text-sm font-bold ${isWinner ? 'text-yellow-400' : 'text-red-400'}`}>
-                        {isWinner ? '👑 0' : score} {t('ptsLabel', language)}
-                      </span>
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-white">{cumulative} {t('ptsLabel', language)}</div>
+                        <div className="text-[10px] text-emerald-300/50">{t('thisHandLabel', language)}: {handScore}</div>
+                      </div>
                     </div>
                   );
                 })}
             </div>
 
-            <button onClick={onBack} className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-colors">
-              {t('backToArcade', language)}
-            </button>
+            <div className="flex gap-2">
+              {isOwner && (
+                <button onClick={handleNextHand} className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded-xl transition-colors">
+                  {t('nextHand', language)}
+                </button>
+              )}
+              <button onClick={onBack} className="flex-1 py-3 bg-emerald-700/60 hover:bg-emerald-600 text-white font-bold rounded-xl transition-colors">
+                {t('backToArcade', language)}
+              </button>
+            </div>
           </div>
         </div>
       )}

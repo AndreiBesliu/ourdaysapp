@@ -10,7 +10,8 @@ export interface PlayerState {
   uid: string;
   hand: RummyCard[];
   hasMelded: boolean;
-  score: number;
+  score: number;            // penalty points for the CURRENT hand
+  totalScore?: number;      // cumulative penalty across previous hands (multi-round)
 }
 
 export interface GameState {
@@ -23,6 +24,7 @@ export interface GameState {
   melds: { id: string, playerId: string, cards: RummyCard[] }[];
   status: 'waiting' | 'playing' | 'finished';
   winner: string | null;
+  round?: number;           // current hand number (1-based) in a multi-hand game
 }
 
 const SUITS = ['H', 'D', 'C', 'S'] as const;
@@ -91,7 +93,8 @@ export const initializeGame = (playerUids: string[]): GameState => {
     discardPile: [],
     melds: [],
     status: 'playing',
-    winner: null
+    winner: null,
+    round: 1
   };
 };
 

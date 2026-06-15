@@ -22,7 +22,24 @@ export function getSessionWinner(game: any): string | null {
       if (p1 === p2) return null;
       return (p1 > p2 ? players.P1 : players.P2) || null;
     }
-    case 'rummy-45':
+    case 'rummy-45': {
+      // Multi-round: the session winner is the LEAST-penalised player. Penalties
+      // are stored NEGATIVE (calculatePenaltyPoints), so the least penalty is the
+      // HIGHEST cumulative (closest to 0) → pick the max. If no multi-round totals
+      // exist (single hand), fall back to the hand winner.
+      const ids: string[] = s.playerIds || [];
+      const multiRound = ids.some((id) => players[id]?.totalScore !== undefined);
+      if (multiRound && ids.length > 0) {
+        let best: string | null = null;
+        let bestTotal = -Infinity;
+        ids.forEach((id) => {
+          const total = (players[id]?.totalScore || 0) + (players[id]?.score || 0);
+          if (total > bestTotal) { bestTotal = total; best = id; }
+        });
+        return best;
+      }
+      return game?.winner || null;
+    }
     default:
       return game?.winner || null;
   }
