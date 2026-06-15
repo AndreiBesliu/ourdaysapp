@@ -59,7 +59,7 @@
 - **Shared Finance 💳**
   - **Shared Expenses (Splitwise-in-App)**: Split group bills, log expenses, and settle balances directly inside the Wallet dashboard.
 - **Infrastructure & UX ⚙️**
-  - **Calendar Grid Weekday Alignment 🔴**: The main month grid in `CalendarGrid` / `CalendarHome` renders dates one column to the right of their real weekday — e.g. **May 28, 2026 is a Thursday** (confirmed by the in-app date picker) but shows up under the **Friday (VIN)** column. The whole month is shifted by one day. Likely cause: `getDay()` (Sunday=0) used with a Monday-first column header without offsetting by 1 (or vice-versa). Affects layout only, not stored data.
+  - **Event Date Timezone Shift 🟠**: Event dates are stored via `new Date(eventDate).toISOString()` where `eventDate` is a `'yyyy-MM-dd'` string from an `<input type="date">`. `new Date('yyyy-MM-dd')` parses as **UTC midnight**, so for users in timezones *behind* UTC (the Americas) the stored day shifts forward by one when re-parsed/compared. Pervasive: storage (`AddEventModal.tsx` ~274/604/608/612/621), comparisons (`CalendarGrid.tsx` ~206/363, `CalendarHome.tsx` ~546/555/564/867), recurrence expansion (`utils/recurrence.ts` ~68/84), display (`EventDetailsModal.tsx` ~336). NB: **latent for UTC+ users** (e.g. Europe/Bucharest is unaffected) — only bites UTC-negative timezones. Fix: store/compare dates as local `yyyy-MM-dd` (or parse with explicit local time), and handle already-stored UTC values. (Found during the weekday-alignment fix sweep, 2026-05-26.)
   - **Emoji Event Icons 🎭**: Support choosing an Emoji instead of standard Lucide icons for event categories, with the emoji background/highlight affected by the custom event color.
   - **Offline-First Support**: Enable Firestore local persistence and disk caching for seamless offline calendar/chat navigation.
   - **Event Templates**: Save commonly used event structures and re-use them in one tap.
@@ -113,6 +113,7 @@
 - **Smart Asset Auto-Linking**: Contextual loyalty card suggestions based on event/checklist text.
 - **Collapsible Week View**: Month/Week view toggle in the Calendar.
 - **Pull-to-Refresh**: Native-feeling refresh mechanism on the home screen.
+- **Calendar Weekday Alignment Fix**: The month/week grid rendered every date one column to the right of its real weekday (e.g. Thursday under the Friday column) because `renderCells` computed the grid's week start with `startOfWeek(...)`/`endOfWeek(...)` **without** the locale option (date-fns default Sunday-first) while the weekday header (`renderDays`) used `{ locale: dateLocale }` (Monday-first for `ro`). Fixed by passing `{ locale: dateLocale }` to all four `startOfWeek`/`endOfWeek` calls in `renderCells` (month + week view), so cells and header share one week-start convention across all languages.
 - **Multiplayer Arcade**: Tic-Tac-Toe, Connect 4, and Rummy 45 (Phases 1-3) implemented with real-time sync.
 - **Game-End / Session Stopping**: Formal "End Game" action that locks a session (`finalized`) and banks the correct **session winner** (the leader across all rounds, not just the last round) to the leaderboard. Available on each game's game-over screen and from the Arcade hub (with an inline confirm) to stop abandoned/in-progress games; finalized games hide "Next Round" and show an "Ended" badge. Leaderboard win-credit now uses `getSessionWinner()`.
 - **Smart Birthday Auto-Add**: Automatically detects and adds birthdays for users within a group.
@@ -1058,3 +1059,15 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > - Deployed both new functions + updated rest + firestore rules + hosting. Build OK (web + functions tsc).
 > VERIFY: (1) edit a SINGLE occurrence of a recurring group event and confirm the override saves + the occurrence is replaced; (2) transfer a wallet asset with "keep copy" to a group member and confirm both keep a copy.
 > Model: Claude Opus 4.7
+
+**2026-05-26 - Task Started**
+> Prompt: "continua" (continue) — App Check enforcement is blocked on metrics maturing, so picked up the 🔴 calendar weekday-alignment bug.
+> Plan: Root-caused the one-column date shift to a week-start mismatch — the weekday header (`renderDays`) uses locale-aware `startOfWeek` (Monday-first for `ro`) but `renderCells` used no-locale `startOfWeek`/`endOfWeek` (Sunday-first default). Fix: pass `{ locale: dateLocale }` to the 4 calls in `renderCells`. Ran an adversarial-verify + codebase-sweep workflow before committing.
+> Model: Claude Opus 4.8 (1M context)
+
+**2026-05-26 - Task Completed**: Fixed calendar weekday alignment.
+> - `CalendarGrid.tsx`: added `{ locale: dateLocale }` to the four `startOfWeek`/`endOfWeek` calls in `renderCells` (week-view + month-view branches), so the grid cells share the header's locale-based week start. Aligns dates with their weekday columns for every language (Monday-first for ro/fr/es/it/de, Sunday-first for en-US). Numeric proof matched the report exactly (Thu May 28 2026 → Sunday-first col 4 → Monday-first "VIN" header).
+> - Verification: a 2-agent workflow independently confirmed the root cause + fix (correct & complete, no counterexample, worked across ro/en × month/week views) and swept the codebase. The sweep surfaced a SEPARATE, latent **timezone date-shift** bug (events stored as UTC-midnight via `new Date('yyyy-MM-dd').toISOString()`) — does NOT affect UTC+ users like Bucharest; logged as a new 🟠 roadmap item rather than bundled in.
+> - Browser preview not used: the calendar is auth-gated, so a dev server would only reach the login screen. Verified via build (tsc+vite) + the adversarial workflow + numeric proof.
+> Build OK. Deployed hosting, committed, pushed.
+> Model: Claude Opus 4.8 (1M context)

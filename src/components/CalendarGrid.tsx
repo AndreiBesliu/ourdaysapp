@@ -172,15 +172,18 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
   const renderCells = () => {
     let monthStart, monthEnd, startDate, endDate;
     
+    // Use the SAME locale-based week start as the weekday header (renderDays),
+    // otherwise the cells default to Sunday-first while a Monday-first locale
+    // header shifts every date one column right (e.g. Thu shows under Fri).
     if (isWeekView && selectedDate) {
-      startDate = startOfWeek(selectedDate);
-      endDate = endOfWeek(selectedDate);
+      startDate = startOfWeek(selectedDate, { locale: dateLocale });
+      endDate = endOfWeek(selectedDate, { locale: dateLocale });
       monthStart = startOfMonth(selectedDate);
     } else {
       monthStart = startOfMonth(currentDate);
       monthEnd = endOfMonth(monthStart);
-      startDate = startOfWeek(monthStart);
-      endDate = endOfWeek(monthEnd);
+      startDate = startOfWeek(monthStart, { locale: dateLocale });
+      endDate = endOfWeek(monthEnd, { locale: dateLocale });
     }
 
     const rows = [];
