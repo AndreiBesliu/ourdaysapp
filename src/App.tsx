@@ -11,6 +11,7 @@ import Login from './screens/Login';
 import CalendarHome from './screens/CalendarHome';
 import Wallet from './screens/Wallet';
 import Settings from './screens/Settings';
+import Friends from './screens/Friends';
 import { useThemeStore } from './store';
 
 function App() {
@@ -233,9 +234,13 @@ function App() {
           element={user ? <Wallet /> : <Navigate to="/login" />} 
         />
 
-        <Route 
-          path="/settings" 
-          element={user ? <Settings /> : <Navigate to="/login" />} 
+        <Route
+          path="/settings"
+          element={user ? <Settings /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/friends"
+          element={user ? <Friends /> : <Navigate to="/login" />}
         />
       </Routes>
     </BrowserRouter>

@@ -145,5 +145,27 @@ service cloud.firestore {
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
+
+    // ── Friend Requests ──
+    // Readable by the sender or the recipient (matched by uid or email). Any
+    // signed-in user may send (must record an honest fromId). Responding
+    // (accept/decline) goes through the `respondToFriendRequest` Cloud Function —
+    // it has to write BOTH users' friend lists — so client update is forbidden;
+    // the sender may delete (cancel) their own pending request.
+    function canAccessFriendReq() {
+      return isSignedIn() && (
+        request.auth.uid == resource.data.fromId ||
+        request.auth.uid == resource.data.toId ||
+        (resource.data.toEmail != null && request.auth.token.email == resource.data.toEmail)
+      );
+    }
+    match /friend_requests/{requestId} {
+      allow read: if canAccessFriendReq();
+      allow create: if isSignedIn() &&
+        request.resource.data.fromId == request.auth.uid &&
+        request.resource.data.status == 'pending';
+      allow update: if false;
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.fromId;
+    }
   }
 }

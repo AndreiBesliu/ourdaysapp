@@ -46,6 +46,7 @@ export default function CalendarHome() {
   const [activeGames, setActiveGames] = useState<any[]>([]);
   const [isFabExpanded, setIsFabExpanded] = useState(false);
   const [isRecurringPanelOpen, setIsRecurringPanelOpen] = useState(false);
+  const [pendingFriendCount, setPendingFriendCount] = useState(0);
   const navigate = useNavigate();
   const { language } = useThemeStore();
   const dateLocale = getDateLocale(language);
@@ -167,6 +168,24 @@ export default function CalendarHome() {
       setPendingFamilyInvites(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
     return () => unsubscribe();
+  }, []);
+
+  // Count incoming pending friend requests (by uid or email) for the menu badge.
+  useEffect(() => {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const myEmail = auth.currentUser.email?.toLowerCase();
+    let byId = new Set<string>();
+    let byEmail = new Set<string>();
+    const update = () => setPendingFriendCount(new Set([...byId, ...byEmail]).size);
+    const qId = query(collection(db, 'friend_requests'), where('toId', '==', uid), where('status', '==', 'pending'));
+    const unsubId = onSnapshot(qId, (s) => { byId = new Set(s.docs.map(d => d.id)); update(); });
+    let unsubEmail = () => {};
+    if (myEmail) {
+      const qEmail = query(collection(db, 'friend_requests'), where('toEmail', '==', myEmail), where('status', '==', 'pending'));
+      unsubEmail = onSnapshot(qEmail, (s) => { byEmail = new Set(s.docs.map(d => d.id)); update(); });
+    }
+    return () => { unsubId(); unsubEmail(); };
   }, []);
 
   // Request notification permissions and save FCM token
@@ -419,7 +438,17 @@ export default function CalendarHome() {
 
         <div className="flex items-center gap-1 sm:gap-4">
           <NotificationsDropdown />
-          
+
+          <button
+            onClick={() => navigate('/friends')}
+            className="hidden sm:flex relative p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors"
+            title={t('friendsMenuLabel', language)}
+          >
+            <Users className="w-5 h-5" />
+            {pendingFriendCount > 0 && (
+              <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{pendingFriendCount}</span>
+            )}
+          </button>
           <button
             onClick={() => setIsRecurringPanelOpen(true)}
             className="hidden sm:flex p-2 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-full transition-colors"
@@ -452,6 +481,15 @@ export default function CalendarHome() {
 
             {isMobileMenuOpen && (
               <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg flex flex-col py-2 animate-in fade-in slide-in-from-top-2 origin-top-right z-[110]">
+                <button
+                  onClick={() => { navigate('/friends'); setIsMobileMenuOpen(false); }}
+                  className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-blue-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
+                >
+                  <Users className="w-4 h-4" /> {t('friendsMenuLabel', language)}
+                  {pendingFriendCount > 0 && (
+                    <span className="ml-auto min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{pendingFriendCount}</span>
+                  )}
+                </button>
                 <button
                   onClick={() => { setIsRecurringPanelOpen(true); setIsMobileMenuOpen(false); }}
                   className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-indigo-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
@@ -966,11 +1004,12 @@ export default function CalendarHome() {
       />
 
       {/* Invite Group Modal */}
-      <InviteFamilyModal 
+      <InviteFamilyModal
         isOpen={isInviteModalOpen}
         onClose={() => setIsInviteModalOpen(false)}
         groupId={activeGroupId !== 'personal' ? activeGroupId : undefined}
         groupName={groups.find(g => g.id === activeGroupId)?.name}
+        memberIds={groups.find(g => g.id === activeGroupId)?.members || []}
       />
 
       <CreateGroupModal

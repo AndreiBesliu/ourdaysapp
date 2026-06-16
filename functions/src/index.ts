@@ -610,3 +610,129 @@ export const transferAssetCopy = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
   return { id: copyRef.id };
 });
 
+// ── Friends: respond to a friend request ──
+// Accepting must add each user to the OTHER's `friends` list, but the `users`
+// collection is owner-only write — clients can't touch each other's docs. So
+// responding goes through this callable (Admin SDK). The caller must be the
+// request's recipient (matched by uid or email). On accept, both users get a
+// `{uid,name,email}` entry for the other (email lives on the owner-only user
+// doc, not the public profile, so we resolve it here) and the sender is notified.
+export const respondToFriendRequest = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = request.auth?.uid;
+  const email = (request.auth?.token?.email || "").toLowerCase();
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+  const { requestId, accept } = request.data || {};
+  if (!requestId || typeof accept !== "boolean") {
+    throw new HttpsError("invalid-argument", "requestId and accept are required.");
+  }
+
+  const cap = (s: any) => String(s || "").slice(0, 80);
+  const db = admin.firestore();
+  const reqRef = db.doc(`friend_requests/${requestId}`);
+
+  // One transaction: re-check status, read both users, and write atomically.
+  // NOTE: recipient is matched by token email when toId is absent. This trusts
+  // the token email (same model as group_invites). Email-squatting via
+  // unverified accounts is a known app-wide risk tracked on the roadmap
+  // (email verification) — not introduced here.
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(reqRef);
+    if (!snap.exists) {
+      throw new HttpsError("not-found", "Friend request not found.");
+    }
+    const fr = snap.data() || {};
+    const isRecipient = fr.toId === uid || (!!fr.toEmail && fr.toEmail === email);
+    if (!isRecipient) {
+      throw new HttpsError("permission-denied", "This request isn't addressed to you.");
+    }
+    if (fr.status !== "pending") {
+      return { status: fr.status };
+    }
+    if (!accept) {
+      tx.update(reqRef, { status: "declined", toId: uid });
+      return { status: "declined" };
+    }
+
+    const senderUid = fr.fromId;
+    if (!senderUid || senderUid === uid) {
+      tx.update(reqRef, { status: "declined", toId: uid });
+      throw new HttpsError("failed-precondition", "Invalid friend request.");
+    }
+
+    const senderRef = db.doc(`users/${senderUid}`);
+    const accepterRef = db.doc(`users/${uid}`);
+    const [senderUser, accepterUser, senderProfile, accepterProfile] = await Promise.all([
+      tx.get(senderRef), tx.get(accepterRef),
+      tx.get(db.doc(`profiles/${senderUid}`)), tx.get(db.doc(`profiles/${uid}`)),
+    ]);
+
+    const senderName = cap(senderProfile.data()?.name || senderUser.data()?.name ||
+      fr.fromName || (fr.fromEmail || "").split("@")[0] || "Friend");
+    const senderEmail = (senderUser.data()?.email || fr.fromEmail || "").toLowerCase() || null;
+    const accepterName = cap(accepterProfile.data()?.name || accepterUser.data()?.name ||
+      (email || "").split("@")[0] || "Friend");
+    const accepterEmail = (accepterUser.data()?.email || email || "").toLowerCase() || null;
+
+    // Read-filter-write so each side has exactly ONE entry per friend uid (and a
+    // re-accept refreshes name/email instead of accumulating stale duplicates).
+    const senderFriends = (senderUser.data()?.friends || []).filter((f: any) => f && f.uid !== uid);
+    senderFriends.push({ uid, name: accepterName, email: accepterEmail });
+    const accepterFriends = (accepterUser.data()?.friends || []).filter((f: any) => f && f.uid !== senderUid);
+    accepterFriends.push({ uid: senderUid, name: senderName, email: senderEmail });
+
+    tx.set(senderRef, { friends: senderFriends }, { merge: true });
+    tx.set(accepterRef, { friends: accepterFriends }, { merge: true });
+    tx.update(reqRef, { status: "accepted", toId: uid });
+
+    // Notify the sender (Admin SDK write bypasses the notifications create rule).
+    const notifRef = db.collection("notifications").doc();
+    tx.set(notifRef, {
+      userId: senderUid,
+      createdBy: uid,
+      type: "friend",
+      title: "Friend request accepted",
+      body: `${accepterName} accepted your friend request.`,
+      read: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return { status: "accepted" };
+  });
+});
+
+// ── Friends: remove a friend (mutual) ──
+// Friends are objects on each owner-only user doc, so an unfriend must edit BOTH
+// docs server-side. Guarded so a caller can only unfriend someone they are
+// ACTUALLY friends with (no forced writes to arbitrary strangers' docs) and run
+// in a transaction to avoid clobbering a concurrent friends-array update.
+export const removeFriend = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+  const { friendUid } = request.data || {};
+  if (!friendUid || friendUid === uid) {
+    throw new HttpsError("invalid-argument", "A valid friendUid is required.");
+  }
+
+  const db = admin.firestore();
+  const meRef = db.doc(`users/${uid}`);
+  const themRef = db.doc(`users/${friendUid}`);
+
+  return db.runTransaction(async (tx) => {
+    const [meSnap, themSnap] = await Promise.all([tx.get(meRef), tx.get(themRef)]);
+    const myFriends = meSnap.data()?.friends || [];
+    if (!myFriends.some((f: any) => f && f.uid === friendUid)) {
+      throw new HttpsError("failed-precondition", "You aren't friends with this user.");
+    }
+    tx.set(meRef, { friends: myFriends.filter((f: any) => f && f.uid !== friendUid) }, { merge: true });
+    if (themSnap.exists) {
+      const theirFriends = (themSnap.data()?.friends || []).filter((f: any) => f && f.uid !== uid);
+      tx.set(themRef, { friends: theirFriends }, { merge: true });
+    }
+    return { ok: true };
+  });
+});
+

@@ -11,7 +11,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.transferAssetCopy = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
+exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -554,5 +554,122 @@ exports.transferAssetCopy = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
     const copyRef = db.collection("assets").doc();
     await copyRef.set(Object.assign(Object.assign({}, rest), { ownerId: recipientId, createdAt: new Date().toISOString(), transferredFrom: uid }));
     return { id: copyRef.id };
+});
+// ── Friends: respond to a friend request ──
+// Accepting must add each user to the OTHER's `friends` list, but the `users`
+// collection is owner-only write — clients can't touch each other's docs. So
+// responding goes through this callable (Admin SDK). The caller must be the
+// request's recipient (matched by uid or email). On accept, both users get a
+// `{uid,name,email}` entry for the other (email lives on the owner-only user
+// doc, not the public profile, so we resolve it here) and the sender is notified.
+exports.respondToFriendRequest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    var _a, _b, _c;
+    const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
+    const email = (((_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.email) || "").toLowerCase();
+    if (!uid) {
+        throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
+    }
+    const { requestId, accept } = request.data || {};
+    if (!requestId || typeof accept !== "boolean") {
+        throw new https_1.HttpsError("invalid-argument", "requestId and accept are required.");
+    }
+    const cap = (s) => String(s || "").slice(0, 80);
+    const db = admin.firestore();
+    const reqRef = db.doc(`friend_requests/${requestId}`);
+    // One transaction: re-check status, read both users, and write atomically.
+    // NOTE: recipient is matched by token email when toId is absent. This trusts
+    // the token email (same model as group_invites). Email-squatting via
+    // unverified accounts is a known app-wide risk tracked on the roadmap
+    // (email verification) — not introduced here.
+    return db.runTransaction(async (tx) => {
+        var _a, _b, _c, _d, _e, _f, _g, _h;
+        const snap = await tx.get(reqRef);
+        if (!snap.exists) {
+            throw new https_1.HttpsError("not-found", "Friend request not found.");
+        }
+        const fr = snap.data() || {};
+        const isRecipient = fr.toId === uid || (!!fr.toEmail && fr.toEmail === email);
+        if (!isRecipient) {
+            throw new https_1.HttpsError("permission-denied", "This request isn't addressed to you.");
+        }
+        if (fr.status !== "pending") {
+            return { status: fr.status };
+        }
+        if (!accept) {
+            tx.update(reqRef, { status: "declined", toId: uid });
+            return { status: "declined" };
+        }
+        const senderUid = fr.fromId;
+        if (!senderUid || senderUid === uid) {
+            tx.update(reqRef, { status: "declined", toId: uid });
+            throw new https_1.HttpsError("failed-precondition", "Invalid friend request.");
+        }
+        const senderRef = db.doc(`users/${senderUid}`);
+        const accepterRef = db.doc(`users/${uid}`);
+        const [senderUser, accepterUser, senderProfile, accepterProfile] = await Promise.all([
+            tx.get(senderRef), tx.get(accepterRef),
+            tx.get(db.doc(`profiles/${senderUid}`)), tx.get(db.doc(`profiles/${uid}`)),
+        ]);
+        const senderName = cap(((_a = senderProfile.data()) === null || _a === void 0 ? void 0 : _a.name) || ((_b = senderUser.data()) === null || _b === void 0 ? void 0 : _b.name) ||
+            fr.fromName || (fr.fromEmail || "").split("@")[0] || "Friend");
+        const senderEmail = (((_c = senderUser.data()) === null || _c === void 0 ? void 0 : _c.email) || fr.fromEmail || "").toLowerCase() || null;
+        const accepterName = cap(((_d = accepterProfile.data()) === null || _d === void 0 ? void 0 : _d.name) || ((_e = accepterUser.data()) === null || _e === void 0 ? void 0 : _e.name) ||
+            (email || "").split("@")[0] || "Friend");
+        const accepterEmail = (((_f = accepterUser.data()) === null || _f === void 0 ? void 0 : _f.email) || email || "").toLowerCase() || null;
+        // Read-filter-write so each side has exactly ONE entry per friend uid (and a
+        // re-accept refreshes name/email instead of accumulating stale duplicates).
+        const senderFriends = (((_g = senderUser.data()) === null || _g === void 0 ? void 0 : _g.friends) || []).filter((f) => f && f.uid !== uid);
+        senderFriends.push({ uid, name: accepterName, email: accepterEmail });
+        const accepterFriends = (((_h = accepterUser.data()) === null || _h === void 0 ? void 0 : _h.friends) || []).filter((f) => f && f.uid !== senderUid);
+        accepterFriends.push({ uid: senderUid, name: senderName, email: senderEmail });
+        tx.set(senderRef, { friends: senderFriends }, { merge: true });
+        tx.set(accepterRef, { friends: accepterFriends }, { merge: true });
+        tx.update(reqRef, { status: "accepted", toId: uid });
+        // Notify the sender (Admin SDK write bypasses the notifications create rule).
+        const notifRef = db.collection("notifications").doc();
+        tx.set(notifRef, {
+            userId: senderUid,
+            createdBy: uid,
+            type: "friend",
+            title: "Friend request accepted",
+            body: `${accepterName} accepted your friend request.`,
+            read: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { status: "accepted" };
+    });
+});
+// ── Friends: remove a friend (mutual) ──
+// Friends are objects on each owner-only user doc, so an unfriend must edit BOTH
+// docs server-side. Guarded so a caller can only unfriend someone they are
+// ACTUALLY friends with (no forced writes to arbitrary strangers' docs) and run
+// in a transaction to avoid clobbering a concurrent friends-array update.
+exports.removeFriend = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    var _a;
+    const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
+    if (!uid) {
+        throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
+    }
+    const { friendUid } = request.data || {};
+    if (!friendUid || friendUid === uid) {
+        throw new https_1.HttpsError("invalid-argument", "A valid friendUid is required.");
+    }
+    const db = admin.firestore();
+    const meRef = db.doc(`users/${uid}`);
+    const themRef = db.doc(`users/${friendUid}`);
+    return db.runTransaction(async (tx) => {
+        var _a, _b;
+        const [meSnap, themSnap] = await Promise.all([tx.get(meRef), tx.get(themRef)]);
+        const myFriends = ((_a = meSnap.data()) === null || _a === void 0 ? void 0 : _a.friends) || [];
+        if (!myFriends.some((f) => f && f.uid === friendUid)) {
+            throw new https_1.HttpsError("failed-precondition", "You aren't friends with this user.");
+        }
+        tx.set(meRef, { friends: myFriends.filter((f) => f && f.uid !== friendUid) }, { merge: true });
+        if (themSnap.exists) {
+            const theirFriends = (((_b = themSnap.data()) === null || _b === void 0 ? void 0 : _b.friends) || []).filter((f) => f && f.uid !== uid);
+            tx.set(themRef, { friends: theirFriends }, { merge: true });
+        }
+        return { ok: true };
+    });
 });
 //# sourceMappingURL=index.js.map

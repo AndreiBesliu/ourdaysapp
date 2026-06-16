@@ -24,3 +24,18 @@ export async function transferAssetCopy(params: {
   const fn = httpsCallable(getFunctions(app), "transferAssetCopy");
   await fn(params);
 }
+
+// Accept or decline a friend request (must write both users' friend lists).
+export async function respondToFriendRequest(params: {
+  requestId: string;
+  accept: boolean;
+}): Promise<void> {
+  const fn = httpsCallable(getFunctions(app), "respondToFriendRequest");
+  await fn(params);
+}
+
+// Remove a friend (mutual — edits both users' friend lists).
+export async function removeFriend(friendUid: string): Promise<void> {
+  const fn = httpsCallable(getFunctions(app), "removeFriend");
+  await fn({ friendUid });
+}

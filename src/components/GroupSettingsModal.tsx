@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { X, Settings2, Edit2, Check, Trash2, LogOut, UserMinus, AlertTriangle } from 'lucide-react';
+import { X, Settings2, Edit2, Check, Trash2, LogOut, UserMinus, UserPlus, AlertTriangle } from 'lucide-react';
 import { db, auth } from '../firebase';
-import { doc, updateDoc, arrayRemove, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { doc, updateDoc, arrayRemove, collection, query, where, getDocs, deleteDoc, addDoc, onSnapshot } from 'firebase/firestore';
 import { useModalBack } from '../hooks/useModalBack';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
@@ -27,6 +27,8 @@ export default function GroupSettingsModal({
   const [editedName, setEditedName] = useState(groupName);
   const [isEditingName, setIsEditingName] = useState(false);
   const [confirmDanger, setConfirmDanger] = useState(false);
+  const [friendUids, setFriendUids] = useState<Set<string>>(new Set());
+  const [sentTo, setSentTo] = useState<Set<string>>(new Set());
 
   useModalBack(isOpen, onClose);
 
@@ -36,8 +38,38 @@ export default function GroupSettingsModal({
       setIsEditingName(false);
       setError('');
       setConfirmDanger(false);
+      setSentTo(new Set());
     }
   }, [isOpen, groupName]);
+
+  // My current friends (to hide the add-friend button for people I already have).
+  useEffect(() => {
+    if (!isOpen || !auth.currentUser) return;
+    const unsub = onSnapshot(doc(db, 'users', auth.currentUser.uid), (snap) => {
+      const list = snap.data()?.friends || [];
+      setFriendUids(new Set(list.map((f: any) => f.uid)));
+    });
+    return () => unsub();
+  }, [isOpen]);
+
+  const handleAddFriend = async (memberId: string) => {
+    if (!auth.currentUser || memberId === auth.currentUser.uid) return;
+    const myName = userMap[auth.currentUser.uid]?.name || auth.currentUser.displayName || 'Friend';
+    try {
+      await addDoc(collection(db, 'friend_requests'), {
+        fromId: auth.currentUser.uid,
+        fromName: myName,
+        fromEmail: auth.currentUser.email?.toLowerCase() || null,
+        toId: memberId,
+        toEmail: null,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      });
+      setSentTo(prev => new Set(prev).add(memberId));
+    } catch (err) {
+      console.error('Add friend failed', err);
+    }
+  };
 
   const handleRename = async () => {
     if (!editedName.trim() || editedName.trim() === groupName) {
@@ -178,6 +210,19 @@ export default function GroupSettingsModal({
                       </p>
                       {u?.email && <p className="text-xs text-zinc-500 truncate">{u.email}</p>}
                     </div>
+                    {!isMe && !friendUids.has(memberId) && (
+                      sentTo.has(memberId) ? (
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 shrink-0">{t('requestSentShort', language)}</span>
+                      ) : (
+                        <button
+                          onClick={() => handleAddFriend(memberId)}
+                          className="p-1.5 text-zinc-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors shrink-0"
+                          title={t('addFriendShort', language)}
+                        >
+                          <UserPlus className="w-4 h-4" />
+                        </button>
+                      )
+                    )}
                     {isOwner && !isMe && (
                       <button
                         onClick={() => handleRemoveMember(memberId)}
