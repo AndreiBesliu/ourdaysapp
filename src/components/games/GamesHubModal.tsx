@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, Gamepad2, Play, Clock, Trash2, Info, Flag } from 'lucide-react';
+import { X, Gamepad2, Play, Clock, Trash2, Info, Flag, Cat, Apple, Plane, Sun } from 'lucide-react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, updateDoc, doc } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
+import { THEME_IDS, THEME_PACKS, buildMemoryBoard, DEFAULT_THEME } from './memoryThemes';
 import TicTacToe from './TicTacToe';
 import Connect4 from './Connect4';
 import RummyGame from './rummy/RummyGame';
@@ -20,6 +21,15 @@ interface GamesHubModalProps {
   userMap: Record<string, any>;
   selectedDate: Date | null;
 }
+
+// One representative icon per Memory Match theme, shown in the theme picker.
+const THEME_PREVIEW: Record<string, React.ReactNode> = {
+  classic: <Gamepad2 className="w-5 h-5" />,
+  animals: <Cat className="w-5 h-5" />,
+  food: <Apple className="w-5 h-5" />,
+  travel: <Plane className="w-5 h-5" />,
+  nature: <Sun className="w-5 h-5" />,
+};
 
 const getGameRules = (lang: string = 'en-US'): Record<string, { title: string, rules: string[] }> => {
   const translations: Record<string, Record<string, { title: string, rules: string[] }>> = {
@@ -287,6 +297,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
   const [leaderboard, setLeaderboard] = useState<{uid: string, wins: number, points?: number}[]>([]);
   const [showRulesFor, setShowRulesFor] = useState<string | null>(null);
   const [confirmingEndId, setConfirmingEndId] = useState<string | null>(null);
+  const [showThemePicker, setShowThemePicker] = useState(false);
   const { language } = useThemeStore();
   const gameRules = getGameRules(language);
 
@@ -359,7 +370,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
     return () => unsubscribe();
   }, [isOpen, groupId, view]);
 
-  const handleCreateGame = async (gameType: string) => {
+  const handleCreateGame = async (gameType: string, theme: string = DEFAULT_THEME) => {
     if (!auth.currentUser || !selectedDate) return;
     
     try {
@@ -398,18 +409,15 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
           winner: null
         };
       } else if (gameType === 'memory-match') {
-        const ICONS = ['Gamepad2', 'Rocket', 'Star', 'Heart', 'Flame', 'Zap', 'Camera', 'Music'];
-        const deck = [...ICONS, ...ICONS];
-        for (let i = deck.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [deck[i], deck[j]] = [deck[j], deck[i]];
-        }
         initialState = {
-          board: deck.map((icon, idx) => ({ id: idx, iconName: icon, isMatched: false })),
+          board: buildMemoryBoard(theme),
+          theme,
           flippedIndices: [],
           p1IsNext: true,
           players: { P1: auth.currentUser.uid, P2: null },
-          scores: { P1: 0, P2: 0 }
+          scores: { P1: 0, P2: 0 },
+          moves: 0,
+          streak: 0
         };
       }
 
@@ -604,7 +612,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                         <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('memory-match'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title={t('howToPlay', language)}>
                           <Info className="w-4 h-4" />
                         </button>
-                        <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('memory-match')}>
+                        <div className="cursor-pointer flex flex-col flex-1" onClick={() => setShowThemePicker(true)}>
                           <div className="w-12 h-12 bg-amber-100 dark:bg-amber-500/20 text-amber-500 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-all">
                             <Gamepad2 className="w-6 h-6" />
                           </div>
@@ -760,6 +768,37 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
             </div>
             <div className="p-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 rounded-b-2xl flex justify-end">
               <button onClick={() => setShowRulesFor(null)} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition-all">{t('okLabel', language)}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Memory Match — theme picker (choose an icon pack before starting) */}
+      {showThemePicker && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200" onClick={() => setShowThemePicker(false)}>
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-amber-50 dark:bg-amber-900/20 rounded-t-2xl">
+              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                <Gamepad2 className="w-5 h-5" />
+                <h3 className="font-bold text-lg">{t('chooseTheme', language)}</h3>
+              </div>
+              <button onClick={() => setShowThemePicker(false)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-white dark:bg-zinc-800 rounded-full transition-colors shadow-sm">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-4 grid grid-cols-1 gap-2">
+              {THEME_IDS.map((id) => (
+                <button
+                  key={id}
+                  onClick={() => { setShowThemePicker(false); handleCreateGame('memory-match', id); }}
+                  className="flex items-center gap-3 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:border-primary/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors text-left"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    {THEME_PREVIEW[id]}
+                  </div>
+                  <span className="font-bold text-zinc-900 dark:text-zinc-100">{t(THEME_PACKS[id].labelKey, language)}</span>
+                </button>
+              ))}
             </div>
           </div>
         </div>

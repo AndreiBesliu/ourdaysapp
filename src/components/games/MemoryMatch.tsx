@@ -1,12 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
-import { ArrowLeft, Gamepad2, Rocket, Star, Heart, Flame, Zap, Camera, Music, Trophy } from 'lucide-react';
+import {
+  ArrowLeft, Trophy, Clock, Footprints, Flame,
+  Gamepad2, Rocket, Star, Heart, Zap, Camera, Music,
+  Cat, Dog, Bird, Fish, Rabbit, Turtle, Snail, Bug,
+  Apple, Cherry, Carrot, Pizza, Cake, Coffee, Egg, Cookie,
+  Plane, Car, Ship, Train, Bike, Anchor, Tent, Compass,
+  Sun, Moon, Cloud, Umbrella, Snowflake, Droplet, Wind, Rainbow,
+} from 'lucide-react';
 import { playTone } from '../../utils/sounds';
 import { triggerHaptic } from '../../utils/haptics';
 import { useThemeStore } from '../../store';
 import { t } from '../../utils/i18n';
 import { finalizeGameUpdate } from './gameResult';
+import { buildMemoryBoard, DEFAULT_THEME, THEME_PACKS } from './memoryThemes';
 
 interface MemoryMatchProps {
   game: any;
@@ -14,22 +22,38 @@ interface MemoryMatchProps {
   onBack: () => void;
 }
 
-const ICON_MAP: Record<string, React.ReactNode> = {
-  Gamepad2: <Gamepad2 className="w-8 h-8 sm:w-10 sm:h-10" />,
-  Rocket: <Rocket className="w-8 h-8 sm:w-10 sm:h-10" />,
-  Star: <Star className="w-8 h-8 sm:w-10 sm:h-10" />,
-  Heart: <Heart className="w-8 h-8 sm:w-10 sm:h-10" />,
-  Flame: <Flame className="w-8 h-8 sm:w-10 sm:h-10" />,
-  Zap: <Zap className="w-8 h-8 sm:w-10 sm:h-10" />,
-  Camera: <Camera className="w-8 h-8 sm:w-10 sm:h-10" />,
-  Music: <Music className="w-8 h-8 sm:w-10 sm:h-10" />
+// All icons used across every theme pack, resolved by name from the stored board.
+const ICON_COMPONENTS: Record<string, React.ComponentType<{ className?: string }>> = {
+  Gamepad2, Rocket, Star, Heart, Flame, Zap, Camera, Music,
+  Cat, Dog, Bird, Fish, Rabbit, Turtle, Snail, Bug,
+  Apple, Cherry, Carrot, Pizza, Cake, Coffee, Egg, Cookie,
+  Plane, Car, Ship, Train, Bike, Anchor, Tent, Compass,
+  Sun, Moon, Cloud, Umbrella, Snowflake, Droplet, Wind, Rainbow,
 };
 
-export const ICONS_LIST = Object.keys(ICON_MAP);
+const renderIcon = (name: string) => {
+  const Icon = ICON_COMPONENTS[name] || Gamepad2;
+  return <Icon className="w-8 h-8 sm:w-10 sm:h-10" />;
+};
+
+const formatTime = (ms: number) => {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
 
 export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps) {
   const { language } = useThemeStore();
   const [processing, setProcessing] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  // Tick the elapsed-time display once a second while the game is in progress.
+  useEffect(() => {
+    if (game.status !== 'playing') return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [game.status]);
 
   const isMyTurn = () => {
     if (game.status === 'finished') return false;
@@ -43,6 +67,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
     if (!auth.currentUser || game.state.players.P2) return;
     await updateDoc(doc(db, 'games', game.id), {
       'state.players.P2': auth.currentUser.uid,
+      'state.startedAt': Date.now(), // start the clock when the 2nd player joins
       status: 'playing'
     });
   };
@@ -80,29 +105,36 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
     });
 
     setTimeout(async () => {
-      const newBoard = [...board];
+      const newBoard = board.map((c: any) => ({ ...c }));
       let newScores = { ...scores };
+      const currentPlayerKey = p1IsNext ? 'P1' : 'P2';
       let nextTurn = p1IsNext;
       let newStatus = 'playing';
-      let winner = null;
+      let winner: string | null = null;
+      let newStreak = game.state.streak || 0;
+      const updates: any = {};
 
       if (isMatch) {
         newBoard[idx1].isMatched = true;
         newBoard[idx2].isMatched = true;
-        
-        const currentPlayerKey = p1IsNext ? 'P1' : 'P2';
-        newScores[currentPlayerKey] += 1;
-        
+
+        // Streak bonus: each consecutive match in your turn is worth one more
+        // point than the last (1, 2, 3, …). A miss resets the streak.
+        newStreak = newStreak + 1;
+        newScores[currentPlayerKey] += newStreak;
+
         playTone('meld');
         triggerHaptic('success');
 
-        // Check if game is over
-        if (newScores.P1 + newScores.P2 === 8) {
+        // Game over when every card is matched (scores now carry streak bonuses,
+        // so we can't infer the end from the score total).
+        if (newBoard.every((c: any) => c.isMatched)) {
           newStatus = 'finished';
           if (newScores.P1 > newScores.P2) winner = players.P1;
           else if (newScores.P2 > newScores.P1) winner = players.P2;
-          else winner = 'draw'; // draw
-          
+          else winner = null; // draw
+          updates['state.finishedAt'] = Date.now();
+
           if (winner === auth.currentUser?.uid) {
             playTone('success');
           } else {
@@ -110,42 +142,39 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
           }
         }
       } else {
-        // No match, switch turns
+        // No match: switch turns and reset the streak
         nextTurn = !p1IsNext;
+        newStreak = 0;
         playTone('error');
         triggerHaptic('medium');
       }
 
       await updateDoc(doc(db, 'games', game.id), {
+        ...updates,
         'state.board': newBoard,
         'state.flippedIndices': [],
         'state.p1IsNext': nextTurn,
         'state.scores': newScores,
+        'state.streak': newStreak,
+        'state.moves': (game.state.moves || 0) + 1,
         status: newStatus,
-        winner: winner === 'draw' ? null : winner // We handle draw by just keeping winner null if finished
+        winner: winner
       });
-      
+
       setProcessing(false);
     }, 1200);
-  };
-
-  // Helper to shuffle cards for next round
-  const generateBoard = () => {
-    const icons = [...ICONS_LIST, ...ICONS_LIST];
-    // Fisher-Yates shuffle
-    for (let i = icons.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [icons[i], icons[j]] = [icons[j], icons[i]];
-    }
-    return icons.map((icon, idx) => ({ id: idx, iconName: icon, isMatched: false }));
   };
 
   const handleNextRound = async () => {
     if (!auth.currentUser) return;
     await updateDoc(doc(db, 'games', game.id), {
-      'state.board': generateBoard(),
+      'state.board': buildMemoryBoard(game.state.theme || DEFAULT_THEME),
       'state.flippedIndices': [],
       'state.scores': { P1: 0, P2: 0 },
+      'state.moves': 0,
+      'state.streak': 0,
+      'state.startedAt': Date.now(),
+      'state.finishedAt': null,
       status: 'playing',
       winner: null
     });
@@ -161,6 +190,12 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
   const p1 = userMap[players.P1];
   const p2 = players.P2 ? userMap[players.P2] : null;
 
+  const moves = game.state.moves || 0;
+  const streak = game.state.streak || 0;
+  const startedAt = game.state.startedAt;
+  // Elapsed ticks live while playing; freezes at finishedAt once the game ends.
+  const elapsedMs = startedAt ? (game.state.finishedAt || now) - startedAt : 0;
+
   return (
     <div className="flex flex-col h-full bg-zinc-50 dark:bg-zinc-950">
       {/* Header */}
@@ -168,7 +203,12 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
         <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h2 className="font-bold text-lg text-zinc-900 dark:text-zinc-100">{t('gameMemoryMatch', language)}</h2>
+        <div className="flex flex-col items-center leading-tight">
+          <h2 className="font-bold text-lg text-zinc-900 dark:text-zinc-100">{t('gameMemoryMatch', language)}</h2>
+          <span className="text-[10px] uppercase tracking-wider text-zinc-400">
+            {t(THEME_PACKS[game.state.theme || DEFAULT_THEME]?.labelKey || 'memThemeClassic', language)}
+          </span>
+        </div>
         <div className="w-9" />
       </div>
 
@@ -226,6 +266,28 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
           </div>
         </div>
 
+        {/* Stats bar: time / moves / current streak */}
+        {players.P2 && (
+          <div className="w-full max-w-sm flex items-center justify-center gap-5 mb-6">
+            <div className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400">
+              <Clock className="w-4 h-4" />
+              <span className="text-sm font-bold tabular-nums">{formatTime(elapsedMs)}</span>
+              <span className="text-[10px] uppercase tracking-wider text-zinc-400 hidden sm:inline">{t('timeLabel', language)}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400">
+              <Footprints className="w-4 h-4" />
+              <span className="text-sm font-bold tabular-nums">{moves}</span>
+              <span className="text-[10px] uppercase tracking-wider text-zinc-400 hidden sm:inline">{t('movesLabel', language)}</span>
+            </div>
+            {streak >= 2 && game.status === 'playing' && (
+              <div className="flex items-center gap-1 text-amber-500 font-bold animate-in fade-in">
+                <Flame className="w-4 h-4" />
+                <span className="text-sm tabular-nums">×{streak}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Board */}
         <div className="grid grid-cols-4 gap-2 sm:gap-3 w-full max-w-sm">
           {board?.map((card: any, idx: number) => {
@@ -245,7 +307,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
                   
                   {/* Back (Revealed) */}
                   <div className={`absolute inset-0 backface-hidden rotate-y-180 rounded-xl shadow-md flex items-center justify-center ${card.isMatched ? 'bg-green-100 dark:bg-green-900/40 border-2 border-green-500 text-green-600 dark:text-green-400 opacity-50' : 'bg-primary/10 border-2 border-primary text-primary'}`}>
-                    {ICON_MAP[card.iconName]}
+                    {renderIcon(card.iconName)}
                   </div>
                 </div>
               </button>
@@ -264,6 +326,10 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
                 userMap[game.winner]?.uid === auth.currentUser?.uid ? t('youWon', language) : `${userMap[game.winner]?.name?.split(' ')[0]} ${t('wonSuffix', language)}`
               ) : t('itsADraw', language)}
             </h3>
+            <div className="flex items-center gap-4 text-sm text-zinc-500 dark:text-zinc-400 mb-1">
+              <span className="flex items-center gap-1.5"><Clock className="w-4 h-4" /> {formatTime(elapsedMs)}</span>
+              <span className="flex items-center gap-1.5"><Footprints className="w-4 h-4" /> {moves} {t('movesLabel', language)}</span>
+            </div>
             {game.finalized ? (
               <span className="mt-4 text-sm font-bold text-zinc-400 flex items-center gap-1">🏁 {t('gameEnded', language)}</span>
             ) : (
