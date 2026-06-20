@@ -352,9 +352,11 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
 
         if (g.gameType === 'rummy-45' && g.state && g.state.players) {
           Object.values(g.state.players).forEach((p: any) => {
-             if (p.score !== undefined) {
+             if (p && p.uid) {
                if (!statsMap[p.uid]) statsMap[p.uid] = { wins: 0, points: 0 };
-               statsMap[p.uid].points += p.score;
+               // Cumulative penalty across the whole session (totalScore banks
+               // prior hands; score is the current hand). Penalties are negative.
+               statsMap[p.uid].points += (p.totalScore || 0) + (p.score || 0);
              }
           });
         }
@@ -405,8 +407,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
           deck: [],
           discardPile: [],
           melds: [],
-          status: 'waiting',
-          winner: null
+          round: 1
         };
       } else if (gameType === 'memory-match') {
         initialState = {

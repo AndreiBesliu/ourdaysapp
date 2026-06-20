@@ -26,3 +26,4 @@ dist-ssr
 # Firebase & Environment Secrets
 .env
 functions/.env
+.firebase/

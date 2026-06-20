@@ -46,7 +46,7 @@
     - *Points per game*: show how many points each player has earned THROUGH each game type (e.g. Rummy penalty/points, future per-game scoring), so the leaderboard reflects where points came from.
     - *Per-player detail view*: tapping a leaderboard entry opens a breakdown (games played, wins, points by game).
     - Likely needs a denormalised per-player/per-game stats aggregate (or a Cloud Function rollup) rather than recomputing from all finished `games` docs each open.
-    - *Known bug to fix here* (`GamesHubModal.tsx` ~342-348): the leaderboard `points` sum accumulates the **negative** per-hand `score` and ignores `totalScore`, so multi-hand Rummy sessions are undercounted and the sign is inverted. Unify one sign convention (consider storing/showing penalties as positive, lower=better) across `calculatePenaltyPoints`, `getSessionWinner`, the Rummy game-over scoreboard, and this points sum. Currently cosmetic (leaderboard sorts by wins).
+    - *Partly fixed* (2026-05-26): the leaderboard `points` sum now accumulates `(totalScore||0)+(score||0)` (full cumulative penalty across all hands) instead of just the last hand's `score`. Still uses the app-wide **negative** penalty convention; unifying to a positive lower=better convention across `calculatePenaltyPoints`/`getSessionWinner`/scoreboard/this sum remains a future polish (currently cosmetic — leaderboard sorts by wins).
   - **Rummy UI Overhaul 🃏**: ✅ DONE (2026-05-26). Phase 1: live meld feedback (Set/Run + points + valid/invalid, meld disabled when invalid); first-meld progress chip (`X/45 pts · needs a run`); card redesign (♥♦♣♠ glyphs + corner indices + amber/sky contrast); dual sort (Runs / Sets). Phase 2: drag-to-INSERT hand reorder (replacing the swap); cumulative multi-round scoreboard (`totalScore`/`round`, owner "Next Hand", session winner = least cumulative penalty, round badge). See Completed Features.
   - **Memory Match Depth 🧠**: ✅ DONE (2026-05-26) — added a timer + move counter, 5 themed icon packs (chosen before the game), and streak-bonus scoring. See Completed Features. (Not done / available as future: variable board sizes & difficulty levels — user opted out for now.)
   - **Family Trivia**: Interactive custom trivia creator for group members.
@@ -71,9 +71,9 @@
 ### 2. Backlog
 - **UI Refinement**: Continue polishing dark mode transitions and mobile responsiveness.
 - **Uno/Other Games**: Expand the Arcade with more simple multiplayer games.
-- **GroupSettingsModal i18n 🧹**: pre-existing hardcoded English ("Group Settings", "Group Name", "Members", "Danger Zone", "Delete/Leave Group", "Failed to rename group.", etc.) violates the i18n-everything rule. Localize in a future i18n pass (surfaced during the friends-feature review).
+- ~~**GroupSettingsModal i18n 🧹**~~ ✅ DONE (2026-05-26) Localized all user-facing strings (title, group name, members, danger zone, delete/leave + descriptions, confirm text, remove-member confirm, error messages) via `t()` across all 6 languages. Only deep data fallbacks (`'Friend'`/`'Unknown'`, shown when a member has neither name nor email) left as-is.
 - **Friends polish (post-MVP) 🧹**: optional refinements flagged by the review — clean up sibling/duplicate pending requests on accept (currently harmless: read-filter-write dedup keeps one friend entry per uid); seed the invite/add-friend "already sent" disabled state from a live outgoing listener (currently only optimistic per-session). Not bugs.
-- **Rummy state single-source-of-truth 🧹**: `status`/`winner` are stored BOTH at the game-doc top level AND inside `GameState` (RummyEngine), but the component + win paths only read/write the top-level copies, leaving `state.status`/`state.winner` stale. Harmless today (nothing reads the nested copies) but a trap for any future lobby/game-list code. Fix: drop `status`/`winner` from `GameState` (rely on top-level), or write both consistently. (Pre-existing; surfaced by the Phase-2 review.)
+- ~~**Rummy state single-source-of-truth 🧹**~~ ✅ DONE (2026-05-26) Dropped `status`/`winner` from `GameState` (RummyEngine), `initializeGame`, and the GamesHubModal rummy create-state. The top-level game-doc `status`/`winner` (which the component already read exclusively) are now the single source of truth. Verified no code reads the nested copies.
 
 ---
 
@@ -91,7 +91,7 @@
   - DONE: sign-up now calls `sendEmailVerification`; a `VerifyEmailBanner` lets email/password users resend + recheck (reload + `getIdToken(true)` to refresh the claim). The **accept** path is gated: `respondToFriendRequest` and `acceptGroupInvite` require `request.auth.token.email_verified === true` to honor an email-addressed (`toEmail`) match — so you can no longer **accept** an invite/request sent to an address you don't own (the account-takeover/impersonation vector). uid-addressed (`toId`) flows — friend-invites to groups, group-member friend-adds — are unaffected (uid can't be spoofed), so the common cases work without verification. Google users are already verified.
   - REMAINING (LOW): the **read** rules (`canAccessInvite` / `canAccessFriendReq` `toEmail` branch) are NOT yet gated on `email_verified`, so an email-squatter can still SEE (not accept) pending invites/requests addressed to that email (discloses inviter name/email). Gating reads would deny the existing `where('toEmail',...)` listener queries for unverified users, so it needs the client listeners made conditional on `emailVerified` first (skip the toEmail listeners + show the verify prompt when unverified). Deferred.
 - **`assets` — shared visibility** 🟠 `sharedWithFamily` assets owned by other users are no longer readable (asset listeners scoped to `ownerId == uid` to satisfy the rule). Restoring cross-user shared wallet assets needs a real sharing model: e.g. an `allowedUserIds` array on the asset + a read rule `request.auth.uid in resource.data.allowedUserIds`, and queries split into "mine" + "shared with me".
-- **Housekeeping** 🟢 `.firebase/` deploy cache is git-tracked — add to `.gitignore` in a future cleanup.
+- ~~**Housekeeping** 🟢 `.firebase/` deploy cache is git-tracked~~ ✅ DONE (2026-05-26) Added `.firebase/` to `.gitignore` and `git rm --cached` the tracked `hosting.*.cache`. (`functions/lib/` left tracked — it's the deployed artifact and there's no predeploy build hook.)
 
 ---
 
@@ -1118,6 +1118,15 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > - Client: new `Friends.tsx` (`/friends` route) — add by email, accept/decline incoming, cancel outgoing, unfriend; `InviteFamilyModal` rewritten with a friends multi-select (one-tap multi-invite, in-group disabled) + reset-on-open; `GroupSettingsModal` add-friend button per member (uses member uid as `toId`); `CalendarHome` Friends menu entry (desktop + mobile) with an incoming-request badge + listener, and passes `memberIds` to the invite modal. +24 i18n keys × 6 languages.
 > - **Adversarial review (3-agent workflow)** found and I FIXED: `removeFriend` writing to arbitrary user docs (now friendship-guarded + transactional); `arrayUnion`-on-objects duplicate friend entries (now read-filter-write dedup); non-atomic accept (now a transaction); `InviteFamilyModal` stale cross-group selection (now reset on open/group change); create-rule `status` hygiene; name length cap. **DEFERRED to roadmap (HIGH):** the `toEmail` trust / email-squatting vuln — *pre-existing and shared with the live `group_invites`*; the correct fix is app-wide email verification (would otherwise break email invites for unverified users), logged under Deferred Security Work.
 > Build OK (functions tsc + web tsc/vite). Deployed functions + firestore rules + hosting. Committed, pushed.
+> Model: Claude Opus 4.8 (1M context)
+
+**2026-05-26 - Task (autonomous cleanup batch)**: "whatever you can do alone" → knocked out self-contained backlog/housekeeping items needing no user input or console steps.
+> - **GroupSettingsModal i18n**: localized every user-facing string (12 new keys × 6 languages) — title, group name, members, danger zone, delete/leave + descriptions, confirm text, remove-member confirm, error messages. Closes the i18n-everything gap flagged in the friends review.
+> - **`.firebase/` housekeeping**: added to `.gitignore` + untracked the deploy cache.
+> - **Rummy single-source-of-truth**: removed `status`/`winner` from `GameState`/`initializeGame`/the rummy create-state; the top-level game-doc fields (already the only ones read) are now authoritative. Grep-verified no nested reads.
+> - **Leaderboard points**: now sums `(totalScore||0)+(score||0)` (full session penalty) instead of just the last hand's `score`.
+> - Skipped (need you or carry migration risk): App Check enforcement (console), email-template tweaks (console), the timezone date-shift bug (touches stored data — wants your testing; doesn't affect UTC+ users).
+> Build OK (web tsc + vite). Deployed hosting. Committed, pushed.
 > Model: Claude Opus 4.8 (1M context)
 
 **2026-05-26 - Bug Fix**: Accepting a group invite never added the member to the group.

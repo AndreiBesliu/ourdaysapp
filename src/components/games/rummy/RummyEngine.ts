@@ -22,8 +22,8 @@ export interface GameState {
   deck: RummyCard[];
   discardPile: RummyCard[];
   melds: { id: string, playerId: string, cards: RummyCard[] }[];
-  status: 'waiting' | 'playing' | 'finished';
-  winner: string | null;
+  // NB: `status`/`winner` live ONLY on the top-level game doc (read as game.status
+  // / game.winner), never inside GameState — one source of truth.
   round?: number;           // current hand number (1-based) in a multi-hand game
 }
 
@@ -92,8 +92,6 @@ export const initializeGame = (playerUids: string[]): GameState => {
     deck,
     discardPile: [],
     melds: [],
-    status: 'playing',
-    winner: null,
     round: 1
   };
 };

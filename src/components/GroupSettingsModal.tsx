@@ -81,21 +81,21 @@ export default function GroupSettingsModal({
       await updateDoc(doc(db, 'groups', groupId), { name: editedName.trim() });
       setIsEditingName(false);
     } catch (err) {
-      setError('Failed to rename group.');
+      setError(t('actionFailed', language));
     } finally {
       setLoading(false);
     }
   };
 
   const handleRemoveMember = async (memberId: string) => {
-    if (!confirm(`Remove ${userMap[memberId]?.name || 'this member'} from the group?`)) return;
+    if (!confirm(t('removeMemberConfirm', language))) return;
     setLoading(true);
     try {
       await updateDoc(doc(db, 'groups', groupId), {
         members: arrayRemove(memberId)
       });
     } catch (err) {
-      setError('Failed to remove member.');
+      setError(t('actionFailed', language));
     } finally {
       setLoading(false);
     }
@@ -128,7 +128,7 @@ export default function GroupSettingsModal({
       onSuccess();
       onClose();
     } catch (err) {
-      setError(`Failed to ${isOwner ? 'delete' : 'leave'} group. Please try again.`);
+      setError(t('actionFailed', language));
     } finally {
       setLoading(false);
     }
@@ -144,7 +144,7 @@ export default function GroupSettingsModal({
         <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50">
           <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
             <Settings2 className="w-5 h-5 text-primary" />
-            Group Settings
+            {t('groupSettings', language)}
           </h3>
           <button onClick={onClose} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-700 rounded-full transition-colors">
             <X className="w-4 h-4" />
@@ -155,7 +155,7 @@ export default function GroupSettingsModal({
 
           {/* Group Name */}
           <section>
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Group Name</p>
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">{t('groupNameLabel', language)}</p>
             <div className="flex items-center gap-2">
               {isEditingName ? (
                 <>
@@ -190,7 +190,7 @@ export default function GroupSettingsModal({
 
           {/* Members */}
           <section>
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Members ({members.length})</p>
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">{t('membersLabel', language)} ({members.length})</p>
             <div className="flex flex-col gap-2">
               {members.map(memberId => {
                 const u = userMap[memberId];
@@ -206,7 +206,7 @@ export default function GroupSettingsModal({
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                        {u?.name || u?.email?.split('@')[0] || 'Unknown'} {isMe && <span className="text-xs text-zinc-400">(you)</span>}
+                        {u?.name || u?.email?.split('@')[0] || 'Unknown'} {isMe && <span className="text-xs text-zinc-400">({t('youLabel', language)})</span>}
                       </p>
                       {u?.email && <p className="text-xs text-zinc-500 truncate">{u.email}</p>}
                     </div>
@@ -241,7 +241,7 @@ export default function GroupSettingsModal({
 
           {/* Danger Zone */}
           <section>
-            <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">Danger Zone</p>
+            <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">{t('dangerZone', language)}</p>
             <div className="rounded-xl border border-red-200 dark:border-red-500/20 overflow-hidden">
               {!confirmDanger ? (
                 <button
@@ -250,9 +250,9 @@ export default function GroupSettingsModal({
                 >
                   {isOwner ? <Trash2 className="w-5 h-5 shrink-0" /> : <LogOut className="w-5 h-5 shrink-0" />}
                   <div>
-                    <p className="font-semibold text-sm">{isOwner ? 'Delete Group' : 'Leave Group'}</p>
+                    <p className="font-semibold text-sm">{isOwner ? t('deleteGroup', language) : t('leaveGroup', language)}</p>
                     <p className="text-xs text-red-400/80 mt-0.5">
-                      {isOwner ? 'This will permanently delete the group and all its events.' : 'You will lose access to all shared events.'}
+                      {isOwner ? t('deleteGroupDesc', language) : t('leaveGroupDesc', language)}
                     </p>
                   </div>
                 </button>
@@ -261,12 +261,12 @@ export default function GroupSettingsModal({
                   <div className="flex items-start gap-2 mb-3">
                     <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
                     <p className="text-sm text-red-600 dark:text-red-400 font-medium">
-                      Are you sure? This cannot be undone.
+                      {t('confirmCannotUndo', language)}
                     </p>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => setConfirmDanger(false)} className="flex-1 py-2 text-sm font-medium bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors">
-                      Cancel
+                      {t('cancel', language)}
                     </button>
                     <button
                       onClick={handleDeleteOrLeave}
@@ -275,7 +275,7 @@ export default function GroupSettingsModal({
                     >
                       {loading
                         ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        : isOwner ? 'Delete Group' : 'Leave Group'
+                        : isOwner ? t('deleteGroup', language) : t('leaveGroup', language)
                       }
                     </button>
                   </div>
