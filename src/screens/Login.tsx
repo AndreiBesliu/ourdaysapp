@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendEmailVerification } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { CalendarDays, Mail, Lock, AlertCircle } from 'lucide-react';
@@ -22,6 +22,13 @@ export default function Login() {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        // Send a verification email so the address can be confirmed (required to
+        // accept invites / friend requests addressed to this email).
+        try {
+          await sendEmailVerification(userCredential.user);
+        } catch (verErr) {
+          console.error('Failed to send verification email:', verErr);
+        }
         try {
           // Create user profile in Firestore
           await setDoc(doc(db, 'users', userCredential.user.uid), {

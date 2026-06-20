@@ -123,7 +123,10 @@ export default function Friends() {
   const respond = async (id: string, accept: boolean) => {
     setBusy(true);
     try { await respondToFriendRequest({ requestId: id, accept }); }
-    catch (err) { console.error('Respond failed', err); }
+    catch (err) {
+      console.error('Respond failed', err);
+      if (accept && !auth.currentUser?.emailVerified) { setError(t('verifyEmailDesc', language)); setSuccess(''); }
+    }
     finally { setBusy(false); }
   };
 

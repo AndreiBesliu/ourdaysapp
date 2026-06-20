@@ -14,6 +14,7 @@ import CreateGroupModal from '../components/CreateGroupModal';
 import LeaveGroupModal from '../components/LeaveGroupModal';
 import GroupSettingsModal from '../components/GroupSettingsModal';
 import NotificationsDropdown from '../components/NotificationsDropdown';
+import VerifyEmailBanner from '../components/VerifyEmailBanner';
 import GroupChatWidget from '../components/GroupChatWidget';
 import GamesHubModal from '../components/games/GamesHubModal';
 import RecurringEventsPanel from '../components/RecurringEventsPanel';
@@ -362,6 +363,10 @@ export default function CalendarHome() {
       await acceptGroupInvite(invite.id);
     } catch (err) {
       console.error('Failed to accept invite', err);
+      // Most likely cause for an email-addressed invite: unverified email.
+      if (!auth.currentUser.emailVerified) {
+        alert(t('verifyEmailDesc', language));
+      }
     }
   };
 
@@ -528,6 +533,9 @@ export default function CalendarHome() {
           </div>
         )}
         
+        {/* Email verification prompt (email/password users only) */}
+        <VerifyEmailBanner />
+
         {/* Birthday Prompt */}
         {auth.currentUser && userMap[auth.currentUser.uid] && !userMap[auth.currentUser.uid].birthday && !userMap[auth.currentUser.uid].hideBirthdayPrompt && (
           <div className="bg-gradient-to-r from-pink-500/10 to-rose-500/10 border border-pink-500/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in slide-in-from-top-4 fade-in mb-2">

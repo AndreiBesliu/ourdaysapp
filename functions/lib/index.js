@@ -563,9 +563,10 @@ exports.transferAssetCopy = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
 // `{uid,name,email}` entry for the other (email lives on the owner-only user
 // doc, not the public profile, so we resolve it here) and the sender is notified.
 exports.respondToFriendRequest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     const email = (((_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.email) || "").toLowerCase();
+    const emailVerified = ((_e = (_d = request.auth) === null || _d === void 0 ? void 0 : _d.token) === null || _e === void 0 ? void 0 : _e.email_verified) === true;
     if (!uid) {
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
     }
@@ -577,10 +578,9 @@ exports.respondToFriendRequest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_
     const db = admin.firestore();
     const reqRef = db.doc(`friend_requests/${requestId}`);
     // One transaction: re-check status, read both users, and write atomically.
-    // NOTE: recipient is matched by token email when toId is absent. This trusts
-    // the token email (same model as group_invites). Email-squatting via
-    // unverified accounts is a known app-wide risk tracked on the roadmap
-    // (email verification) — not introduced here.
+    // A request addressed by email can only be accepted by a caller whose email is
+    // VERIFIED (prevents claiming a request sent to an address you don't own).
+    // Requests addressed by uid (toId) are always safe (uid can't be spoofed).
     return db.runTransaction(async (tx) => {
         var _a, _b, _c, _d, _e, _f, _g, _h;
         const snap = await tx.get(reqRef);
@@ -588,7 +588,7 @@ exports.respondToFriendRequest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_
             throw new https_1.HttpsError("not-found", "Friend request not found.");
         }
         const fr = snap.data() || {};
-        const isRecipient = fr.toId === uid || (!!fr.toEmail && fr.toEmail === email);
+        const isRecipient = fr.toId === uid || (emailVerified && !!fr.toEmail && fr.toEmail === email);
         if (!isRecipient) {
             throw new https_1.HttpsError("permission-denied", "This request isn't addressed to you.");
         }
@@ -679,9 +679,10 @@ exports.removeFriend = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK 
 // validates the caller is the invite's recipient (by uid or email) and that the
 // invite is pending, then adds them to the group and marks the invite accepted.
 exports.acceptGroupInvite = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     const email = (((_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.email) || "").toLowerCase();
+    const emailVerified = ((_e = (_d = request.auth) === null || _d === void 0 ? void 0 : _d.token) === null || _e === void 0 ? void 0 : _e.email_verified) === true;
     if (!uid) {
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
     }
@@ -697,7 +698,9 @@ exports.acceptGroupInvite = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
             throw new https_1.HttpsError("not-found", "Invite not found.");
         }
         const inv = snap.data() || {};
-        const isRecipient = inv.toId === uid || (!!inv.toEmail && inv.toEmail.toLowerCase() === email);
+        // Email-addressed invites require a VERIFIED email to accept (no claiming an
+        // invite to an address you don't own); uid-addressed invites are always safe.
+        const isRecipient = inv.toId === uid || (emailVerified && !!inv.toEmail && inv.toEmail.toLowerCase() === email);
         if (!isRecipient) {
             throw new https_1.HttpsError("permission-denied", "This invite isn't addressed to you.");
         }

@@ -620,6 +620,7 @@ export const transferAssetCopy = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
 export const respondToFriendRequest = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const uid = request.auth?.uid;
   const email = (request.auth?.token?.email || "").toLowerCase();
+  const emailVerified = request.auth?.token?.email_verified === true;
   if (!uid) {
     throw new HttpsError("unauthenticated", "You must be signed in.");
   }
@@ -633,17 +634,16 @@ export const respondToFriendRequest = onCall({ enforceAppCheck: ENFORCE_APP_CHEC
   const reqRef = db.doc(`friend_requests/${requestId}`);
 
   // One transaction: re-check status, read both users, and write atomically.
-  // NOTE: recipient is matched by token email when toId is absent. This trusts
-  // the token email (same model as group_invites). Email-squatting via
-  // unverified accounts is a known app-wide risk tracked on the roadmap
-  // (email verification) — not introduced here.
+  // A request addressed by email can only be accepted by a caller whose email is
+  // VERIFIED (prevents claiming a request sent to an address you don't own).
+  // Requests addressed by uid (toId) are always safe (uid can't be spoofed).
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(reqRef);
     if (!snap.exists) {
       throw new HttpsError("not-found", "Friend request not found.");
     }
     const fr = snap.data() || {};
-    const isRecipient = fr.toId === uid || (!!fr.toEmail && fr.toEmail === email);
+    const isRecipient = fr.toId === uid || (emailVerified && !!fr.toEmail && fr.toEmail === email);
     if (!isRecipient) {
       throw new HttpsError("permission-denied", "This request isn't addressed to you.");
     }
@@ -745,6 +745,7 @@ export const removeFriend = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async
 export const acceptGroupInvite = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const uid = request.auth?.uid;
   const email = (request.auth?.token?.email || "").toLowerCase();
+  const emailVerified = request.auth?.token?.email_verified === true;
   if (!uid) {
     throw new HttpsError("unauthenticated", "You must be signed in.");
   }
@@ -763,7 +764,9 @@ export const acceptGroupInvite = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
     }
     const inv = snap.data() || {};
 
-    const isRecipient = inv.toId === uid || (!!inv.toEmail && inv.toEmail.toLowerCase() === email);
+    // Email-addressed invites require a VERIFIED email to accept (no claiming an
+    // invite to an address you don't own); uid-addressed invites are always safe.
+    const isRecipient = inv.toId === uid || (emailVerified && !!inv.toEmail && inv.toEmail.toLowerCase() === email);
     if (!isRecipient) {
       throw new HttpsError("permission-denied", "This invite isn't addressed to you.");
     }
