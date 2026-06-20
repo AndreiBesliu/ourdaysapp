@@ -21,6 +21,7 @@ import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../store';
 import { t, getDateLocale } from '../utils/i18n';
 import { expandRecurringEvents } from '../utils/recurrence';
+import { acceptGroupInvite } from '../serverActions';
 
 export default function CalendarHome() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -354,18 +355,13 @@ export default function CalendarHome() {
 
   const handleAcceptFamilyInvite = async (invite: any) => {
     if (!auth.currentUser) return;
-    // 1. Update invite status
-    await updateDoc(doc(db, 'group_invites', invite.id), { status: 'accepted' });
-    
-    // 2. Add me to the group members
-    if (invite.groupId) {
-      await updateDoc(doc(db, 'groups', invite.groupId), {
-        members: arrayUnion(auth.currentUser.uid)
-      });
-    } else {
-      // Legacy fallback
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), { familyMembers: arrayUnion(invite.fromId) });
-      await updateDoc(doc(db, 'users', invite.fromId), { familyMembers: arrayUnion(auth.currentUser.uid) });
+    // Adding yourself to a group's members can't be a client write (the groups
+    // rule requires existing membership), so acceptance runs server-side: the
+    // acceptGroupInvite Cloud Function validates the invite and joins the group.
+    try {
+      await acceptGroupInvite(invite.id);
+    } catch (err) {
+      console.error('Failed to accept invite', err);
     }
   };
 

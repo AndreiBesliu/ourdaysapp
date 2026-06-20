@@ -11,7 +11,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
+exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -670,6 +670,50 @@ exports.removeFriend = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK 
             tx.set(themRef, { friends: theirFriends }, { merge: true });
         }
         return { ok: true };
+    });
+});
+// ── Accept a group invite ──
+// Joining a group means adding yourself to its `members`, but the groups update
+// rule requires you to ALREADY be a member — so a non-member's self-add is
+// denied. Acceptance therefore goes through this callable (Admin SDK): it
+// validates the caller is the invite's recipient (by uid or email) and that the
+// invite is pending, then adds them to the group and marks the invite accepted.
+exports.acceptGroupInvite = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    var _a, _b, _c;
+    const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
+    const email = (((_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.email) || "").toLowerCase();
+    if (!uid) {
+        throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
+    }
+    const { inviteId } = request.data || {};
+    if (!inviteId) {
+        throw new https_1.HttpsError("invalid-argument", "inviteId is required.");
+    }
+    const db = admin.firestore();
+    const inviteRef = db.doc(`group_invites/${inviteId}`);
+    return db.runTransaction(async (tx) => {
+        const snap = await tx.get(inviteRef);
+        if (!snap.exists) {
+            throw new https_1.HttpsError("not-found", "Invite not found.");
+        }
+        const inv = snap.data() || {};
+        const isRecipient = inv.toId === uid || (!!inv.toEmail && inv.toEmail.toLowerCase() === email);
+        if (!isRecipient) {
+            throw new https_1.HttpsError("permission-denied", "This invite isn't addressed to you.");
+        }
+        if (inv.status && inv.status !== "pending") {
+            return { status: inv.status, groupId: inv.groupId || null };
+        }
+        if (inv.groupId) {
+            const groupRef = db.doc(`groups/${inv.groupId}`);
+            const groupSnap = await tx.get(groupRef);
+            if (!groupSnap.exists) {
+                throw new https_1.HttpsError("not-found", "That group no longer exists.");
+            }
+            tx.update(groupRef, { members: admin.firestore.FieldValue.arrayUnion(uid) });
+        }
+        tx.update(inviteRef, { status: "accepted", toId: uid });
+        return { status: "accepted", groupId: inv.groupId || null };
     });
 });
 //# sourceMappingURL=index.js.map

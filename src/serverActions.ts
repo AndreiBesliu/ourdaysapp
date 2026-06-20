@@ -39,3 +39,10 @@ export async function removeFriend(friendUid: string): Promise<void> {
   const fn = httpsCallable(getFunctions(app), "removeFriend");
   await fn({ friendUid });
 }
+
+// Accept a group invite (adds you to the group's members — a non-member can't
+// do that under the groups rules, so it runs server-side).
+export async function acceptGroupInvite(inviteId: string): Promise<void> {
+  const fn = httpsCallable(getFunctions(app), "acceptGroupInvite");
+  await fn({ inviteId });
+}

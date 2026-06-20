@@ -736,3 +736,51 @@ export const removeFriend = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async
   });
 });
 
+// ── Accept a group invite ──
+// Joining a group means adding yourself to its `members`, but the groups update
+// rule requires you to ALREADY be a member — so a non-member's self-add is
+// denied. Acceptance therefore goes through this callable (Admin SDK): it
+// validates the caller is the invite's recipient (by uid or email) and that the
+// invite is pending, then adds them to the group and marks the invite accepted.
+export const acceptGroupInvite = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = request.auth?.uid;
+  const email = (request.auth?.token?.email || "").toLowerCase();
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+  const { inviteId } = request.data || {};
+  if (!inviteId) {
+    throw new HttpsError("invalid-argument", "inviteId is required.");
+  }
+
+  const db = admin.firestore();
+  const inviteRef = db.doc(`group_invites/${inviteId}`);
+
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(inviteRef);
+    if (!snap.exists) {
+      throw new HttpsError("not-found", "Invite not found.");
+    }
+    const inv = snap.data() || {};
+
+    const isRecipient = inv.toId === uid || (!!inv.toEmail && inv.toEmail.toLowerCase() === email);
+    if (!isRecipient) {
+      throw new HttpsError("permission-denied", "This invite isn't addressed to you.");
+    }
+    if (inv.status && inv.status !== "pending") {
+      return { status: inv.status, groupId: inv.groupId || null };
+    }
+
+    if (inv.groupId) {
+      const groupRef = db.doc(`groups/${inv.groupId}`);
+      const groupSnap = await tx.get(groupRef);
+      if (!groupSnap.exists) {
+        throw new HttpsError("not-found", "That group no longer exists.");
+      }
+      tx.update(groupRef, { members: admin.firestore.FieldValue.arrayUnion(uid) });
+    }
+    tx.update(inviteRef, { status: "accepted", toId: uid });
+    return { status: "accepted", groupId: inv.groupId || null };
+  });
+});
+
