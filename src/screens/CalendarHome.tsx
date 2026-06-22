@@ -3,7 +3,7 @@ import { isSameDay, format, startOfMonth, endOfMonth, addMonths, subMonths } fro
 import { auth, db, messaging } from '../firebase';
 import { getToken } from 'firebase/messaging';
 import { collection, query, onSnapshot, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
-import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu } from 'lucide-react';
+import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu, ShieldCheck } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import CalendarGrid from '../components/CalendarGrid';
@@ -22,7 +22,7 @@ import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../store';
 import { t, getDateLocale } from '../utils/i18n';
 import { expandRecurringEvents } from '../utils/recurrence';
-import { acceptGroupInvite } from '../serverActions';
+import { acceptGroupInvite, ADMIN_BOOTSTRAP_EMAILS } from '../serverActions';
 
 export default function CalendarHome() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -52,6 +52,8 @@ export default function CalendarHome() {
   const navigate = useNavigate();
   const { language } = useThemeStore();
   const dateLocale = getDateLocale(language);
+  // Cosmetic gate for the Admin entry (the /admin screen + callables re-check server-side).
+  const isAdminEmail = ADMIN_BOOTSTRAP_EMAILS.includes((auth.currentUser?.email || '').toLowerCase());
 
   // Pull to refresh states
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -464,12 +466,21 @@ export default function CalendarHome() {
           >
             <Wallet className="w-5 h-5" />
           </button>
-          <button 
+          <button
             onClick={() => navigate('/settings')}
             className="hidden sm:flex p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
           >
             <Settings className="w-5 h-5" />
           </button>
+          {isAdminEmail && (
+            <button
+              onClick={() => navigate('/admin')}
+              className="hidden sm:flex p-2 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded-full transition-colors"
+              title="Admin"
+            >
+              <ShieldCheck className="w-5 h-5" />
+            </button>
+          )}
 
           {/* Mobile Menu */}
           <div className="sm:hidden relative">
@@ -503,12 +514,20 @@ export default function CalendarHome() {
                 >
                   <Wallet className="w-4 h-4" /> {t('assetsTitle', language)}
                 </button>
-                <button 
+                <button
                   onClick={() => { navigate('/settings'); setIsMobileMenuOpen(false); }}
                   className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
                 >
                   <Settings className="w-4 h-4" /> {t('settings', language)}
                 </button>
+                {isAdminEmail && (
+                  <button
+                    onClick={() => { navigate('/admin'); setIsMobileMenuOpen(false); }}
+                    className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-amber-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
+                  >
+                    <ShieldCheck className="w-4 h-4" /> Admin
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -918,7 +937,7 @@ export default function CalendarHome() {
                   return <p className="text-sm text-zinc-500 text-center py-6">{t('noItemsFound', language)}</p>;
                 }
 
-                return filtered.map((ev: any, idx: number) => {
+                return filtered.map((ev: any) => {
                   let Icon = Circle;
                   let colorClass = 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800';
 
@@ -935,8 +954,8 @@ export default function CalendarHome() {
                   }
 
                   return (
-                    <div 
-                      key={idx} 
+                    <div
+                      key={ev.id}
                       onClick={() => { setOverviewModalType(null); setSelectedEvent(ev); }}
                       className="flex items-start gap-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors border border-zinc-200 dark:border-zinc-700"
                     >

@@ -18,6 +18,12 @@ const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 50);
 const NOTIF_DAILY_LIMIT = Number(process.env.NOTIF_DAILY_LIMIT || 100);
 
+// Admin backend access. Source of truth = the `admins/{uid}` collection (locked
+// to clients; only the Admin SDK writes it). A VERIFIED email in this bootstrap
+// list is auto-granted admin on first admin call (so the owner works out of the
+// box, no script) — verification required to block email-squatting.
+const BOOTSTRAP_ADMIN_EMAILS = ["besliandrei@gmail.com"];
+
 // Per-user, per-day quota counter (admin-only `*_usage` collections — clients
 // have no matching rule → denied). Returns true if within today's limit (and
 // records the use), false if over. Shared by the AI callables, the AI trigger,
@@ -45,6 +51,34 @@ async function assertAiCallerAllowed(request: { auth?: { uid?: string } }): Prom
     throw new HttpsError("resource-exhausted", "Daily AI limit reached. Please try again tomorrow.");
   }
   return uid;
+}
+
+// Admin gate for the admin-backend callables. Admin if `admins/{uid}` exists, or
+// the caller's VERIFIED email is in BOOTSTRAP_ADMIN_EMAILS (auto-provisioned into
+// `admins/{uid}` on first use so they appear in the admins list). Returns the uid.
+async function assertAdmin(request: { auth?: { uid?: string; token?: any } }): Promise<string> {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+  const db = admin.firestore();
+  const adminRef = db.doc(`admins/${uid}`);
+  const snap = await adminRef.get();
+  if (snap.exists) return uid;
+
+  const email = (request.auth?.token?.email || "").toLowerCase();
+  const emailVerified = request.auth?.token?.email_verified === true;
+  if (emailVerified && BOOTSTRAP_ADMIN_EMAILS.includes(email)) {
+    // Auto-provision the bootstrap owner so they show up in the admins list.
+    await adminRef.set({
+      email,
+      name: request.auth?.token?.name || email.split("@")[0],
+      addedBy: "bootstrap",
+      addedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return uid;
+  }
+  throw new HttpsError("permission-denied", "Admin access required.");
 }
 
 // Whether `uid` is a member of the given group.
@@ -785,5 +819,300 @@ export const acceptGroupInvite = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
     tx.update(inviteRef, { status: "accepted", toId: uid });
     return { status: "accepted", groupId: inv.groupId || null };
   });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// ADMIN BACKEND — all gated by assertAdmin(); data served via Admin SDK so we
+// never open read rules on user PII. Stats are computed on-read (refreshable).
+// ════════════════════════════════════════════════════════════════════════════
+
+// Fetch all Firebase Auth users (paginated, capped) for stats/profiles.
+async function listAllAuthUsers(max = 5000): Promise<{ users: admin.auth.UserRecord[]; truncated: boolean }> {
+  const out: admin.auth.UserRecord[] = [];
+  let token: string | undefined = undefined;
+  let truncated = false;
+  do {
+    const pageSize = Math.min(1000, max - out.length);
+    const res: admin.auth.ListUsersResult = await admin.auth().listUsers(pageSize, token);
+    out.push(...res.users);
+    token = res.pageToken;
+    if (token && out.length >= max) { truncated = true; break; }
+  } while (token);
+  return { users: out.slice(0, max), truncated };
+}
+
+const inc = (obj: Record<string, number>, key: string, by = 1) => {
+  if (!key) return;
+  obj[key] = (obj[key] || 0) + by;
+};
+
+// Is the current caller an admin? (Non-throwing for non-admins.)
+export const adminCheck = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  if (!request.auth?.uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+  try {
+    await assertAdmin(request);
+    return { isAdmin: true };
+  } catch {
+    return { isAdmin: false };
+  }
+});
+
+// Detailed platform statistics across every collection + Firebase Auth.
+export const adminGetStats = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  await assertAdmin(request);
+  const db = admin.firestore();
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+
+  // Accurate totals come from count() aggregation (never truncated); the capped
+  // doc reads below feed the breakdowns and flag `truncated` if they hit a cap.
+  const ct = (c: string) => db.collection(c).count().get().then((s) => s.data().count).catch(() => 0);
+  const [authResult, usersSnap, groupsSnap, eventsSnap, gamesSnap, assetsSnap,
+    friendReqSnap, invitesSnap, notifsSnap, adminsSnap, messagesCount,
+    groupsTotal, eventsTotal, gamesTotal, assetsTotal, notifTotal] = await Promise.all([
+    listAllAuthUsers(),
+    db.collection("users").limit(5000).get(),
+    db.collection("groups").limit(5000).get(),
+    db.collection("events").limit(8000).get(),
+    db.collection("games").limit(5000).get(),
+    db.collection("assets").limit(5000).get(),
+    db.collection("friend_requests").limit(5000).get(),
+    db.collection("group_invites").limit(5000).get(),
+    db.collection("notifications").limit(8000).get(),
+    db.collection("admins").get(),
+    db.collectionGroup("messages").count().get().then((s) => s.data().count).catch(() => 0),
+    ct("groups"), ct("events"), ct("games"), ct("assets"), ct("notifications"),
+  ]);
+  const authUsers = authResult.users;
+  const truncated = authResult.truncated ||
+    usersSnap.size >= 5000 || groupsSnap.size >= 5000 || eventsSnap.size >= 8000 ||
+    gamesSnap.size >= 5000 || assetsSnap.size >= 5000 || friendReqSnap.size >= 5000 ||
+    invitesSnap.size >= 5000 || notifsSnap.size >= 8000;
+
+  // ── Users (Firebase Auth + Firestore user docs) ──
+  const byProvider: Record<string, number> = {};
+  let verified = 0; let signups7d = 0; let signups30d = 0;
+  authUsers.forEach((u) => {
+    if (u.emailVerified) verified++;
+    const created = u.metadata?.creationTime ? new Date(u.metadata.creationTime).getTime() : 0;
+    if (created && now - created < 7 * day) signups7d++;
+    if (created && now - created < 30 * day) signups30d++;
+    inc(byProvider, u.providerData?.[0]?.providerId || "password");
+  });
+  let withBirthday = 0; let withPhoto = 0; let pushEnabled = 0; let withFriends = 0; let totalFriendEntries = 0;
+  usersSnap.forEach((d) => {
+    const u = d.data();
+    if (u.birthday) withBirthday++;
+    if (u.photoURL) withPhoto++;
+    if (Array.isArray(u.fcmTokens) && u.fcmTokens.length > 0) pushEnabled++;
+    if (Array.isArray(u.friends) && u.friends.length > 0) { withFriends++; totalFriendEntries += u.friends.length; }
+  });
+
+  // ── Groups ──
+  let memberships = 0; let largest = 0; let shared = 0;
+  groupsSnap.forEach((d) => {
+    const m = (d.data().members || []).length;
+    memberships += m;
+    if (m > largest) largest = m;
+    if (m > 1) shared++;
+  });
+
+  // ── Events ──
+  const evByCategory: Record<string, number> = {};
+  let tasks = 0; let completedTasks = 0; let recurring = 0; let withReminder = 0; let sharedFam = 0; let withRsvp = 0;
+  eventsSnap.forEach((d) => {
+    const e = d.data();
+    if (e.isTask) { tasks++; if (e.taskStatus === "completed") completedTasks++; }
+    if (e.recurrenceRule) recurring++;
+    if (e.reminderMinutes !== null && e.reminderMinutes !== undefined) withReminder++;
+    if (e.sharedWithFamily) sharedFam++;
+    if (e.rsvpEnabled) withRsvp++;
+    inc(evByCategory, e.categoryId || "other");
+  });
+
+  // ── Games ──
+  const gByType: Record<string, number> = {}; const gByStatus: Record<string, number> = {};
+  let finalized = 0;
+  gamesSnap.forEach((d) => {
+    const g = d.data();
+    inc(gByType, g.gameType || "unknown");
+    inc(gByStatus, g.status || "unknown");
+    if (g.finalized) finalized++;
+  });
+
+  // ── Assets ──
+  const aByCategory: Record<string, number> = {}; let assetsShared = 0;
+  assetsSnap.forEach((d) => {
+    const a = d.data();
+    if (a.sharedWithFamily) assetsShared++;
+    inc(aByCategory, a.category || "Uncategorized");
+  });
+
+  // ── Social ──
+  const frByStatus: Record<string, number> = {}; const invByStatus: Record<string, number> = {};
+  friendReqSnap.forEach((d) => inc(frByStatus, d.data().status || "pending"));
+  invitesSnap.forEach((d) => inc(invByStatus, d.data().status || "pending"));
+
+  // ── Notifications ──
+  const nByType: Record<string, number> = {}; let unread = 0;
+  notifsSnap.forEach((d) => {
+    const n = d.data();
+    if (!n.read) unread++;
+    inc(nByType, n.type || "info");
+  });
+
+  return {
+    generatedAt: new Date().toISOString(),
+    truncated, // true if a breakdown read hit its cap (totals from count() stay accurate)
+    users: {
+      total: authUsers.length, verified, unverified: authUsers.length - verified,
+      withBirthday, withPhoto, pushEnabled, withFriends,
+      friendships: Math.floor(totalFriendEntries / 2),
+      signups7d, signups30d, byProvider,
+    },
+    groups: {
+      total: groupsTotal, memberships, shared, solo: groupsTotal - shared,
+      avgMembers: groupsTotal ? Math.round((memberships / groupsTotal) * 10) / 10 : 0,
+      largest,
+    },
+    events: {
+      total: eventsTotal, tasks, completedTasks, pendingTasks: tasks - completedTasks,
+      plainEvents: eventsTotal - tasks, recurring, withReminder, sharedWithFamily: sharedFam,
+      withRsvp, byCategory: evByCategory,
+    },
+    games: { total: gamesTotal, byType: gByType, byStatus: gByStatus, finalized },
+    messages: { total: messagesCount },
+    assets: { total: assetsTotal, shared: assetsShared, byCategory: aByCategory },
+    social: { friendRequests: frByStatus, groupInvites: invByStatus },
+    notifications: { total: notifTotal, unread, byType: nByType },
+    admins: { total: adminsSnap.size },
+  };
+});
+
+// All user profiles — Firebase Auth merged with Firestore + per-user activity.
+export const adminListProfiles = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  await assertAdmin(request);
+  const db = admin.firestore();
+  const [authResult, usersSnap, profilesSnap, groupsSnap, eventsSnap, adminsSnap] = await Promise.all([
+    listAllAuthUsers(),
+    db.collection("users").limit(5000).get(),
+    db.collection("profiles").limit(5000).get(),
+    db.collection("groups").limit(5000).get(),
+    db.collection("events").limit(8000).get(),
+    db.collection("admins").get(),
+  ]);
+  const authUsers = authResult.users;
+
+  const userDocs: Record<string, any> = {};
+  usersSnap.forEach((d) => { userDocs[d.id] = d.data(); });
+  const profileDocs: Record<string, any> = {};
+  profilesSnap.forEach((d) => { profileDocs[d.id] = d.data(); });
+  const groupCount: Record<string, number> = {};
+  groupsSnap.forEach((d) => (d.data().members || []).forEach((uid: string) => inc(groupCount, uid)));
+  const eventCount: Record<string, number> = {};
+  eventsSnap.forEach((d) => { const o = d.data().ownerId; if (o) inc(eventCount, o); });
+  const adminUids = new Set(adminsSnap.docs.map((d) => d.id));
+
+  const profiles = authUsers.map((u) => {
+    const fs = userDocs[u.uid] || {};
+    const pr = profileDocs[u.uid] || {};
+    return {
+      uid: u.uid,
+      email: u.email || fs.email || null,
+      emailVerified: u.emailVerified,
+      disabled: u.disabled,
+      name: fs.name || pr.name || u.displayName || null,
+      photoURL: fs.photoURL || pr.photoURL || u.photoURL || null,
+      provider: u.providerData?.[0]?.providerId || "password",
+      createdAt: u.metadata?.creationTime || null,
+      lastSignInAt: u.metadata?.lastSignInTime || null,
+      birthday: fs.birthday || pr.birthday || null,
+      friends: Array.isArray(fs.friends) ? fs.friends.length : 0,
+      groups: groupCount[u.uid] || 0,
+      events: eventCount[u.uid] || 0,
+      pushEnabled: Array.isArray(fs.fcmTokens) && fs.fcmTokens.length > 0,
+      isAdmin: adminUids.has(u.uid),
+    };
+  }).sort((a, b) => (new Date(b.createdAt || 0).getTime()) - (new Date(a.createdAt || 0).getTime()));
+
+  return { profiles, count: profiles.length, truncated: authResult.truncated };
+});
+
+// Current admins with display details.
+export const adminListAdmins = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  await assertAdmin(request);
+  const db = admin.firestore();
+  const snap = await db.collection("admins").get();
+  const admins = await Promise.all(snap.docs.map(async (d) => {
+    const data = d.data();
+    let email = data.email || null;
+    let name = data.name || null;
+    let emailVerified: boolean | null = null;
+    try {
+      const u = await admin.auth().getUser(d.id);
+      email = email || u.email || null;
+      name = name || u.displayName || null;
+      emailVerified = u.emailVerified;
+    } catch { /* auth user may be gone */ }
+    return {
+      uid: d.id, email, name, emailVerified,
+      addedBy: data.addedBy || null,
+      addedAt: data.addedAt?.toDate?.()?.toISOString?.() || null,
+      bootstrap: BOOTSTRAP_ADMIN_EMAILS.includes((email || "").toLowerCase()),
+    };
+  }));
+  return { admins };
+});
+
+// Grant or revoke admin (admin-only). Accepts a uid or an email. Last-admin
+// protected; the bootstrap owner re-provisions on next call so can't be locked out.
+export const adminSetAdmin = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const callerUid = await assertAdmin(request);
+  const { uid, email, makeAdmin } = request.data || {};
+  if (typeof makeAdmin !== "boolean" || (!uid && !email)) {
+    throw new HttpsError("invalid-argument", "makeAdmin and a uid or email are required.");
+  }
+
+  let targetUid = uid as string | undefined;
+  let targetEmail = (email || "").toLowerCase();
+  let targetName: string | undefined;
+  try {
+    const rec = targetUid
+      ? await admin.auth().getUser(targetUid)
+      : await admin.auth().getUserByEmail(targetEmail);
+    targetUid = rec.uid;
+    targetEmail = (rec.email || targetEmail).toLowerCase();
+    targetName = rec.displayName || undefined;
+  } catch {
+    throw new HttpsError("not-found", "No user found for that uid/email.");
+  }
+
+  const db = admin.firestore();
+  const ref = db.doc(`admins/${targetUid}`);
+
+  if (makeAdmin) {
+    await ref.set({
+      email: targetEmail || null,
+      name: targetName || (targetEmail ? targetEmail.split("@")[0] : null),
+      addedBy: callerUid,
+      addedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { ok: true, uid: targetUid, makeAdmin: true };
+  }
+
+  // Revoke inside a transaction so the last-admin check and the delete are
+  // atomic (two concurrent revokes can't both pass the floor and empty the set).
+  await db.runTransaction(async (tx) => {
+    const all = await tx.get(db.collection("admins"));
+    const targetSnap = await tx.get(ref);
+    if (!targetSnap.exists) return; // already not an admin → no-op
+    if (all.size <= 1) {
+      throw new HttpsError("failed-precondition", "Can't remove the last admin.");
+    }
+    tx.delete(ref);
+  });
+  return { ok: true, uid: targetUid, makeAdmin: false };
 });
 

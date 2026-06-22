@@ -146,6 +146,13 @@ service cloud.firestore {
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
+    // ── Admins ──
+    // Admin backend access list. Locked to clients entirely — only the Admin SDK
+    // (admin* Cloud Functions, which self-check assertAdmin) reads/writes it.
+    match /admins/{adminId} {
+      allow read, write: if false;
+    }
+
     // ── Friend Requests ──
     // Readable by the sender or the recipient (matched by uid or email). Any
     // signed-in user may send (must record an honest fromId). Responding

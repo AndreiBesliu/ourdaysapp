@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, setDoc, updateDoc, getDoc, arrayUnion } from 'firebase/firestore';
@@ -12,6 +12,7 @@ import CalendarHome from './screens/CalendarHome';
 import Wallet from './screens/Wallet';
 import Settings from './screens/Settings';
 import Friends from './screens/Friends';
+const Admin = lazy(() => import('./screens/Admin')); // owner-only, rarely used → lazy
 import { useThemeStore } from './store';
 
 function App() {
@@ -241,6 +242,10 @@ function App() {
         <Route
           path="/friends"
           element={user ? <Friends /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/admin"
+          element={user ? <Suspense fallback={null}><Admin /></Suspense> : <Navigate to="/login" />}
         />
       </Routes>
     </BrowserRouter>

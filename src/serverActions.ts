@@ -46,3 +46,31 @@ export async function acceptGroupInvite(inviteId: string): Promise<void> {
   const fn = httpsCallable(getFunctions(app), "acceptGroupInvite");
   await fn({ inviteId });
 }
+
+// ── Admin backend (all server-gated by assertAdmin) ──
+export async function adminCheck(): Promise<boolean> {
+  const fn = httpsCallable(getFunctions(app), "adminCheck");
+  const res = await fn({});
+  return (res.data as { isAdmin?: boolean })?.isAdmin === true;
+}
+export async function adminGetStats(): Promise<any> {
+  const fn = httpsCallable(getFunctions(app), "adminGetStats");
+  return (await fn({})).data;
+}
+export async function adminListProfiles(): Promise<{ profiles: any[]; count: number }> {
+  const fn = httpsCallable(getFunctions(app), "adminListProfiles");
+  return (await fn({})).data as { profiles: any[]; count: number };
+}
+export async function adminListAdmins(): Promise<{ admins: any[] }> {
+  const fn = httpsCallable(getFunctions(app), "adminListAdmins");
+  return (await fn({})).data as { admins: any[] };
+}
+export async function adminSetAdmin(params: { uid?: string; email?: string; makeAdmin: boolean }): Promise<void> {
+  const fn = httpsCallable(getFunctions(app), "adminSetAdmin");
+  await fn(params);
+}
+
+// Emails that see the Admin entry client-side (cosmetic only — the /admin screen
+// and every admin callable re-check server-side). Keep in sync with the
+// functions' BOOTSTRAP_ADMIN_EMAILS.
+export const ADMIN_BOOTSTRAP_EMAILS = ["besliandrei@gmail.com"];
