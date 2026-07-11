@@ -3,7 +3,7 @@ import { isSameDay, format, startOfMonth, endOfMonth, addMonths, subMonths } fro
 import { auth, db, messaging } from '../firebase';
 import { getToken } from 'firebase/messaging';
 import { collection, query, onSnapshot, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
-import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu, ShieldCheck } from 'lucide-react';
+import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu, ShieldCheck, Swords } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import CalendarGrid from '../components/CalendarGrid';
@@ -481,6 +481,13 @@ export default function CalendarHome() {
               <ShieldCheck className="w-5 h-5" />
             </button>
           )}
+          <button
+            onClick={() => navigate('/warlord')}
+            className="hidden sm:flex p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-full transition-colors"
+            title="Warlord"
+          >
+            <Swords className="w-5 h-5" />
+          </button>
 
           {/* Mobile Menu */}
           <div className="sm:hidden relative">
@@ -528,6 +535,12 @@ export default function CalendarHome() {
                     <ShieldCheck className="w-4 h-4" /> Admin
                   </button>
                 )}
+                <button
+                  onClick={() => { navigate('/warlord'); setIsMobileMenuOpen(false); }}
+                  className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-rose-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
+                >
+                  <Swords className="w-4 h-4" /> Warlord
+                </button>
               </div>
             )}
           </div>

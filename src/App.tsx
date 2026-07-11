@@ -13,6 +13,7 @@ import Wallet from './screens/Wallet';
 import Settings from './screens/Settings';
 import Friends from './screens/Friends';
 const Admin = lazy(() => import('./screens/Admin')); // owner-only, rarely used → lazy
+const Warlord = lazy(() => import('./screens/Warlord')); // large embedded game → lazy chunk
 import { useThemeStore } from './store';
 
 function App() {
@@ -246,6 +247,10 @@ function App() {
         <Route
           path="/admin"
           element={user ? <Suspense fallback={null}><Admin /></Suspense> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/warlord"
+          element={user ? <Suspense fallback={null}><Warlord /></Suspense> : <Navigate to="/login" />}
         />
       </Routes>
     </BrowserRouter>

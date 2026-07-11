@@ -136,6 +136,28 @@
 
 ---
 
+## 📅 Session Log: July 11, 2026
+
+**Task Started**
+> Prompt: "vreau sa ii facem deploy in aplicatia OurDaysApp si sa il lucram acolo, iar eu sa il testez in aplicatie" (about the Warlord strategy game, developed standalone in Apps/games/warlord)
+> Plan: Embed the whole single-player Warlord game into OurDaysApp as a lazy `/warlord` route so it can be played/tested in the live app; no backend (localStorage). English-only i18n for now. Keep the standalone repo and the embedded copy identical.
+> Model: Claude Opus 4.8
+
+**Task Completed**
+> Model: Claude Opus 4.8
+> Decisions (Andrei): whole game single-player first (PvP later); English UI for now (noted exception to the 6-language rule); both repos kept in sync.
+> Changes:
+> - `src/warlord/` — copied the entire Warlord game (logic/state/components/mods/assets + `WarlordApp.tsx`). ~46 PNGs.
+> - `src/screens/Warlord.tsx` — full-width screen wrapper (back-to-app button) rendering `WarlordApp`; NOT the arcade modal (too small for the multi-tab layout) and NOT group/date-scoped.
+> - `src/App.tsx` — `const Warlord = lazy(() => import('./screens/Warlord'))` + auth-gated `/warlord` route (mirrors `/admin`).
+> - `src/screens/CalendarHome.tsx` — a ⚔ (Swords) header button (desktop + mobile menu) navigating to `/warlord`.
+> - Strict-build cleanup of the copied code (this repo's `tsc -b` enforces `verbatimModuleSyntax` + `noUnusedLocals/Parameters`): `import type` conversions, removed unused React/imports/vars. Same fixes mirrored back to the standalone repo so both stay identical.
+> - State is local `localStorage` (`warlord_save`), no Firestore. Known follow-ups: localStorage is device-local (not uid-scoped yet); ~8MB of PNGs (unused assets could be trimmed); UI is English-only.
+> Build: `tsc -b` ✅ + `npm run build` ✅ — Warlord is a separate lazy chunk (`Warlord-*.js` ~118kB / gzip 32kB); the main bundle is unchanged. Deployed: `firebase deploy --only hosting` ✅ → live at https://our-days-2a939.web.app/warlord (reachable via the ⚔ header button).
+> Verified locally (temporary auth-gate bypass, reverted): `/warlord` renders with no console errors; the full Load → Campaign → Deploy → March → battle-grid flow works in the embedded context.
+
+---
+
 ## ðŸ“… Session Log: May 5, 2026
 
 **~18:10 - Task Started**: Implementing Task Assignment Constraints and Autosave Engine.
