@@ -140,6 +140,21 @@
 
 ## 📅 Session Log: July 12, 2026
 
+**Task Started (Warlord development round)**
+> Prompt: "vreau sa imbunatatim si sa dezvoltam jocul / deci? / limita este libera"
+> Plan: Game-development round on the embedded Warlord (synced 1:1 from the standalone repo): fix save-lost-on-refresh + dead split/merge/training state, add rank promotion from XP, building upgrade levels, campaign progression (one battle/day, escalation, win-streak loot), attack forecast panel, battle report, per-uid saves in the embed.
+> Model: Claude Opus 4.8
+
+**Task Completed (Warlord development round)**
+> Model: Claude Opus 4.8
+> Changes (all inside `src/warlord/` — synced 1:1 with the standalone repo — plus `src/screens/Warlord.tsx`):
+> - CRITICAL FIX: saves survive page refresh now (hydrate-on-init; previously the mount-time save-effect clobbered the stored save with fresh state before Load could be pressed).
+> - Split/Merge/Training toggle now actually work (were writing to a dead local state).
+> - New systems: rank promotion from XP (training + battle, thresholds 100/250/450/700), building levels L1–L3 (+30%/+60% output, upgrade = 60%×base×level), campaign progression (one battle per day, per-mission enemy escalation +5%/clear cap +50%, win-streak loot bonus), attack forecast panel (expected kills/losses before committing, pure/no-rng), per-unit battle report with promotions.
+> - `screens/Warlord.tsx`: per-user saves — `warlord_save_{uid}` (+ one-time migration from the old shared `warlord_save`), so family members on one device keep separate domains.
+> Build: `tsc -b` ✅ + `npm run build` ✅ (Warlord lazy chunk ~126kB). Standalone tests 18/18 ✅. Verified end-to-end in local preview (temporary auth bypass, reverted): hydration on refresh, old-save compat, promotion with XP overflow, building upgrade cost math, daily battle limit, forecast-panel attack flow.
+> Deployed + pushed after adversarial multi-agent code review of the diff (19 agents, 15 confirmed findings = 9 distinct, all fixed). Highlights: CRITICAL — a mid-mount saveKey change (auth flip while /warlord mounted) would overwrite the new user's save with the old user's in-memory state → fixed with `key={saveKey}` remount + a hydratedKey guard in the persist effect; MAJOR — legacy-save migration could be consumed by an anonymous render → now runs only for a real authenticated uid; MAJOR — daily upkeep/food morale checks used the pre-income snapshot (penalizing units whose upkeep was actually paid) → checks now use post-production values.
+
 **Task Started (Admin Phase 2)**
 > Prompt: "continua" (following the multi-select where Andrei chose all four admin additions; Phase 1 = Error monitoring/Health + drill-down/moderation already shipped)
 > Plan: Build Admin Phase 2 — Broadcast notifications, Groups explorer, and 30-day growth charts.

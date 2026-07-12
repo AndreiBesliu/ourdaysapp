@@ -6,7 +6,7 @@
 
 import type { Unit, UnitBucket, Rank, Weapon } from '../types'
 import { Ranks, RankNumber } from '../types'
-import { computeEquipped, computeUnitAvgXP } from '../units'
+import { computeEquipped, computeUnitAvgXP, promoteBuckets, type Promotion } from '../units'
 import { Registry } from '../registry'
 import type { BattleState, Combatant, Side } from './types'
 import { COMBAT_XP_K, XP_CAP } from './stats'
@@ -80,24 +80,46 @@ function applyKillsLowestRankFirst(buckets: UnitBucket[], killCount: number): Un
   return copy.filter((b) => b.count > 0)
 }
 
-function applyCasualtiesToUnit(u: Unit, c: Combatant, won: boolean): Unit | null {
+function applyCasualtiesToUnit(
+  u: Unit, c: Combatant, won: boolean,
+): { unit: Unit | null; xpGain: number; promotions: Promotion[] } {
   const survivors = c.hp
-  if (survivors <= 0) return null
+  if (survivors <= 0) return { unit: null, xpGain: 0, promotions: [] }
   const killCount = Math.max(0, c.hpStart - survivors)
 
   const kept = applyKillsLowestRankFirst(u.buckets, killCount)
-  if (kept.length === 0) return null
+  if (kept.length === 0) return { unit: null, xpGain: 0, promotions: [] }
 
   const survCount = kept.reduce((a, b) => a + b.count, 0)
   let xpGain = Math.min(XP_CAP, Math.round((COMBAT_XP_K * c.kills) / Math.max(1, survCount)))
   if (!won) xpGain = Math.round(xpGain * 0.4)
   if (xpGain > 0) for (const b of kept) b.avgXP += xpGain
 
+  // Battle veterancy: XP crossing a rank threshold promotes on the spot.
+  const { buckets: promoted, promotions } = promoteBuckets(kept)
+
   const lossFrac = killCount / Math.max(1, c.hpStart)
   const delta = won ? 10 - Math.round(20 * lossFrac) : -15 - Math.round(30 * lossFrac)
   const morale = Math.max(0, Math.min(100, c.morale + delta))
 
-  return { ...u, buckets: kept, avgXP: computeUnitAvgXP(kept), morale }
+  return {
+    unit: { ...u, buckets: promoted, avgXP: computeUnitAvgXP(promoted), morale },
+    xpGain,
+    promotions,
+  }
+}
+
+// Per-unit battle report line, shown on the result screen.
+export interface UnitReport {
+  unitId: string
+  name: string
+  type: string
+  fielded: number
+  lost: number
+  survivors: number
+  xpGain: number
+  destroyed: boolean
+  promotions: Promotion[]
 }
 
 export interface BattleOutcome {
@@ -106,6 +128,7 @@ export interface BattleOutcome {
   totalLosses: number
   totalKills: number
   destroyed: number
+  report: UnitReport[]
 }
 
 // Apply a finished battle to the army. Only units in `deployedUnitIds` are touched;
@@ -119,6 +142,7 @@ export function applyBattleResult(units: Unit[], finalState: BattleState, deploy
   }
 
   const out: Unit[] = []
+  const report: UnitReport[] = []
   let totalLosses = 0
   let totalKills = 0
   let destroyed = 0
@@ -133,16 +157,33 @@ export function applyBattleResult(units: Unit[], finalState: BattleState, deploy
     if (!c || c.hp <= 0) {
       totalLosses += before
       destroyed++
+      if (c) totalKills += c.kills
+      report.push({
+        unitId: u.id, name: prettyName(u.type), type: u.type,
+        fielded: before, lost: before, survivors: 0, xpGain: 0, destroyed: true, promotions: [],
+      })
       continue
     }
     totalKills += c.kills
     totalLosses += Math.max(0, c.hpStart - c.hp)
-    const updated = applyCasualtiesToUnit(u, c, won)
-    if (updated) out.push(updated)
-    else destroyed++
+    const res = applyCasualtiesToUnit(u, c, won)
+    if (res.unit) {
+      out.push(res.unit)
+      report.push({
+        unitId: u.id, name: prettyName(u.type), type: u.type,
+        fielded: c.hpStart, lost: Math.max(0, c.hpStart - c.hp), survivors: c.hp,
+        xpGain: res.xpGain, destroyed: false, promotions: res.promotions,
+      })
+    } else {
+      destroyed++
+      report.push({
+        unitId: u.id, name: prettyName(u.type), type: u.type,
+        fielded: c.hpStart, lost: c.hpStart, survivors: 0, xpGain: 0, destroyed: true, promotions: [],
+      })
+    }
   }
 
-  return { units: out, won, totalLosses, totalKills, destroyed }
+  return { units: out, won, totalLosses, totalKills, destroyed, report }
 }
 
 export function armyStrength(units: Unit[], ids?: string[]): number {

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Unit } from '../../logic/types'
 import type { Difficulty, MissionPreset } from '../../logic/combat/types'
 import { fieldedStrength, prettyName } from '../../logic/combat/army'
+import { escalationMult } from '../../logic/combat/enemies'
 import GameIcon from '../common/GameIcon'
 import { getIconForGameItem } from '../../logic/iconHelpers'
 
@@ -9,16 +10,18 @@ interface Props {
   units: Unit[]
   difficulty: Difficulty
   preset: MissionPreset
+  clears: number
   onConfirm: (ids: string[]) => void
   onBack: () => void
 }
 
-export default function DeployPanel({ units, preset, onConfirm, onBack }: Props) {
+export default function DeployPanel({ units, preset, clears, onConfirm, onBack }: Props) {
   const [picked, setPicked] = useState<string[]>([])
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
 
   const deployStrength = units.filter((u) => picked.includes(u.id)).reduce((a, u) => a + fieldedStrength(u), 0)
-  const estEnemy = Math.round(deployStrength * preset.ratio)
+  // Same escalation the actual army generator applies — the estimate must not undersell.
+  const estEnemy = Math.round(deployStrength * preset.ratio * escalationMult(clears))
 
   return (
     <div className="space-y-4">

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { GameStateShape } from '../../state/useGameState'
 import type { Difficulty } from '../../logic/combat/types'
-import { combatantById } from '../../logic/combat/engine'
+import { combatantById, legalTargets, forecastAttack } from '../../logic/combat/engine'
 import Card from '../common/Card'
 import BattleGrid from '../campaign/BattleGrid'
 import BattleLog from '../campaign/BattleLog'
@@ -27,10 +27,14 @@ export default function CampaignTab({ state }: { state: GameStateShape }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [side, status])
 
-  // Drop a stale selection when it's no longer the player's to command.
+  // Drop a stale selection when it's no longer the player's to command (or it died —
+  // destroyed combatants stay in the array with hp 0 to preserve their kill stats).
   useEffect(() => {
     if (!battle || battle.side !== 'PLAYER' || battle.status !== 'ONGOING') { setSelectedId(null); return }
-    if (selectedId && !combatantById(battle, selectedId)) setSelectedId(null)
+    if (selectedId) {
+      const c = combatantById(battle, selectedId)
+      if (!c || c.hp <= 0) setSelectedId(null)
+    }
   }, [battle, selectedId])
 
   // ---- Active battle ----
@@ -101,6 +105,36 @@ export default function CampaignTab({ state }: { state: GameStateShape }) {
                 </div>
               )}
             </div>
+
+            {/* Attack forecast: mean-variance preview for every legal target of the selection */}
+            {sel && canControl && !sel.hasActed && (() => {
+              const forecasts = legalTargets(battle, sel.id)
+                .map((tid) => forecastAttack(battle, sel.id, tid))
+                .filter((f): f is NonNullable<typeof f> => !!f)
+              if (forecasts.length === 0) return null
+              return (
+                <div className="border rounded-lg p-3 bg-red-50/60">
+                  <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">Attack forecast</div>
+                  <div className="space-y-1">
+                    {forecasts.map((f) => (
+                      <button
+                        key={f.targetId}
+                        onClick={() => state.battleCommand({ kind: 'ATTACK', id: sel.id, targetId: f.targetId })}
+                        className="w-full text-left text-xs border rounded px-2 py-1 bg-white hover:bg-red-100 transition-colors"
+                        title={f.melee ? 'Melee attack (may take retaliation)' : 'Ranged attack (no retaliation)'}
+                      >
+                        <span className="font-semibold">{f.targetName}</span>{' '}
+                        <span className="text-red-700 font-mono">~{f.kills} kills{f.lethal ? ' ☠' : ''}</span>
+                        {f.melee && f.retalKills > 0 && (
+                          <span className="text-stone-500 font-mono"> / lose ~{f.retalKills}</span>
+                        )}
+                        {!f.melee && <span className="text-stone-400"> (ranged)</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
             <div className="border rounded-lg p-3 bg-stone-50">
               <div className="text-xs uppercase tracking-wide text-stone-500 mb-1">Battle log</div>
               <BattleLog battle={battle} />
@@ -132,6 +166,9 @@ export default function CampaignTab({ state }: { state: GameStateShape }) {
           presets={state.MISSION_PRESETS}
           difficulties={state.DIFFICULTIES}
           record={campaign.record}
+          streak={campaign.streak ?? 0}
+          clears={campaign.clears ?? {}}
+          canFightToday={campaign.lastBattleDay !== state.day}
           onPick={(d) => { setPendingDifficulty(d); setMode('DEPLOY') }}
         />
       )}
@@ -140,6 +177,7 @@ export default function CampaignTab({ state }: { state: GameStateShape }) {
           units={state.units}
           difficulty={pendingDifficulty}
           preset={state.MISSION_PRESETS[pendingDifficulty]}
+          clears={campaign.clears?.[pendingDifficulty] ?? 0}
           onConfirm={(ids) => { state.startBattle(ids, pendingDifficulty); setMode('MENU'); setPendingDifficulty(null) }}
           onBack={() => { setMode('MENU'); setPendingDifficulty(null) }}
         />

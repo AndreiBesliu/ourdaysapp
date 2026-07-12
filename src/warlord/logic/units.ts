@@ -245,3 +245,64 @@ export function mergeUnits(a: Unit, b: Unit): Unit {
 
 export const trainingGainPerDay = (r: Rank) =>
   (RankIndex[r] >= 3 ? 0 : 25 + 10 * RankIndex[r])
+
+// ---- Rank promotion ----
+// XP a bucket must reach to promote OUT of its rank. Training XP alone carries a
+// soldier to VETERAN (trainingGainPerDay is 0 at VETERAN+); ELITE is earned in battle.
+export const PROMOTE_AT: Record<Rank, number | null> = {
+  NOVICE: 100,
+  TRAINED: 250,
+  ADVANCED: 450,
+  VETERAN: 700,
+  ELITE: null,
+}
+
+const RANK_ORDER: Rank[] = ['NOVICE', 'TRAINED', 'ADVANCED', 'VETERAN', 'ELITE']
+
+export function nextRank(r: Rank): Rank | null {
+  const i = RANK_ORDER.indexOf(r)
+  return i >= 0 && i < RANK_ORDER.length - 1 ? RANK_ORDER[i + 1] : null
+}
+
+export interface Promotion { from: Rank; to: Rank; count: number }
+
+// Promote every bucket whose avgXP reached its rank's threshold, carrying overflow XP
+// into the next rank (so training days aren't wasted). Buckets landing on an existing
+// higher bucket merge with a count-weighted XP average. Pure; returns the SAME array
+// reference when nothing promotes so callers can cheaply skip no-op state writes.
+export function promoteBuckets(buckets: Bucket[]): { buckets: Bucket[]; promotions: Promotion[] } {
+  const promotions: Promotion[] = []
+  let cur = buckets
+  // A bucket promotes at most one rank per pass; loop until stable (bounded by ranks).
+  for (let pass = 0; pass < RANK_ORDER.length; pass++) {
+    let changed = false
+    const out: Bucket[] = []
+    for (const b of cur) {
+      const threshold = PROMOTE_AT[b.r]
+      const to = nextRank(b.r)
+      if (threshold !== null && to && b.count > 0 && b.avgXP >= threshold) {
+        promotions.push({ from: b.r, to, count: b.count })
+        out.push({ r: to, count: b.count, avgXP: Math.max(0, b.avgXP - threshold) })
+        changed = true
+      } else {
+        out.push({ ...b })
+      }
+    }
+    if (!changed) break
+    // merge duplicates of the same rank (promoted bucket meets an existing one)
+    const merged = new Map<Rank, { count: number; wx: number }>()
+    for (const b of out) {
+      const prev = merged.get(b.r) || { count: 0, wx: 0 }
+      prev.count += b.count
+      prev.wx += b.count * b.avgXP
+      merged.set(b.r, prev)
+    }
+    cur = RANK_ORDER
+      .filter(r => merged.has(r))
+      .map(r => {
+        const m = merged.get(r)!
+        return { r, count: m.count, avgXP: m.count ? Math.floor(m.wx / m.count) : 0 }
+      })
+  }
+  return promotions.length ? { buckets: cur, promotions } : { buckets, promotions }
+}

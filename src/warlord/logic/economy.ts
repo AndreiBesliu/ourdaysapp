@@ -142,15 +142,31 @@ export function dailyFoodConsumption(units: Unit[]): number {
   return total
 }
 
+// ---- Building levels ----
+export const BUILDING_MAX_LEVEL = 3
+
+// Output multiplier per level: L1 ×1.0, L2 ×1.3, L3 ×1.6
+export function buildingLevelMult(level: number): number {
+  const lvl = Math.max(1, Math.min(BUILDING_MAX_LEVEL, Math.floor(level || 1)))
+  return 1 + 0.3 * (lvl - 1)
+}
+
+// Copper cost to upgrade FROM `currentLevel` to the next: 60% of base cost × current level.
+export function buildingUpgradeCostCopper(type: BuildingType, currentLevel: number): number {
+  const base = BuildingCostCopper[type] || 0
+  return Math.round(base * 0.6 * Math.max(1, currentLevel))
+}
+
 export function passiveIncomeAndProduction(args: {
   costCopper: number
   focusCoinPct: (typeof FocusOptions)[number]
   outputItem: string
   fractionalBuffer: number
+  level?: number
 }): { coinGain: number; items: number; newBuffer: number } {
   const { costCopper, focusCoinPct, outputItem, fractionalBuffer } = args
 
-  const basePerDay = RESOURCE_BUILDING_BASE_VALUE[outputItem] ?? (0.10 * costCopper)
+  const basePerDay = (RESOURCE_BUILDING_BASE_VALUE[outputItem] ?? (0.10 * costCopper)) * buildingLevelMult(args.level ?? 1)
   if (!basePerDay) return { coinGain: 0, items: 0, newBuffer: fractionalBuffer }
 
   const coinGain = Math.round(basePerDay * (focusCoinPct / 100))

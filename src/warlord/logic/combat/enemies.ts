@@ -84,9 +84,9 @@ function makeEnemyCombatant(i: number, type: SoldierType, rank: Rank, count: num
   }
 }
 
-export function generateEnemyArmy(preset: MissionPreset, playerStrength: number, seed: number): Combatant[] {
+export function generateEnemyArmy(preset: MissionPreset, playerStrength: number, seed: number, ratioMult = 1): Combatant[] {
   const rng = makeRng((seed ^ 0x51ed) >>> 0)
-  const targetStrength = Math.max(preset.minTokens, Math.round(playerStrength * preset.ratio))
+  const targetStrength = Math.max(preset.minTokens, Math.round(playerStrength * preset.ratio * ratioMult))
   let n = Math.round(targetStrength / 30)
   n = Math.max(preset.minTokens, Math.min(preset.maxTokens, n))
 
@@ -161,24 +161,29 @@ export interface CreatedBattle {
   enemyStrength: number
 }
 
-export function computeReward(preset: MissionPreset, enemyStrength: number): { copper: number; resources: Partial<Record<string, number>> } {
-  const copper = Math.round(preset.rewardCopperPerStrength * enemyStrength)
+export function computeReward(preset: MissionPreset, enemyStrength: number, rewardMult = 1): { copper: number; resources: Partial<Record<string, number>> } {
+  const copper = Math.round(preset.rewardCopperPerStrength * enemyStrength * rewardMult)
   const resources: Partial<Record<string, number>> = {}
   for (const [k, v] of Object.entries(preset.rewardResources)) {
-    resources[k] = Math.max(1, Math.round((v as number) * (enemyStrength / 50)))
+    resources[k] = Math.max(1, Math.round((v as number) * (enemyStrength / 50) * rewardMult))
   }
   return { copper, resources }
 }
 
+export interface BattleMods {
+  ratioMult?: number // campaign escalation: enemy strength multiplier (1 = base)
+  rewardMult?: number // win-streak bonus: loot multiplier (1 = base)
+}
+
 // High-level entry point: deployedUnits are the actual Unit objects the player committed.
-export function createBattle(deployedUnits: Unit[], difficulty: Difficulty, seed: number): CreatedBattle {
+export function createBattle(deployedUnits: Unit[], difficulty: Difficulty, seed: number, mods?: BattleMods): CreatedBattle {
   const preset = MISSION_PRESETS[difficulty]
   const w = BATTLE_WIDTH
   const h = BATTLE_HEIGHT
 
   const playerCombatants = deployedUnits.map((u, i) => unitToCombatant(u, 'PLAYER', i))
   const playerStrength = armyStrength(deployedUnits)
-  const enemyCombatants = generateEnemyArmy(preset, playerStrength, seed)
+  const enemyCombatants = generateEnemyArmy(preset, playerStrength, seed, mods?.ratioMult ?? 1)
   const enemyStrength = enemyCombatants.reduce((a, c) => a + c.hpStart, 0)
   const terrain = generateTerrain(seed, w, h)
 
@@ -198,8 +203,18 @@ export function createBattle(deployedUnits: Unit[], difficulty: Difficulty, seed
   return {
     state,
     deployedIds: deployedUnits.map((u) => u.id),
-    reward: computeReward(preset, enemyStrength),
+    reward: computeReward(preset, enemyStrength, mods?.rewardMult ?? 1),
     playerStrength,
     enemyStrength,
   }
+}
+
+// Campaign escalation curve: each prior clear of a mission raises enemy strength 5%, cap +50%.
+export function escalationMult(clears: number): number {
+  return Math.min(1.5, 1 + 0.05 * Math.max(0, clears))
+}
+
+// Win-streak loot curve: each consecutive victory raises loot 5%, cap +50%.
+export function streakLootMult(streak: number): number {
+  return Math.min(1.5, 1 + 0.05 * Math.max(0, streak))
 }

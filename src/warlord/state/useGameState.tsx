@@ -14,19 +14,19 @@ import {
 } from '../logic/training'
 
 //state
-import { dailyUpkeepCopper, dailyFoodConsumption } from '../logic/economy'
+import { dailyUpkeepCopper, dailyFoodConsumption, buildingUpgradeCostCopper, buildingLevelMult, BUILDING_MAX_LEVEL } from '../logic/economy'
 import { useEconomy } from './useEconomy'
 import { useUnits } from './useUnits'
 import useBarracks, { emptyBarracks } from './useBarracks'
-import { computeReady, mergeUnits, splitUnit, applyMoraleChange } from '../logic/units'
+import { computeReady, mergeUnits, splitUnit, applyMoraleChange, trainingGainPerDay, promoteBuckets, computeUnitAvgXP } from '../logic/units'
 import { Registry } from '../logic/registry'
 import { rollDailyEvent } from '../logic/events'
 import { loadSampleMod } from '../mods/sampleMod';
-import { useCampaign, emptyCampaign, type CampaignReward } from './useCampaign'
+import { useCampaign, emptyCampaign, hydrateCampaign, type CampaignReward } from './useCampaign'
 import { applyCommand } from '../logic/combat/engine'
 import { chooseEnemyCommands } from '../logic/combat/ai'
-import { createBattle, MISSION_PRESETS, DIFFICULTIES } from '../logic/combat/enemies'
-import { applyBattleResult } from '../logic/combat/army'
+import { createBattle, MISSION_PRESETS, DIFFICULTIES, escalationMult, streakLootMult } from '../logic/combat/enemies'
+import { applyBattleResult, prettyName } from '../logic/combat/army'
 import type { Command, Difficulty } from '../logic/combat/types'
 
 // Initialize registry with core data
@@ -49,27 +49,41 @@ const emptyResources: ResourceMap = {
   FOOD: 50,
 }
 
-export function useGameState() {
+function readSaveBlob(saveKey: string): any {
+  try {
+    const raw = localStorage.getItem(saveKey)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+export function useGameState(saveKey = 'warlord_save') {
+  // Hydrate-on-init: read the save ONCE, synchronously, before any state exists.
+  // (Previously the save-effect below ran on mount with fresh state and clobbered the
+  // stored save before the player could press Load — a page refresh lost all progress.)
+  const [saved] = useState(() => readSaveBlob(saveKey))
+  // Defense-in-depth: remember which key this state was hydrated from. If the caller
+  // ever changes saveKey without remounting (they should pass key={saveKey}), the
+  // persist effect must NOT write state hydrated from another user's key.
+  const [hydratedKey] = useState(saveKey)
+
   // day + log
-  const [day, setDay] = useState(1)
-  const [log, setLog] = useState<string[]>([])
+  const [day, setDay] = useState<number>(() => saved?.day ?? 1)
+  const [log, setLog] = useState<string[]>(() => saved?.log ?? [])
   const addLog = (s: string) => setLog(l => [`${new Date().toLocaleString()} — ${s} `, ...l])
 
-
-  // NOTE: this local units state is legacy/dead (the real list is unit.units from
-  // useUnits); doSplit/doMergeIfReady/toggleTraining still write to it. Kept as-is to
-  // stay identical to the standalone repo. The destructure drops the unused reader.
-  const [, setUnits] = useState<Unit[]>([])
   const [mergePick, setMergePick] = useState<string[]>([])
 
-  // slices
-  const econ = useEconomy(10 * GOLD, defaultBuildings)
-  const barr = useBarracks()
-  const unit = useUnits()
-  const camp = useCampaign()
+  // slices (each hydrates from the same save blob)
+  const econ = useEconomy(10 * GOLD, defaultBuildings, saved ?? undefined)
+  const barr = useBarracks(saved ?? undefined)
+  const unit = useUnits(saved?.units ?? undefined)
+  const camp = useCampaign(saved?.campaign)
 
   useEffect(() => {
-    localStorage.setItem('warlord_save', JSON.stringify({
+    if (saveKey !== hydratedKey) return // never clobber another key's save (see above)
+    localStorage.setItem(saveKey, JSON.stringify({
       day, log,
       wallet: econ.wallet, inv: econ.inv, buildings: econ.buildings, resources: econ.resources,
       barracks: barr.barracks, barracksLevel: barr.barracksLevel,
@@ -77,10 +91,10 @@ export function useGameState() {
       units: unit.units,
       campaign: camp.campaign,
     }))
-  }, [day, log, econ.wallet, econ.inv, econ.buildings, econ.resources, barr.barracks, barr.barracksLevel, barr.recruits, barr.batches, unit.units, camp.campaign]) // econ.resources & camp.campaign included so those-only changes persist
+  }, [saveKey, day, log, econ.wallet, econ.inv, econ.buildings, econ.resources, barr.barracks, barr.barracksLevel, barr.recruits, barr.batches, unit.units, camp.campaign]) // econ.resources & camp.campaign included so those-only changes persist
 
   function loadSave() {
-    const raw = localStorage.getItem('warlord_save')
+    const raw = localStorage.getItem(saveKey)
     if (!raw) return addLog('No save found.')
     try {
       const s = JSON.parse(raw)
@@ -94,7 +108,7 @@ export function useGameState() {
       barr.setRecruits(s.recruits ?? { count: 0, avgXP: 0 })
       barr.setBatches(s.batches ?? [])
       unit.setUnits(s.units ?? [])
-      camp.setCampaign(s.campaign ?? emptyCampaign())
+      camp.setCampaign(hydrateCampaign(s.campaign))
       addLog('Loaded save.')
     } catch { addLog('Failed to load save.') }
   }
@@ -111,6 +125,7 @@ export function useGameState() {
     barr.setBatches([])
     unit.setUnits([])
     camp.setCampaign(emptyCampaign())
+    setMergePick([])
   }
 
   // type HorseKey = 'LIGHT_HORSE' | 'HEAVY_HORSE'
@@ -220,6 +235,22 @@ export function useGameState() {
     econ.setBuildings(bs => bs.map(b => b.id === id ? { ...b, focusCoinPct: pct as any } : b))
   }
 
+  // Generic building upgrade (BARRACKS has its own leveling; MARKET/STABLE have no
+  // passive production to scale, so none of the three is upgradable here).
+  function upgradeBuilding(id: string) {
+    const b = econ.buildings.find(x => x.id === id)
+    if (!b) return
+    if (['BARRACKS', 'MARKET', 'STABLE'].includes(b.type)) { addLog(`${b.type} cannot be upgraded here.`); return }
+    const lvl = b.level ?? 1
+    if (lvl >= BUILDING_MAX_LEVEL) { addLog(`${b.type} is already at max level (L${BUILDING_MAX_LEVEL}).`); return }
+    const cost = buildingUpgradeCostCopper(b.type, lvl)
+    if (cost <= 0) { addLog(`${b.type} cannot be upgraded.`); return }
+    if (econ.wallet < cost) { addLog(`Not enough funds to upgrade ${b.type}. Need ${fmtCopper(cost)}.`); return }
+    econ.setWallet(w => w - cost)
+    econ.setBuildings(bs => bs.map(x => x.id === id ? { ...x, level: lvl + 1 } : x))
+    addLog(`⬆ Upgraded ${b.type} to L${lvl + 1} for ${fmtCopper(cost)} (output ×${buildingLevelMult(lvl + 1).toFixed(1)}).`)
+  }
+
   function setBuildingOutput(id: string, item: string) {
     econ.setBuildings(bs => bs.map(b => b.id === id ? { ...b, outputItem: item } : b))
   }
@@ -268,25 +299,22 @@ export function useGameState() {
   }
 
 
+  // NOTE: these used to write to a local, never-rendered `units` state — the buttons
+  // silently did nothing. They now operate on the real list (unit.setUnits).
   function toggleTraining(unitId: string) {
-    setUnits(us => {
-      const used = us.filter(u => u.training).length
-      const slots = barr.barracksLevel // or wherever your barracks level lives
-      return us.map(u => {
-        if (u.id !== unitId) return u
-        if (!u.training) {
-          if (used >= slots) { addLog(`Training queue full: ${used}/${slots}.`); return u }
-          return { ...u, training: true }
-        }
-        return { ...u, training: false }
-      })
-
-    })
-
+    // checks BEFORE setState (no addLog inside the updater)
+    const used = unit.units.filter(u => u.training).length
+    const target = unit.units.find(u => u.id === unitId)
+    if (!target) return
+    if (!target.training && used >= barr.barracksLevel) {
+      addLog(`Training queue full: ${used}/${barr.barracksLevel}.`)
+      return
+    }
+    unit.setUnits(us => us.map(u => u.id === unitId ? { ...u, training: !u.training } : u))
   }
 
   function doSplit(unitId: string, count: number) {
-    setUnits(us => {
+    unit.setUnits(us => {
       const i = us.findIndex(x => x.id === unitId)
       if (i === -1) return us
       const u = us[i]
@@ -311,7 +339,7 @@ export function useGameState() {
   function doMergeIfReady() {
     if (mergePick.length !== 2) return
     const [aId, bId] = mergePick
-    setUnits(us => {
+    unit.setUnits(us => {
       const a = us.find(x => x.id === aId)
       const b = us.find(x => x.id === bId)
       if (!a || !b || a.type !== b.type) return us
@@ -336,21 +364,26 @@ export function useGameState() {
 
   function runDailyTick() {
     const notes: string[] = []
-    const delta = econ.applyBuildingIncome(s => notes.push(s))
+    const income = econ.applyBuildingIncome(s => notes.push(s))
+    const delta = income.walletDelta
+    // Post-income/production values for this tick's checks: the setState updates from
+    // applyBuildingIncome are queued, so the render snapshot is one day behind.
+    const postWallet = econ.wallet + delta
+    const postRes = income.resources
 
     // Unit upkeep
     const upkeep = dailyUpkeepCopper(unit.units)
     if (upkeep > 0) {
       econ.setWallet(w => w - upkeep)
       notes.push(`Upkeep ${fmtCopper(upkeep)}`)
-      if (econ.wallet - upkeep < 0) {
+      if (postWallet - upkeep < 0) {
         notes.push('⚠ Nu poți plăti upkeep-ul!')
       }
     }
 
-    // Food consumption
+    // Food consumption (checked against TODAY's production, matching the decrement below)
     const foodNeeded = dailyFoodConsumption(unit.units)
-    const foodHave = econ.resources.FOOD ?? 0
+    const foodHave = postRes.FOOD ?? 0
     const foodShortage = foodNeeded > 0 && foodHave < foodNeeded
     if (foodNeeded > 0) {
       const foodConsumed = Math.min(foodNeeded, foodHave)
@@ -362,8 +395,30 @@ export function useGameState() {
     }
 
     // Morale update
-    const canPayUpkeep = econ.wallet >= upkeep
+    const canPayUpkeep = postWallet >= upkeep
     unit.setUnits(us => us.map(u => applyMoraleChange(u, canPayUpkeep, foodShortage)))
+
+    // Training XP + rank promotions. Logging is computed in a pre-pass over the current
+    // snapshot (buckets/XP are untouched by the morale update above, so the outcome is
+    // identical) — the state write itself stays a pure functional update.
+    const applyDailyXP = (u: Unit) => {
+      const base = u.training
+        ? u.buckets.map(b => ({ ...b, avgXP: b.avgXP + trainingGainPerDay(b.r) }))
+        : u.buckets
+      return promoteBuckets(base)
+    }
+    for (const u of unit.units) {
+      const promo = applyDailyXP(u)
+      for (const p of promo.promotions) {
+        notes.push(`⬆ ${p.count} ${prettyName(u.type)}: ${p.from} → ${p.to}`)
+        addLog(`⬆ ${p.count} ${prettyName(u.type)} promoted ${p.from} → ${p.to}.`)
+      }
+    }
+    unit.setUnits(us => us.map(u => {
+      const promo = applyDailyXP(u)
+      if (!u.training && promo.promotions.length === 0) return u
+      return { ...u, buckets: promo.buckets, avgXP: computeUnitAvgXP(promo.buckets) }
+    }))
 
     // Random daily event
     const event = rollDailyEvent()
@@ -397,58 +452,37 @@ export function useGameState() {
     addLog(`Day ${nextDay} — ${notes.join(' | ')} | Wallet Δ ${fmtCopper(delta - upkeep)}`)
     // Add: training batch progress here if you want (uses barr.batches etc)
 
-    // Process training batches
-    barr.setBatches(currentBatches => {
-      const kept: any[] = []
-      let finishedCount = 0
-
-      for (const b of currentBatches) {
-        // decrement days
-        const nextDays = b.daysRemaining - 1
-
-        if (nextDays > 0) {
-          kept.push({ ...b, daysRemaining: nextDays })
-        } else {
-          // Batch complete!
-          finishedCount++
-          const { kind, target, qty, fromType } = b
-
-          if (kind === 'LIGHT_TRAIN' && target) {
-            // Add soldiers
-            barr.setBarracks(prev => {
-              const pool = structuredClone(prev)
-              pool[target]['NOVICE'].count += qty // default to Rookie
-              return pool
-            })
-            addLog(`Training finished: ${qty} ${target} (ROOKIE).`)
-          } else if (kind === 'LIGHT_CAV' && fromType) {
-            // lightly trained -> light cav
-            barr.setBarracks(prev => {
-              const pool = structuredClone(prev)
-              pool['LIGHT_CAV']['NOVICE'].count += qty
-              return pool
-            })
-            addLog(`Conversion finished: ${qty} LIGHT_CAV.`)
-          } else if (kind === 'HEAVY_CAV') {
-            barr.setBarracks(prev => {
-              const pool = structuredClone(prev)
-              pool['HEAVY_CAV']['NOVICE'].count += qty
-              return pool
-            })
-            addLog(`Conversion finished: ${qty} HEAVY_CAV.`)
-          } else if (kind === 'HORSE_ARCHER') {
-            barr.setBarracks(prev => {
-              const pool = structuredClone(prev)
-              pool['HORSE_ARCHER']['NOVICE'].count += qty
-              return pool
-            })
-            addLog(`Conversion finished: ${qty} HORSE_ARCHER.`)
-          }
-        }
+    // Process training batches. Completion is computed in a pre-pass over the current
+    // snapshot (nothing else in this tick touches batches), so every setState below is
+    // a pure, side-effect-free updater — per the hard rule: no setState inside setState.
+    const keptBatches: typeof barr.batches = []
+    const finished: { pool: SoldierType; qty: number; note: string }[] = []
+    for (const b of barr.batches) {
+      const nextDays = b.daysRemaining - 1
+      if (nextDays > 0) {
+        keptBatches.push({ ...b, daysRemaining: nextDays })
+        continue
       }
-
-      return kept
-    })
+      const { kind, target, qty } = b
+      if (kind === 'LIGHT_TRAIN' && target) {
+        finished.push({ pool: target, qty, note: `Training finished: ${qty} ${target} (ROOKIE).` })
+      } else if (kind === 'LIGHT_CAV') {
+        finished.push({ pool: 'LIGHT_CAV', qty, note: `Conversion finished: ${qty} LIGHT_CAV.` })
+      } else if (kind === 'HEAVY_CAV') {
+        finished.push({ pool: 'HEAVY_CAV', qty, note: `Conversion finished: ${qty} HEAVY_CAV.` })
+      } else if (kind === 'HORSE_ARCHER') {
+        finished.push({ pool: 'HORSE_ARCHER', qty, note: `Conversion finished: ${qty} HORSE_ARCHER.` })
+      }
+    }
+    barr.setBatches(keptBatches)
+    if (finished.length) {
+      barr.setBarracks(prev => {
+        const pool = structuredClone(prev)
+        for (const f of finished) pool[f.pool]['NOVICE'].count += f.qty
+        return pool
+      })
+      finished.forEach(f => addLog(f.note))
+    }
   }
 
   function createUnitFromBarracks(
@@ -592,20 +626,25 @@ export function useGameState() {
 
   function startBattle(deployedUnitIds: string[], difficulty: Difficulty) {
     if (camp.campaign.battle) { addLog('A battle is already in progress.'); return }
+    if (camp.campaign.lastBattleDay === day) { addLog('⚔ Your host has already taken the field today. March again tomorrow.'); return }
     const chosen = unit.units.filter(u => deployedUnitIds.includes(u.id))
     if (chosen.length === 0) { addLog('Select at least one unit to deploy.'); return }
     // Seed selection is UI-level (not part of the deterministic engine); the battle is
     // fully reproducible from the seed stored inside its state.
     const seed = (Math.floor(Math.random() * 0x7fffffff)) >>> 0
-    const created = createBattle(chosen, difficulty, seed)
+    const ratioMult = escalationMult(camp.campaign.clears?.[difficulty] ?? 0)
+    const rewardMult = streakLootMult(camp.campaign.streak ?? 0)
+    const created = createBattle(chosen, difficulty, seed, { ratioMult, rewardMult })
     camp.setCampaign(c => ({
       ...c,
       battle: created.state,
       deployedIds: created.deployedIds,
       reward: created.reward,
       lastResult: null,
+      lastBattleDay: day,
     }))
-    addLog(`⚔ Battle started: ${MISSION_PRESETS[difficulty].name} (${chosen.length} units vs enemy strength ${created.enemyStrength}).`)
+    const esc = ratioMult > 1 ? ` (escalated ×${ratioMult.toFixed(2)})` : ''
+    addLog(`⚔ Battle started: ${MISSION_PRESETS[difficulty].name}${esc} (${chosen.length} units vs enemy strength ${created.enemyStrength}).`)
   }
 
   // Apply one player command to the active battle.
@@ -640,12 +679,19 @@ export function useGameState() {
       ? ` Loot: ${fmtCopper(c.reward.copper)}${Object.keys(c.reward.resources).length ? ' + resources' : ''}.`
       : ''
     addLog(`⚔ ${won ? 'Victory' : 'Defeat'} at ${MISSION_PRESETS[b.difficulty].name}! Lost ${outcome.totalLosses} soldiers${outcome.destroyed ? `, ${outcome.destroyed} units wiped out` : ''}, killed ${outcome.totalKills}.${rewardText}`)
+    for (const r of outcome.report) {
+      for (const p of r.promotions) addLog(`⬆ ${p.count} ${r.name} promoted ${p.from} → ${p.to} in battle.`)
+    }
     camp.setCampaign(prev => ({
       ...prev,
       battle: null,
       deployedIds: [],
       reward: null,
       record: { wins: prev.record.wins + (won ? 1 : 0), losses: prev.record.losses + (won ? 0 : 1) },
+      streak: won ? (prev.streak ?? 0) + 1 : 0,
+      clears: won
+        ? { ...prev.clears, [b.difficulty]: (prev.clears?.[b.difficulty] ?? 0) + 1 }
+        : prev.clears,
       lastResult: {
         difficulty: b.difficulty,
         won,
@@ -653,6 +699,7 @@ export function useGameState() {
         totalKills: outcome.totalKills,
         destroyed: outcome.destroyed,
         reward: won ? c.reward : null,
+        report: outcome.report,
       },
     }))
   }
@@ -670,7 +717,8 @@ export function useGameState() {
       deployedIds: [],
       reward: null,
       record: { ...prev.record, losses: prev.record.losses + 1 },
-      lastResult: { difficulty: b.difficulty, won: false, totalLosses: outcome.totalLosses, totalKills: outcome.totalKills, destroyed: outcome.destroyed, reward: null },
+      streak: 0,
+      lastResult: { difficulty: b.difficulty, won: false, totalLosses: outcome.totalLosses, totalKills: outcome.totalKills, destroyed: outcome.destroyed, reward: null, report: outcome.report },
     }))
   }
 
@@ -689,7 +737,7 @@ export function useGameState() {
     resources: econ.resources, // Export resources
     setWallet: econ.setWallet, setInv: econ.setInv, setBuildings: econ.setBuildings,
     BuildingCostCopper, BuildingOutputChoices, FocusOptions, ResourceBuildingCosts,
-    buy, sell, buyBuilding, setBuildingFocus, setBuildingOutput,
+    buy, sell, buyBuilding, setBuildingFocus, setBuildingOutput, upgradeBuilding,
 
     // barracks (state)
     recruits: barr.recruits,

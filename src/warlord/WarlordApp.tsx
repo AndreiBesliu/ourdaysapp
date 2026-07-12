@@ -13,19 +13,21 @@ import { useGameState } from './state/useGameState'
 
 import { fmtCopper as fmtCopperUtil } from './logic/types'
 
-export default function App() {
-  const state = useGameState()
+// saveKey scopes ALL persistence (game save + tick timers). The OurDaysApp embed passes
+// a per-user key (warlord_save_<uid>) so family members on one device don't share saves.
+export default function App({ saveKey = 'warlord_save' }: { saveKey?: string }) {
+  const state = useGameState(saveKey)
 
   // ---- auto day-tick every 5 minutes ----
   const TICK_MS = 5 * 60 * 1000; // 5 min
 
   // persisted auto/pause and next-tick target
   const [autoTick, setAutoTick] = useState<boolean>(() => {
-    const v = localStorage.getItem('autoTick');
+    const v = localStorage.getItem(`${saveKey}:autoTick`);
     return v ? v === 'true' : true; // default ON
   });
   const [nextTickAt, setNextTickAt] = useState<number>(() => {
-    const v = localStorage.getItem('nextTickAt');
+    const v = localStorage.getItem(`${saveKey}:nextTickAt`);
     // start a new 5-min window if missing or in the past
     const n = v ? parseInt(v, 10) : 0;
     return Number.isFinite(n) && n > Date.now() ? n : Date.now() + TICK_MS;
@@ -34,11 +36,11 @@ export default function App() {
 
   // keep localStorage in sync
   useEffect(() => {
-    localStorage.setItem('autoTick', String(autoTick));
-  }, [autoTick]);
+    localStorage.setItem(`${saveKey}:autoTick`, String(autoTick));
+  }, [saveKey, autoTick]);
   useEffect(() => {
-    localStorage.setItem('nextTickAt', String(nextTickAt));
-  }, [nextTickAt]);
+    localStorage.setItem(`${saveKey}:nextTickAt`, String(nextTickAt));
+  }, [saveKey, nextTickAt]);
 
   // 1s heartbeat to update countdown and fire daily ticks
   useEffect(() => {

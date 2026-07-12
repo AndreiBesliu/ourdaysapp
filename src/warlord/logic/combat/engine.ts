@@ -215,17 +215,53 @@ function resolveDamage(s: BattleState, a: Combatant, d: Combatant, opts: DamageO
 // at a hypothetical tile (aX/aY) with aMoved=true to score a charge after moving.
 export function estimateKills(
   s: BattleState, a: Combatant, d: Combatant,
-  opts: { isMelee: boolean; allowCharge?: boolean; aX?: number; aY?: number; aMoved?: boolean },
+  opts: { isMelee: boolean; allowCharge?: boolean; aX?: number; aY?: number; aMoved?: boolean; factor?: number },
 ): number {
   return computeKillsCore(s, a, d, {
     isMelee: opts.isMelee,
     allowCharge: opts.allowCharge ?? true,
-    factor: 1.0,
+    factor: opts.factor ?? 1.0,
     variance: 1.0,
     aX: opts.aX ?? a.x,
     aY: opts.aY ?? a.y,
     aMoved: opts.aMoved ?? a.hasMoved,
   })
+}
+
+export interface AttackForecast {
+  targetId: string
+  targetName: string
+  melee: boolean
+  kills: number // expected enemy soldiers killed (mean variance)
+  retalKills: number // expected own soldiers lost to retaliation (0 for ranged)
+  lethal: boolean // expected to destroy the target outright
+}
+
+// Player-facing attack preview: mean-variance estimate of an attack and the likely
+// retaliation. Pure — consumes NO rng and never mutates state, so showing it cannot
+// desync a battle (critical for PvP later). Returns null for illegal targets.
+export function forecastAttack(s: BattleState, attackerId: string, targetId: string): AttackForecast | null {
+  const a = combatantById(s, attackerId)
+  const d = combatantById(s, targetId)
+  if (!a || !d) return null
+  if (!legalTargets(s, attackerId).includes(targetId)) return null
+
+  const melee = chebyshev(a.x, a.y, d.x, d.y) <= 1
+  const kills = estimateKills(s, a, d, { isMelee: melee, allowCharge: true })
+  const hpAfter = d.hp - kills
+
+  let retalKills = 0
+  if (melee && hpAfter > 0) {
+    // Mirror the real retaliation rules: survivor retaliates unless the morale hit routs it.
+    const lossFrac = kills / Math.max(1, d.hp)
+    const moraleAfter = Math.max(0, Math.min(100, d.morale - Math.round(20 * lossFrac)))
+    if (moraleAfter > ROUT_THRESHOLD) {
+      const dAfter: Combatant = { ...d, hp: hpAfter, morale: moraleAfter }
+      retalKills = estimateKills(s, dAfter, a, { isMelee: true, allowCharge: false, factor: RETAL_FACTOR })
+    }
+  }
+
+  return { targetId, targetName: d.name, melee, kills, retalKills, lethal: hpAfter <= 0 }
 }
 
 function applyMoraleHit(c: Combatant, kills: number, hpBefore: number): void {
@@ -297,8 +333,9 @@ export function applyCommand(state: BattleState, cmd: Command): BattleState {
     }
   }
 
-  // Remove destroyed combatants
-  s.combatants = s.combatants.filter((c) => c.hp > 0)
+  // Destroyed combatants STAY in the array (hp 0). Every consumer already filters on
+  // hp > 0 (combatantAt, legalTargets, sideActive, the AI, the grid) — keeping them
+  // preserves their kill counts for the battle report and post-battle XP write-back.
   return checkVictory(s)
 }
 

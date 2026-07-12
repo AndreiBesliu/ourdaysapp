@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import Card from '../common/Card'
-import { type Building, type ResourceMap } from '../../logic/types'
+import { fmtCopper, type Building, type ResourceMap } from '../../logic/types'
 import type { GameStateShape } from '../../state/useGameState'
+import { buildingUpgradeCostCopper, buildingLevelMult, BUILDING_MAX_LEVEL } from '../../logic/economy'
 import { formatGameTooltip } from '../../logic/iconHelpers'
 import MoneyDisplay from '../common/MoneyDisplay'
 import parchmentBg from '../../assets/parchment_bg.png'
@@ -104,6 +105,7 @@ export default function BuildingsTab({ state, setTab }: Props) {
     setBuildingOutput,
     barracksLevel,
     upgradeBarracks,
+    upgradeBuilding,
   } = state
 
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null)
@@ -176,7 +178,22 @@ export default function BuildingsTab({ state, setTab }: Props) {
                           </button>
                         )}
                       </div>
-                    ) : <span className="text-[10px] bg-amber-200/50 px-1 rounded text-amber-800 font-mono">LVL 1</span>}
+                    ) : ['MARKET', 'STABLE'].includes(b.type) ? (
+                      <span className="text-[10px] bg-amber-200/50 px-1 rounded text-amber-800 font-mono">L{b.level ?? 1}</span>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] bg-amber-200/50 px-1 rounded text-amber-800 font-mono">L{b.level ?? 1}</span>
+                        {(b.level ?? 1) < BUILDING_MAX_LEVEL && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); upgradeBuilding(b.id) }}
+                            title={`Upgrade to L${(b.level ?? 1) + 1} — ${fmtCopper(buildingUpgradeCostCopper(b.type, b.level ?? 1))} (output ×${buildingLevelMult((b.level ?? 1) + 1).toFixed(1)})`}
+                            className="text-[9px] bg-red-800 text-white px-1.5 py-0.5 rounded shadow hover:bg-red-700"
+                          >
+                            UP
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <BuildingImg type={b.type} />

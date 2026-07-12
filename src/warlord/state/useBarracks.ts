@@ -22,11 +22,18 @@ export function emptyBarracks(): BarracksPool {
   }
   export type BarracksAPI = ReturnType<typeof useBarracks>;
 
-export default function useBarracks() {
-  const [barracks, setBarracks] = useState<BarracksPool>(emptyBarracks())
-  const [barracksLevel, setBarracksLevel] = useState(1)
-  const [recruits, setRecruits] = useState<RecruitPool>({ count: 0, avgXP: 0 })
-  const [batches, setBatches] = useState<TrainingBatch[]>([])
+export interface BarracksSaved {
+  barracks?: BarracksPool
+  barracksLevel?: number
+  recruits?: RecruitPool
+  batches?: TrainingBatch[]
+}
+
+export default function useBarracks(saved?: BarracksSaved) {
+  const [barracks, setBarracks] = useState<BarracksPool>(() => saved?.barracks ?? emptyBarracks())
+  const [barracksLevel, setBarracksLevel] = useState(() => saved?.barracksLevel ?? 1)
+  const [recruits, setRecruits] = useState<RecruitPool>(() => saved?.recruits ?? { count: 0, avgXP: 0 })
+  const [batches, setBatches] = useState<TrainingBatch[]>(() => saved?.batches ?? [])
 
   function barracksUpgradeCost(level: number) {
     if (level === 1) return 50_00

@@ -2,18 +2,33 @@ import { useState } from 'react'
 import { GOLD, fmtCopper, type Building, type ResourceMap, ResourceTypes, WeaponTypes, ArmorTypes } from '../logic/types'
 import { BuildingCostCopper, BuildingOutputChoices, passiveIncomeAndProduction, SmelterRecipes, ManufacturingRecipes } from '../logic/economy'
 
-export function useEconomy(initialWallet = 5 * GOLD, defaultBuildings: () => Building[]) {
-  const [wallet, setWallet] = useState(initialWallet)
-  const [inv, setInv] = useState({
-    weapons: { HALBERD: 0, SPEAR: 0, SWORD: 0, BOW: 0 } as Record<string, number>,
-    armors: { SHIELD: 0, HEAVY_ARMOR: 0, LIGHT_ARMOR: 0, HORSE_ARMOR: 0 } as Record<string, number>,
+// Optional pre-parsed save blob for hydrate-on-init (fixes the save being clobbered
+// by the first render's save-effect before the player could press Load).
+export interface EconomySaved {
+  wallet?: number
+  inv?: any
+  buildings?: Building[]
+  resources?: ResourceMap
+}
+
+export interface Inv {
+  weapons: Record<string, number>
+  armors: Record<string, number>
+  horses: Record<'LIGHT_HORSE' | 'HEAVY_HORSE', { active: number; inactive: number }>
+}
+
+export function useEconomy(initialWallet = 5 * GOLD, defaultBuildings: () => Building[], saved?: EconomySaved) {
+  const [wallet, setWallet] = useState<number>(() => saved?.wallet ?? initialWallet)
+  const [inv, setInv] = useState<Inv>(() => saved?.inv ?? {
+    weapons: { HALBERD: 0, SPEAR: 0, SWORD: 0, BOW: 0 },
+    armors: { SHIELD: 0, HEAVY_ARMOR: 0, LIGHT_ARMOR: 0, HORSE_ARMOR: 0 },
     horses: {
       LIGHT_HORSE: { active: 0, inactive: 0 },
       HEAVY_HORSE: { active: 0, inactive: 0 }
-    } as Record<'LIGHT_HORSE' | 'HEAVY_HORSE', { active: number; inactive: number }>
+    }
   })
-  const [buildings, setBuildings] = useState<Building[]>(defaultBuildings())
-  const [resources, setResources] = useState<ResourceMap>({
+  const [buildings, setBuildings] = useState<Building[]>(() => saved?.buildings ?? defaultBuildings())
+  const [resources, setResources] = useState<ResourceMap>(() => saved?.resources ?? {
     WOOD: 100, STONE: 0,
     IRON_ORE: 0, COAL: 0, COPPER_ORE: 0, SILVER_ORE: 0,
     IRON_INGOT: 0, COPPER_INGOT: 0, SILVER_INGOT: 0,
@@ -45,6 +60,7 @@ export function useEconomy(initialWallet = 5 * GOLD, defaultBuildings: () => Bui
         focusCoinPct: row.focusCoinPct,
         outputItem: row.outputItem ?? BuildingOutputChoices[row.type].options[0] ?? '',
         fractionalBuffer: row.fractionalBuffer ?? 0,
+        level: row.level ?? 1,
       })
 
       walletDelta += coinGain
@@ -158,7 +174,10 @@ export function useEconomy(initialWallet = 5 * GOLD, defaultBuildings: () => Bui
     setInv(ninv)
     setResources(nres)
     setWallet(w => w + walletDelta)
-    return walletDelta
+    // Return the post-production values too: same-tick checks (upkeep affordability,
+    // food shortage) must be computed against TODAY's income/production, not the stale
+    // render snapshot — the queued setState updates aren't visible to the caller yet.
+    return { walletDelta, resources: nres }
   }
 
   return {

@@ -48,6 +48,43 @@ export default function ResultScreen({ result, record, onDismiss }: Props) {
         </div>
       )}
 
+      {result.report && result.report.length > 0 && (
+        <div className="border rounded-lg bg-white text-left overflow-hidden">
+          <div className="text-xs uppercase tracking-wide text-stone-500 px-3 pt-2">Battle report</div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-stone-400">
+                <th className="text-left px-3 py-1 font-normal">Unit</th>
+                <th className="text-right px-2 py-1 font-normal">Fielded</th>
+                <th className="text-right px-2 py-1 font-normal">Lost</th>
+                <th className="text-right px-2 py-1 font-normal">XP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.report.map((r) => (
+                <tr key={r.unitId} className={`border-t border-stone-100 ${r.destroyed ? 'text-red-700' : ''}`}>
+                  <td className="px-3 py-1">
+                    <span className="inline-flex items-center gap-1">
+                      <GameIcon name={getIconForGameItem(r.type) || 'sword'} size={14} />
+                      {r.name}
+                      {r.destroyed && <span title="Unit wiped out">💀</span>}
+                      {r.promotions.map((p, i) => (
+                        <span key={i} className="text-[10px] px-1 rounded bg-amber-100 text-amber-800 border border-amber-300" title={`${p.count} promoted ${p.from} → ${p.to}`}>
+                          ⬆ {p.to}
+                        </span>
+                      ))}
+                    </span>
+                  </td>
+                  <td className="text-right px-2 py-1 font-mono">{r.fielded}</td>
+                  <td className="text-right px-2 py-1 font-mono">{r.lost > 0 ? `-${r.lost}` : '—'}</td>
+                  <td className="text-right px-2 py-1 font-mono">{r.xpGain > 0 ? `+${r.xpGain}` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="text-sm text-stone-500">Record: {record.wins}W / {record.losses}L</div>
       <button onClick={onDismiss} className="px-5 py-2 bg-black text-white rounded hover:bg-stone-800">
         Return to camp

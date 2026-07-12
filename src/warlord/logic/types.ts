@@ -79,6 +79,7 @@ export type Building = {
   focusCoinPct: 0 | 20 | 40 | 60 | 80 | 100;
   outputItem?: string;
   fractionalBuffer: number;
+  level?: number; // 1..BUILDING_MAX_LEVEL; absent in old saves = 1
 };
 
 export type ResourceType =
