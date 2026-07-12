@@ -4,14 +4,15 @@ import {
   ArrowLeft, ShieldCheck, ShieldAlert, RefreshCw, Users, UsersRound, CalendarDays,
   Gamepad2, Wallet, Search, Crown, Trash2, UserPlus, CheckCircle2,
   XCircle, Mail, Loader2, Activity, AlertTriangle, Ban, MailCheck, Power, X,
+  Send, TrendingUp, Megaphone,
 } from 'lucide-react';
 import { auth } from '../firebase';
 import {
   adminCheck, adminGetStats, adminListProfiles, adminListAdmins, adminSetAdmin,
-  adminGetHealth, adminGetUser, adminModerateUser,
+  adminGetHealth, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
 } from '../serverActions';
 
-type Tab = 'overview' | 'profiles' | 'admins' | 'health';
+type Tab = 'overview' | 'profiles' | 'groups' | 'admins' | 'health' | 'broadcast';
 
 const fmtDate = (iso?: string | null) => {
   if (!iso) return '—';
@@ -61,6 +62,32 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
   );
 }
 
+// 30-day mini bar chart. `series` = [{date:'YYYY-MM-DD', count:n}].
+function GrowthChart({ label, series, color }: { label: string; series: { date: string; count: number }[]; color: string }) {
+  const data = series || [];
+  const max = Math.max(1, ...data.map(d => d.count));
+  const total = data.reduce((s, d) => s + d.count, 0);
+  return (
+    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+      <div className="flex items-baseline justify-between mb-3">
+        <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">{label}</p>
+        <p className="text-sm font-black text-zinc-900 dark:text-zinc-100 tabular-nums">{total} <span className="text-[10px] font-medium text-zinc-400">/ 30d</span></p>
+      </div>
+      <div className="flex items-end gap-[2px] h-20">
+        {data.map(d => (
+          <div key={d.date} className="flex-1 flex flex-col justify-end group relative" title={`${d.date}: ${d.count}`}>
+            <div className={`${color} rounded-sm transition-all`} style={{ height: `${Math.max(d.count ? 6 : 0, (d.count / max) * 100)}%` }} />
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-between mt-1.5 text-[9px] text-zinc-400">
+        <span>{data[0]?.date?.slice(5) || ''}</span>
+        <span>{data[data.length - 1]?.date?.slice(5) || 'today'}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   const navigate = useNavigate();
   const [access, setAccess] = useState<'checking' | 'granted' | 'denied'>('checking');
@@ -70,9 +97,16 @@ export default function Admin() {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [admins, setAdmins] = useState<any[]>([]);
   const [health, setHealth] = useState<any>(null);
+  const [groups, setGroups] = useState<any[]>([]);
+  const [growth, setGrowth] = useState<any>(null);
   const [detail, setDetail] = useState<any>(null); // open user drill-down
   const [detailLoading, setDetailLoading] = useState(false);
   const [modBusy, setModBusy] = useState(false);
+  const [bcTarget, setBcTarget] = useState('all');
+  const [bcTitle, setBcTitle] = useState('');
+  const [bcBody, setBcBody] = useState('');
+  const [bcMsg, setBcMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [bcBusy, setBcBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [search, setSearch] = useState('');
@@ -93,13 +127,34 @@ export default function Admin() {
 
   const refresh = async () => {
     setLoading(true); setLoadError(false);
-    const [s, p, a, h] = await Promise.allSettled([adminGetStats(), adminListProfiles(), adminListAdmins(), adminGetHealth()]);
+    const results = await Promise.allSettled([
+      adminGetStats(), adminListProfiles(), adminListAdmins(), adminGetHealth(), adminListGroups(), adminGetGrowth(),
+    ]);
+    const [s, p, a, h, g, gr] = results;
     if (s.status === 'fulfilled') setStats(s.value);
     if (p.status === 'fulfilled') setProfiles(p.value.profiles || []);
     if (a.status === 'fulfilled') setAdmins(a.value.admins || []);
     if (h.status === 'fulfilled') setHealth(h.value);
-    if ([s, p, a, h].some(r => r.status === 'rejected')) { setLoadError(true); console.error('Some admin data failed to load'); }
+    if (g.status === 'fulfilled') setGroups(g.value.groups || []);
+    if (gr.status === 'fulfilled') setGrowth(gr.value);
+    if (results.some(r => r.status === 'rejected')) { setLoadError(true); console.error('Some admin data failed to load'); }
     setLoading(false);
+  };
+
+  const sendBroadcast = async () => {
+    if (!bcTitle.trim()) return;
+    setBcBusy(true); setBcMsg(null);
+    try {
+      const res = await adminBroadcast({ target: bcTarget, title: bcTitle.trim(), body: bcBody.trim() });
+      setBcMsg({ ok: true, text: `Sent to ${res.created} user${res.created === 1 ? '' : 's'}.` });
+      setBcTitle(''); setBcBody('');
+    } catch (e: any) { setBcMsg({ ok: false, text: e?.message || 'Failed.' }); }
+    finally { setBcBusy(false); }
+  };
+
+  const nameOf = (uid: string) => {
+    const p = profiles.find(x => x.uid === uid);
+    return p?.name || p?.email || uid.slice(0, 8);
   };
 
   const openUser = async (uid: string) => {
@@ -175,10 +230,10 @@ export default function Admin() {
 
       <main className="max-w-5xl w-full mx-auto p-4 flex flex-col gap-5">
         {/* Tabs */}
-        <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800/50 p-1 rounded-xl w-fit">
-          {(['overview', 'profiles', 'admins', 'health'] as Tab[]).map(t => (
-            <button key={t} onClick={() => setTab(t)} className={`relative px-5 py-2 rounded-lg text-sm font-bold capitalize transition-all ${tab === t ? 'bg-white dark:bg-zinc-700 shadow-sm text-primary' : 'text-zinc-500'}`}>
-              {t}{t === 'profiles' && profiles.length ? ` (${profiles.length})` : ''}{t === 'admins' && admins.length ? ` (${admins.length})` : ''}
+        <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800/50 p-1 rounded-xl w-fit overflow-x-auto max-w-full">
+          {(['overview', 'profiles', 'groups', 'admins', 'health', 'broadcast'] as Tab[]).map(t => (
+            <button key={t} onClick={() => setTab(t)} className={`relative px-4 py-2 rounded-lg text-sm font-bold capitalize whitespace-nowrap transition-all ${tab === t ? 'bg-white dark:bg-zinc-700 shadow-sm text-primary' : 'text-zinc-500'}`}>
+              {t}{t === 'profiles' && profiles.length ? ` (${profiles.length})` : ''}{t === 'groups' && groups.length ? ` (${groups.length})` : ''}{t === 'admins' && admins.length ? ` (${admins.length})` : ''}
               {t === 'health' && health?.errors?.length > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{health.errorTotal}</span>}
             </button>
           ))}
@@ -273,6 +328,16 @@ export default function Admin() {
                 <Breakdown title="Notification types" data={no.byType} />
               </div>
             </Section>
+
+            {growth && (
+              <Section icon={<TrendingUp className="w-4 h-4 text-primary" />} title="Growth (last 30 days)">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <GrowthChart label="Sign-ups" series={growth.signups} color="bg-primary" />
+                  <GrowthChart label="Events created" series={growth.events} color="bg-emerald-500" />
+                  <GrowthChart label="Games played" series={growth.games} color="bg-indigo-500" />
+                </div>
+              </Section>
+            )}
 
             <p className="text-[11px] text-zinc-400 text-center">Generated {fmtDate(stats.generatedAt)} · {new Date(stats.generatedAt).toLocaleTimeString()}</p>
           </div>
@@ -423,6 +488,81 @@ export default function Admin() {
                 </div>
               </Section>
             )}
+          </div>
+        )}
+
+        {/* ── GROUPS ── */}
+        {tab === 'groups' && (
+          <div className="flex flex-col gap-3">
+            <div className="overflow-x-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wider text-zinc-400 border-b border-zinc-100 dark:border-zinc-800">
+                    <th className="p-3">Group</th><th className="p-3">Owner</th>
+                    <th className="p-3 text-center">Members</th><th className="p-3 text-center">Events</th><th className="p-3 text-center">Games</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groups.map(gr => (
+                    <tr key={gr.id} className="border-b border-zinc-50 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/30">
+                      <td className="p-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-blue-500/15 text-blue-500 flex items-center justify-center shrink-0"><UsersRound className="w-4 h-4" /></div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-zinc-900 dark:text-zinc-100 truncate">{gr.name || 'Group'}</p>
+                            <p className="text-[11px] text-zinc-400 truncate">{gr.id}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        {gr.ownerId ? (
+                          <button onClick={() => openUser(gr.ownerId)} className="text-zinc-600 dark:text-zinc-300 hover:text-primary hover:underline truncate max-w-[160px] text-left">{nameOf(gr.ownerId)}</button>
+                        ) : <span className="text-zinc-400">—</span>}
+                      </td>
+                      <td className="p-3 text-center tabular-nums font-medium">{gr.members}</td>
+                      <td className="p-3 text-center tabular-nums">{gr.events}</td>
+                      <td className="p-3 text-center tabular-nums">{gr.games}</td>
+                    </tr>
+                  ))}
+                  {groups.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-zinc-400">No groups.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── BROADCAST ── */}
+        {tab === 'broadcast' && (
+          <div className="flex flex-col gap-4 max-w-xl">
+            <div className="bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs rounded-lg p-3 flex items-start gap-2">
+              <Megaphone className="w-4 h-4 shrink-0 mt-0.5" /> Sends an in-app notification to every recipient. Use sparingly — this reaches real users.
+            </div>
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex flex-col gap-4">
+              <div>
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Recipients</label>
+                <select value={bcTarget} onChange={e => setBcTarget(e.target.value)}
+                  className="mt-1.5 w-full px-3 py-2 text-sm border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none">
+                  <option value="all">All users{stats?.users?.total ? ` (${stats.users.total})` : ''}</option>
+                  {groups.map(gr => <option key={gr.id} value={gr.id}>Group: {gr.name || gr.id} ({gr.members})</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Title</label>
+                <input value={bcTitle} onChange={e => setBcTitle(e.target.value)} maxLength={80} placeholder="e.g. New feature available!"
+                  className="mt-1.5 w-full px-3 py-2 text-sm border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Message <span className="normal-case font-normal text-zinc-400">(optional)</span></label>
+                <textarea value={bcBody} onChange={e => setBcBody(e.target.value)} maxLength={280} rows={3} placeholder="Details…"
+                  className="mt-1.5 w-full px-3 py-2 text-sm border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none resize-none" />
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={sendBroadcast} disabled={bcBusy || !bcTitle.trim()} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-2">
+                  {bcBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Send broadcast
+                </button>
+                {bcMsg && <p className={`text-sm ${bcMsg.ok ? 'text-emerald-500' : 'text-red-500'}`}>{bcMsg.text}</p>}
+              </div>
+            </div>
           </div>
         )}
       </main>

@@ -138,6 +138,28 @@
 
 ---
 
+## 📅 Session Log: July 12, 2026
+
+**Task Started (Admin Phase 2)**
+> Prompt: "continua" (following the multi-select where Andrei chose all four admin additions; Phase 1 = Error monitoring/Health + drill-down/moderation already shipped)
+> Plan: Build Admin Phase 2 — Broadcast notifications, Groups explorer, and 30-day growth charts.
+> Model: Claude Opus 4.8 (1M context)
+
+**Task Completed (Admin Phase 2)**
+> Model: Claude Opus 4.8 (1M context)
+> Changes:
+> - `functions/src/index.ts` — 3 new admin-gated callables (each `await assertAdmin(request)` first):
+>   - `adminBroadcast({target,title,body})` — writes a `notifications` doc per recipient (`userId`, `type:'broadcast'`, `createdBy`, `read:false`, server timestamp) for either **all users** (via `listAllAuthUsers`) or one **group** (its `members`); recipients de-duped, title/body length-capped, committed in batches of 400; returns `{ok, created}`.
+>   - `adminListGroups()` — every group with per-group member/event/game tallies (reads groups≤2000, events≤8000, games≤5000), sorted by member count desc.
+>   - `adminGetGrowth()` — 30-day daily buckets for sign-ups (Auth `creationTime`), events (`createdAt`), and games (`createdAt`); returns `{days, signups[], events[], games[]}`.
+>   - Added a `chunk<T>()` helper for batched writes.
+> - `src/serverActions.ts` — `adminBroadcast` / `adminListGroups` / `adminGetGrowth` httpsCallable wrappers.
+> - `src/screens/Admin.tsx` — two new tabs (**Groups** table with owner drill-down, **Broadcast** composer: all-users/group target + title/body, live "sent to N" result) + a **Growth (30 days)** section on Overview with 3 mini bar charts (new `GrowthChart` component). `refresh()` now also loads groups + growth; `nameOf()`/`sendBroadcast()` helpers.
+> Security: all three callables gate on `assertAdmin`; broadcast writes via Admin SDK (no rules change), `userId` matches the client notifications query so broadcasts appear in the bell dropdown; recipients de-duped; returned `created` count is honest.
+> Build: `functions` `tsc` ✅ + root `npm run build` ✅ (Admin chunk 33.8kB). Deployed: `firebase deploy --only functions:adminBroadcast,functions:adminListGroups,functions:adminGetGrowth,hosting` ✅ → live at https://our-days-2a939.web.app/admin.
+
+---
+
 ## 📅 Session Log: July 11, 2026
 
 **Task Started**

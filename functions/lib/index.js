@@ -11,7 +11,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminModerateUser = exports.adminGetUser = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
+exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -783,6 +783,12 @@ const inc = (obj, key, by = 1) => {
         return;
     obj[key] = (obj[key] || 0) + by;
 };
+const chunk = (arr, size) => {
+    const out = [];
+    for (let i = 0; i < arr.length; i += size)
+        out.push(arr.slice(i, i + size));
+    return out;
+};
 // Delete every doc matching a query, in batches, until exhausted (or a cap).
 async function deleteQueryInBatches(query, max = 3000) {
     let deleted = 0;
@@ -1317,5 +1323,113 @@ exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
         };
     }
     throw new https_1.HttpsError("invalid-argument", "Unknown action.");
+});
+// ── Broadcast a notification to all users or one group (admin-only) ──
+exports.adminBroadcast = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    var _a;
+    const callerUid = await assertAdmin(request);
+    const { target, title, body } = request.data || {};
+    if (!title || !target)
+        throw new https_1.HttpsError("invalid-argument", "target and title are required.");
+    const db = admin.firestore();
+    let recipients = [];
+    if (target === "all") {
+        const res = await listAllAuthUsers();
+        recipients = res.users.map((u) => u.uid);
+    }
+    else {
+        const g = await db.doc(`groups/${target}`).get();
+        if (!g.exists)
+            throw new https_1.HttpsError("not-found", "Group not found.");
+        recipients = (((_a = g.data()) === null || _a === void 0 ? void 0 : _a.members) || []).filter((x) => typeof x === "string");
+    }
+    recipients = [...new Set(recipients)];
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    let created = 0;
+    for (const group of chunk(recipients, 400)) {
+        const batch = db.batch();
+        group.forEach((uid) => {
+            const ref = db.collection("notifications").doc();
+            batch.set(ref, {
+                userId: uid, createdBy: callerUid, type: "broadcast",
+                title: String(title).slice(0, 200), body: typeof body === "string" ? body.slice(0, 500) : "",
+                read: false, createdAt: now,
+            });
+            created++;
+        });
+        await batch.commit();
+    }
+    return { ok: true, created };
+});
+// ── All groups with per-group activity (admin-only) ──
+exports.adminListGroups = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    await assertAdmin(request);
+    const db = admin.firestore();
+    const [groupsSnap, eventsSnap, gamesSnap] = await Promise.all([
+        db.collection("groups").limit(2000).get(),
+        db.collection("events").limit(8000).get(),
+        db.collection("games").limit(5000).get(),
+    ]);
+    const evByGroup = {};
+    eventsSnap.forEach((d) => { const g = d.data().groupId; if (g)
+        inc(evByGroup, g); });
+    const gaByGroup = {};
+    gamesSnap.forEach((d) => { const g = d.data().groupId; if (g)
+        inc(gaByGroup, g); });
+    const groups = groupsSnap.docs.map((d) => {
+        const g = d.data();
+        return {
+            id: d.id, name: g.name || "Group", ownerId: g.ownerId || null,
+            members: (g.members || []).length, memberUids: g.members || [],
+            events: evByGroup[d.id] || 0, games: gaByGroup[d.id] || 0,
+        };
+    }).sort((a, b) => b.members - a.members);
+    return { groups };
+});
+// ── Growth over the last 30 days (signups / events / games) ──
+exports.adminGetGrowth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    await assertAdmin(request);
+    const db = admin.firestore();
+    const days = 30;
+    const dayMs = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
+    const mkBuckets = () => {
+        const m = {};
+        for (let i = days - 1; i >= 0; i--)
+            m[dayKey(now - i * dayMs)] = 0;
+        return m;
+    };
+    const cutoff = now - (days - 1) * dayMs - (now % dayMs); // start-of-day, days-1 ago (UTC-ish)
+    const signups = mkBuckets();
+    const events = mkBuckets();
+    const games = mkBuckets();
+    const tsOf = (c) => { var _a, _b, _c; return typeof c === "string" ? new Date(c).getTime() : (((_c = (_b = (_a = c === null || c === void 0 ? void 0 : c.toDate) === null || _a === void 0 ? void 0 : _a.call(c)) === null || _b === void 0 ? void 0 : _b.getTime) === null || _c === void 0 ? void 0 : _c.call(_b)) || 0); };
+    const [authRes, eventsSnap, gamesSnap] = await Promise.all([
+        listAllAuthUsers(),
+        db.collection("events").limit(8000).get(),
+        db.collection("games").limit(5000).get(),
+    ]);
+    authRes.users.forEach((u) => {
+        var _a;
+        const t = ((_a = u.metadata) === null || _a === void 0 ? void 0 : _a.creationTime) ? new Date(u.metadata.creationTime).getTime() : 0;
+        if (t >= cutoff) {
+            const k = dayKey(t);
+            if (k in signups)
+                signups[k]++;
+        }
+    });
+    eventsSnap.forEach((d) => { const t = tsOf(d.data().createdAt); if (t >= cutoff) {
+        const k = dayKey(t);
+        if (k in events)
+            events[k]++;
+    } });
+    gamesSnap.forEach((d) => { const t = tsOf(d.data().createdAt); if (t >= cutoff) {
+        const k = dayKey(t);
+        if (k in games)
+            games[k]++;
+    } });
+    const toSeries = (m) => Object.entries(m).map(([date, count]) => ({ date, count }));
+    return { days, signups: toSeries(signups), events: toSeries(events), games: toSeries(games) };
 });
 //# sourceMappingURL=index.js.map

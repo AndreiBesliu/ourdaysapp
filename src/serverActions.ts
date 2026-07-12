@@ -81,6 +81,18 @@ export async function adminModerateUser(uid: string, action: 'enable' | 'disable
   const fn = httpsCallable(getFunctions(app), "adminModerateUser");
   return (await fn({ uid, action })).data;
 }
+export async function adminBroadcast(params: { target: string; title: string; body?: string }): Promise<{ created: number }> {
+  const fn = httpsCallable(getFunctions(app), "adminBroadcast");
+  return (await fn(params)).data as { created: number };
+}
+export async function adminListGroups(): Promise<{ groups: any[] }> {
+  const fn = httpsCallable(getFunctions(app), "adminListGroups");
+  return (await fn({})).data as { groups: any[] };
+}
+export async function adminGetGrowth(): Promise<any> {
+  const fn = httpsCallable(getFunctions(app), "adminGetGrowth");
+  return (await fn({})).data;
+}
 
 // Emails that see the Admin entry client-side (cosmetic only — the /admin screen
 // and every admin callable re-check server-side). Keep in sync with the
