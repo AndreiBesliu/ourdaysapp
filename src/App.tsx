@@ -12,7 +12,11 @@ import CalendarHome from './screens/CalendarHome';
 import Wallet from './screens/Wallet';
 import Settings from './screens/Settings';
 import Friends from './screens/Friends';
+import ErrorBoundary from './components/ErrorBoundary';
+import { installGlobalErrorHandlers } from './reportError';
 const Admin = lazy(() => import('./screens/Admin')); // owner-only, rarely used → lazy
+
+installGlobalErrorHandlers();
 const Warlord = lazy(() => import('./screens/Warlord')); // large embedded game → lazy chunk
 import { useThemeStore } from './store';
 
@@ -221,6 +225,7 @@ function App() {
   }
 
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       <Routes>
         <Route 
@@ -254,6 +259,7 @@ function App() {
         />
       </Routes>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 

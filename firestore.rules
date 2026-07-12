@@ -153,6 +153,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── Error logs ──
+    // Client errors are written by the `logClientError` callable (Admin SDK) and
+    // read by admins via `adminGetHealth` — never touched directly by clients.
+    match /errorLogs/{logId} {
+      allow read, write: if false;
+    }
+
     // ── Friend Requests ──
     // Readable by the sender or the recipient (matched by uid or email). Any
     // signed-in user may send (must record an honest fromId). Responding

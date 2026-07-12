@@ -69,6 +69,18 @@ export async function adminSetAdmin(params: { uid?: string; email?: string; make
   const fn = httpsCallable(getFunctions(app), "adminSetAdmin");
   await fn(params);
 }
+export async function adminGetHealth(): Promise<any> {
+  const fn = httpsCallable(getFunctions(app), "adminGetHealth");
+  return (await fn({})).data;
+}
+export async function adminGetUser(uid: string): Promise<any> {
+  const fn = httpsCallable(getFunctions(app), "adminGetUser");
+  return (await fn({ uid })).data;
+}
+export async function adminModerateUser(uid: string, action: 'enable' | 'disable' | 'forceVerify' | 'delete'): Promise<any> {
+  const fn = httpsCallable(getFunctions(app), "adminModerateUser");
+  return (await fn({ uid, action })).data;
+}
 
 // Emails that see the Admin entry client-side (cosmetic only — the /admin screen
 // and every admin callable re-check server-side). Keep in sync with the

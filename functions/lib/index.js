@@ -11,7 +11,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
+exports.adminModerateUser = exports.adminGetUser = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -172,6 +172,7 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
     }
     catch (error) {
         console.error("AI Generation Error", error);
+        void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI generation error", "ai:generateChecklist", { stack: error === null || error === void 0 ? void 0 : error.stack });
     }
 });
 exports.onMessageCreated = (0, firestore_1.onDocumentCreated)("groups/{groupId}/messages/{messageId}", async (event) => {
@@ -310,6 +311,7 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
     }
     catch (error) {
         console.error("AI Generation Error", error);
+        void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI generation error", "ai:generateChecklist", { stack: error === null || error === void 0 ? void 0 : error.stack });
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
@@ -339,6 +341,7 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
     }
     catch (error) {
         console.error("AI Category Suggestion Error", error);
+        void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI category error", "ai:suggestCategory", { stack: error === null || error === void 0 ? void 0 : error.stack });
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
@@ -418,6 +421,7 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
     }
     catch (error) {
         console.error("AI Group Digest Error", error);
+        void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI digest error", "ai:groupDigest", { stack: error === null || error === void 0 ? void 0 : error.stack });
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
@@ -455,6 +459,7 @@ Do not include any other text or markdown formatting.`;
     }
     catch (error) {
         console.error("AI Asset Suggestion Error", error);
+        void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI asset error", "ai:suggestAsset", { stack: error === null || error === void 0 ? void 0 : error.stack });
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
@@ -778,6 +783,47 @@ const inc = (obj, key, by = 1) => {
         return;
     obj[key] = (obj[key] || 0) + by;
 };
+// Delete every doc matching a query, in batches, until exhausted (or a cap).
+async function deleteQueryInBatches(query, max = 3000) {
+    let deleted = 0;
+    while (deleted < max) {
+        const snap = await query.limit(400).get();
+        if (snap.empty)
+            break;
+        const batch = admin.firestore().batch();
+        snap.docs.forEach((d) => batch.delete(d.ref));
+        await batch.commit();
+        deleted += snap.size;
+        if (snap.size < 400)
+            break;
+    }
+    return deleted;
+}
+// Delete all Storage objects under the given prefixes (best-effort).
+async function deleteStoragePrefixes(prefixes) {
+    try {
+        const bucket = admin.storage().bucket();
+        await Promise.all(prefixes.map((p) => bucket.deleteFiles({ prefix: p }).catch(() => { })));
+        return true;
+    }
+    catch (_a) {
+        return false;
+    }
+}
+// Record a server-side error so it surfaces in the admin Health panel.
+async function logServerError(message, where, extra) {
+    try {
+        await admin.firestore().collection("errorLogs").add({
+            message: String(message || "server error").slice(0, 1000),
+            stack: (extra === null || extra === void 0 ? void 0 : extra.stack) ? String(extra.stack).slice(0, 4000) : null,
+            context: where.slice(0, 200),
+            uid: (extra === null || extra === void 0 ? void 0 : extra.uid) || null,
+            source: "server",
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+    }
+    catch ( /* never let logging break the caller */_a) { /* never let logging break the caller */ }
+}
 // Is the current caller an admin? (Non-throwing for non-admins.)
 exports.adminCheck = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
@@ -1072,5 +1118,204 @@ exports.adminSetAdmin = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
         tx.delete(ref);
     });
     return { ok: true, uid: targetUid, makeAdmin: false };
+});
+// ── Error monitoring ──
+// Clients report captured errors here (rate-limited); the Admin SDK writes the
+// `errorLogs` collection so clients can't write it directly.
+exports.logClientError = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    var _a, _b, _c, _d, _e;
+    const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
+    const { message, stack, url, context } = request.data || {};
+    if (!message)
+        return { ok: false };
+    // Require auth so every report is rate-limited (no unauthenticated spam path).
+    if (!uid)
+        return { ok: false };
+    if (!(await tryConsumeQuota(uid, "error_usage", 200)))
+        return { ok: false, throttled: true };
+    const ua = (_c = (_b = request.rawRequest) === null || _b === void 0 ? void 0 : _b.headers) === null || _c === void 0 ? void 0 : _c["user-agent"];
+    await admin.firestore().collection("errorLogs").add({
+        message: String(message).slice(0, 1000),
+        stack: stack ? String(stack).slice(0, 4000) : null,
+        url: url ? String(url).slice(0, 500) : null,
+        context: context ? String(context).slice(0, 200) : null,
+        uid,
+        email: ((_e = (_d = request.auth) === null || _d === void 0 ? void 0 : _d.token) === null || _e === void 0 ? void 0 : _e.email) || null,
+        userAgent: ua ? String(ua).slice(0, 300) : null,
+        source: "client",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { ok: true };
+});
+// Health / observability: recent errors + AI & notification usage.
+exports.adminGetHealth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    await assertAdmin(request);
+    const db = admin.firestore();
+    const today = new Date().toISOString().slice(0, 10);
+    const [errSnap, errCount, aiSnap, notifSnap] = await Promise.all([
+        db.collection("errorLogs").orderBy("createdAt", "desc").limit(50).get(),
+        db.collection("errorLogs").count().get().then((s) => s.data().count).catch(() => 0),
+        db.collection("ai_usage").limit(3000).get(),
+        db.collection("notif_usage").limit(3000).get(),
+    ]);
+    const errors = errSnap.docs.map((d) => {
+        var _a, _b, _c, _d;
+        const e = d.data();
+        return Object.assign(Object.assign({ id: d.id }, e), { createdAt: ((_d = (_c = (_b = (_a = e.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString) === null || _d === void 0 ? void 0 : _d.call(_c)) || null });
+    });
+    let aiToday = 0;
+    const aiTop = [];
+    aiSnap.forEach((d) => { const u = d.data(); if (u.date === today && u.count) {
+        aiToday += u.count;
+        aiTop.push({ uid: d.id, count: u.count });
+    } });
+    aiTop.sort((a, b) => b.count - a.count);
+    let notifToday = 0;
+    notifSnap.forEach((d) => { const u = d.data(); if (u.date === today)
+        notifToday += u.count || 0; });
+    return {
+        errors, errorTotal: errCount,
+        truncated: aiSnap.size >= 3000 || notifSnap.size >= 3000,
+        ai: { today: aiToday, dailyLimitPerUser: AI_DAILY_LIMIT, activeUsers: aiTop.length, top: aiTop.slice(0, 10) },
+        notifications: { today: notifToday, dailyLimitPerUser: NOTIF_DAILY_LIMIT },
+    };
+});
+// Full detail for one user (drill-down).
+exports.adminGetUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    var _a, _b, _c, _d, _e;
+    await assertAdmin(request);
+    const { uid } = request.data || {};
+    if (!uid || typeof uid !== "string" || uid.includes("/"))
+        throw new https_1.HttpsError("invalid-argument", "A valid uid is required.");
+    const db = admin.firestore();
+    let authRec = null;
+    try {
+        const u = await admin.auth().getUser(uid);
+        authRec = {
+            email: u.email || null, emailVerified: u.emailVerified, disabled: u.disabled,
+            displayName: u.displayName || null, photoURL: u.photoURL || null,
+            provider: ((_b = (_a = u.providerData) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.providerId) || "password",
+            createdAt: ((_c = u.metadata) === null || _c === void 0 ? void 0 : _c.creationTime) || null, lastSignInAt: ((_d = u.metadata) === null || _d === void 0 ? void 0 : _d.lastSignInTime) || null,
+        };
+    }
+    catch ( /* auth user may be gone */_f) { /* auth user may be gone */ }
+    const [userDoc, profileDoc, groupsSnap, eventsSnap, gamesSnap, assetsSnap, adminSnap] = await Promise.all([
+        db.doc(`users/${uid}`).get(),
+        db.doc(`profiles/${uid}`).get(),
+        db.collection("groups").where("members", "array-contains", uid).limit(200).get(),
+        db.collection("events").where("ownerId", "==", uid).limit(500).get(),
+        db.collection("games").where("createdBy", "==", uid).limit(200).get(),
+        db.collection("assets").where("ownerId", "==", uid).limit(500).get(),
+        db.doc(`admins/${uid}`).get(),
+    ]);
+    const ud = userDoc.data() || {};
+    return {
+        uid, auth: authRec, isAdmin: adminSnap.exists,
+        isProtected: adminSnap.exists || BOOTSTRAP_ADMIN_EMAILS.includes(((authRec === null || authRec === void 0 ? void 0 : authRec.email) || "").toLowerCase()),
+        name: ud.name || ((_e = profileDoc.data()) === null || _e === void 0 ? void 0 : _e.name) || (authRec === null || authRec === void 0 ? void 0 : authRec.displayName) || null,
+        birthday: ud.birthday || null,
+        pushEnabled: Array.isArray(ud.fcmTokens) && ud.fcmTokens.length > 0,
+        friends: Array.isArray(ud.friends) ? ud.friends.map((f) => ({ uid: f === null || f === void 0 ? void 0 : f.uid, name: f === null || f === void 0 ? void 0 : f.name, email: f === null || f === void 0 ? void 0 : f.email })) : [],
+        groups: groupsSnap.docs.map((d) => ({ id: d.id, name: d.data().name || "Group", members: (d.data().members || []).length })),
+        counts: { groups: groupsSnap.size, events: eventsSnap.size, games: gamesSnap.size, assets: assetsSnap.size },
+        recentEvents: eventsSnap.docs.slice(0, 10).map((d) => {
+            const e = d.data();
+            return { id: d.id, title: e.title || "(untitled)", date: e.date || null, isTask: !!e.isTask, taskStatus: e.taskStatus || null };
+        }),
+    };
+});
+// Moderate a user: enable | disable | forceVerify | delete. Admins/owner and the
+// caller themselves are protected from disable/delete.
+exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    var _a;
+    const callerUid = await assertAdmin(request);
+    const { uid, action } = request.data || {};
+    if (!uid || typeof uid !== "string" || uid.includes("/"))
+        throw new https_1.HttpsError("invalid-argument", "A valid uid is required.");
+    if (!action)
+        throw new https_1.HttpsError("invalid-argument", "action is required.");
+    if (uid === callerUid)
+        throw new https_1.HttpsError("failed-precondition", "You can't moderate your own account.");
+    const db = admin.firestore();
+    const adminSnap = await db.doc(`admins/${uid}`).get();
+    let targetEmail = "";
+    try {
+        targetEmail = ((await admin.auth().getUser(uid)).email || "").toLowerCase();
+    }
+    catch ( /* gone */_b) { /* gone */ }
+    const isTargetAdmin = adminSnap.exists || BOOTSTRAP_ADMIN_EMAILS.includes(targetEmail);
+    // Protect admins/owner from disable, delete, AND forceVerify (force-verifying a
+    // bootstrap-email account would let it auto-escalate to admin).
+    if (isTargetAdmin && (action === "disable" || action === "delete" || action === "forceVerify")) {
+        throw new https_1.HttpsError("failed-precondition", "You can't disable, delete, or force-verify another admin.");
+    }
+    if (action === "enable") {
+        await admin.auth().updateUser(uid, { disabled: false });
+        return { ok: true };
+    }
+    if (action === "disable") {
+        await admin.auth().updateUser(uid, { disabled: true });
+        return { ok: true };
+    }
+    if (action === "forceVerify") {
+        await admin.auth().updateUser(uid, { emailVerified: true });
+        return { ok: true };
+    }
+    if (action === "delete") {
+        // Read the user's own friends first (peers) so we can unlink both sides.
+        const meDoc = await db.doc(`users/${uid}`).get();
+        const myFriends = Array.isArray((_a = meDoc.data()) === null || _a === void 0 ? void 0 : _a.friends) ? meDoc.data().friends : [];
+        // Unlink the deleted uid from every peer's mutual friends array.
+        await Promise.all(myFriends.map(async (f) => {
+            var _a;
+            if (!(f === null || f === void 0 ? void 0 : f.uid))
+                return;
+            try {
+                const peerRef = db.doc(`users/${f.uid}`);
+                const peer = await peerRef.get();
+                if (!peer.exists)
+                    return;
+                const pf = (((_a = peer.data()) === null || _a === void 0 ? void 0 : _a.friends) || []).filter((x) => x && x.uid !== uid);
+                await peerRef.set({ friends: pf }, { merge: true });
+            }
+            catch ( /* ignore a bad peer */_b) { /* ignore a bad peer */ }
+        }));
+        // Remove from every group's members.
+        const groupsSnap = await db.collection("groups").where("members", "array-contains", uid).limit(400).get();
+        await Promise.all(groupsSnap.docs.map((g) => g.ref.update({ members: admin.firestore.FieldValue.arrayRemove(uid) }).catch(() => { })));
+        // Delete owned/created content + friend requests (paginated to exhaustion).
+        const events = await deleteQueryInBatches(db.collection("events").where("ownerId", "==", uid));
+        const assets = await deleteQueryInBatches(db.collection("assets").where("ownerId", "==", uid));
+        const games = await deleteQueryInBatches(db.collection("games").where("createdBy", "==", uid));
+        const frFrom = await deleteQueryInBatches(db.collection("friend_requests").where("fromId", "==", uid));
+        const frTo = await deleteQueryInBatches(db.collection("friend_requests").where("toId", "==", uid));
+        // Delete the user's uploaded Storage files.
+        const storageDeleted = await deleteStoragePrefixes([
+            `assets/${uid}/`, `events/${uid}/`, `checklists/${uid}/`,
+            `profiles/${uid}_`, `backgrounds/${uid}_`,
+        ]);
+        // Delete the user's own docs.
+        await Promise.all([
+            db.doc(`users/${uid}`).delete().catch(() => { }),
+            db.doc(`profiles/${uid}`).delete().catch(() => { }),
+            db.doc(`admins/${uid}`).delete().catch(() => { }),
+            db.doc(`ai_usage/${uid}`).delete().catch(() => { }),
+            db.doc(`notif_usage/${uid}`).delete().catch(() => { }),
+            db.doc(`error_usage/${uid}`).delete().catch(() => { }),
+        ]);
+        // Finally the Auth account.
+        let authDeleted = false;
+        try {
+            await admin.auth().deleteUser(uid);
+            authDeleted = true;
+        }
+        catch ( /* already gone */_c) { /* already gone */ }
+        return {
+            ok: true, deleted: true, authDeleted, storageDeleted,
+            counts: { groups: groupsSnap.size, events, assets, games, friendRequests: frFrom + frTo, friendsUnlinked: myFriends.length },
+            note: "Group chat messages authored by the user are retained as group history.",
+        };
+    }
+    throw new https_1.HttpsError("invalid-argument", "Unknown action.");
 });
 //# sourceMappingURL=index.js.map
