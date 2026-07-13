@@ -34,6 +34,48 @@ export async function respondToFriendRequest(params: {
   await fn(params);
 }
 
+// ── Warlord PvP (server-authoritative; see functions/src/index.ts) ──
+
+// Create a PvP challenge. The server validates the challenger's army and stashes it
+// in an Admin-only doc (hidden from the opponent until they commit), then writes the
+// public 'waiting' game doc. Returns the new gameId.
+export async function createWarlordChallenge(params: {
+  groupId: string;
+  opponentUid: string;
+  unitIds: string[];
+  combatants: unknown[];
+}): Promise<{ gameId: string }> {
+  const fn = httpsCallable(getFunctions(app), "createWarlordChallenge");
+  return (await fn(params)).data as { gameId: string };
+}
+
+// Accept a Warlord PvP challenge: locks in the defender's deployment; the server
+// generates the seed, builds the authoritative BattleState and flips to 'playing'.
+export async function acceptWarlordChallenge(params: {
+  gameId: string;
+  unitIds: string[];
+  combatants: unknown[]; // DeployCombatantClaim[] — validated server-side
+}): Promise<void> {
+  const fn = httpsCallable(getFunctions(app), "acceptWarlordChallenge");
+  await fn(params);
+}
+
+// Submit one battle command; the server engine validates and applies it.
+// applied:false = the engine judged it illegal — roll back the optimistic state.
+export async function submitWarlordCommand(params: {
+  gameId: string;
+  command: unknown; // Command — validated & rebuilt server-side
+}): Promise<{ applied: boolean; finished: boolean }> {
+  const fn = httpsCallable(getFunctions(app), "submitWarlordCommand");
+  return (await fn(params)).data as { applied: boolean; finished: boolean };
+}
+
+// Retreat (= concede) an active battle, or decline/cancel a waiting challenge.
+export async function forfeitWarlordBattle(gameId: string): Promise<void> {
+  const fn = httpsCallable(getFunctions(app), "forfeitWarlordBattle");
+  await fn({ gameId });
+}
+
 // Remove a friend (mutual — edits both users' friend lists).
 export async function removeFriend(friendUid: string): Promise<void> {
   const fn = httpsCallable(getFunctions(app), "removeFriend");

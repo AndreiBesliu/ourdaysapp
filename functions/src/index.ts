@@ -1,8 +1,12 @@
-import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import * as crypto from "crypto";
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { applyCommand } from "./warlordCombat/combat/engine";
+import { sanitizeDeploy, createPvpBattle } from "./warlordCombat/combat/pvp";
+import type { BattleState, Command } from "./warlordCombat/combat/types";
 
 admin.initializeApp();
 
@@ -1437,5 +1441,326 @@ export const adminGetGrowth = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
 
   const toSeries = (m: Record<string, number>) => Object.entries(m).map(([date, count]) => ({ date, count }));
   return { days, signups: toSeries(signups), events: toSeries(events), games: toSeries(games) };
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Warlord PvP — SERVER-AUTHORITATIVE battle host.
+//
+// Trust model: the client may only (a) create an inert 'waiting' challenge doc
+// (firestore.rules create-fence forces state/seed/winner null) and (b) call the
+// callables below. Every server-owned field (state, status, winner, seed, deploy,
+// players) is fenced from client updates in firestore.rules; the Admin SDK here
+// bypasses the fence. Move legality is decided EXCLUSIVELY by the same pure
+// deterministic engine the clients run (functions/src/warlordCombat/ — a byte-
+// identical copy of the game's combat engine), so optimistic client UI reconciles
+// exactly with the authoritative state.
+//
+// Known limit (documented, accepted for v1): armies live only in each player's
+// localStorage, so deploy payloads are client-claimed. sanitizeDeploy BOUNDS them
+// (caps, derived vet, no statsOverride) but cannot verify provenance — a true fix
+// needs a server-side domain registry.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const WARLORD_GAME_TYPE = "warlord-battle";
+const WARLORD_CID = /^[PE]\d{1,3}$/;
+
+// Validate AND rebuild the command — only whitelisted fields reach the engine.
+function parseWarlordCommand(raw: any): Command | null {
+  if (!raw || typeof raw !== "object") return null;
+  if (raw.kind === "END_TURN") return { kind: "END_TURN" };
+  if (raw.kind === "MOVE") {
+    if (typeof raw.id !== "string" || !WARLORD_CID.test(raw.id)) return null;
+    const x = raw.to?.x;
+    const y = raw.to?.y;
+    if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x > 63 || y > 63) return null;
+    return { kind: "MOVE", id: raw.id, to: { x, y } };
+  }
+  if (raw.kind === "ATTACK") {
+    if (typeof raw.id !== "string" || !WARLORD_CID.test(raw.id)) return null;
+    if (typeof raw.targetId !== "string" || !WARLORD_CID.test(raw.targetId)) return null;
+    return { kind: "ATTACK", id: raw.id, targetId: raw.targetId };
+  }
+  return null;
+}
+
+function requireGameId(data: any): string {
+  const gameId = data?.gameId;
+  if (typeof gameId !== "string" || !gameId || gameId.includes("/")) {
+    throw new HttpsError("invalid-argument", "A valid gameId is required.");
+  }
+  return gameId;
+}
+
+// Defender locks in their deployment; the server validates BOTH payloads, generates
+// the seed (unknowable before both armies are committed), builds the authoritative
+// initial BattleState and flips the doc to 'playing'.
+export const acceptWarlordChallenge = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
+  const gameId = requireGameId(request.data);
+  const { unitIds, combatants } = request.data || {};
+
+  // Defender payload is pure input — validate before the transaction.
+  const defender = sanitizeDeploy({ unitIds, combatants }, "ENEMY");
+  if (!defender.ok) throw new HttpsError("invalid-argument", `Invalid deployment: ${defender.error}`);
+
+  const db = admin.firestore();
+  const ref = db.doc(`games/${gameId}`);
+  const deployRef = db.doc(`warlordDeploys/${gameId}`); // challenger army, Admin-SDK-only
+
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "Challenge not found.");
+    const g = snap.data()!;
+    if (g.gameType !== WARLORD_GAME_TYPE) throw new HttpsError("failed-precondition", "Not a Warlord battle.");
+    if (g.status !== "waiting") throw new HttpsError("failed-precondition", "Challenge already accepted or resolved.");
+    // Belt & suspenders vs a forged create that slipped past the rules fence.
+    if (g.state != null || g.seed != null) throw new HttpsError("failed-precondition", "Malformed challenge.");
+    const players = g.players;
+    if (!Array.isArray(players) || players.length !== 2 ||
+        typeof players[0] !== "string" || typeof players[1] !== "string" ||
+        players[0] === players[1] || players[0] !== g.createdBy || players[1] !== g.opponentUid) {
+      throw new HttpsError("failed-precondition", "Malformed challenge.");
+    }
+    if (uid !== g.opponentUid) throw new HttpsError("permission-denied", "This challenge isn't addressed to you.");
+
+    // Both players must (still) be members of the group — read inside the tx.
+    const groupSnap = await tx.get(db.doc(`groups/${g.groupId}`));
+    const members = groupSnap.exists ? groupSnap.data()?.members : undefined;
+    if (!Array.isArray(members) || !members.includes(players[0]) || !members.includes(players[1])) {
+      throw new HttpsError("permission-denied", "Both players must be members of the group.");
+    }
+
+    // The challenger's army lives in the Admin-only warlordDeploys doc (never readable
+    // by the opponent while waiting → no pre-commit counter-picking). Re-sanitize it.
+    const deploySnap = await tx.get(deployRef);
+    const challenger = sanitizeDeploy(deploySnap.exists ? deploySnap.data() : undefined, "PLAYER");
+    if (!challenger.ok) {
+      throw new HttpsError("failed-precondition", `Challenger deployment invalid: ${challenger.error}`);
+    }
+
+    // Server-owned seed, generated only after BOTH deploys are locked in.
+    const seed = crypto.randomInt(0, 0x100000000); // CSPRNG uint32 (engine applies seed >>> 0)
+    const state = createPvpBattle(challenger.combatants, defender.combatants, seed);
+
+    tx.update(ref, {
+      status: "playing",
+      seed,
+      state,
+      // Both deploys become public now (the battle is full-information once playing);
+      // write-back reads unitIds from here.
+      deploy: {
+        [g.createdBy]: { unitIds: challenger.unitIds, combatants: challenger.combatants },
+        [uid]: { unitIds: defender.unitIds, combatants: defender.combatants },
+      },
+      startedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    tx.delete(deployRef); // private staging no longer needed
+    return { ok: true };
+  });
+});
+
+// Create a PvP challenge (server-authoritative). The challenger's army is validated
+// here and stored in the Admin-only `warlordDeploys/{gameId}` doc so the opponent
+// cannot read it before committing their own; the public game doc stays army-free
+// while 'waiting'. (Client cannot create warlord docs directly — rules deny it.)
+export const createWarlordChallenge = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
+  const { groupId, opponentUid, unitIds, combatants } = request.data || {};
+  if (typeof groupId !== "string" || !groupId) throw new HttpsError("invalid-argument", "groupId is required.");
+  if (typeof opponentUid !== "string" || !opponentUid || opponentUid === uid) {
+    throw new HttpsError("invalid-argument", "A valid, distinct opponent is required.");
+  }
+  const deploy = sanitizeDeploy({ unitIds, combatants }, "PLAYER");
+  if (!deploy.ok) throw new HttpsError("invalid-argument", `Invalid deployment: ${deploy.error}`);
+
+  const db = admin.firestore();
+  const groupSnap = await db.doc(`groups/${groupId}`).get();
+  const members = groupSnap.exists ? groupSnap.data()?.members : undefined;
+  if (!Array.isArray(members) || !members.includes(uid) || !members.includes(opponentUid)) {
+    throw new HttpsError("permission-denied", "Both players must be members of the group.");
+  }
+
+  const gameRef = db.collection("games").doc();
+  const date = new Date().toISOString().slice(0, 10);
+  const batch = db.batch();
+  batch.set(gameRef, {
+    groupId,
+    date,
+    gameType: WARLORD_GAME_TYPE,
+    status: "waiting",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdBy: uid,
+    winner: null,
+    players: [uid, opponentUid],
+    opponentUid,
+    stake: "war",
+    seed: null,
+    state: null,
+    // NO deploy while waiting — the challenger's army stays in warlordDeploys.
+  });
+  batch.set(db.doc(`warlordDeploys/${gameRef.id}`), {
+    challengerUid: uid,
+    unitIds: deploy.unitIds,
+    combatants: deploy.combatants,
+  });
+  await batch.commit();
+  return { gameId: gameRef.id };
+});
+
+// Apply one battle command. The seat check + the pure engine are the entire
+// authority: an illegal command is rejected (applied:false, nothing persisted —
+// the engine's skip path consumes no rng, so dropping it is determinism-safe).
+export const submitWarlordCommand = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
+  const gameId = requireGameId(request.data);
+  const cmd = parseWarlordCommand(request.data?.command);
+  if (!cmd) throw new HttpsError("invalid-argument", "Malformed command.");
+
+  const db = admin.firestore();
+  const ref = db.doc(`games/${gameId}`);
+
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "Game not found.");
+    const g = snap.data()!;
+    if (g.gameType !== WARLORD_GAME_TYPE || g.status !== "playing") {
+      throw new HttpsError("failed-precondition", "Not an active Warlord battle.");
+    }
+    const battle = g.state as BattleState;
+    if (!battle || battle.status !== "ONGOING") {
+      throw new HttpsError("failed-precondition", "Battle already resolved.");
+    }
+    if (!Array.isArray(g.players) || !g.players.includes(uid)) {
+      throw new HttpsError("permission-denied", "You aren't a participant in this battle.");
+    }
+    const seatUid = g.players[battle.side === "PLAYER" ? 0 : 1];
+    if (seatUid !== uid) throw new HttpsError("permission-denied", "Not your turn.");
+
+    const next = applyCommand(battle, cmd);
+
+    // The engine's reject path appends a 'skipped' entry; a legal command never does.
+    const last = next.log.length > 0 ? next.log[next.log.length - 1] : null;
+    if (last && last.kind === "skipped") {
+      return { applied: false, finished: false };
+    }
+
+    const patch: Record<string, unknown> = { state: next };
+    const finished = next.status !== "ONGOING";
+    if (finished) {
+      patch.status = "finished";
+      patch.winner =
+        next.status === "PLAYER_WON" ? g.players[0] :
+        next.status === "ENEMY_WON" ? g.players[1] : null; // DRAW → null (arcade convention)
+      patch.finalized = true; // server-side session lock; leaderboard needs no client write
+      patch.endedAt = admin.firestore.FieldValue.serverTimestamp();
+    }
+    tx.update(ref, patch);
+    return { applied: true, finished };
+  });
+});
+
+// Retreat (= concede) an active battle, or decline/cancel a waiting challenge.
+export const forfeitWarlordBattle = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
+  const gameId = requireGameId(request.data);
+
+  const db = admin.firestore();
+  const ref = db.doc(`games/${gameId}`);
+
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "Game not found.");
+    const g = snap.data()!;
+    if (g.gameType !== WARLORD_GAME_TYPE) throw new HttpsError("failed-precondition", "Not a Warlord battle.");
+    if (!Array.isArray(g.players) || !g.players.includes(uid)) {
+      throw new HttpsError("permission-denied", "You aren't a participant in this battle.");
+    }
+
+    if (g.status === "finished") return { ok: true, already: true }; // idempotent
+
+    if (g.status === "waiting") {
+      tx.delete(ref); // decline (opponent) or cancel (creator) — no scoreboard noise
+      tx.delete(db.doc(`warlordDeploys/${gameId}`)); // clean the private staging doc
+      return { ok: true, declined: true };
+    }
+
+    // playing → retreat = loss. Mark BOTH the doc and the state (terminal annotation,
+    // never replayed through applyCommand, consumes no rng) so the client write-back
+    // (applyBattleResult reads state.winner) needs no special case.
+    const loserIsChallenger = uid === g.players[0];
+    const winnerUid = loserIsChallenger ? g.players[1] : g.players[0];
+    const s = structuredClone(g.state) as BattleState;
+    s.status = loserIsChallenger ? "ENEMY_WON" : "PLAYER_WON";
+    s.winner = loserIsChallenger ? "ENEMY" : "PLAYER";
+    s.phase = "RESOLVED";
+    s.log.push({ turn: s.turn, side: s.side, kind: "victory", detail: { status: s.status, forfeit: 1 } });
+
+    tx.update(ref, {
+      status: "finished",
+      winner: winnerUid,
+      forfeitedBy: uid,
+      finalized: true,
+      state: s,
+      endedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { ok: true };
+  });
+});
+
+// Turn/lifecycle push notifications. Fires on EVERY games/{id} update (Firestore
+// triggers can't filter on field values) — exits before any reads for other types.
+// Performs zero Firestore writes → cannot retrigger itself.
+export const onWarlordBattleUpdated = onDocumentUpdated("games/{gameId}", async (event) => {
+  const change = event.data;
+  if (!change) return;
+  const after = change.after.data();
+  if (!after || after.gameType !== WARLORD_GAME_TYPE) return;
+  const before = change.before.data() || {};
+  const players: string[] = Array.isArray(after.players) ? after.players : [];
+  if (players.length !== 2) return;
+
+  // One push target set per branch (else-if: the accept write flips status AND
+  // creates state — it must not also fire the turn branch).
+  let targets: { uid: string; title: string; body: string }[] = [];
+
+  if (before.status === "waiting" && after.status === "playing") {
+    targets = [{
+      uid: players[0], // initial side = PLAYER = seat 0 (the challenger moves first)
+      title: "⚔️ Warlord: battle joined!",
+      body: "Your challenge was accepted — it's your move.",
+    }];
+  } else if (before.status !== "finished" && after.status === "finished") {
+    const w = after.winner;
+    const suffix = after.forfeitedBy ? " (by retreat)" : "";
+    targets = players.map((uid) => ({
+      uid,
+      title: "⚔️ Warlord: battle over",
+      body: w == null ? "The battle ended in a draw." : uid === w ? `Victory!${suffix}` : `Defeat.${suffix}`,
+    }));
+  } else if (after.status === "playing" && before.state?.side !== after.state?.side) {
+    const seatUid = players[after.state.side === "PLAYER" ? 0 : 1];
+    targets = [{ uid: seatUid, title: "⚔️ Warlord: your turn", body: "The enemy has ended their turn." }];
+  }
+  if (targets.length === 0) return;
+
+  try {
+    for (const t of targets) {
+      const userDoc = await admin.firestore().doc(`users/${t.uid}`).get();
+      const tokens: string[] = userDoc.data()?.fcmTokens || [];
+      const unique = [...new Set(tokens)];
+      if (unique.length === 0) continue;
+      const res = await admin.messaging().sendEachForMulticast({
+        notification: { title: t.title, body: t.body },
+        tokens: unique,
+      });
+      console.log(`Warlord push to ${t.uid}: sent ${res.successCount}, failed ${res.failureCount}`);
+    }
+  } catch (error) {
+    console.error("Error sending Warlord FCM:", error);
+  }
 });
 

@@ -133,12 +133,14 @@ export interface BattleOutcome {
 
 // Apply a finished battle to the army. Only units in `deployedUnitIds` are touched;
 // undeployed units pass through unchanged. Destroyed units are removed.
-export function applyBattleResult(units: Unit[], finalState: BattleState, deployedUnitIds: string[]): BattleOutcome {
-  const won = finalState.winner === 'PLAYER'
+// `side` = which battle side belongs to THIS army (PvE is always 'PLAYER'; in PvP the
+// defender applies its own casualties from the 'ENEMY' perspective).
+export function applyBattleResult(units: Unit[], finalState: BattleState, deployedUnitIds: string[], side: Side = 'PLAYER'): BattleOutcome {
+  const won = finalState.winner === side
   const deployed = new Set(deployedUnitIds)
   const bySrc = new Map<string, Combatant>()
   for (const c of finalState.combatants) {
-    if (c.side === 'PLAYER' && c.unitId) bySrc.set(c.unitId, c)
+    if (c.side === side && c.unitId) bySrc.set(c.unitId, c)
   }
 
   const out: Unit[] = []

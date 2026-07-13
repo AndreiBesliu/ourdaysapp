@@ -140,6 +140,17 @@
 
 ## 📅 Session Log: July 12, 2026
 
+**Task Started + Completed (Warlord PvP — server-authoritative)**
+> Prompt: "pvp" → decizii Andrei: server-authoritative de la început ("securitate și anti-cheat bun, aplicația se extinde de la familie la social mai larg"), pierderi reale, push de tură.
+> Model: Claude Opus 4.8
+> This is the app's FIRST server-authoritative game (the classic arcade is client-authoritative). A shared pure engine runs identically on both clients (optimistic UI) and in Cloud Functions (the authority), reconciling by determinism.
+> Changes:
+> - `functions/src/index.ts`: `createWarlordChallenge`, `acceptWarlordChallenge`, `submitWarlordCommand`, `forfeitWarlordBattle` (onCall + runTransaction) + `onWarlordBattleUpdated` (onDocumentUpdated → FCM "your turn"/"joined"/"battle over" push, the app's first update-trigger). `functions/src/warlordCombat/` = a 3rd byte-identical copy of the pure engine + `combat/pvp.ts` (sanitizeDeploy + createPvpBattle). Added `@types/node`.
+> - `firestore.rules`: games block fenced for `gameType=='warlord-battle'` (create only via callable; update denies state/winner/status/seed/deploy/players/finalized/…; delete only while waiting) + new Admin-only `warlordDeploys` collection (challenger armies, hidden from the opponent pre-commit).
+> - Client (OurDaysApp-only): `src/serverActions.ts` (4 wrappers), `src/warlordPvp/{pvpApi,PvpPanel,PvpBattle}.tsx`, Domain|PvP toggle in `src/screens/Warlord.tsx`, `warlord-battle` dispatch branch + `navigate` in `GamesHubModal.tsx`. Optimistic `applyCommand` reconciles with the server doc; real casualties written back per client via `applyBattleResult(units, state, myUnitIds, mySide)`, idempotent via `warlord_pvp_applied_{uid}`.
+> - Adversarial multi-agent review (run pre-final-ship) caught & fixed: CRITICAL weapon-smuggling (archer+halberd bypass → dropped loadoutWeapon), MAJOR pre-commit army peek (→ private warlordDeploys + callable-only create), MINOR finalized deny-list. Deferred (documented): no turn timeout (forfeit is the escape hatch), English-only i18n.
+> Build: tsc (embed+functions) ✅, standalone 24 tests ✅, vite build ✅. Deploy order: functions → rules → hosting, all ✅. Live at https://our-days-2a939.web.app/warlord (⚔ PvP tab).
+
 **Task Started (Warlord development round)**
 > Prompt: "vreau sa imbunatatim si sa dezvoltam jocul / deci? / limita este libera"
 > Plan: Game-development round on the embedded Warlord (synced 1:1 from the standalone repo): fix save-lost-on-refresh + dead split/merge/training state, add rank promotion from XP, building upgrade levels, campaign progression (one battle/day, escalation, win-streak loot), attack forecast panel, battle report, per-uid saves in the embed.

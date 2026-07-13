@@ -8,6 +8,7 @@ import Connect4 from './Connect4';
 import RummyGame from './rummy/RummyGame';
 import MemoryMatch from './MemoryMatch';
 import { format } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../../store';
 import { t } from '../../utils/i18n';
 import { getSessionWinner, finalizeGameUpdate } from './gameResult';
@@ -299,6 +300,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
   const [confirmingEndId, setConfirmingEndId] = useState<string | null>(null);
   const [showThemePicker, setShowThemePicker] = useState(false);
   const { language } = useThemeStore();
+  const navigate = useNavigate();
   const gameRules = getGameRules(language);
 
   // Localized display name for a game type id (used in the active/past games list)
@@ -308,6 +310,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
       case 'connect-4': return t('gameConnect4', language);
       case 'rummy-45': return t('gameRummy45', language);
       case 'memory-match': return t('gameMemoryMatch', language);
+      case 'warlord-battle': return 'Warlord Battle';
       default: return gt.replace(/-/g, ' ');
     }
   };
@@ -536,6 +539,21 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
               )}
               {activeGame.gameType === 'memory-match' && (
                 <MemoryMatch game={activeGame} userMap={userMap} onBack={() => setPlayingGameId(null)} />
+              )}
+              {activeGame.gameType === 'warlord-battle' && (
+                // PvP battles are played from the full-width /warlord route (the arcade
+                // modal is too small for the tactical grid + the player's local army).
+                <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
+                  <span className="text-4xl">⚔️</span>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">This is a Warlord PvP battle — it opens in the Warlord arena.</p>
+                  <button
+                    onClick={() => { onClose(); navigate('/warlord'); }}
+                    className="px-4 py-2 bg-black text-white dark:bg-white dark:text-black rounded-lg text-sm font-semibold"
+                  >
+                    Open in Warlord ⚔
+                  </button>
+                  <button onClick={() => setPlayingGameId(null)} className="text-xs text-zinc-500 underline">Back</button>
+                </div>
               )}
             </div>
           ) : (

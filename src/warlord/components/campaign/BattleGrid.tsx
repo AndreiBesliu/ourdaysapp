@@ -1,5 +1,5 @@
 import React from 'react'
-import type { BattleState, Combatant, TerrainType } from '../../logic/combat/types'
+import type { BattleState, Combatant, Side, TerrainType } from '../../logic/combat/types'
 import { legalMoves, legalTargets, terrainAt, combatantAt } from '../../logic/combat/engine'
 import GameIcon from '../common/GameIcon'
 import { getIconForGameItem } from '../../logic/iconHelpers'
@@ -45,10 +45,13 @@ interface Props {
   onSelect: (id: string) => void
   onMove: (x: number, y: number) => void
   onAttack: (targetId: string) => void
+  // Which battle side this viewer commands. PvE is always 'PLAYER' (default);
+  // in PvP the defender commands the 'ENEMY' side of the same shared state.
+  controlSide?: Side
 }
 
-export default function BattleGrid({ battle, selectedId, onSelect, onMove, onAttack }: Props) {
-  const canControl = battle.side === 'PLAYER' && battle.status === 'ONGOING'
+export default function BattleGrid({ battle, selectedId, onSelect, onMove, onAttack, controlSide = 'PLAYER' }: Props) {
+  const canControl = battle.side === controlSide && battle.status === 'ONGOING'
   const moves = selectedId && canControl ? legalMoves(battle, selectedId) : []
   const targets = selectedId && canControl ? legalTargets(battle, selectedId) : []
   const moveSet = new Set(moves.map((m) => `${m.x},${m.y}`))
@@ -62,11 +65,11 @@ export default function BattleGrid({ battle, selectedId, onSelect, onMove, onAtt
       const isMove = moveSet.has(`${x},${y}`)
       const isTarget = !!occ && targetSet.has(occ.id)
       const selected = !!occ && occ.id === selectedId
-      const dim = !!occ && occ.side === 'PLAYER' && canControl && occ.hasActed && occ.hasMoved
+      const dim = !!occ && occ.side === controlSide && canControl && occ.hasActed && occ.hasMoved
 
       const onClick = () => {
         if (occ) {
-          if (occ.side === 'PLAYER' && canControl) onSelect(occ.id)
+          if (occ.side === controlSide && canControl) onSelect(occ.id)
           else if (isTarget) onAttack(occ.id)
         } else if (isMove) {
           onMove(x, y)

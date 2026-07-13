@@ -1,13 +1,17 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
 import WarlordApp from '../warlord/WarlordApp';
+import PvpPanel from '../warlordPvp/PvpPanel';
 
-// Embedded single-player Warlord game, mounted as its own full-width route so its
-// multi-tab desktop layout isn't squeezed into the arcade modal. State is local
-// (localStorage), no Firestore/backend. See src/warlord/ (kept in sync with the
-// standalone games/warlord repo).
+// Embedded Warlord game, mounted as its own full-width route. Two views:
+//  • Domain — the single-player game (localStorage state, no backend).
+//  • PvP — server-authoritative battles vs group members (Firestore + callables).
+// Only ONE view is mounted at a time: the PvP write-back edits the local save
+// directly, which is only safe while the game (and its persist effect) is unmounted.
 export default function Warlord() {
   const navigate = useNavigate();
+  const [view, setView] = useState<'DOMAIN' | 'PVP'>('DOMAIN');
 
   // Per-user save so family members sharing one device don't share a domain.
   const realUid = auth.currentUser?.uid;
@@ -35,13 +39,32 @@ export default function Warlord() {
         >
           ← Back to Our Days
         </button>
-        <span className="text-sm text-stone-500">Warlord (single-player)</span>
+        <span className="text-sm text-stone-500">Warlord</span>
+        <div className="ml-auto flex gap-1">
+          {([['DOMAIN', '🏰 Domain'], ['PVP', '⚔ PvP']] as const).map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setView(k)}
+              className={`px-3 py-1 rounded text-sm border ${view === k ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
-      {/* key={saveKey}: if the uid (and thus the storage key) ever changes while mounted
-          (sign-out/sign-in in another tab), remount the whole game so every useState
-          initializer re-hydrates from the NEW key — otherwise the persist effect would
-          overwrite the new user's save with the previous user's in-memory state. */}
-      <WarlordApp key={saveKey} saveKey={saveKey} />
+      {view === 'DOMAIN' ? (
+        // key={saveKey}: if the uid (and thus the storage key) ever changes while mounted
+        // (sign-out/sign-in in another tab), remount the whole game so every useState
+        // initializer re-hydrates from the NEW key — otherwise the persist effect would
+        // overwrite the new user's save with the previous user's in-memory state.
+        <WarlordApp key={saveKey} saveKey={saveKey} />
+      ) : (
+        <div className="p-6 max-w-6xl mx-auto">
+          {realUid
+            ? <PvpPanel key={realUid} myUid={realUid} />
+            : <p className="text-sm text-stone-600">Sign in to play PvP battles.</p>}
+        </div>
+      )}
     </div>
   );
 }
