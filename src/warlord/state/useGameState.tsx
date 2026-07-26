@@ -58,11 +58,23 @@ function readSaveBlob(saveKey: string): any {
   }
 }
 
-export function useGameState(saveKey = 'warlord_save') {
+// Pluggable persistence so the same game runs off localStorage (standalone) or a cloud
+// store (the OurDaysApp embed passes a pre-loaded blob + an onPersist that writes Firestore).
+export interface GameStatePersistOpts {
+  initialBlob?: any // pre-loaded save (e.g. from the cloud); overrides the localStorage read
+  onPersist?: (blob: any) => void // called on every save with the full blob (in addition to localStorage)
+}
+
+const LOG_CAP = 300 // keep the persisted log bounded (display-only; protects the cloud doc size)
+
+export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOpts) {
   // Hydrate-on-init: read the save ONCE, synchronously, before any state exists.
   // (Previously the save-effect below ran on mount with fresh state and clobbered the
   // stored save before the player could press Load — a page refresh lost all progress.)
-  const [saved] = useState(() => readSaveBlob(saveKey))
+  // A caller-supplied initialBlob (cloud) wins; `undefined` means "read localStorage"
+  // (standalone), `null` means "loaded from cloud, empty → fresh game".
+  const [saved] = useState(() => (opts?.initialBlob !== undefined ? opts.initialBlob : readSaveBlob(saveKey)))
+  const onPersist = opts?.onPersist
   // Defense-in-depth: remember which key this state was hydrated from. If the caller
   // ever changes saveKey without remounting (they should pass key={saveKey}), the
   // persist effect must NOT write state hydrated from another user's key.
@@ -83,14 +95,16 @@ export function useGameState(saveKey = 'warlord_save') {
 
   useEffect(() => {
     if (saveKey !== hydratedKey) return // never clobber another key's save (see above)
-    localStorage.setItem(saveKey, JSON.stringify({
-      day, log,
+    const blob = {
+      day, log: log.slice(0, LOG_CAP),
       wallet: econ.wallet, inv: econ.inv, buildings: econ.buildings, resources: econ.resources,
       barracks: barr.barracks, barracksLevel: barr.barracksLevel,
       recruits: barr.recruits, batches: barr.batches,
       units: unit.units,
       campaign: camp.campaign,
-    }))
+    }
+    localStorage.setItem(saveKey, JSON.stringify(blob)) // fast local cache / offline fallback
+    onPersist?.(blob) // e.g. debounced cloud write (OurDaysApp embed)
   }, [saveKey, day, log, econ.wallet, econ.inv, econ.buildings, econ.resources, barr.barracks, barr.barracksLevel, barr.recruits, barr.batches, unit.units, camp.campaign]) // econ.resources & camp.campaign included so those-only changes persist
 
   function loadSave() {

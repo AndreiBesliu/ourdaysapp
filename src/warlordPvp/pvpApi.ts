@@ -10,6 +10,7 @@ import type { BattleState } from '../warlord/logic/combat/types';
 import { type DeployCombatantClaim, sanitizeDeploy } from '../warlord/logic/combat/pvp';
 import { fieldedStrength } from '../warlord/logic/combat/army';
 import { createWarlordChallenge, forfeitWarlordBattle } from '../serverActions';
+import { saveWarlordDomain } from '../warlordCloud';
 
 export const WARLORD_GAME_TYPE = 'warlord-battle';
 
@@ -49,7 +50,8 @@ export function writeLocalArmy(uid: string, units: Unit[]): boolean {
     if (!raw) return false;
     const blob = JSON.parse(raw);
     blob.units = units;
-    localStorage.setItem(key, JSON.stringify(blob));
+    localStorage.setItem(key, JSON.stringify(blob)); // local cache
+    void saveWarlordDomain(uid, blob); // durable: casualties must survive across devices
     return true;
   } catch {
     return false;

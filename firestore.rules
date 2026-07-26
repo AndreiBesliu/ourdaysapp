@@ -148,6 +148,13 @@ service cloud.firestore {
         (resource.data.gameType != 'warlord-battle' || resource.data.status == 'waiting');
     }
 
+    // ── Warlord domains (per-user single-player kingdom, cloud-synced) ──
+    // Each user's own economy/army save. Strictly owner-only — this is the user's
+    // private game account, readable/writable only by them.
+    match /warlordDomains/{ownerId} {
+      allow read, write: if isSignedIn() && request.auth.uid == ownerId;
+    }
+
     // ── Warlord PvP staging (challenger armies) ──
     // Holds a challenger's committed army while the challenge is 'waiting', so the
     // opponent CANNOT read it before choosing their own (no pre-commit counter-pick).

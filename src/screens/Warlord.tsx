@@ -1,30 +1,44 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
 import WarlordApp from '../warlord/WarlordApp';
 import PvpPanel from '../warlordPvp/PvpPanel';
+import { loadWarlordDomain, createDomainSync } from '../warlordCloud';
 
 // Embedded Warlord game, mounted as its own full-width route. Two views:
-//  • Domain — the single-player game (localStorage state, no backend).
-//  • PvP — server-authoritative battles vs group members (Firestore + callables).
-// Only ONE view is mounted at a time: the PvP write-back edits the local save
-// directly, which is only safe while the game (and its persist effect) is unmounted.
+//  • Domain — the single-player game. State is CLOUD-BACKED (warlordDomains/{uid} in
+//    Firestore, cached in localStorage) so a user's kingdom follows them across devices.
+//  • PvP — server-authoritative battles vs other users (Firestore + callables).
+// Only ONE view is mounted at a time: the PvP write-back edits the local save (and
+// pushes to the cloud), which is only safe while the Domain game is unmounted.
 export default function Warlord() {
   const navigate = useNavigate();
   const [view, setView] = useState<'DOMAIN' | 'PVP'>('DOMAIN');
-
-  // Per-user save so family members sharing one device don't share a domain.
   const realUid = auth.currentUser?.uid;
   const saveKey = `warlord_save_${realUid ?? 'anon'}`;
 
-  // One-time migration: adopt the pre-uid-scoping save if this user has none yet.
-  // ONLY for a real authenticated uid — an anon render must never consume the shared
-  // legacy save (it would strand the family's progress under an unreachable key).
-  const legacy = localStorage.getItem('warlord_save');
-  if (realUid && legacy && !localStorage.getItem(saveKey)) {
-    localStorage.setItem(saveKey, legacy);
-    localStorage.removeItem('warlord_save');
-  }
+  // Debounced cloud writer for this user's domain (null for a signed-out visitor).
+  const sync = useMemo(() => (realUid ? createDomainSync(realUid) : null), [realUid]);
+
+  // Load the cloud domain into localStorage BEFORE mounting the game (so its synchronous
+  // hydrate picks it up). `ready` gates the mount so the async load can't race the game.
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    if (!realUid) { setReady(true); return; } // anon plays locally, no cloud
+    // One-time migration of the pre-uid-scoping local save into this user's key.
+    const legacy = localStorage.getItem('warlord_save');
+    if (legacy && !localStorage.getItem(saveKey)) {
+      localStorage.setItem(saveKey, legacy);
+      localStorage.removeItem('warlord_save');
+    }
+    setReady(false);
+    loadWarlordDomain(realUid).finally(() => { if (alive) setReady(true); });
+    return () => { alive = false; sync?.flush(); }; // push the last state on unmount
+  }, [realUid, saveKey, sync]);
+
+  // Leaving the Domain view (e.g. to PvP) flushes any pending cloud write immediately.
+  useEffect(() => { if (view !== 'DOMAIN') sync?.flush(); }, [view, sync]);
 
   // Warlord is designed for a light theme (white cards, dark text) with stock Tailwind
   // classes and no `dark:` variants. OurDaysApp may run in dark mode (`.dark` on <html>),
@@ -52,12 +66,15 @@ export default function Warlord() {
           ))}
         </div>
       </div>
-      {view === 'DOMAIN' ? (
-        // key={saveKey}: if the uid (and thus the storage key) ever changes while mounted
-        // (sign-out/sign-in in another tab), remount the whole game so every useState
-        // initializer re-hydrates from the NEW key — otherwise the persist effect would
-        // overwrite the new user's save with the previous user's in-memory state.
-        <WarlordApp key={saveKey} saveKey={saveKey} />
+
+      {!ready ? (
+        <div className="flex items-center justify-center py-24">
+          <div className="w-8 h-8 border-4 border-stone-300 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : view === 'DOMAIN' ? (
+        // key={saveKey}: an auth change while mounted remounts the game so it re-hydrates
+        // from the new user's key. onPersist mirrors every save to the cloud (debounced).
+        <WarlordApp key={saveKey} saveKey={saveKey} onPersist={sync?.onPersist} />
       ) : (
         <div className="p-6 max-w-6xl mx-auto">
           {realUid

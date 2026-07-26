@@ -14,9 +14,18 @@ import { useGameState } from './state/useGameState'
 import { fmtCopper as fmtCopperUtil } from './logic/types'
 
 // saveKey scopes ALL persistence (game save + tick timers). The OurDaysApp embed passes
-// a per-user key (warlord_save_<uid>) so family members on one device don't share saves.
-export default function App({ saveKey = 'warlord_save' }: { saveKey?: string }) {
-  const state = useGameState(saveKey)
+// a per-user key (warlord_save_<uid>) so users on one device don't share saves, and may
+// pass initialBlob/onPersist to back the save with the cloud instead of localStorage.
+export default function App({
+  saveKey = 'warlord_save',
+  initialBlob,
+  onPersist,
+}: {
+  saveKey?: string
+  initialBlob?: any
+  onPersist?: (blob: any) => void
+}) {
+  const state = useGameState(saveKey, { initialBlob, onPersist })
 
   // ---- auto day-tick every 5 minutes ----
   const TICK_MS = 5 * 60 * 1000; // 5 min

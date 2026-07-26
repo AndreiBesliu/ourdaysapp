@@ -140,6 +140,16 @@
 
 ## 📅 Session Log: July 12, 2026
 
+**Task Completed (Warlord — cloud-synced domain / real game account)**
+> Prompt: "fiecare user al aplicatiei OurDaysApp are un cont separat pentru jocul Warlords, sau intra toti pe acelasi joc?" → each user is a player; the app account IS the game account; make the kingdom cross-device.
+> Model: Claude Opus 4.8
+> The Warlord single-player domain (economy/army) was device-local (localStorage). Now it's CLOUD-BACKED at `warlordDomains/{uid}` (Firestore), so a user's kingdom follows them across devices — a real per-user game account.
+> - Synced game code (`useGameState`): pluggable persistence — `opts.initialBlob` (cloud-loaded save) + `opts.onPersist(blob)` (extra write target); log capped at 300 to bound the cloud doc. `App.tsx` passes them through. Standalone behavior unchanged (no opts → localStorage).
+> - OurDaysApp-only: `src/warlordCloud.ts` (load cloud→localStorage with local→cloud migration; debounced saver + flush). `screens/Warlord.tsx` loads the cloud domain BEFORE mounting the game (ready-gate + spinner), wires onPersist to the debounced cloud writer, flushes on unmount/view-switch. PvP casualty write-back now also pushes to the cloud. New rule `warlordDomains/{uid}` owner-only.
+> - Model: localStorage = write-through cache + offline fallback; Firestore = durable source of truth.
+> Noted for later (Andrei's north-star): all users share ONE world; PvP beyond groups (groups become a social layer — search/message/invite); game↔app ties defined in the main app.
+> Build: tsc+build ✅, standalone 24 tests ✅. Deploy: rules ✅ + hosting ✅. Verified locally (ready-gate hydration, Domain↔PvP toggle keeps state, no console errors).
+
 **Task Started + Completed (Warlord PvP — server-authoritative)**
 > Prompt: "pvp" → decizii Andrei: server-authoritative de la început ("securitate și anti-cheat bun, aplicația se extinde de la familie la social mai larg"), pierderi reale, push de tură.
 > Model: Claude Opus 4.8
