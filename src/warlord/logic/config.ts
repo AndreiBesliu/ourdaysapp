@@ -20,6 +20,11 @@ export interface TrainingConfig {
   maxSlots: number // hard cap on concurrent batches
 }
 
+export interface TickConfig {
+  minutesPerDay: number // real minutes that make one in-game day
+  maxOfflineDays: number // how much of an absence is resolved on return (0 = none)
+}
+
 export interface MissionOverride {
   ratio?: number
   rewardCopperPerStrength?: number
@@ -37,12 +42,18 @@ export interface GameConfigOverrides {
   upkeepRankMult?: Partial<Record<Rank, number>>
   foodBase?: Partial<Record<SoldierType, number>>
   training?: Partial<TrainingConfig>
+  tick?: Partial<TickConfig>
   missions?: Record<string, MissionOverride>
   catalog?: CatalogOverrides
   buffs?: Record<string, Partial<Omit<BuffDef, 'id'>>>
 }
 
 export const DEFAULT_TRAINING: TrainingConfig = { baseDays: 7, minDays: 3, maxSlots: 5 }
+
+// 24 days = two real hours of absence resolved on return. Deliberately conservative:
+// every caught-up day still charges upkeep and eats food, so a huge catch-up can starve
+// an army the player never got to feed. Raise it from the admin if you want more.
+export const DEFAULT_TICK: TickConfig = { minutesPerDay: 5, maxOfflineDays: 24 }
 
 // Only finite, non-negative numbers survive — an admin typo (or a corrupted doc) must
 // never turn a price into NaN and brick the economy.
@@ -97,6 +108,19 @@ class GameConfigStore {
       minDays,
       maxSlots: Math.max(1, num(t.maxSlots, DEFAULT_TRAINING.maxSlots, 1)),
     }
+  }
+
+  tick(): TickConfig {
+    const t = this.o.tick ?? {}
+    return {
+      // A day shorter than 10s would spin the catch-up loop; a missing/absurd value falls back.
+      minutesPerDay: Math.max(1 / 6, num(t.minutesPerDay, DEFAULT_TICK.minutesPerDay, 1 / 6)),
+      maxOfflineDays: Math.min(2000, Math.floor(num(t.maxOfflineDays, DEFAULT_TICK.maxOfflineDays))),
+    }
+  }
+
+  tickMs(): number {
+    return Math.round(this.tick().minutesPerDay * 60_000)
   }
 
   mission(id: string): MissionOverride | undefined {

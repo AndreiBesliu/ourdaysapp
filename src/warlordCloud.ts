@@ -54,7 +54,11 @@ export async function loadWarlordDomain(uid: string): Promise<void> {
   const localRev = readLocalRev(uid);
   const localSave = readLocalSave(uid);
 
-  if (cloudSave !== undefined && cloudRev >= localRev) {
+  // STRICTLY greater: after a successful write both sides sit at the same rev, and
+  // localStorage is written synchronously on every state change while the cloud write is
+  // debounced. On a tie the local copy is therefore never older — adopting the cloud
+  // would silently throw away whatever happened inside the last debounce window.
+  if (cloudSave !== undefined && cloudRev > localRev) {
     localStorage.setItem(localKey(uid), JSON.stringify(cloudSave));
     localStorage.setItem(revKey(uid), String(cloudRev));
     return;

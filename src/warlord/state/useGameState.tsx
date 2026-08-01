@@ -87,6 +87,14 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
 
   // day + log
   const [day, setDay] = useState<number>(() => saved?.day ?? 1)
+  // Timestamp of the last completed day. This is THE clock: everything about the day
+  // schedule is derived from it, and it lives in the save (not in a device-local key)
+  // so it travels with the kingdom across devices exactly like `day` does. An older
+  // save has no anchor — start it now, so nobody is retro-credited for the past.
+  const [lastTickAt, setLastTickAt] = useState<number>(() => {
+    const t = saved?.lastTickAt
+    return typeof t === 'number' && Number.isFinite(t) ? t : Date.now()
+  })
   const [log, setLog] = useState<string[]>(() => saved?.log ?? [])
   const addLog = (s: string) => setLog(l => [`${new Date().toLocaleString()} — ${s} `, ...l])
 
@@ -119,7 +127,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
   useEffect(() => {
     if (saveKey !== hydratedKey) return // never clobber another key's save (see above)
     const blob = {
-      day, log: log.slice(0, LOG_CAP),
+      day, lastTickAt, log: log.slice(0, LOG_CAP),
       wallet: econ.wallet, inv: econ.inv, buildings: econ.buildings, resources: econ.resources,
       barracks: barr.barracks, barracksLevel: barr.barracksLevel,
       recruits: barr.recruits, batches: barr.batches,
@@ -129,7 +137,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     }
     localStorage.setItem(saveKey, JSON.stringify(blob)) // fast local cache / offline fallback
     onPersist?.(blob) // e.g. debounced cloud write (OurDaysApp embed)
-  }, [saveKey, day, log, econ.wallet, econ.inv, econ.buildings, econ.resources, barr.barracks, barr.barracksLevel, barr.recruits, barr.batches, unit.units, camp.campaign, rsc.research]) // econ.resources & camp.campaign included so those-only changes persist
+  }, [saveKey, day, lastTickAt, log, econ.wallet, econ.inv, econ.buildings, econ.resources, barr.barracks, barr.barracksLevel, barr.recruits, barr.batches, unit.units, camp.campaign, rsc.research]) // econ.resources & camp.campaign included so those-only changes persist
 
   function loadSave() {
     const raw = localStorage.getItem(saveKey)
@@ -137,6 +145,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     try {
       const s = JSON.parse(raw)
       setDay(s.day ?? 1); setLog(s.log ?? [])
+      setLastTickAt(typeof s.lastTickAt === 'number' && Number.isFinite(s.lastTickAt) ? s.lastTickAt : Date.now())
       econ.setWallet(s.wallet ?? 5 * GOLD)
       econ.setInv(s.inv ?? econ.inv)
       econ.setBuildings(s.buildings ?? econ.buildings)
@@ -153,7 +162,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
   }
 
   function resetAll() {
-    setDay(1); setLog([])
+    setDay(1); setLog([]); setLastTickAt(Date.now())
     econ.setWallet(10 * GOLD)
     econ.setInv(makeEmptyInventories())
     econ.setBuildings(defaultBuildings())
@@ -439,7 +448,13 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     qHA({ econ, barr, addLog, mods }, qty)
   }
 
-  function runDailyTick() {
+  // `anchorTo` is for the manual "Run Day" button: it restarts the countdown from that
+  // instant. The automatic path passes nothing, so the anchor advances by exactly one
+  // window and the schedule stays phase-locked instead of drifting on every late fire.
+  function runDailyTick(anchorTo?: number) {
+    setLastTickAt(t =>
+      typeof anchorTo === 'number' && Number.isFinite(anchorTo) ? anchorTo : t + GameConfig.tickMs()
+    )
     const notes: string[] = []
     const income = econ.applyBuildingIncome(s => notes.push(s), mods)
     const delta = income.walletDelta
@@ -851,6 +866,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
   return {
     // core
     day, log, addLog, runDailyTick, loadSave, resetAll, fmtCopper,
+    lastTickAt, setLastTickAt,
 
     // economy
     wallet: econ.wallet, inv: econ.inv, buildings: econ.buildings, hasStable: econ.hasStable,

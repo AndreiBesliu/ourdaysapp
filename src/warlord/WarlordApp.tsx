@@ -1,5 +1,5 @@
 // src/App.tsx
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import BuildingsTab from './components/tabs/BuildingsTab'
 import ResourcesTab from './components/tabs/ResourcesTab'
 import MarketTab from './components/tabs/MarketTab'
@@ -11,6 +11,8 @@ import ResearchTab from './components/tabs/ResearchTab'
 
 import BarracksTab from './components/tabs/BarracksTab'
 import { useGameState } from './state/useGameState'
+import { GameConfig } from './logic/config'
+import { planTicks, mmss, humanDuration } from './logic/tick'
 import type { GameConfigOverrides } from './logic/config'
 
 import { fmtCopper as fmtCopperUtil } from './logic/types'
@@ -31,64 +33,88 @@ export default function App({
 }) {
   const state = useGameState(saveKey, { initialBlob, onPersist, config })
 
-  // ---- auto day-tick every 5 minutes ----
-  const TICK_MS = 5 * 60 * 1000; // 5 min
+  // ---- day clock ----
+  // Every day is derived from `state.lastTickAt` (the timestamp of the last completed
+  // day, stored IN THE SAVE). Nothing is scheduled against an in-memory deadline any
+  // more: closing the app used to discard the elapsed window and restart the countdown,
+  // so time spent away credited zero days and short visits never advanced a day at all.
+  const TICK_MS = GameConfig.tickMs();
+  const MAX_OFFLINE_DAYS = GameConfig.tick().maxOfflineDays;
 
-  // persisted auto/pause and next-tick target
   const [autoTick, setAutoTick] = useState<boolean>(() => {
     const v = localStorage.getItem(`${saveKey}:autoTick`);
     return v ? v === 'true' : true; // default ON
   });
-  const [nextTickAt, setNextTickAt] = useState<number>(() => {
-    const v = localStorage.getItem(`${saveKey}:nextTickAt`);
-    // start a new 5-min window if missing or in the past
-    const n = v ? parseInt(v, 10) : 0;
-    return Number.isFinite(n) && n > Date.now() ? n : Date.now() + TICK_MS;
-  });
-  const [remaining, setRemaining] = useState<number>(nextTickAt - Date.now());
+  const [remaining, setRemaining] = useState<number>(
+    () => planTicks(Date.now(), state.lastTickAt, TICK_MS, MAX_OFFLINE_DAYS).remainingMs
+  );
+  // Days still owed to the player, drained one per commit (see below).
+  const [pendingDays, setPendingDays] = useState(0);
 
-  // keep localStorage in sync
   useEffect(() => {
     localStorage.setItem(`${saveKey}:autoTick`, String(autoTick));
   }, [saveKey, autoTick]);
-  useEffect(() => {
-    localStorage.setItem(`${saveKey}:nextTickAt`, String(nextTickAt));
-  }, [saveKey, nextTickAt]);
 
-  // 1s heartbeat to update countdown and fire daily ticks
+  // The heartbeat reads the game through a ref so the interval is installed ONCE.
+  // `state` is a fresh object every render, so keeping it in the dependency array
+  // tore down and re-created the interval on every single render.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const pendingRef = useRef(pendingDays);
+  pendingRef.current = pendingDays;
+  // The anchor a backlog was last planned from. Guards against crediting the same
+  // absence twice when the effect runs more than once for one mount (StrictMode).
+  const plannedFromRef = useRef(0);
+
   useEffect(() => {
     if (!autoTick) return;
-    const id = setInterval(() => {
-      const now = Date.now();
-      const left = nextTickAt - now;
-      if (left <= 0) {
-        // fire a tick and schedule the next window
-        state.runDailyTick();
-        const next = now + TICK_MS;
-        setNextTickAt(next);
-        setRemaining(next - now);
-      } else {
-        setRemaining(left);
+
+    const check = () => {
+      const g = stateRef.current;
+      const plan = planTicks(Date.now(), g.lastTickAt, TICK_MS, MAX_OFFLINE_DAYS);
+      setRemaining(plan.remainingMs);
+      if (pendingRef.current > 0) return; // a drain is in flight — never touch the anchor
+      if (plan.grant <= 0) {
+        // A clock that ran backwards (device time change, sleep/resume) leaves the
+        // anchor in the future; rebase it so the countdown can't stick at a nonsense value.
+        if (plan.anchor !== g.lastTickAt) g.setLastTickAt(plan.anchor);
+        return;
       }
-    }, 1000);
+      if (plan.anchor === plannedFromRef.current) return; // already planned this window
+      plannedFromRef.current = plan.anchor;
+      if (plan.due > 1) {
+        const away = humanDuration(plan.due * TICK_MS);
+        g.addLog(
+          plan.forfeited > 0
+            ? `⏳ Away ${away} — resolving ${plan.grant} days (${plan.forfeited} beyond the ${MAX_OFFLINE_DAYS}-day catch-up limit were skipped).`
+            : `⏳ Away ${away} — resolving ${plan.grant} days.`
+        );
+      }
+      // Rewind the anchor so the days about to run land it exactly on now-minus-remainder.
+      g.setLastTickAt(plan.anchor);
+      setPendingDays(plan.grant);
+    };
 
+    check(); // credit an absence immediately on mount, before the first interval fires
+    const id = setInterval(check, 1000);
     return () => clearInterval(id);
-  }, [autoTick, nextTickAt, state]);
+  }, [autoTick, TICK_MS, MAX_OFFLINE_DAYS]);
 
-  // manual “run now” also resets the 5-min window
-  function runDayNow() {
+  // Drain the backlog ONE DAY PER COMMIT. runDailyTick reads the render snapshot
+  // (`const nextDay = day + 1`, `for (const u of unit.units)`, ...), so calling it N
+  // times in a row from one closure would compute every day from the same stale state
+  // and advance the day by exactly 1.
+  useEffect(() => {
+    if (pendingDays <= 0) return;
     state.runDailyTick();
-    const next = Date.now() + TICK_MS;
-    setNextTickAt(next);
-    setRemaining(next - Date.now());
-  }
+    setPendingDays(n => n - 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDays]);
 
-  // util for header display
-  function mmss(ms: number) {
-    const s = Math.max(0, Math.floor(ms / 1000));
-    const m = Math.floor(s / 60);
-    const r = s % 60;
-    return `${m}:${r.toString().padStart(2, '0')}`;
+  // Manual “run now” also restarts the countdown from this instant.
+  function runDayNow() {
+    state.runDailyTick(Date.now());
+    setRemaining(TICK_MS);
   }
 
   const {

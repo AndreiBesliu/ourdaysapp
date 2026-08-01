@@ -59,6 +59,20 @@ export default function Warlord() {
   // Leaving the Domain view (e.g. to PvP) flushes any pending cloud write immediately.
   useEffect(() => { if (view !== 'DOMAIN') sync?.flush(); }, [view, sync]);
 
+  // React unmount does NOT run when the tab is closed, the app is swiped away, or the
+  // OS backgrounds a webview — so without this, anything saved inside the last debounce
+  // window (2.5s) never reached the cloud and the next device loaded an older kingdom.
+  useEffect(() => {
+    if (!sync) return;
+    const onHide = () => { if (document.visibilityState === 'hidden') sync.flush(); };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', sync.flush);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', sync.flush);
+    };
+  }, [sync]);
+
   // Warlord is designed for a light theme (white cards, dark text) with stock Tailwind
   // classes and no `dark:` variants. OurDaysApp may run in dark mode (`.dark` on <html>),
   // which sets the inherited default text color to near-white via `--foreground`. Force a

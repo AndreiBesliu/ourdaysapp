@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { auth } from '../firebase';
 import { loadWarlordConfig, saveWarlordConfig, loadWarlordConfigMeta, pruneOverrides } from './configApi';
 import type { GameConfigOverrides } from '../warlord/logic/config';
-import { DEFAULT_TRAINING } from '../warlord/logic/config';
+import { DEFAULT_TRAINING, DEFAULT_TICK } from '../warlord/logic/config';
 import {
   BuildingCostCopper, ResourceBuildingCosts, UPKEEP_BASE, UPKEEP_RANK_MULT, FOOD_BASE,
   RESOURCE_BUILDING_BASE_VALUE,
@@ -170,6 +170,17 @@ export default function WarlordAdminPanel() {
     });
   }
 
+  function setTick(key: 'minutesPerDay' | 'maxOfflineDays', v: number | undefined) {
+    setOv((prev) => {
+      const t: Record<string, unknown> = { ...(prev.tick ?? {}) };
+      if (v === undefined) delete t[key]; else t[key] = v;
+      const next: Record<string, unknown> = { ...prev };
+      if (Object.keys(t).length === 0) delete next.tick;
+      else next.tick = t;
+      return next as GameConfigOverrides;
+    });
+  }
+
   function setTraining(key: 'baseDays' | 'minDays' | 'maxSlots', v: number | undefined) {
     setOv((prev) => {
       const t: Record<string, unknown> = { ...(prev.training ?? {}) };
@@ -190,6 +201,7 @@ export default function WarlordAdminPanel() {
       if (s === 'ECONOMY') {
         delete next.buildingCost; delete next.buildingResourceCost; delete next.resourceBaseValue;
         delete next.upkeepBase; delete next.upkeepRankMult; delete next.foodBase; delete next.training;
+        delete next.tick;
       }
       return next;
     });
@@ -342,6 +354,21 @@ export default function WarlordAdminPanel() {
                 />
               ))}
             </div>
+          </section>
+
+          <section>
+            <h3 className="font-bold mb-2">Day clock</h3>
+            <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
+              <NumField label="Real minutes per day" def={DEFAULT_TICK.minutesPerDay} value={ov.tick?.minutesPerDay} onChange={(v) => setTick('minutesPerDay', v)} />
+              <NumField label="Offline catch-up (days)" def={DEFAULT_TICK.maxOfflineDays} value={ov.tick?.maxOfflineDays} onChange={(v) => setTick('maxOfflineDays', v)} />
+            </div>
+            <p className="mt-2 text-xs text-stone-500">
+              The clock is anchored to the last completed day and stored in the save, so time
+              spent away counts: on return the game resolves every whole day that elapsed, up to
+              the catch-up limit (the excess is skipped, never banked). Each caught-up day still
+              charges upkeep and eats food — a large limit can starve an army the player never
+              got to feed. 0 = no offline catch-up (the day you are playing still ticks).
+            </p>
           </section>
 
           <section>
