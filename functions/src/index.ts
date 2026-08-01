@@ -1524,11 +1524,18 @@ export const acceptWarlordChallenge = onCall({ enforceAppCheck: ENFORCE_APP_CHEC
     }
     if (uid !== g.opponentUid) throw new HttpsError("permission-denied", "This challenge isn't addressed to you.");
 
-    // Both players must (still) be members of the group — read inside the tx.
-    const groupSnap = await tx.get(db.doc(`groups/${g.groupId}`));
-    const members = groupSnap.exists ? groupSnap.data()?.members : undefined;
-    if (!Array.isArray(members) || !members.includes(players[0]) || !members.includes(players[1])) {
-      throw new HttpsError("permission-denied", "Both players must be members of the group.");
+    // A GROUP TAG is optional (Warlord is one world: any user may challenge any
+    // other). When a battle carries one, it must still be honest — both players
+    // members — so re-check it inside the tx. A global battle has groupId === null;
+    // note `groups/${null}` is a VALID path string, so this must be guarded or every
+    // global challenge would fail the membership check.
+    const battleGroupId = typeof g.groupId === "string" && g.groupId ? g.groupId : null;
+    if (battleGroupId) {
+      const groupSnap = await tx.get(db.doc(`groups/${battleGroupId}`));
+      const members = groupSnap.exists ? groupSnap.data()?.members : undefined;
+      if (!Array.isArray(members) || !members.includes(players[0]) || !members.includes(players[1])) {
+        throw new HttpsError("permission-denied", "Both players must be members of the group.");
+      }
     }
 
     // The challenger's army lives in the Admin-only warlordDeploys doc (never readable
@@ -1568,7 +1575,10 @@ export const createWarlordChallenge = onCall({ enforceAppCheck: ENFORCE_APP_CHEC
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
   const { groupId, opponentUid, unitIds, combatants } = request.data || {};
-  if (typeof groupId !== "string" || !groupId) throw new HttpsError("invalid-argument", "groupId is required.");
+  // groupId is OPTIONAL: Warlord is one shared world, so any app user may challenge
+  // any other. A groupId (when supplied) only tags the battle to that group so it
+  // also shows up in the group's arcade list — it is never a permission requirement.
+  const groupIdOrNull = typeof groupId === "string" && groupId ? groupId : null;
   if (typeof opponentUid !== "string" || !opponentUid || opponentUid === uid) {
     throw new HttpsError("invalid-argument", "A valid, distinct opponent is required.");
   }
@@ -1576,17 +1586,24 @@ export const createWarlordChallenge = onCall({ enforceAppCheck: ENFORCE_APP_CHEC
   if (!deploy.ok) throw new HttpsError("invalid-argument", `Invalid deployment: ${deploy.error}`);
 
   const db = admin.firestore();
-  const groupSnap = await db.doc(`groups/${groupId}`).get();
-  const members = groupSnap.exists ? groupSnap.data()?.members : undefined;
-  if (!Array.isArray(members) || !members.includes(uid) || !members.includes(opponentUid)) {
-    throw new HttpsError("permission-denied", "Both players must be members of the group.");
+  // The opponent must be a real app user (a profile doc is created on every login).
+  const oppProfile = await db.doc(`profiles/${opponentUid}`).get();
+  if (!oppProfile.exists) throw new HttpsError("not-found", "That player doesn't exist.");
+  // When a group is supplied, both players must actually be in it (it becomes a
+  // visibility tag on the doc, so it must be honest).
+  if (groupIdOrNull) {
+    const groupSnap = await db.doc(`groups/${groupIdOrNull}`).get();
+    const members = groupSnap.exists ? groupSnap.data()?.members : undefined;
+    if (!Array.isArray(members) || !members.includes(uid) || !members.includes(opponentUid)) {
+      throw new HttpsError("permission-denied", "Both players must be members of that group.");
+    }
   }
 
   const gameRef = db.collection("games").doc();
   const date = new Date().toISOString().slice(0, 10);
   const batch = db.batch();
   batch.set(gameRef, {
-    groupId,
+    groupId: groupIdOrNull,
     date,
     gameType: WARLORD_GAME_TYPE,
     status: "waiting",
@@ -1605,9 +1622,54 @@ export const createWarlordChallenge = onCall({ enforceAppCheck: ENFORCE_APP_CHEC
     unitIds: deploy.unitIds,
     combatants: deploy.combatants,
   });
+  // In-app notification for the opponent. Written here (Admin SDK) rather than via
+  // notifyUsers, which only allows notifying users you share a GROUP with — global
+  // challenges have no group. Mirrors respondToFriendRequest's direct write.
+  const challengerName =
+    (await db.doc(`profiles/${uid}`).get()).data()?.name || "A challenger";
+  batch.set(db.collection("notifications").doc(), {
+    userId: opponentUid,
+    createdBy: uid,
+    type: "warlord_challenge",
+    title: "⚔️ Warlord challenge",
+    body: `${challengerName} has challenged you to battle.`,
+    read: false,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
   await batch.commit();
+
+  // Push (best-effort, never fails the challenge).
+  try {
+    const oppDoc = await db.doc(`users/${opponentUid}`).get();
+    const tokens: string[] = [...new Set<string>(oppDoc.data()?.fcmTokens || [])];
+    if (tokens.length > 0) {
+      await admin.messaging().sendEachForMulticast({
+        notification: { title: "⚔️ Warlord challenge", body: `${challengerName} has challenged you to battle.` },
+        tokens,
+      });
+    }
+  } catch (e) {
+    console.error("Warlord challenge push failed:", e);
+  }
   return { gameId: gameRef.id };
 });
+
+interface WarlordLadderUpdate { winner: string | null; loser: string | null }
+
+// Record a finished battle in the public world roster (server-only fields).
+// Best-effort: a ladder-stat hiccup must never fail the battle itself.
+async function recordWarlordResult(winnerUid: string | null, loserUid: string | null): Promise<void> {
+  try {
+    const db = admin.firestore();
+    const inc = admin.firestore.FieldValue.increment(1);
+    const writes: Promise<unknown>[] = [];
+    if (winnerUid) writes.push(db.doc(`warlordPlayers/${winnerUid}`).set({ wins: inc }, { merge: true }));
+    if (loserUid) writes.push(db.doc(`warlordPlayers/${loserUid}`).set({ losses: inc }, { merge: true }));
+    await Promise.all(writes);
+  } catch (e) {
+    console.error("Warlord ladder update failed:", e);
+  }
+}
 
 // Apply one battle command. The seat check + the pure engine are the entire
 // authority: an illegal command is rejected (applied:false, nothing persisted —
@@ -1621,8 +1683,9 @@ export const submitWarlordCommand = onCall({ enforceAppCheck: ENFORCE_APP_CHECK 
 
   const db = admin.firestore();
   const ref = db.doc(`games/${gameId}`);
+  let ladder: WarlordLadderUpdate | null = null;
 
-  return db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError("not-found", "Game not found.");
     const g = snap.data()!;
@@ -1650,16 +1713,24 @@ export const submitWarlordCommand = onCall({ enforceAppCheck: ENFORCE_APP_CHECK 
     const patch: Record<string, unknown> = { state: next };
     const finished = next.status !== "ONGOING";
     if (finished) {
-      patch.status = "finished";
-      patch.winner =
+      const winnerUid =
         next.status === "PLAYER_WON" ? g.players[0] :
         next.status === "ENEMY_WON" ? g.players[1] : null; // DRAW → null (arcade convention)
+      patch.status = "finished";
+      patch.winner = winnerUid;
       patch.finalized = true; // server-side session lock; leaderboard needs no client write
       patch.endedAt = admin.firestore.FieldValue.serverTimestamp();
+      ladder = winnerUid
+        ? { winner: winnerUid, loser: g.players.find((p: string) => p !== winnerUid) ?? null }
+        : null; // draws don't move the ladder
     }
     tx.update(ref, patch);
     return { applied: true, finished };
   });
+
+  const done = ladder as WarlordLadderUpdate | null;
+  if (done) await recordWarlordResult(done.winner, done.loser);
+  return result;
 });
 
 // Retreat (= concede) an active battle, or decline/cancel a waiting challenge.
@@ -1670,8 +1741,9 @@ export const forfeitWarlordBattle = onCall({ enforceAppCheck: ENFORCE_APP_CHECK 
 
   const db = admin.firestore();
   const ref = db.doc(`games/${gameId}`);
+  let ladder: WarlordLadderUpdate | null = null;
 
-  return db.runTransaction(async (tx) => {
+  const result = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError("not-found", "Game not found.");
     const g = snap.data()!;
@@ -1707,8 +1779,13 @@ export const forfeitWarlordBattle = onCall({ enforceAppCheck: ENFORCE_APP_CHECK 
       state: s,
       endedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+    ladder = { winner: winnerUid, loser: uid };
     return { ok: true };
   });
+
+  const done = ladder as WarlordLadderUpdate | null;
+  if (done) await recordWarlordResult(done.winner, done.loser);
+  return result;
 });
 
 // Turn/lifecycle push notifications. Fires on EVERY games/{id} update (Firestore

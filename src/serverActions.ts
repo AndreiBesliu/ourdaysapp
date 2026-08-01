@@ -40,7 +40,7 @@ export async function respondToFriendRequest(params: {
 // in an Admin-only doc (hidden from the opponent until they commit), then writes the
 // public 'waiting' game doc. Returns the new gameId.
 export async function createWarlordChallenge(params: {
-  groupId: string;
+  groupId?: string; // optional — Warlord is one world; a group only tags the battle
   opponentUid: string;
   unitIds: string[];
   combatants: unknown[];

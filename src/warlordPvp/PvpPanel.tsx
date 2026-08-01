@@ -9,10 +9,13 @@ import GameIcon from '../warlord/components/common/GameIcon';
 import { getIconForGameItem } from '../warlord/logic/iconHelpers';
 import { acceptWarlordChallenge } from '../serverActions';
 import {
-  type WarlordGameDoc, type GroupInfo,
-  subscribeMyBattles, subscribeMyGroups, fetchProfileNames,
+  type WarlordGameDoc, type WarlordPlayer,
+  subscribeMyBattles, fetchProfileNames,
   createChallenge, cancelChallenge, readLocalArmy, unitToClaim,
+  upsertWarlordPlayer, fetchRecentPlayers, searchPlayers, fetchKnownUids,
 } from './pvpApi';
+import { armyStrength } from '../warlord/logic/combat/army';
+import { auth } from '../firebase';
 import PvpBattle from './PvpBattle';
 
 // Shared unit-picker used by both the challenge wizard and the accept flow.
@@ -56,34 +59,57 @@ function UnitPicker({ units, picked, onToggle }: {
 
 export default function PvpPanel({ myUid }: { myUid: string }) {
   const [battles, setBattles] = useState<WarlordGameDoc[]>([]);
-  const [groups, setGroups] = useState<GroupInfo[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [view, setView] = useState<'LIST' | 'CHALLENGE' | { accept: string } | { battle: string }>('LIST');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // wizard state
-  const [groupId, setGroupId] = useState<string>('');
-  const [opponentUid, setOpponentUid] = useState<string>('');
+  const [opponent, setOpponent] = useState<WarlordPlayer | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
+  // world roster
+  const [roster, setRoster] = useState<WarlordPlayer[]>([]);
+  const [known, setKnown] = useState<Set<string>>(new Set());
+  const [term, setTerm] = useState('');
+  const [results, setResults] = useState<WarlordPlayer[] | null>(null);
+  const [searching, setSearching] = useState(false);
 
   const army = useMemo(() => readLocalArmy(myUid), [myUid, view]);
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
   useEffect(() => subscribeMyBattles(myUid, setBattles), [myUid]);
-  useEffect(() => subscribeMyGroups(myUid, setGroups), [myUid]);
 
-  // Resolve display names for everyone we can see (opponents + group members).
+  // Announce myself in the world roster (name + current army power) and load it.
+  useEffect(() => {
+    const me = auth.currentUser;
+    const myName = me?.displayName || me?.email?.split('@')[0] || 'Player';
+    upsertWarlordPlayer(myUid, myName, me?.photoURL ?? null, armyStrength(readLocalArmy(myUid)))
+      .then(() => fetchRecentPlayers(myUid))
+      .then(setRoster);
+    fetchKnownUids(myUid).then(setKnown);
+  }, [myUid]);
+
+  // Debounced name search over the roster.
+  useEffect(() => {
+    const q = term.trim();
+    if (!q) { setResults(null); return; }
+    setSearching(true);
+    const id = setTimeout(() => {
+      searchPlayers(q, myUid).then((r) => { setResults(r); setSearching(false); });
+    }, 300);
+    return () => clearTimeout(id);
+  }, [term, myUid]);
+
+  // Resolve display names for battle opponents.
   useEffect(() => {
     const uids = new Set<string>();
     battles.forEach((b) => b.players.forEach((u) => uids.add(u)));
-    groups.forEach((g) => g.members.forEach((u) => uids.add(u)));
     uids.delete(myUid);
     const missing = [...uids].filter((u) => !(u in names));
     if (missing.length === 0) return;
     fetchProfileNames(missing).then((got) => setNames((prev) => ({ ...prev, ...got })));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [battles, groups]);
+  }, [battles]);
 
   const nameOf = (uid: string) => (uid === myUid ? 'You' : names[uid] || 'Player');
 
@@ -137,33 +163,61 @@ export default function PvpPanel({ myUid }: { myUid: string }) {
     );
   }
 
-  // ── Challenge wizard ──
+  // ── Challenge wizard: pick ANY player in the world, then your detachment ──
   if (view === 'CHALLENGE') {
-    const group = groups.find((g) => g.id === groupId);
-    const members = (group?.members ?? []).filter((u) => u !== myUid);
     const chosen = army.filter((u) => picked.includes(u.id));
+    const shown = results ?? roster;
+    // People you know from the app float to the top — discovery shortcut, not a gate.
+    const sorted = [...shown].sort((a, b) => Number(known.has(b.uid)) - Number(known.has(a.uid)));
+
+    const PlayerRow = ({ p }: { p: WarlordPlayer }) => {
+      const on = opponent?.uid === p.uid;
+      return (
+        <button
+          onClick={() => setOpponent(on ? null : p)}
+          className={`flex items-center gap-3 border rounded-lg p-2 text-left w-full transition-all ${on ? 'ring-2 ring-yellow-400 bg-yellow-50' : 'bg-white hover:bg-stone-50'}`}
+        >
+          {p.photoURL
+            ? <img src={p.photoURL} alt="" className="w-8 h-8 rounded-full object-cover" />
+            : <span className="w-8 h-8 rounded-full bg-stone-200 flex items-center justify-center text-sm">{p.name.slice(0, 1).toUpperCase()}</span>}
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold truncate">
+              {p.name}
+              {known.has(p.uid) && <span className="ml-2 text-[10px] px-1 rounded bg-blue-100 text-blue-800 border border-blue-300">known</span>}
+            </div>
+            <div className="text-xs text-stone-500 font-mono">power {p.power} · {p.wins ?? 0}W/{p.losses ?? 0}L</div>
+          </div>
+          <span className={`w-4 h-4 rounded border flex items-center justify-center text-[10px] ${on ? 'bg-black text-white' : 'bg-white'}`}>{on ? '✓' : ''}</span>
+        </button>
+      );
+    };
+
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-serif text-lg font-bold">New challenge</h3>
-          <button onClick={() => { setView('LIST'); setPicked([]); }} className="px-3 py-1 border rounded text-sm">← Battles</button>
+          <button onClick={() => { setView('LIST'); setPicked([]); setOpponent(null); }} className="px-3 py-1 border rounded text-sm">← Battles</button>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <label className="text-sm">
-            <span className="block text-xs text-stone-500 mb-1">Group</span>
-            <select value={groupId} onChange={(e) => { setGroupId(e.target.value); setOpponentUid(''); }} className="border rounded px-2 py-1 bg-white">
-              <option value="">Select…</option>
-              {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
-          </label>
-          <label className="text-sm">
-            <span className="block text-xs text-stone-500 mb-1">Opponent</span>
-            <select value={opponentUid} onChange={(e) => setOpponentUid(e.target.value)} disabled={!groupId} className="border rounded px-2 py-1 bg-white">
-              <option value="">Select…</option>
-              {members.map((u) => <option key={u} value={u}>{nameOf(u)}</option>)}
-            </select>
-          </label>
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-stone-500">Opponent — anyone in the world</span>
+            <input
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              placeholder="Search players by name…"
+              className="ml-auto border rounded px-2 py-1 text-sm w-56"
+            />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 max-h-64 overflow-auto">
+            {sorted.map((p) => <PlayerRow key={p.uid} p={p} />)}
+          </div>
+          {searching && <div className="text-xs text-stone-500 mt-1">Searching…</div>}
+          {!searching && sorted.length === 0 && (
+            <p className="text-sm text-stone-600">
+              {results ? 'No player by that name yet.' : 'No other players have entered the world yet — they appear here once they open the PvP tab.'}
+            </p>
+          )}
         </div>
 
         <p className="text-xs text-stone-500">
@@ -173,22 +227,25 @@ export default function PvpPanel({ myUid }: { myUid: string }) {
         {error && <div className="text-sm text-red-700">{error}</div>}
         <div className="flex items-center justify-between border-t pt-3">
           <div className="text-sm text-stone-600">
-            Deploying <span className="font-mono font-bold">{chosen.length}</span> units ·
+            {opponent ? <>vs <span className="font-semibold">{opponent.name}</span> · </> : <span className="text-stone-400">pick an opponent · </span>}
+            <span className="font-mono font-bold">{chosen.length}</span> units ·
             strength <span className="font-mono font-bold">{chosen.reduce((a, u) => a + fieldedStrength(u), 0)}</span>
           </div>
           <button
-            disabled={!groupId || !opponentUid || chosen.length === 0 || busy}
+            disabled={!opponent || chosen.length === 0 || busy}
             onClick={async () => {
+              if (!opponent) return;
               setBusy(true); setError(null);
               try {
-                await createChallenge({ groupId, opponentUid, units: chosen });
+                await createChallenge({ opponentUid: opponent.uid, units: chosen });
                 setPicked([]);
+                setOpponent(null);
                 setView('LIST');
               } catch (e: any) {
                 setError(e?.message || 'Failed to create the challenge');
               } finally { setBusy(false); }
             }}
-            className={`px-4 py-2 rounded text-white ${groupId && opponentUid && chosen.length && !busy ? 'bg-red-800 hover:bg-red-900' : 'bg-stone-300 cursor-not-allowed'}`}
+            className={`px-4 py-2 rounded text-white ${opponent && chosen.length && !busy ? 'bg-red-800 hover:bg-red-900' : 'bg-stone-300 cursor-not-allowed'}`}
           >
             {busy ? 'Sending…' : 'Send challenge ⚔'}
           </button>

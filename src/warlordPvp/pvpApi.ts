@@ -3,7 +3,9 @@
 // talks to Firestore/callables. The server (functions/src/warlordCombat/) is the
 // authority; this file only creates inert challenge docs and reads.
 
-import { doc, onSnapshot, query, collection, where } from 'firebase/firestore';
+import {
+  doc, onSnapshot, query, collection, where, getDoc, getDocs, setDoc, orderBy, limit, serverTimestamp,
+} from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Unit } from '../warlord/logic/types';
 import type { BattleState } from '../warlord/logic/combat/types';
@@ -102,7 +104,7 @@ export function unitToClaim(u: Unit): DeployCombatantClaim {
 // stashed Admin-side, hidden from the opponent until they commit). A client-side
 // sanitize gives instant feedback before the round-trip. Returns the new gameId.
 export async function createChallenge(params: {
-  groupId: string;
+  groupId?: string | null; // optional: tags the battle to a group; NOT a permission gate
   opponentUid: string;
   units: Unit[];
 }): Promise<string> {
@@ -110,7 +112,7 @@ export async function createChallenge(params: {
   const check = sanitizeDeploy({ unitIds: claims.map((c) => c.unitId), combatants: claims }, 'PLAYER');
   if (!check.ok) throw new Error(check.error);
   const { gameId } = await createWarlordChallenge({
-    groupId: params.groupId,
+    ...(params.groupId ? { groupId: params.groupId } : {}),
     opponentUid: params.opponentUid,
     unitIds: claims.map((c) => c.unitId),
     combatants: claims,
@@ -168,7 +170,6 @@ export function subscribeMyGroups(uid: string, cb: (groups: GroupInfo[]) => void
 }
 
 export async function fetchProfileNames(uids: string[]): Promise<Record<string, string>> {
-  const { getDoc } = await import('firebase/firestore');
   const out: Record<string, string> = {};
   await Promise.all(uids.map(async (uid) => {
     try {
@@ -179,4 +180,85 @@ export async function fetchProfileNames(uids: string[]): Promise<Record<string, 
     }
   }));
   return out;
+}
+
+// ── The world roster (warlordPlayers) ──
+// Warlord is ONE shared world: any app user can find and challenge any other. This
+// registry is the discovery surface — game data only (no app PII). Friends/groups
+// remain shortcuts for "people you know", not a permission boundary.
+
+export interface WarlordPlayer {
+  uid: string;
+  name: string;
+  photoURL?: string | null;
+  power: number; // self-reported army strength (display only; battles use the server-sanitized deploy)
+  wins?: number; // server-written
+  losses?: number; // server-written
+}
+
+// Announce/refresh my roster entry. Called whenever the PvP panel opens so the
+// directory reflects a live name and army power. wins/losses are server-only
+// (rules reject client writes to them), so they are never sent here.
+export async function upsertWarlordPlayer(uid: string, name: string, photoURL: string | null, power: number): Promise<void> {
+  try {
+    await setDoc(doc(db, 'warlordPlayers', uid), {
+      name,
+      nameLower: name.toLowerCase(),
+      photoURL: photoURL ?? null,
+      power,
+      lastActive: serverTimestamp(),
+    }, { merge: true });
+  } catch (e) {
+    console.error('Warlord roster upsert failed:', e);
+  }
+}
+
+function toPlayer(id: string, d: any): WarlordPlayer {
+  return { uid: id, name: d?.name || 'Player', photoURL: d?.photoURL ?? null, power: d?.power ?? 0, wins: d?.wins ?? 0, losses: d?.losses ?? 0 };
+}
+
+// Most recently active players — the default "who's out there" list.
+export async function fetchRecentPlayers(excludeUid: string, max = 24): Promise<WarlordPlayer[]> {
+  try {
+    const snap = await getDocs(query(collection(db, 'warlordPlayers'), orderBy('lastActive', 'desc'), limit(max)));
+    return snap.docs.map((d) => toPlayer(d.id, d.data())).filter((p) => p.uid !== excludeUid);
+  } catch (e) {
+    console.error('Warlord roster fetch failed:', e);
+    return [];
+  }
+}
+
+// Name prefix search (single-field range → no composite index needed).
+export async function searchPlayers(term: string, excludeUid: string, max = 20): Promise<WarlordPlayer[]> {
+  const q = term.trim().toLowerCase();
+  if (!q) return [];
+  try {
+    const snap = await getDocs(query(
+      collection(db, 'warlordPlayers'),
+      orderBy('nameLower'),
+      where('nameLower', '>=', q),
+      where('nameLower', '<', q + ''),
+      limit(max),
+    ));
+    return snap.docs.map((d) => toPlayer(d.id, d.data())).filter((p) => p.uid !== excludeUid);
+  } catch (e) {
+    console.error('Warlord roster search failed:', e);
+    return [];
+  }
+}
+
+// The uids I know from the app (friends + fellow group members) — used to badge
+// roster entries as "known" and to offer a quick-pick list.
+export async function fetchKnownUids(uid: string): Promise<Set<string>> {
+  const known = new Set<string>();
+  try {
+    const me = await getDoc(doc(db, 'users', uid));
+    for (const f of (me.data()?.friends ?? [])) if (f?.uid) known.add(f.uid);
+  } catch { /* friends are optional */ }
+  try {
+    const groups = await getDocs(query(collection(db, 'groups'), where('members', 'array-contains', uid)));
+    groups.docs.forEach((g) => (g.data().members || []).forEach((m: string) => known.add(m)));
+  } catch { /* groups are optional */ }
+  known.delete(uid);
+  return known;
 }

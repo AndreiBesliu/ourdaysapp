@@ -117,13 +117,17 @@ service cloud.firestore {
     //    every server-owned field is fenced from client writes; all mutations go
     //    through the Warlord callables (Admin SDK bypasses these rules).
     match /games/{gameId} {
-      // The extra `players` branch makes the Warlord "my battles" query
-      // (where players array-contains uid) provable; other games keep players
-      // inside `state`, so nothing else matches it. Missing-field access inside
-      // || evaluates false, preserving existing behavior.
+      // Group branch stays FIRST so the existing arcade queries evaluate exactly as
+      // they did before (where groupId == X ...). It is now null-guarded because a
+      // GLOBAL Warlord battle has groupId == null, and isMemberOfGroup(null) would
+      // build an invalid document path — an error, which denies the whole rule.
+      // The players branch (key-guarded, so arcade docs without the field return
+      // false instead of erroring) makes global battles readable by their two
+      // participants and the "my battles" query (players array-contains uid) provable.
       allow read: if isSignedIn() && (
-        isMemberOfGroup(resource.data.groupId) ||
-        request.auth.uid in resource.data.players
+        ('groupId' in resource.data && resource.data.groupId != null &&
+          isMemberOfGroup(resource.data.groupId)) ||
+        ('players' in resource.data && request.auth.uid in resource.data.players)
       );
       // Creator must be the authenticated user and a member of the target group.
       // Warlord challenges are created ONLY by the createWarlordChallenge callable
@@ -132,20 +136,34 @@ service cloud.firestore {
       // may still create every other (arcade) game type directly.
       allow create: if isSignedIn() &&
         request.resource.data.createdBy == request.auth.uid &&
-        isMemberOfGroup(request.resource.data.groupId) &&
-        request.resource.data.gameType != 'warlord-battle';
-      // affectedKeys() lists only added/removed/changed keys, so an idempotent
-      // client write of identical values still passes. gameType/groupId/createdBy
-      // are in the deny list so a warlord doc can't be laundered out of the fence.
-      allow update: if isSignedIn() && isMemberOfGroup(resource.data.groupId) &&
-        (resource.data.gameType != 'warlord-battle' ||
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(
-            ['state', 'winner', 'status', 'seed', 'deploy', 'players', 'finalized',
-             'opponentUid', 'gameType', 'groupId', 'createdBy', 'forfeitedBy'].toSet()));
-      // Warlord: a live or finished battle can't be deleted to dodge a loss.
+        request.resource.data.gameType != 'warlord-battle' &&
+        isMemberOfGroup(request.resource.data.groupId);
+      // Warlord docs are fully server-owned: clients may not update them at all
+      // (every mutation goes through the callables, which bypass rules). Arcade
+      // games keep the original client-authoritative behavior.
+      allow update: if isSignedIn() &&
+        resource.data.gameType != 'warlord-battle' &&
+        isMemberOfGroup(resource.data.groupId);
+      // Warlord battles are never client-deletable (cancelling a waiting challenge
+      // goes through forfeitWarlordBattle, which also cleans the private deploy doc).
       allow delete: if isSignedIn() &&
         resource.data.createdBy == request.auth.uid &&
-        (resource.data.gameType != 'warlord-battle' || resource.data.status == 'waiting');
+        resource.data.gameType != 'warlord-battle';
+    }
+
+    // ── Warlord players (the public world roster) ──
+    // Game-scoped, opt-in-by-playing directory so ANY app user can find and
+    // challenge ANY other player (the game is one shared world; groups/friends are
+    // just discovery shortcuts). Deliberately holds only game data — display name,
+    // avatar, self-reported army power, W/L — never app PII like email.
+    // wins/losses are SERVER-ONLY (written by the Warlord callables via Admin SDK).
+    match /warlordPlayers/{ownerId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == ownerId &&
+        !request.resource.data.keys().hasAny(['wins', 'losses']);
+      allow update: if isSignedIn() && request.auth.uid == ownerId &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['wins', 'losses'].toSet());
+      allow delete: if false;
     }
 
     // ── Warlord domains (per-user single-player kingdom, cloud-synced) ──

@@ -140,6 +140,17 @@
 
 ## 📅 Session Log: July 12, 2026
 
+**Task Completed (Warlord — GLOBAL matchmaking / one shared world)**
+> Prompt: "atacam acum" (following: all app users are players in ONE world; groups stay as a social/discovery layer)
+> Model: Claude Opus 4.8
+> PvP was group-scoped (you could only challenge someone from a shared group). Now ANY app user can challenge ANY other; groups/friends are only discovery shortcuts.
+> - NEW `warlordPlayers/{uid}` — the public world roster (opt-in by playing). Game data only: name/nameLower/photoURL/self-reported army power/lastActive, plus SERVER-ONLY wins/losses. No app PII (no email), unlike the app's `profiles`.
+> - `firestore.rules`: new warlordPlayers block (owner-write, wins/losses server-only, read by any signed-in user). Games read rule now null-guards the group branch (a global battle has groupId == null and isMemberOfGroup(null) would build an invalid path → rule error → deny) and adds a key-guarded players branch. Group branch kept FIRST so the existing arcade queries evaluate exactly as before. Warlord docs are now fully un-writable/un-deletable by clients.
+> - `functions`: createWarlordChallenge takes an OPTIONAL groupId (a tag, not a gate), verifies the opponent exists via profiles/{uid}, and writes the in-app notification + FCM push itself (notifyUsers only permits notifying users you share a group with — unusable for global play). New recordWarlordResult increments the roster's wins/losses on every finish/forfeit.
+> - Client: `PvpPanel` challenge wizard replaced the group→opponent cascade with a world-roster picker (recently active list + debounced name search + a "known" badge for friends/group members).
+> - FIXED same session (caught by adversarial review, was live): acceptWarlordChallenge still read `groups/${g.groupId}` unconditionally — with groupId null that resolves to the valid-but-missing path "groups/null", so EVERY global challenge failed with permission-denied. Now guarded by a typed battleGroupId check; a group tag, when present, is still verified.
+> Build: functions tsc ✅, app tsc+build ✅. Deploy: functions ✅ + rules ✅ + hosting ✅.
+
 **Task Completed (Warlord — cloud-synced domain / real game account)**
 > Prompt: "fiecare user al aplicatiei OurDaysApp are un cont separat pentru jocul Warlords, sau intra toti pe acelasi joc?" → each user is a player; the app account IS the game account; make the kingdom cross-device.
 > Model: Claude Opus 4.8
