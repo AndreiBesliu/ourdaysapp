@@ -98,14 +98,15 @@ function PriceTag({ cost, resCost }: { cost: number, resCost?: Partial<ResourceM
 export default function BuildingsTab({ state, setTab }: Props) {
   const {
     buildings,
-    BuildingCostCopper,
-    ResourceBuildingCosts,
+    buildingPrice,
+    buildingResCost,
     buyBuilding,
     setBuildingFocus,
     setBuildingOutput,
     barracksLevel,
     upgradeBarracks,
     upgradeBuilding,
+    mods,
   } = state
 
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null)
@@ -144,6 +145,8 @@ export default function BuildingsTab({ state, setTab }: Props) {
           onClose={() => setSelectedBuildingId(null)}
           onSetOutput={(item) => setBuildingOutput(selectedBuilding.id, item)}
           onSetFocus={(pct) => setBuildingFocus(selectedBuilding.id, pct)}
+          prodMult={mods?.prodMult ?? 1}
+          craftEfficiency={mods?.craftEfficiency ?? 1}
         />
       )}
 
@@ -186,7 +189,7 @@ export default function BuildingsTab({ state, setTab }: Props) {
                         {(b.level ?? 1) < BUILDING_MAX_LEVEL && (
                           <button
                             onClick={(e) => { e.stopPropagation(); upgradeBuilding(b.id) }}
-                            title={`Upgrade to L${(b.level ?? 1) + 1} — ${fmtCopper(buildingUpgradeCostCopper(b.type, b.level ?? 1))} (output ×${buildingLevelMult((b.level ?? 1) + 1).toFixed(1)})`}
+                            title={`Upgrade to L${(b.level ?? 1) + 1} — ${fmtCopper(buildingUpgradeCostCopper(b.type, b.level ?? 1, mods?.buildCostMult ?? 1))} (output ×${buildingLevelMult((b.level ?? 1) + 1).toFixed(1)})`}
                             className="text-[9px] bg-red-800 text-white px-1.5 py-0.5 rounded shadow hover:bg-red-700"
                           >
                             UP
@@ -231,7 +234,7 @@ export default function BuildingsTab({ state, setTab }: Props) {
                       <button key={t} onClick={() => buyBuilding(t)} className="flex flex-col items-center p-3 rounded border border-amber-900/20 bg-amber-50/40 hover:bg-amber-100 transition-colors">
                         <div className="w-24 h-24 mb-3"><img src={BuildingImages[t]} className="w-full h-full object-contain mix-blend-multiply" alt={t} /></div>
                         <span className="font-bold text-sm text-amber-900 mb-2">{t}</span>
-                        <PriceTag cost={BuildingCostCopper[t]} resCost={ResourceBuildingCosts[t]} />
+                        <PriceTag cost={buildingPrice(t)} resCost={buildingResCost(t)} />
                       </button>
                     ))}
                   </div>
@@ -252,7 +255,7 @@ export default function BuildingsTab({ state, setTab }: Props) {
                           }
                         </div>
                         <span className="font-bold text-sm text-stone-800 mb-2">{t.replace('_', ' ')}</span>
-                        <PriceTag cost={BuildingCostCopper[t]} resCost={ResourceBuildingCosts[t]} />
+                        <PriceTag cost={buildingPrice(t)} resCost={buildingResCost(t)} />
                       </button>
                     ))}
                   </div>

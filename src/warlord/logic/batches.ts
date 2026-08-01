@@ -1,5 +1,6 @@
 
 import { Ranks, type Rank, type BarracksPool, type SoldierType } from './types'
+import { GameConfig } from './config'
 
   export type BatchKind = 'LIGHT_TRAIN' | 'LIGHT_CAV' | 'HEAVY_CAV' | 'HORSE_ARCHER'
 
@@ -17,13 +18,15 @@ import { Ranks, type Rank, type BarracksPool, type SoldierType } from './types'
 
 // L1=2 slots, +1 per level, cap 5 (reached at L4)
 export function batchSlots(level: number, extra = 0) {
-  return Math.min(level + 1, 5) + Math.max(0, Math.round(extra))
+  const { maxSlots } = GameConfig.training()
+  return Math.min(level + 1, maxSlots) + Math.max(0, Math.round(extra))
 }
 
 // L1=7 days, -1 per level, min 3 days
 // `daysDelta` (negative) lets research shorten training; never below 1 day.
 export function batchDurationDays(level: number, daysDelta = 0) {
-  return Math.max(1, Math.max(7 - (level - 1), 3) + Math.round(daysDelta))
+  const { baseDays, minDays } = GameConfig.training()
+  return Math.max(1, Math.max(baseDays - (level - 1), minDays) + Math.round(daysDelta))
 }
 
 export function newBatchId() {
@@ -32,10 +35,11 @@ export function newBatchId() {
 
 export function enqueueBatch(
   current: TrainingBatch[],
-  draft: Omit<TrainingBatch, 'id' | 'daysRemaining'> & { level: number }
+  draft: Omit<TrainingBatch, 'id' | 'daysRemaining'> & { level: number },
+  daysDelta = 0, // research: negative shortens training
 ): TrainingBatch[] {
   const id = newBatchId()
-  const daysRemaining = batchDurationDays(draft.level)
+  const daysRemaining = batchDurationDays(draft.level, daysDelta)
   const next: TrainingBatch = {
     id,
     kind: draft.kind,
@@ -48,8 +52,8 @@ export function enqueueBatch(
   return [next, ...current]
 }
 
-export function canEnqueue(current: TrainingBatch[], level: number) {
-  return current.length < batchSlots(level)
+export function canEnqueue(current: TrainingBatch[], level: number, extraSlots = 0) {
+  return current.length < batchSlots(level, extraSlots)
 }
 
 export function buildBatch(

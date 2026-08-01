@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 //logic
 import { GOLD, fmtCopper, Ranks, type Rank, type SoldierType, type Building, type ResourceMap } from '../logic/types'
 import type { Unit } from '../logic/types'
-import { BuildingOutputChoices, BuildingCostCopper, FocusOptions, ResourceBuildingCosts } from '../logic/economy'
+import { BuildingOutputChoices, FocusOptions } from '../logic/economy'
 import { makeEmptyInventories, isHorseKey, type HorseKey } from '../logic/helpers'
 import { demandFor, ensureEquipOrBuy } from '../logic/equipment'
 import { itemValueCopper } from '../logic/items'  // if you use buy/sell here
@@ -14,7 +14,7 @@ import {
 } from '../logic/training'
 
 //state
-import { dailyUpkeepCopper, dailyFoodConsumption, buildingUpgradeCostCopper, buildingLevelMult, BUILDING_MAX_LEVEL } from '../logic/economy'
+import { dailyUpkeepCopper, dailyFoodConsumption, buildingUpgradeCostCopper, buildingCostCopper, buildingResourceCost, buildingLevelMult, BUILDING_MAX_LEVEL } from '../logic/economy'
 import { useEconomy } from './useEconomy'
 import { useUnits } from './useUnits'
 import useBarracks, { emptyBarracks } from './useBarracks'
@@ -22,13 +22,14 @@ import { computeReady, mergeUnits, splitUnit, applyMoraleChange, trainingGainPer
 import { Registry } from '../logic/registry'
 import { rollDailyEvent } from '../logic/events'
 import { loadSampleMod } from '../mods/sampleMod';
+import { GameConfig, type GameConfigOverrides } from '../logic/config'
 import { useCampaign, emptyCampaign, hydrateCampaign, type CampaignReward } from './useCampaign'
 import { useResearch, emptyResearch, hydrateResearch, type ResearchProject } from './useResearch'
 import { resolveCatalog, techById, prereqsMet, type TechId } from '../logic/research/catalog'
-import { aggregate, availableTechs, onBattleWon, onBattleLost, onResearchCompleted, tickBuffs } from '../logic/research/momentum'
+import { aggregate, availableTechs, onBattleWon, onBattleLost, onResearchCompleted, tickBuffs, resolveBuffs } from '../logic/research/momentum'
 import { applyCommand } from '../logic/combat/engine'
 import { chooseEnemyCommands } from '../logic/combat/ai'
-import { createBattle, MISSION_PRESETS, DIFFICULTIES, escalationMult, streakLootMult } from '../logic/combat/enemies'
+import { createBattle, missionPresets, DIFFICULTIES, escalationMult, streakLootMult } from '../logic/combat/enemies'
 import { applyBattleResult, prettyName } from '../logic/combat/army'
 import type { Command, Difficulty } from '../logic/combat/types'
 
@@ -66,6 +67,7 @@ function readSaveBlob(saveKey: string): any {
 export interface GameStatePersistOpts {
   initialBlob?: any // pre-loaded save (e.g. from the cloud); overrides the localStorage read
   onPersist?: (blob: any) => void // called on every save with the full blob (in addition to localStorage)
+  config?: GameConfigOverrides | null // admin-tuned balance values (absent = built-in defaults)
 }
 
 const LOG_CAP = 300 // keep the persisted log bounded (display-only; protects the cloud doc size)
@@ -97,9 +99,16 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
   const camp = useCampaign(saved?.campaign)
   const rsc = useResearch(saved?.research)
 
-  // The tech catalog is DATA: resolveCatalog() merges any admin overrides over the
-  // defaults, so a future Warlord admin only has to supply an override object.
-  const catalog = useMemo(() => resolveCatalog(), [])
+  // Admin-tuned balance values. Initialised BEFORE anything reads a price or a table:
+  // several modules (and UI components) read GameConfig directly rather than via props.
+  GameConfig.init(opts?.config)
+  const cfg = opts?.config ?? undefined
+
+  // The tech catalog and the momentum table are DATA — the admin ships an override
+  // object and everything downstream resolves against it.
+  const catalog = useMemo(() => resolveCatalog(cfg?.catalog), [cfg])
+  const buffTable = useMemo(() => resolveBuffs(cfg?.buffs), [cfg])
+  const presets = useMemo(() => missionPresets(), [cfg])
   // THE single bonus pipeline: researched techs + active momentum buffs → one object
   // that every boostable knob below reads. No parallel bonus system.
   const mods = useMemo(
@@ -230,11 +239,11 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
 
   function buyBuilding(type: Building['type']) {
     if (econ.buildings.some(b => b.type === type)) { addLog(`You already own a ${type}.`); return }
-    const cost = BuildingCostCopper[type] || 0
+    const cost = buildingCostCopper(type, mods.buildCostMult)
     if (econ.wallet < cost) { addLog(`Not enough funds to buy ${type}. Need ${fmtCopper(cost)}.`); return }
 
     // Check Resources
-    const resCost = ResourceBuildingCosts[type] || {}
+    const resCost = buildingResourceCost(type)
     const missing: string[] = []
     for (const [res, amt] of Object.entries(resCost)) {
       if ((econ.resources[res as keyof ResourceMap] || 0) < amt) {
@@ -310,7 +319,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     if (['BARRACKS', 'MARKET', 'STABLE'].includes(b.type)) { addLog(`${b.type} cannot be upgraded here.`); return }
     const lvl = b.level ?? 1
     if (lvl >= BUILDING_MAX_LEVEL) { addLog(`${b.type} is already at max level (L${BUILDING_MAX_LEVEL}).`); return }
-    const cost = buildingUpgradeCostCopper(b.type, lvl)
+    const cost = buildingUpgradeCostCopper(b.type, lvl, mods.buildCostMult)
     if (cost <= 0) { addLog(`${b.type} cannot be upgraded.`); return }
     if (econ.wallet < cost) { addLog(`Not enough funds to upgrade ${b.type}. Need ${fmtCopper(cost)}.`); return }
     econ.setWallet(w => w - cost)
@@ -329,7 +338,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
 
     // Resource cost for upgrades (scale with level?)
     // Basic scaling: (Level+1) * Base Cost
-    const baseRes = ResourceBuildingCosts['BARRACKS'] || {}
+    const baseRes = buildingResourceCost('BARRACKS')
     const scale = barr.barracksLevel
     const missing: string[] = []
 
@@ -418,16 +427,16 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
   }
 
   function queueLightTraining(target: SoldierType, qty: number) {
-    qLight({ econ, barr, addLog }, target, qty)
+    qLight({ econ, barr, addLog, mods }, target, qty)
   }
   function queueLightCavConversion(fromType: SoldierType, qty: number) {
-    qLC({ econ, barr, addLog }, fromType, qty)
+    qLC({ econ, barr, addLog, mods }, fromType, qty)
   }
   function queueHeavyConversion(fromType: SoldierType, qty: number) {
-    qHC({ econ, barr, addLog }, fromType, qty)
+    qHC({ econ, barr, addLog, mods }, fromType, qty)
   }
   function queueHorseArcherConversion(qty: number) {
-    qHA({ econ, barr, addLog }, qty)
+    qHA({ econ, barr, addLog, mods }, qty)
   }
 
   function runDailyTick() {
@@ -532,7 +541,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
       rsc.setResearch(r => {
         let buffs = keptBuffs
         // A discovery lifts the whole domain for a couple of days (cross-branch effect).
-        for (let i = 0; i < doneProjects.length; i++) buffs = onResearchCompleted(buffs)
+        for (let i = 0; i < doneProjects.length; i++) buffs = onResearchCompleted(buffs, buffTable)
         return {
           ...r,
           unlocked: [...r.unlocked, ...doneProjects.map(p => p.id)],
@@ -744,7 +753,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
       lastBattleDay: day,
     }))
     const esc = ratioMult > 1 ? ` (escalated ×${ratioMult.toFixed(2)})` : ''
-    addLog(`⚔ Battle started: ${MISSION_PRESETS[difficulty].name}${esc} (${chosen.length} units vs enemy strength ${created.enemyStrength}).`)
+    addLog(`⚔ Battle started: ${presets[difficulty].name}${esc} (${chosen.length} units vs enemy strength ${created.enemyStrength}).`)
   }
 
   // Apply one player command to the active battle.
@@ -778,13 +787,13 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     const rewardText = won && c.reward
       ? ` Loot: ${fmtCopper(c.reward.copper)}${Object.keys(c.reward.resources).length ? ' + resources' : ''}.`
       : ''
-    addLog(`⚔ ${won ? 'Victory' : 'Defeat'} at ${MISSION_PRESETS[b.difficulty].name}! Lost ${outcome.totalLosses} soldiers${outcome.destroyed ? `, ${outcome.destroyed} units wiped out` : ''}, killed ${outcome.totalKills}.${rewardText}`)
+    addLog(`⚔ ${won ? 'Victory' : 'Defeat'} at ${presets[b.difficulty].name}! Lost ${outcome.totalLosses} soldiers${outcome.destroyed ? `, ${outcome.destroyed} units wiped out` : ''}, killed ${outcome.totalKills}.${rewardText}`)
     for (const r of outcome.report) {
       for (const p of r.promotions) addLog(`⬆ ${p.count} ${r.name} promoted ${p.from} → ${p.to} in battle.`)
     }
     // Cross-branch momentum: a victory doesn't just pay loot — it lifts the workshops
     // AND the soldiers still in training for a few days. A defeat costs a little output.
-    rsc.setResearch(r => ({ ...r, buffs: won ? onBattleWon(r.buffs) : onBattleLost(r.buffs) }))
+    rsc.setResearch(r => ({ ...r, buffs: won ? onBattleWon(r.buffs, buffTable) : onBattleLost(r.buffs, buffTable) }))
     if (won) addLog('🔥 Momentum: War Spoils (+production) and Martial Fervour (+training XP).')
     // Field surgeons etc. — research keeps survivors steadier after a fight.
     if (mods.postBattleMoraleBonus > 0) {
@@ -820,8 +829,8 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     const b = camp.campaign.battle
     const outcome = applyBattleResult(unit.units, { ...b, winner: 'ENEMY' }, camp.campaign.deployedIds)
     unit.setUnits(outcome.units)
-    addLog(`⚑ Retreated from ${MISSION_PRESETS[b.difficulty].name}. Lost ${outcome.totalLosses} soldiers.`)
-    rsc.setResearch(r => ({ ...r, buffs: onBattleLost(r.buffs) }))
+    addLog(`⚑ Retreated from ${presets[b.difficulty].name}. Lost ${outcome.totalLosses} soldiers.`)
+    rsc.setResearch(r => ({ ...r, buffs: onBattleLost(r.buffs, buffTable) }))
     camp.setCampaign(prev => ({
       ...prev,
       battle: null,
@@ -847,7 +856,11 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     wallet: econ.wallet, inv: econ.inv, buildings: econ.buildings, hasStable: econ.hasStable,
     resources: econ.resources, // Export resources
     setWallet: econ.setWallet, setInv: econ.setInv, setBuildings: econ.setBuildings,
-    BuildingCostCopper, BuildingOutputChoices, FocusOptions, ResourceBuildingCosts,
+    // Prices go out as FUNCTIONS, not raw tables: the displayed price must include the
+    // admin config AND the research discount, or the shop lies about what you'll pay.
+    buildingPrice: (t: Building['type']) => buildingCostCopper(t, mods.buildCostMult),
+    buildingResCost: (t: Building['type']) => buildingResourceCost(t),
+    BuildingOutputChoices, FocusOptions,
     buy, sell, buyBuilding, setBuildingFocus, setBuildingOutput, upgradeBuilding,
 
     // barracks (state)
@@ -889,7 +902,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
 
     // campaign / combat
     campaign: camp.campaign,
-    MISSION_PRESETS,
+    MISSION_PRESETS: presets,
     DIFFICULTIES,
     startBattle,
     battleCommand,

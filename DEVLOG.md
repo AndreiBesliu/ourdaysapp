@@ -138,6 +138,24 @@
 
 ---
 
+## 📅 Session Log: August 1, 2026
+
+**Task Completed (Warlord — admin de balans + reparat modificatorii inerți)**
+> Prompt: "adminul" (după tech tree: „O sa vreau un admin de unde pot configura toate lucrurile astea. Un admin separat de cel de la OurDaysApp") — decizii: aceiași admini ca OurDaysApp (`admins/{uid}`), scope v1 = tehnologii + buff-uri de momentum + economia de bază.
+> Model: Claude Opus 5
+>
+> **Fundația: `warlord/logic/config.ts`** — un singleton `GameConfig` (model `Registry`) inițializat înainte de montarea jocului. Tabelele existente rămân DEFAULT-uri neatinse; override-ul se merge peste ele, iar valorile invalide (NaN, negative, tip greșit, id necunoscut) cad înapoi pe default — un typo în admin nu poate strica economia. Motivul singletonului: `BuildingsTab`/`ProductionModal` citesc tabelele direct din module, deci o configurare pasată doar prin `useGameState` ar fi afișat un preț și ar fi încasat altul.
+> **Reparat: doi modificatori de research erau INERȚI.** `mods.buildCostMult` (Craft Guilds, Grand Armory) și `mods.trainDaysDelta`/`trainSlotsDelta` (War Academy) apăreau în `ResearchTab` dar nu ajungeau nicăieri — `buildingUpgradeCostCopper` nu primea niciodată `costMult`, `buildingCostCopper` nu avea apelant, iar `enqueueBatch`/`canEnqueue` nu primeau deltele. Acum `buildingCostCopper` e SINGURA sursă de preț (cumpărare, upgrade, PriceTag, tooltip), iar deltele de antrenament trec prin `Ctx.mods` din `training.ts`. Teste noi care prind exact regresia.
+> **Reparat: `ProductionModal` reimplementa formula de venit** (`0.10*cost`, `0.7*mv`) — ignora nivelul clădirii, valorile de bază pe resursă și bonusurile de research, deci promitea numere pe care jocul nu le plătea. Acum cheamă `passiveIncomeAndProduction`, aceeași funcție ca tick-ul zilnic.
+> - Date resolvate: `missionPresets()` (enemies.ts) și `resolveBuffs(overrides)` (momentum.ts) alături de `resolveCatalog` existent; `onBattleWon/Lost/onResearchCompleted` iau tabelul resolvat.
+> - `firestore.rules`: `warlordConfig/{docId}` — citire pentru orice utilizator autentificat (o lume ⇒ o configurare pentru toți), scriere doar cu `exists(/databases/$(database)/documents/admins/$(uid))` (același tipar privilegiat ca `isMemberOfGroup`).
+> - OurDaysApp-only: `src/warlordAdmin/{configApi.ts,WarlordAdminPanel.tsx}` — secțiuni Economy / Techs / Momentum / Campaign / JSON, fiecare câmp e un OVERRIDE (gol = default, evidențiat când e schimbat), reset pe secțiune, JSON pentru editări în masă, „Clear ALL". Al treilea buton `[⚙ Admin]` în `screens/Warlord.tsx`, vizibil doar dacă `adminCheck()` întoarce true (regulile re-verifică pe server). Configurarea se încarcă în același `ready`-gate ca domeniul, ÎNAINTE de montarea jocului (GameConfig e citit sincron la primul render).
+> - Verificat live (preview, bypass temporar de auth, revenit): cu un override de test prețul BLACKSMITH a trecut de la 100g la 777g în magazin; panoul randează toate secțiunile; o editare produce exact `{"missions":{"BANDIT_RAID":{"ratio":2.5}}}`; fără sesiune, citirea configurării e respinsă de reguli și jocul cade elegant pe default-uri.
+> - Semantică (scrisă și în panou): configurarea e globală și live — cercetarea deja în coadă își păstrează zilele, prețurile/duratele noi se aplică de la următoarea pornire, iar efectele tehnologiilor deja deblocate se citesc din valorile curente (un nerf se aplică retroactiv).
+> - 53 teste verzi (13 noi în `config.test.ts`), tsc + build verzi în ambele proiecte, cele 2 copii de cod de joc identice (`diff -q`). Deploy: firestore rules + hosting. Commit + push în ambele repo-uri.
+
+---
+
 ## 📅 Session Log: July 12, 2026
 
 **Task Completed (Warlord — GLOBAL matchmaking / one shared world)**

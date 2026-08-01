@@ -4,6 +4,10 @@ import { auth } from '../firebase';
 import WarlordApp from '../warlord/WarlordApp';
 import PvpPanel from '../warlordPvp/PvpPanel';
 import { loadWarlordDomain, createDomainSync } from '../warlordCloud';
+import { loadWarlordConfig } from '../warlordAdmin/configApi';
+import WarlordAdminPanel from '../warlordAdmin/WarlordAdminPanel';
+import { adminCheck } from '../serverActions';
+import type { GameConfigOverrides } from '../warlord/logic/config';
 
 // Embedded Warlord game, mounted as its own full-width route. Two views:
 //  • Domain — the single-player game. State is CLOUD-BACKED (warlordDomains/{uid} in
@@ -13,7 +17,11 @@ import { loadWarlordDomain, createDomainSync } from '../warlordCloud';
 // pushes to the cloud), which is only safe while the Domain game is unmounted.
 export default function Warlord() {
   const navigate = useNavigate();
-  const [view, setView] = useState<'DOMAIN' | 'PVP'>('DOMAIN');
+  const [view, setView] = useState<'DOMAIN' | 'PVP' | 'ADMIN'>('DOMAIN');
+  // Admin entry is UI-only sugar; the Firestore rules are what actually gate the write.
+  const [isAdmin, setIsAdmin] = useState(false);
+  // Admin-tuned balance values, loaded once alongside the domain (null = pure defaults).
+  const [config, setConfig] = useState<GameConfigOverrides | null>(null);
   const realUid = auth.currentUser?.uid;
   const saveKey = `warlord_save_${realUid ?? 'anon'}`;
 
@@ -25,7 +33,7 @@ export default function Warlord() {
   const [ready, setReady] = useState(false);
   useEffect(() => {
     let alive = true;
-    if (!realUid) { setReady(true); return; } // anon plays locally, no cloud
+    if (!realUid) { setReady(true); return; } // anon plays locally, no cloud (and no config: rules require sign-in)
     // One-time migration of the pre-uid-scoping local save into this user's key.
     const legacy = localStorage.getItem('warlord_save');
     if (legacy && !localStorage.getItem(saveKey)) {
@@ -33,9 +41,20 @@ export default function Warlord() {
       localStorage.removeItem('warlord_save');
     }
     setReady(false);
-    loadWarlordDomain(realUid).finally(() => { if (alive) setReady(true); });
+    // The config must be in hand BEFORE the game mounts: GameConfig is read synchronously
+    // by prices and tables during the first render, so a late arrival would show defaults.
+    Promise.all([loadWarlordDomain(realUid), loadWarlordConfig()])
+      .then(([, cfg]) => { if (alive) setConfig(cfg); })
+      .finally(() => { if (alive) setReady(true); });
     return () => { alive = false; sync?.flush(); }; // push the last state on unmount
   }, [realUid, saveKey, sync]);
+
+  useEffect(() => {
+    let alive = true;
+    if (!realUid) { setIsAdmin(false); return; }
+    adminCheck().then((ok) => { if (alive) setIsAdmin(ok); }).catch(() => {});
+    return () => { alive = false; };
+  }, [realUid]);
 
   // Leaving the Domain view (e.g. to PvP) flushes any pending cloud write immediately.
   useEffect(() => { if (view !== 'DOMAIN') sync?.flush(); }, [view, sync]);
@@ -55,7 +74,7 @@ export default function Warlord() {
         </button>
         <span className="text-sm text-stone-500">Warlord</span>
         <div className="ml-auto flex gap-1">
-          {([['DOMAIN', '🏰 Domain'], ['PVP', '⚔ PvP']] as const).map(([k, label]) => (
+          {([['DOMAIN', '🏰 Domain'], ['PVP', '⚔ PvP'], ...(isAdmin ? [['ADMIN', '⚙ Admin'] as const] : [])] as const).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setView(k)}
@@ -71,10 +90,12 @@ export default function Warlord() {
         <div className="flex items-center justify-center py-24">
           <div className="w-8 h-8 border-4 border-stone-300 border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : view === 'ADMIN' ? (
+        <WarlordAdminPanel />
       ) : view === 'DOMAIN' ? (
         // key={saveKey}: an auth change while mounted remounts the game so it re-hydrates
         // from the new user's key. onPersist mirrors every save to the cloud (debounced).
-        <WarlordApp key={saveKey} saveKey={saveKey} onPersist={sync?.onPersist} />
+        <WarlordApp key={saveKey} saveKey={saveKey} onPersist={sync?.onPersist} config={config} />
       ) : (
         <div className="p-6 max-w-6xl mx-auto">
           {realUid

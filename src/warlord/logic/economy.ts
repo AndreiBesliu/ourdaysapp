@@ -1,9 +1,10 @@
 // src/logic/economy.ts
 import type { BuildingType, ResourceMap, SoldierType, Unit, Rank } from './types'
 import { itemValueCopper } from './items'
+import { GameConfig } from './config'
 
 // Daily upkeep cost per soldier (in copper), by type
-const UPKEEP_BASE: Record<SoldierType, number> = {
+export const UPKEEP_BASE: Record<SoldierType, number> = {
   LIGHT_INF_SWORD: 2, LIGHT_INF_SPEAR: 2, LIGHT_INF_HALBERD: 2,
   HEAVY_INF_SWORD: 3, HEAVY_INF_SPEAR: 3, HEAVY_INF_HALBERD: 3,
   LIGHT_ARCHER: 2,    HEAVY_ARCHER: 3,
@@ -12,7 +13,7 @@ const UPKEEP_BASE: Record<SoldierType, number> = {
 }
 
 // Rank multiplier for upkeep (veterans cost more to maintain)
-const UPKEEP_RANK_MULT: Record<Rank, number> = {
+export const UPKEEP_RANK_MULT: Record<Rank, number> = {
   NOVICE: 1.0, TRAINED: 1.1, ADVANCED: 1.25, VETERAN: 1.5, ELITE: 2.0,
 }
 
@@ -20,9 +21,9 @@ const UPKEEP_RANK_MULT: Record<Rank, number> = {
 export function dailyUpkeepCopper(units: Unit[], mult = 1): number {
   let total = 0
   for (const u of units) {
-    const base = UPKEEP_BASE[u.type] ?? 2
+    const base = GameConfig.upkeepBase(u.type, UPKEEP_BASE[u.type] ?? 2)
     for (const b of u.buckets) {
-      total += Math.round(base * (UPKEEP_RANK_MULT[b.r] ?? 1) * b.count)
+      total += Math.round(base * GameConfig.upkeepRankMult(b.r, UPKEEP_RANK_MULT[b.r] ?? 1) * b.count)
     }
   }
   return Math.round(total * mult)
@@ -119,14 +120,14 @@ export const ManufacturingRecipes: Record<string, Partial<ResourceMap>> = {
  */
 
 // Fixed daily output value (in copper) for resource buildings that don't scale with cost.
-const RESOURCE_BUILDING_BASE_VALUE: Partial<Record<string, number>> = {
+export const RESOURCE_BUILDING_BASE_VALUE: Partial<Record<string, number>> = {
   WOOD: 500,   // ~10 wood/day at 50c/wood
   STONE: 500,
   FOOD: 800,   // ~16 food/day at 50c/food
 }
 
 // Food consumption per soldier per day (base, before rank modifier)
-const FOOD_BASE: Record<SoldierType, number> = {
+export const FOOD_BASE: Record<SoldierType, number> = {
   LIGHT_INF_SWORD: 1, LIGHT_INF_SPEAR: 1, LIGHT_INF_HALBERD: 1,
   HEAVY_INF_SWORD: 2, HEAVY_INF_SPEAR: 2, HEAVY_INF_HALBERD: 2,
   LIGHT_ARCHER: 1,    HEAVY_ARCHER: 2,
@@ -138,7 +139,7 @@ const FOOD_BASE: Record<SoldierType, number> = {
 export function dailyFoodConsumption(units: Unit[], mult = 1): number {
   let total = 0
   for (const u of units) {
-    const base = FOOD_BASE[u.type] ?? 1
+    const base = GameConfig.foodBase(u.type, FOOD_BASE[u.type] ?? 1)
     for (const b of u.buckets) total += base * b.count
   }
   return Math.round(total * mult)
@@ -155,13 +156,21 @@ export function buildingLevelMult(level: number): number {
 
 // Copper cost to upgrade FROM `currentLevel` to the next: 60% of base cost × current level.
 export function buildingUpgradeCostCopper(type: BuildingType, currentLevel: number, costMult = 1): number {
-  const base = BuildingCostCopper[type] || 0
+  const base = GameConfig.buildingCost(type, BuildingCostCopper[type] || 0)
   return Math.round(base * 0.6 * Math.max(1, currentLevel) * costMult)
 }
 
-// Copper price of a new building after research discounts (1 = unchanged).
+// THE single source of a building's copper price: admin config first, then any research
+// discount. Every reader (purchase, income math, UI price tags) must go through this —
+// reading the raw BuildingCostCopper table would show a price the game doesn't charge.
 export function buildingCostCopper(type: BuildingType, costMult = 1): number {
-  return Math.round((BuildingCostCopper[type] || 0) * costMult)
+  return Math.round(GameConfig.buildingCost(type, BuildingCostCopper[type] || 0) * costMult)
+}
+
+// Resource price of a building after admin config (research discounts don't apply to
+// materials today — only to copper).
+export function buildingResourceCost(type: BuildingType): Partial<ResourceMap> {
+  return GameConfig.buildingResourceCost(type, ResourceBuildingCosts[type] || {})
 }
 
 export function passiveIncomeAndProduction(args: {
@@ -175,7 +184,8 @@ export function passiveIncomeAndProduction(args: {
 }): { coinGain: number; items: number; newBuffer: number } {
   const { costCopper, focusCoinPct, outputItem, fractionalBuffer } = args
 
-  const basePerDay = (RESOURCE_BUILDING_BASE_VALUE[outputItem] ?? (0.10 * costCopper))
+  const configured = GameConfig.resourceBaseValue(outputItem, RESOURCE_BUILDING_BASE_VALUE[outputItem])
+  const basePerDay = (configured ?? (0.10 * costCopper))
     * buildingLevelMult(args.level ?? 1) * (args.outputMult ?? 1)
   if (!basePerDay) return { coinGain: 0, items: 0, newBuffer: fractionalBuffer }
 

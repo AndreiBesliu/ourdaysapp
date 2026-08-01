@@ -9,6 +9,7 @@ import type { BattleState, Combatant, Difficulty, MissionPreset, TerrainType } f
 import { makeRng, weightedPick } from './rng'
 import { buildBattle } from './engine'
 import { unitToCombatant, prettyName, armyStrength } from './army'
+import { GameConfig } from '../config'
 
 export const BATTLE_WIDTH = 12
 export const BATTLE_HEIGHT = 8
@@ -82,6 +83,31 @@ function makeEnemyCombatant(i: number, type: SoldierType, rank: Rank, count: num
     routed: false,
     buckets: [{ r: rank, count, avgXP: preset.baseXP }],
   }
+}
+
+// Mission presets are DATA: the admin retunes difficulty/reward without a deploy.
+// Weights and names stay code-owned (v1 scope); only the numeric knobs are overridable.
+export function missionPresets(): Record<Difficulty, MissionPreset> {
+  const out = {} as Record<Difficulty, MissionPreset>
+  for (const [id, base] of Object.entries(MISSION_PRESETS) as [Difficulty, MissionPreset][]) {
+    const ov = GameConfig.mission(id)
+    if (!ov) { out[id] = base; continue }
+    const n = (v: unknown, fallback: number, min = 0) =>
+      typeof v === 'number' && Number.isFinite(v) && v >= min ? v : fallback
+    const minTokens = Math.max(1, Math.round(n(ov.minTokens, base.minTokens, 1)))
+    out[id] = {
+      ...base,
+      ratio: n(ov.ratio, base.ratio, 0.01),
+      minTokens,
+      maxTokens: Math.max(minTokens, Math.round(n(ov.maxTokens, base.maxTokens, 1))),
+      baseMorale: n(ov.baseMorale, base.baseMorale, 1),
+      rewardCopperPerStrength: n(ov.rewardCopperPerStrength, base.rewardCopperPerStrength),
+      rewardResources: ov.rewardResources && typeof ov.rewardResources === 'object'
+        ? { ...base.rewardResources, ...ov.rewardResources }
+        : base.rewardResources,
+    }
+  }
+  return out
 }
 
 export function generateEnemyArmy(preset: MissionPreset, playerStrength: number, seed: number, ratioMult = 1): Combatant[] {
@@ -177,7 +203,7 @@ export interface BattleMods {
 
 // High-level entry point: deployedUnits are the actual Unit objects the player committed.
 export function createBattle(deployedUnits: Unit[], difficulty: Difficulty, seed: number, mods?: BattleMods): CreatedBattle {
-  const preset = MISSION_PRESETS[difficulty]
+  const preset = missionPresets()[difficulty]
   const w = BATTLE_WIDTH
   const h = BATTLE_HEIGHT
 

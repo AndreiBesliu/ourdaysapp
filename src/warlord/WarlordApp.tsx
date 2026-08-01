@@ -11,6 +11,7 @@ import ResearchTab from './components/tabs/ResearchTab'
 
 import BarracksTab from './components/tabs/BarracksTab'
 import { useGameState } from './state/useGameState'
+import type { GameConfigOverrides } from './logic/config'
 
 import { fmtCopper as fmtCopperUtil } from './logic/types'
 
@@ -21,12 +22,14 @@ export default function App({
   saveKey = 'warlord_save',
   initialBlob,
   onPersist,
+  config,
 }: {
   saveKey?: string
   initialBlob?: any
   onPersist?: (blob: any) => void
+  config?: GameConfigOverrides | null // admin-tuned balance (absent = built-in defaults)
 }) {
-  const state = useGameState(saveKey, { initialBlob, onPersist })
+  const state = useGameState(saveKey, { initialBlob, onPersist, config })
 
   // ---- auto day-tick every 5 minutes ----
   const TICK_MS = 5 * 60 * 1000; // 5 min

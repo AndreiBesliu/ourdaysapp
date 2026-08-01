@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { GOLD, fmtCopper, type Building, type ResourceMap, ResourceTypes, WeaponTypes, ArmorTypes } from '../logic/types'
-import { BuildingCostCopper, BuildingOutputChoices, passiveIncomeAndProduction, SmelterRecipes, ManufacturingRecipes } from '../logic/economy'
+import { buildingCostCopper, BuildingOutputChoices, passiveIncomeAndProduction, SmelterRecipes, ManufacturingRecipes } from '../logic/economy'
 
 // Optional pre-parsed save blob for hydrate-on-init (fixes the save being clobbered
 // by the first render's save-effect before the player could press Load).
@@ -58,7 +58,8 @@ export function useEconomy(initialWallet = 5 * GOLD, defaultBuildings: () => Bui
       if (['STABLE', 'MARKET', 'BARRACKS'].includes(row.type)) return row
 
       // 1. Calculate Potential Output based on Investment (Cost)
-      const cost = BuildingCostCopper[row.type] || 0
+      // Config price only — a research BUILD discount must not shrink the income basis.
+      const cost = buildingCostCopper(row.type)
       const { coinGain, items, newBuffer } = passiveIncomeAndProduction({
         costCopper: cost,
         focusCoinPct: row.focusCoinPct,

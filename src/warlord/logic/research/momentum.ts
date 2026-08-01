@@ -69,6 +69,34 @@ export const BUFF_DEFS: Record<string, BuffDef> = {
   },
 }
 
+export type BuffTable = Record<string, BuffDef>
+
+// Admin overrides merged over the defaults. Only sane values survive: a buff whose
+// duration or multiplier was typed wrong must fall back, never poison the economy.
+export function resolveBuffs(overrides?: Record<string, Partial<Omit<BuffDef, 'id'>>> | null): BuffTable {
+  if (!overrides || typeof overrides !== 'object') return BUFF_DEFS
+  const out: BuffTable = {}
+  for (const [id, def] of Object.entries(BUFF_DEFS)) {
+    const ov = overrides[id]
+    if (!ov || typeof ov !== 'object') { out[id] = def; continue }
+    const days = typeof ov.days === 'number' && Number.isFinite(ov.days) && ov.days >= 1 ? Math.round(ov.days) : def.days
+    const effects: EffectDelta = { ...def.effects }
+    if (ov.effects && typeof ov.effects === 'object') {
+      for (const [k, v] of Object.entries(ov.effects)) {
+        if (typeof v === 'number' && Number.isFinite(v)) (effects as Record<string, number>)[k] = v
+      }
+    }
+    out[id] = {
+      ...def,
+      days,
+      effects,
+      name: typeof ov.name === 'string' && ov.name.trim() ? ov.name : def.name,
+      desc: typeof ov.desc === 'string' && ov.desc.trim() ? ov.desc : def.desc,
+    }
+  }
+  return out
+}
+
 function instantiate(def: BuffDef): ActiveBuff {
   return { id: def.id, name: def.name, desc: def.desc, daysRemaining: def.days, effects: def.effects, good: def.good }
 }
@@ -85,16 +113,16 @@ export function addBuff(buffs: ActiveBuff[], def: BuffDef): ActiveBuff[] {
 }
 
 // A victory ripples into economy AND training — the cross-branch effect Andrei asked for.
-export function onBattleWon(buffs: ActiveBuff[]): ActiveBuff[] {
-  return addBuff(addBuff(buffs, BUFF_DEFS.WAR_SPOILS), BUFF_DEFS.MARTIAL_FERVOUR)
+export function onBattleWon(buffs: ActiveBuff[], table: BuffTable = BUFF_DEFS): ActiveBuff[] {
+  return addBuff(addBuff(buffs, table.WAR_SPOILS), table.MARTIAL_FERVOUR)
 }
 
-export function onBattleLost(buffs: ActiveBuff[]): ActiveBuff[] {
-  return addBuff(buffs, BUFF_DEFS.LICKING_WOUNDS)
+export function onBattleLost(buffs: ActiveBuff[], table: BuffTable = BUFF_DEFS): ActiveBuff[] {
+  return addBuff(buffs, table.LICKING_WOUNDS)
 }
 
-export function onResearchCompleted(buffs: ActiveBuff[]): ActiveBuff[] {
-  return addBuff(buffs, BUFF_DEFS.BREAKTHROUGH)
+export function onResearchCompleted(buffs: ActiveBuff[], table: BuffTable = BUFF_DEFS): ActiveBuff[] {
+  return addBuff(buffs, table.BREAKTHROUGH)
 }
 
 // One day passes: decrement and drop the expired. Pure; returns the survivors and the

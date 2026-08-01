@@ -1,7 +1,6 @@
 import { createPortal } from 'react-dom'
 import { type Building } from '../../logic/types'
-import { BuildingCostCopper, BuildingOutputChoices } from '../../logic/economy'
-import { itemValueCopper } from '../../logic/items'
+import { buildingCostCopper, BuildingOutputChoices, passiveIncomeAndProduction } from '../../logic/economy'
 import { getIconForGameItem } from '../../logic/iconHelpers'
 import MoneyDisplay from '../common/MoneyDisplay'
 import GameIcon from '../common/GameIcon'
@@ -18,6 +17,8 @@ type Props = {
     onClose: () => void
     onSetOutput: (item: string) => void
     onSetFocus: (pct: number) => void
+    prodMult?: number      // research/momentum production bonus (1 = unchanged)
+    craftEfficiency?: number
 }
 
 const InteriorMap: Record<string, string> = {
@@ -38,11 +39,13 @@ const InteriorMap: Record<string, string> = {
     MARKET: bgTailor,
 }
 
-export default function ProductionModal({ building, onClose, onSetOutput, onSetFocus }: Props) {
+export default function ProductionModal({ building, onClose, onSetOutput, onSetFocus, prodMult = 1, craftEfficiency = 1 }: Props) {
     const bg = InteriorMap[building.type] || bgBlacksmith
     const options = BuildingOutputChoices[building.type]?.options || []
 
-    // Calculate stats for preview
+    // Preview MUST come from the same function the daily tick runs, otherwise the
+    // modal advertises numbers the game never pays (it used to hardcode 0.10*cost / 0.7*mv,
+    // ignoring building level, resource base values and research bonuses).
     let coinGain = 0
     let items = '0'
 
@@ -50,14 +53,19 @@ export default function ProductionModal({ building, onClose, onSetOutput, onSetF
         coinGain = 0
         items = '10'
     } else {
-        const cost = BuildingCostCopper[building.type] || 0
-        const basePerDay = 0.10 * cost
-        coinGain = Math.round(basePerDay * (building.focusCoinPct / 100))
-        const remainderValue = basePerDay - coinGain
-        const mv = itemValueCopper(building.outputItem || options[0] || '') || 1
-        items = (remainderValue > 0 && mv > 0)
-            ? (remainderValue / (0.7 * mv)).toFixed(1)
-            : '0'
+        const out = passiveIncomeAndProduction({
+            costCopper: buildingCostCopper(building.type),
+            focusCoinPct: building.focusCoinPct,
+            outputItem: building.outputItem || options[0] || '',
+            fractionalBuffer: 0,
+            level: building.level ?? 1,
+            outputMult: prodMult,
+            craftEfficiency: craftEfficiency,
+        })
+        coinGain = out.coinGain
+        // Whole items only land once the buffer fills; show the daily rate, not the floor.
+        const perDay = out.items + out.newBuffer
+        items = perDay > 0 ? perDay.toFixed(1) : '0'
     }
 
     return createPortal(

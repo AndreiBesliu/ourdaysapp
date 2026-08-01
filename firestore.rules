@@ -190,6 +190,17 @@ service cloud.firestore {
       allow read, write: if isSignedIn() && request.auth.uid == ownerId;
     }
 
+    // ── Warlord game configuration (admin-tuned balance) ──
+    // ONE shared world ⇒ ONE configuration: every player must load the same balance
+    // values, so this is world-readable to signed-in players and writable only by an
+    // OurDaysApp admin. `exists()` on /admins reads privileged (same pattern as
+    // isMemberOfGroup above), so a player can never read the admin roster itself.
+    match /warlordConfig/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
     // ── Warlord PvP staging (challenger armies) ──
     // Holds a challenger's committed army while the challenge is 'waiting', so the
     // opponent CANNOT read it before choosing their own (no pre-commit counter-pick).

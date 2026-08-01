@@ -21,6 +21,9 @@ type Ctx = {
     setBarracks: (fn: (prev: any) => any) => void
   }
   addLog: (s: string) => void
+  // Research/momentum modifiers. Optional so existing callers/tests keep working;
+  // this is how trainDaysDelta / trainSlotsDelta actually reach the training queue.
+  mods?: { trainDaysDelta?: number; trainSlotsDelta?: number }
 }
 
 const ADV_PLUS: Rank[] = ['ADVANCED', 'VETERAN', 'ELITE']
@@ -47,7 +50,7 @@ function assertQty(qty: number) {
 }
 
 function requireSlot(ctx: Ctx) {
-  if (!canEnqueue(ctx.barr.batches, ctx.barr.barracksLevel)) {
+  if (!canEnqueue(ctx.barr.batches, ctx.barr.barracksLevel, ctx.mods?.trainSlotsDelta ?? 0)) {
     ctx.addLog('Training queue full.')
     return false
   }
@@ -100,7 +103,7 @@ export function queueLightTraining(ctx: Ctx, target: SoldierType, qty: number) {
   ctx.econ.setInv(() => res.inv)
   if (res.spent > 0) ctx.econ.setWallet(w => w - res.spent)
   ctx.barr.setBatches(prev =>
-    enqueueBatch(prev, { level: ctx.barr.barracksLevel, kind: 'LIGHT_TRAIN', target, qty: n })
+    enqueueBatch(prev, { level: ctx.barr.barracksLevel, kind: 'LIGHT_TRAIN', target, qty: n }, ctx.mods?.trainDaysDelta ?? 0)
   )
   ctx.addLog(`Queued LIGHT training: ${n} → ${target}.`)
 }
@@ -144,7 +147,7 @@ export function queueLightCavConversion(ctx: Ctx, fromType: SoldierType, qty: nu
       fromType,
       qty: n,
       takeByRank: take
-    })
+    }, ctx.mods?.trainDaysDelta ?? 0)
   )
   ctx.addLog(`Queued LIGHT_CAV conversion: ${n} from ${fromType}.`)
 }
@@ -202,7 +205,7 @@ export function queueHeavyConversion(ctx: Ctx, fromType: SoldierType, qty: numbe
       fromType,
       qty: n,
       takeByRank: take
-    })
+    }, ctx.mods?.trainDaysDelta ?? 0)
   )
   ctx.addLog(`Queued HEAVY_CAV conversion: ${n} from ${fromType} (ADV+).`)
 }
@@ -243,7 +246,7 @@ export function queueHorseArcherConversion(ctx: Ctx, qty: number) {
       fromType,
       qty: n,
       takeByRank: take
-    })
+    }, ctx.mods?.trainDaysDelta ?? 0)
   )
   ctx.addLog(`Queued HORSE_ARCHER conversion: ${n} (ADV+ from LIGHT_ARCHER).`)
 }
