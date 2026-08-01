@@ -76,6 +76,12 @@ export async function forfeitWarlordBattle(gameId: string): Promise<void> {
   await fn({ gameId });
 }
 
+// Claim the win when the opponent has stopped playing (server checks the elapsed time).
+export async function claimWarlordTimeout(gameId: string): Promise<void> {
+  const fn = httpsCallable(getFunctions(app), "claimWarlordTimeout");
+  await fn({ gameId });
+}
+
 // Remove a friend (mutual — edits both users' friend lists).
 export async function removeFriend(friendUid: string): Promise<void> {
   const fn = httpsCallable(getFunctions(app), "removeFriend");

@@ -158,7 +158,15 @@
 > - MAJOR unfindable players: the roster name came from auth.displayName, which is null for every email/password signup. Now taken from the app's canonical `profiles` doc.
 > - MAJOR troop destruction: the unit picker offered units already staked in a live battle, so the same soldiers fought twice and each write-back subtracted casualties from the same unit. Committed units are now excluded.
 > - Hardening/UX: warlordPlayers rules got a field whitelist + size caps (world-readable doc); a Decline button for incoming challenges (anyone can now challenge you); search race guard + stuck spinner fix; roster refresh on opening the wizard; optimistic battle state keyed on turn/side/rngCursor instead of object identity; the arcade hub no longer shows a delete button for server-owned Warlord docs.
-> Deferred (documented): no turn timeout; orphaned warlordDeploys for challenges that are never answered.
+> Deferred (documented): orphaned warlordDeploys for challenges that are never answered; English-only PvP i18n.
+
+**Task Completed (Warlord PvP — turn timeout)**
+> Model: Claude Opus 4.8
+> Closes the last major gap, made urgent by the review fix that excludes committed units: an opponent who simply stopped playing locked those units out of every future deployment forever, with "retreat" (a self-inflicted loss) as the only exit.
+> - Game docs now carry `lastMoveAt`, stamped when the battle starts and on every applied command.
+> - NEW `claimWarlordTimeout` callable: only the WAITING player may call it, and only after WARLORD_TURN_TIMEOUT_HOURS (default 24) of no move; the stalled side loses. Terminal marking mirrors forfeit (doc + state), so the existing casualty write-back and the ladder work unchanged. A legacy battle with no clock starts one instead of granting a free win.
+> - UI: a "Claim victory ⏱" button appears for the waiting player once the timer elapses; the result screen labels a timeout win.
+> Build ✅ · deploy functions + hosting ✅.
 
 **Task Completed (Warlord — cloud-synced domain / real game account)**
 > Prompt: "fiecare user al aplicatiei OurDaysApp are un cont separat pentru jocul Warlords, sau intra toti pe acelasi joc?" → each user is a player; the app account IS the game account; make the kingdom cross-device.

@@ -15,6 +15,9 @@ import { createWarlordChallenge, forfeitWarlordBattle } from '../serverActions';
 import { saveWarlordDomain } from '../warlordCloud';
 
 export const WARLORD_GAME_TYPE = 'warlord-battle';
+// Keep in sync with WARLORD_TURN_TIMEOUT_HOURS in functions/src/index.ts — the server
+// is the authority; this only decides when to OFFER the claim button.
+export const WARLORD_TURN_TIMEOUT_HOURS = 24;
 
 export interface WarlordGameDoc {
   id: string;
@@ -31,6 +34,8 @@ export interface WarlordGameDoc {
   state: BattleState | null;
   deploy?: Record<string, { unitIds: string[]; combatants: unknown[] }>; // absent while 'waiting'
   forfeitedBy?: string;
+  timedOutBy?: string;
+  lastMoveAt?: { toMillis?: () => number } | null; // Firestore Timestamp (turn-timeout clock)
 }
 
 // ── Local army access (reads the per-uid save the game itself writes) ──

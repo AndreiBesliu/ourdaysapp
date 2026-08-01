@@ -10,9 +10,10 @@ import BattleGrid from '../warlord/components/campaign/BattleGrid';
 import BattleLog from '../warlord/components/campaign/BattleLog';
 import GameIcon from '../warlord/components/common/GameIcon';
 import { getIconForGameItem } from '../warlord/logic/iconHelpers';
-import { submitWarlordCommand, forfeitWarlordBattle } from '../serverActions';
+import { submitWarlordCommand, forfeitWarlordBattle, claimWarlordTimeout } from '../serverActions';
 import {
   type WarlordGameDoc, readLocalArmy, writeLocalArmy, hasAppliedBattle, markBattleApplied,
+  WARLORD_TURN_TIMEOUT_HOURS,
 } from './pvpApi';
 
 interface Props {
@@ -102,6 +103,9 @@ export default function PvpBattle({ game, myUid, names, onBack }: Props) {
   const myName = names[myUid] || 'You';
   const oppName = names[oppUid] || 'Opponent';
   const iAmBlue = mySide === 'PLAYER';
+  // Hours since the opponent's last move (the server re-checks before granting a claim).
+  const lastMoveMs = game.lastMoveAt?.toMillis?.() ?? 0;
+  const stalledHours = lastMoveMs ? (Date.now() - lastMoveMs) / 3600000 : 0;
 
   return (
     <div className="space-y-3">
@@ -119,6 +123,17 @@ export default function PvpBattle({ game, myUid, names, onBack }: Props) {
         <span className="text-sm text-blue-700 font-mono">🛡 {count('PLAYER')}</span>
         <span className="text-sm text-red-700 font-mono">⚔ {count('ENEMY')}</span>
         <div className="ml-auto flex gap-2">
+          {!over && !myTurn && stalledHours >= WARLORD_TURN_TIMEOUT_HOURS && (
+            // The opponent stopped playing. Without this the battle never ends and the
+            // units staked in it stay locked out of every new deployment.
+            <button
+              onClick={() => claimWarlordTimeout(game.id).catch((e) => setError(e?.message || 'Failed'))}
+              className="px-3 py-1 rounded bg-green-700 text-white hover:bg-green-800"
+              title={`No move for over ${WARLORD_TURN_TIMEOUT_HOURS}h`}
+            >
+              Claim victory ⏱
+            </button>
+          )}
           {!over && (
             <>
               <button
@@ -146,6 +161,7 @@ export default function PvpBattle({ game, myUid, names, onBack }: Props) {
           <div className="font-serif text-xl font-bold">
             {game.winner === myUid ? '🏆 Victory!' : game.winner ? '💀 Defeat' : '🤝 Draw'}
             {game.forfeitedBy && <span className="text-sm font-normal text-stone-500"> (by retreat)</span>}
+            {game.timedOutBy && <span className="text-sm font-normal text-stone-500"> (opponent timed out)</span>}
           </div>
           {writeBackNote && <div className="text-xs text-stone-600 mt-1">{writeBackNote}</div>}
           {outcome && outcome.report.length > 0 && (

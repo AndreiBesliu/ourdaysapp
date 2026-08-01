@@ -22,6 +22,10 @@ const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 50);
 const NOTIF_DAILY_LIMIT = Number(process.env.NOTIF_DAILY_LIMIT || 100);
 const WARLORD_CHALLENGE_DAILY_LIMIT = Number(process.env.WARLORD_CHALLENGE_DAILY_LIMIT || 30);
+// A battle where the opponent simply stops playing would otherwise lock the units
+// staked in it forever (they are excluded from new deployments). After this many hours
+// of no move, the waiting player may claim the win.
+const WARLORD_TURN_TIMEOUT_HOURS = Number(process.env.WARLORD_TURN_TIMEOUT_HOURS || 24);
 
 // Admin backend access. Source of truth = the `admins/{uid}` collection (locked
 // to clients; only the Admin SDK writes it). A VERIFIED email in this bootstrap
@@ -1568,6 +1572,7 @@ export const acceptWarlordChallenge = onCall({ enforceAppCheck: ENFORCE_APP_CHEC
         [uid]: { unitIds: defender.unitIds, combatants: defender.combatants },
       },
       startedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastMoveAt: admin.firestore.FieldValue.serverTimestamp(), // turn-timeout clock
     });
     tx.delete(deployRef); // private staging no longer needed
     return { ok: true };
@@ -1725,7 +1730,10 @@ export const submitWarlordCommand = onCall({ enforceAppCheck: ENFORCE_APP_CHECK 
       return { applied: false, finished: false };
     }
 
-    const patch: Record<string, unknown> = { state: next };
+    const patch: Record<string, unknown> = {
+      state: next,
+      lastMoveAt: admin.firestore.FieldValue.serverTimestamp(), // resets the turn-timeout clock
+    };
     const finished = next.status !== "ONGOING";
     if (finished) {
       const winnerUid =
@@ -1797,6 +1805,78 @@ export const forfeitWarlordBattle = onCall({ enforceAppCheck: ENFORCE_APP_CHECK 
     });
     ladder = { winner: winnerUid, loser: uid };
     return { ok: true };
+  });
+
+  const done = ladder as WarlordLadderUpdate | null;
+  if (done) await recordWarlordResult(done.winner, done.loser);
+  return result;
+});
+
+// Claim a win when the opponent has stopped playing. Without this, an abandoned
+// battle is immortal: it never ends, and the units staked in it are excluded from
+// every new deployment — an opponent who simply walks away would permanently
+// confiscate part of your army, with "retreat" (a self-inflicted loss) as the only exit.
+// Only the WAITING player may claim, and only after the timeout has actually elapsed.
+export const claimWarlordTimeout = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
+  const gameId = requireGameId(request.data);
+
+  const db = admin.firestore();
+  const ref = db.doc(`games/${gameId}`);
+  let ladder: WarlordLadderUpdate | null = null;
+
+  const result = await db.runTransaction(async (tx) => {
+    ladder = null; // reset per attempt (callbacks re-run on contention)
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "Game not found.");
+    const g = snap.data()!;
+    if (g.gameType !== WARLORD_GAME_TYPE) throw new HttpsError("failed-precondition", "Not a Warlord battle.");
+    if (g.status === "finished") return { ok: true, already: true }; // idempotent
+    if (g.status !== "playing") throw new HttpsError("failed-precondition", "That battle hasn't started.");
+    if (!Array.isArray(g.players) || !g.players.includes(uid)) {
+      throw new HttpsError("permission-denied", "You aren't a participant in this battle.");
+    }
+    const battle = g.state as BattleState;
+    if (!battle || battle.status !== "ONGOING") throw new HttpsError("failed-precondition", "Battle already resolved.");
+
+    // Only the player who is WAITING can claim — you can never time out your own turn.
+    const stalledUid = g.players[battle.side === "PLAYER" ? 0 : 1];
+    if (stalledUid === uid) throw new HttpsError("failed-precondition", "It's your turn — make a move.");
+
+    const stampMs =
+      (g.lastMoveAt?.toMillis?.() as number | undefined) ??
+      (g.startedAt?.toMillis?.() as number | undefined) ?? 0;
+    // A battle from before this field existed has no clock; start it now rather than
+    // handing out a free win.
+    if (!stampMs) {
+      tx.update(ref, { lastMoveAt: admin.firestore.FieldValue.serverTimestamp() });
+      throw new HttpsError("failed-precondition", "The timeout clock has just started for this battle.");
+    }
+    const elapsedH = (Date.now() - stampMs) / 3600000;
+    if (elapsedH < WARLORD_TURN_TIMEOUT_HOURS) {
+      const left = Math.ceil(WARLORD_TURN_TIMEOUT_HOURS - elapsedH);
+      throw new HttpsError("failed-precondition", `Not yet — the opponent has ${left}h left to move.`);
+    }
+
+    // Terminal annotation, same shape as a forfeit: the stalled side loses.
+    const stalledIsChallenger = stalledUid === g.players[0];
+    const s = structuredClone(battle) as BattleState;
+    s.status = stalledIsChallenger ? "ENEMY_WON" : "PLAYER_WON";
+    s.winner = stalledIsChallenger ? "ENEMY" : "PLAYER";
+    s.phase = "RESOLVED";
+    s.log.push({ turn: s.turn, side: s.side, kind: "victory", detail: { status: s.status, timeout: 1 } });
+
+    tx.update(ref, {
+      status: "finished",
+      winner: uid,
+      timedOutBy: stalledUid,
+      finalized: true,
+      state: s,
+      endedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    ladder = { winner: uid, loser: stalledUid };
+    return { ok: true, claimed: true };
   });
 
   const done = ladder as WarlordLadderUpdate | null;
