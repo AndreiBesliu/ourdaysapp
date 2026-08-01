@@ -55,7 +55,7 @@ export function useEconomy(initialWallet = 5 * GOLD, defaultBuildings: () => Bui
       const row = { ...b }
 
       // Stable/Market/Barracks handled separately or are passive
-      if (['STABLE', 'MARKET', 'BARRACKS'].includes(row.type)) return row
+      if (['STABLE', 'MARKET', 'BARRACKS', 'SCRIPTORIUM'].includes(row.type)) return row
 
       // 1. Calculate Potential Output based on Investment (Cost)
       // Config price only — a research BUILD discount must not shrink the income basis.

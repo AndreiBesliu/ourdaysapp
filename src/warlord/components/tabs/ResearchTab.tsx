@@ -3,7 +3,7 @@ import MoneyDisplay from '../common/MoneyDisplay'
 import GameIcon from '../common/GameIcon'
 import type { GameStateShape } from '../../state/useGameState'
 import type { Branch, Modifiers } from '../../logic/research/effects'
-import { BRANCH_LABEL, prereqsMet, techById, type TechDef } from '../../logic/research/catalog'
+import { BRANCH_LABEL, prereqsMet, missingBuildings, techById, type TechDef } from '../../logic/research/catalog'
 import { getIconForGameItem, formatGameTooltip } from '../../logic/iconHelpers'
 
 const BRANCHES: Branch[] = ['ECONOMY', 'ARMY', 'CAMPAIGN', 'UNLOCKS']
@@ -41,7 +41,7 @@ function effectLines(m: Modifiers): string[] {
 }
 
 export default function ResearchTab({ state }: { state: GameStateShape }) {
-  const { research, mods, catalog, startResearch, wallet, resources } = state
+  const { research, mods, catalog, startResearch, wallet, resources, buildings } = state
   const inProgress = new Map(research.queue.map((p) => [p.id, p]))
 
   const canAfford = (t: TechDef) =>
@@ -100,7 +100,8 @@ export default function ResearchTab({ state }: { state: GameStateShape }) {
               .map((t) => {
                 const done = research.unlocked.includes(t.id)
                 const busy = inProgress.get(t.id)
-                const ready = prereqsMet(t, research.unlocked)
+                const missingB = missingBuildings(t, buildings ?? [])
+                const ready = prereqsMet(t, research.unlocked) && missingB.length === 0
                 const affordable = canAfford(t)
                 const missingReq = t.requires
                   .filter((r) => !research.unlocked.includes(r))
@@ -140,7 +141,10 @@ export default function ResearchTab({ state }: { state: GameStateShape }) {
                           <span className="text-stone-500 font-mono">{t.days}d</span>
                         </div>
                         {!ready ? (
-                          <div className="text-xs text-stone-500 mt-1">Requires: {missingReq.join(', ')}</div>
+                          <div className="text-xs text-stone-500 mt-1">
+                            {missingReq.length > 0 && <div>Requires: {missingReq.join(', ')}</div>}
+                            {missingB.length > 0 && <div>Needs: {missingB.join(', ')}</div>}
+                          </div>
                         ) : (
                           <button
                             onClick={() => startResearch(t.id)}

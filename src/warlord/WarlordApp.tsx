@@ -172,7 +172,7 @@ export default function App({
           ['barracks', 'Barracks'],
           ['units', 'Units'],
           ['market', 'Market'],
-          ['research', 'Research'],
+          ...(state.hasResearchBuilding ? [['research', 'Research'] as const] : []),
           ['campaign', 'Campaign'],
           ['log', 'Log']
         ].map(([k, label]) => (

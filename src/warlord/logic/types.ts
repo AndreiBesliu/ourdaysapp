@@ -75,7 +75,8 @@ export type Unit = {
 export type Building = {
   id: string;
   type: 'BARRACKS' | 'BLACKSMITH' | 'ARMORY' | 'WOODWORKER' | 'TAILOR' | 'STABLE' | 'MARKET' |
-  'LUMBER_MILL' | 'QUARRY' | 'IRON_MINE' | 'COAL_MINE' | 'COPPER_MINE' | 'SILVER_MINE' | 'SMELTER' | 'MINTER' | 'FARM';
+  'LUMBER_MILL' | 'QUARRY' | 'IRON_MINE' | 'COAL_MINE' | 'COPPER_MINE' | 'SILVER_MINE' | 'SMELTER' | 'MINTER' | 'FARM' |
+  'SCRIPTORIUM';
   focusCoinPct: 0 | 20 | 40 | 60 | 80 | 100;
   outputItem?: string;
   fractionalBuffer: number;

@@ -25,7 +25,7 @@ import { loadSampleMod } from '../mods/sampleMod';
 import { GameConfig, type GameConfigOverrides } from '../logic/config'
 import { useCampaign, emptyCampaign, hydrateCampaign, type CampaignReward } from './useCampaign'
 import { useResearch, emptyResearch, hydrateResearch, type ResearchProject } from './useResearch'
-import { resolveCatalog, techById, prereqsMet, type TechId } from '../logic/research/catalog'
+import { resolveCatalog, techById, prereqsMet, missingBuildings, hasResearchBuilding, type TechId } from '../logic/research/catalog'
 import { aggregate, availableTechs, onBattleWon, onBattleLost, onResearchCompleted, tickBuffs, resolveBuffs } from '../logic/research/momentum'
 import { applyCommand } from '../logic/combat/engine'
 import { chooseEnemyCommands } from '../logic/combat/ai'
@@ -287,6 +287,15 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     if (!t) { addLog('Unknown technology.'); return }
     if (rsc.research.unlocked.includes(techId)) { addLog(`${t.name} is already researched.`); return }
     if (rsc.research.queue.some(p => p.id === techId)) { addLog(`${t.name} is already being researched.`); return }
+    if (!hasResearchBuilding(econ.buildings)) {
+      addLog('You need a Scriptorium before anything can be researched.')
+      return
+    }
+    const missingB = missingBuildings(t, econ.buildings)
+    if (missingB.length > 0) {
+      addLog(`${t.name} needs: ${missingB.join(', ')}.`)
+      return
+    }
     if (!prereqsMet(t, rsc.research.unlocked)) {
       const missing = t.requires.filter(r => !rsc.research.unlocked.includes(r))
         .map(r => techById(catalog, r)?.name ?? r)
@@ -914,6 +923,9 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     mods,
     catalog,
     startResearch,
+    // The Scriptorium gates the whole discipline; individual techs gate on their own
+    // infrastructure (see missingBuildings) so the UI can say WHAT is missing.
+    hasResearchBuilding: hasResearchBuilding(econ.buildings),
     availableResearch: () => availableTechs(catalog, rsc.research.unlocked, rsc.research.queue.map(p => p.id)),
 
     // campaign / combat

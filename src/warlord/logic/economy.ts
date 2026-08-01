@@ -48,6 +48,8 @@ export const BuildingCostCopper: Record<BuildingType, number> = {
   SMELTER: 40_000,
   MINTER: 80_000,
   FARM: 8_000,
+  // Learning has a home before it has an output: the Scriptorium is the gate to research.
+  SCRIPTORIUM: 60_000,
 }
 
 // Resource costs for buildings (Wood, Stone, etc.)
@@ -70,6 +72,7 @@ export const ResourceBuildingCosts: Record<BuildingType, Partial<ResourceMap>> =
   SMELTER: { WOOD: 50, STONE: 200 },
   MINTER: { WOOD: 50, STONE: 200, IRON_INGOT: 20 },
   FARM: { WOOD: 30 },
+  SCRIPTORIUM: { WOOD: 60, STONE: 40 },
 }
 
 // Focus options (percentage of coin kept; remaining is converted to items)
@@ -94,6 +97,7 @@ export const BuildingOutputChoices: Record<string, { options: string[] }> = {
   SMELTER: { options: ['IRON_INGOT', 'COPPER_INGOT', 'SILVER_INGOT'] },
   MINTER: { options: [] },
   FARM: { options: ['FOOD'] },
+  SCRIPTORIUM: { options: [] },
 }
 
 export const SmelterRecipes: Record<string, { input: Partial<ResourceMap> }> = {

@@ -24,7 +24,7 @@ import bSilverMine from '../../assets/building_silver_mine.png'
 
 type Props = {
   state: GameStateShape
-  setTab: (tab: 'overview' | 'buildings' | 'barracks' | 'units' | 'market' | 'log') => void
+  setTab: (tab: 'overview' | 'buildings' | 'barracks' | 'units' | 'market' | 'research' | 'log') => void
 }
 
 export const BuildingImages: Record<string, string> = {
@@ -114,13 +114,17 @@ export default function BuildingsTab({ state, setTab }: Props) {
   const buildingsArr = buildings ?? []
   const owns = (t: Building['type']) => buildingsArr.some(b => b.type === t)
 
-  const prodTypes = ['BLACKSMITH', 'ARMORY', 'WOODWORKER', 'TAILOR', 'STABLE', 'MARKET'] as const
-  const resTypes = ['LUMBER_MILL', 'QUARRY', 'IRON_MINE', 'COAL_MINE', 'COPPER_MINE', 'SILVER_MINE', 'SMELTER', 'MINTER'] as const
+  const prodTypes = ['BLACKSMITH', 'ARMORY', 'WOODWORKER', 'TAILOR', 'STABLE', 'MARKET', 'SCRIPTORIUM'] as const
+  const resTypes = ['LUMBER_MILL', 'QUARRY', 'IRON_MINE', 'COAL_MINE', 'COPPER_MINE', 'SILVER_MINE', 'SMELTER', 'MINTER', 'FARM'] as const
 
   const prodConstruction = prodTypes.filter(t => !owns(t))
   const resConstruction = resTypes.filter(t => !owns(t))
 
   const handleBuildingClick = (b: Building) => {
+    if (b.type === 'SCRIPTORIUM') {
+      setTab('research')
+      return
+    }
     if (b.type === 'BARRACKS') {
       setTab('barracks')
     } else if (['MARKET', 'STABLE'].includes(b.type)) {

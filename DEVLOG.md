@@ -145,6 +145,15 @@
 
 ## 📅 Session Log: August 1, 2026
 
+**Task Completed (Warlord — Research felia 1: Scriptorium + cerințe de infrastructură)**
+> Prompt: „research ar trebui sa fie disponibil dupa ce se construieste o cladire anume, si anumite research options ar trebui sa fie influentate de unele cladiri si de nivelul lor de upgrade".
+> Model: Claude Opus 5
+> - Clădire nouă `SCRIPTORIUM` (60.000 cupru + 60 Wood + 40 Stone): fără ea tabul Research nu apare deloc, iar `startResearch` refuză orice proiect. Fiecare din cele 12 tehnologii cere acum infrastructură concretă, cu nivel (`TechDef.requiresBuildings`), iar cardul blocat spune exact ce lipsește („Needs: Smelter L2 (you have L1)").
+> - Cerințele trec prin `resolveCatalog` ⇒ se pot rescrie din panoul de admin Warlord (tabul JSON), ca orice altă valoare de balans.
+> - Bug colateral reparat: `FARM` nu apărea în nicio listă de construcție, deci nu putea fi construită deși hrana se consuma zilnic.
+> - Planul complet pe 4+1 felii (Studiu ca resursă produsă, slider Research% pe clădiri, head of research + experți cu randament descrescător, probe de teren, doctrine→tradiții) e în `Apps/games/warlord/DEVLOG.md`. Următoarea felie rămâne, prin decizia lui Andrei, revamp-ul UI + tema dark.
+> - 79 teste verzi (11 noi), tsc + build verzi în ambele proiecte, cele 2 copii identice, verificat live. Deploy hosting. Commit + push ×2.
+
 **Bug Fix (Warlord — ziua nu avansa după ce ieșeai din aplicație)**
 > Raport: „am lăsat jocul deschis și a ajuns la ziua 159, dar am ieșit și am intrat înapoi și ziua nu a avansat, deși ar trebui" (+ raportul anterior: „ziua nu s-a schimbat, dar timer-ul s-a resetat").
 > Model: Claude Opus 5
