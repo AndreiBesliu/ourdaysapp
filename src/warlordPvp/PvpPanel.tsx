@@ -1,7 +1,7 @@
 // Warlord PvP lobby — OurDaysApp-only. Lists my battles, creates challenges
 // (pick group → opponent → deploy units from the local army), accepts incoming
 // challenges (pick units → server callable builds the authoritative battle).
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Unit } from '../warlord/logic/types';
 import { fieldedStrength, prettyName } from '../warlord/logic/combat/army';
 import { PVP_MAX_COMBATANTS } from '../warlord/logic/combat/pvp';
@@ -27,7 +27,8 @@ function UnitPicker({ units, picked, onToggle }: {
   if (units.length === 0) {
     return (
       <p className="text-sm text-stone-600">
-        You have no formed units on this device. Build your army in the Domain tab first.
+        No units available — build your army in the Domain tab, or wait for your current
+        battles to finish (units already committed to a battle can't be deployed again).
       </p>
     );
   }
@@ -74,28 +75,57 @@ export default function PvpPanel({ myUid }: { myUid: string }) {
   const [results, setResults] = useState<WarlordPlayer[] | null>(null);
   const [searching, setSearching] = useState(false);
 
-  const army = useMemo(() => readLocalArmy(myUid), [myUid, view]);
+  const fullArmy = useMemo(() => readLocalArmy(myUid), [myUid, view]);
+  // Units already staked in a live/pending battle must NOT be offered again: the same
+  // soldiers would fight twice and each write-back would subtract casualties from the
+  // same underlying unit, destroying troops that never died.
+  const committedUnitIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const b of battles) {
+      if (b.status === 'finished') continue;
+      for (const id of b.deploy?.[myUid]?.unitIds ?? []) s.add(id);
+    }
+    return s;
+  }, [battles, myUid]);
+  const army = useMemo(() => fullArmy.filter((u) => !committedUnitIds.has(u.id)), [fullArmy, committedUnitIds]);
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
   useEffect(() => subscribeMyBattles(myUid, setBattles), [myUid]);
 
-  // Announce myself in the world roster (name + current army power) and load it.
+  // Announce myself in the world roster and load it. The name comes from the app's
+  // canonical `profiles` doc (auth.displayName is null for email/password signups,
+  // which would make those players unfindable by the name everyone else sees).
   useEffect(() => {
-    const me = auth.currentUser;
-    const myName = me?.displayName || me?.email?.split('@')[0] || 'Player';
-    upsertWarlordPlayer(myUid, myName, me?.photoURL ?? null, armyStrength(readLocalArmy(myUid)))
-      .then(() => fetchRecentPlayers(myUid))
-      .then(setRoster);
-    fetchKnownUids(myUid).then(setKnown);
-  }, [myUid]);
+    let alive = true;
+    (async () => {
+      const me = auth.currentUser;
+      const fromProfile = (await fetchProfileNames([myUid]))[myUid];
+      const myName = (fromProfile && fromProfile !== 'Player' ? fromProfile : null)
+        || me?.displayName || me?.email?.split('@')[0] || 'Player';
+      await upsertWarlordPlayer(myUid, myName, me?.photoURL ?? null, armyStrength(readLocalArmy(myUid)));
+      const [r, k] = await Promise.all([fetchRecentPlayers(myUid), fetchKnownUids(myUid)]);
+      if (!alive) return;
+      setRoster(r);
+      setKnown(k);
+    })();
+    return () => { alive = false; };
+    // Re-runs when the wizard is opened so the roster is fresh (view is in the deps).
+  }, [myUid, view]);
 
-  // Debounced name search over the roster.
+  // Debounced name search. `seq` drops out-of-order responses so a slow earlier query
+  // can't overwrite newer results.
+  const searchSeq = useRef(0);
   useEffect(() => {
     const q = term.trim();
-    if (!q) { setResults(null); return; }
+    if (!q) { setResults(null); setSearching(false); return; }
     setSearching(true);
+    const mine = ++searchSeq.current;
     const id = setTimeout(() => {
-      searchPlayers(q, myUid).then((r) => { setResults(r); setSearching(false); });
+      searchPlayers(q, myUid).then((r) => {
+        if (searchSeq.current !== mine) return; // a newer search already answered
+        setResults(r);
+        setSearching(false);
+      });
     }, 300);
     return () => clearTimeout(id);
   }, [term, myUid]);
@@ -291,9 +321,18 @@ export default function PvpPanel({ myUid }: { myUid: string }) {
                 </div>
               </div>
               {incoming && (
-                <button onClick={() => { setPicked([]); setError(null); setView({ accept: g.id }); }} className="px-3 py-1 bg-red-800 text-white rounded text-sm hover:bg-red-900">
-                  Respond ⚔
-                </button>
+                <>
+                  <button onClick={() => { setPicked([]); setError(null); setView({ accept: g.id }); }} className="px-3 py-1 bg-red-800 text-white rounded text-sm hover:bg-red-900">
+                    Respond ⚔
+                  </button>
+                  {/* Anyone in the world can challenge you — you must be able to say no. */}
+                  <button
+                    onClick={() => { if (confirm('Decline this challenge?')) cancelChallenge(g.id).catch(() => {}); }}
+                    className="px-3 py-1 border rounded text-sm text-stone-600"
+                  >
+                    Decline
+                  </button>
+                </>
               )}
               {outgoing && (
                 <button onClick={() => cancelChallenge(g.id).catch(() => {})} className="px-3 py-1 border rounded text-sm text-stone-600">

@@ -30,6 +30,7 @@ const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 // written only by the Admin SDK here (clients have no matching rule → denied).
 const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 50);
 const NOTIF_DAILY_LIMIT = Number(process.env.NOTIF_DAILY_LIMIT || 100);
+const WARLORD_CHALLENGE_DAILY_LIMIT = Number(process.env.WARLORD_CHALLENGE_DAILY_LIMIT || 30);
 // Admin backend access. Source of truth = the `admins/{uid}` collection (locked
 // to clients; only the Admin SDK writes it). A VERIFIED email in this bootstrap
 // list is auto-granted admin on first admin call (so the owner works out of the
@@ -1311,6 +1312,12 @@ exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
             db.doc(`ai_usage/${uid}`).delete().catch(() => { }),
             db.doc(`notif_usage/${uid}`).delete().catch(() => { }),
             db.doc(`error_usage/${uid}`).delete().catch(() => { }),
+            db.doc(`warlord_challenge_usage/${uid}`).delete().catch(() => { }),
+            // Warlord: the world-roster entry and the cloud-synced kingdom. Both are
+            // otherwise undeletable (clients cannot delete them) and the roster is
+            // world-readable, so a deleted account would linger in the player directory.
+            db.doc(`warlordPlayers/${uid}`).delete().catch(() => { }),
+            db.doc(`warlordDomains/${uid}`).delete().catch(() => { }),
         ]);
         // Finally the Auth account.
         let authDeleted = false;
@@ -1580,9 +1587,16 @@ exports.createWarlordChallenge = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_
     if (typeof opponentUid !== "string" || !opponentUid || opponentUid === uid) {
         throw new https_1.HttpsError("invalid-argument", "A valid, distinct opponent is required.");
     }
+    if (opponentUid.includes("/"))
+        throw new https_1.HttpsError("invalid-argument", "Invalid opponent id.");
     const deploy = (0, pvp_1.sanitizeDeploy)({ unitIds, combatants }, "PLAYER");
     if (!deploy.ok)
         throw new https_1.HttpsError("invalid-argument", `Invalid deployment: ${deploy.error}`);
+    // Anyone may challenge anyone (one world), so the abuse control is a per-sender daily
+    // cap rather than a relationship gate — each challenge costs the target a push + docs.
+    if (!(await tryConsumeQuota(uid, "warlord_challenge_usage", WARLORD_CHALLENGE_DAILY_LIMIT))) {
+        throw new https_1.HttpsError("resource-exhausted", "Daily challenge limit reached. Please try again tomorrow.");
+    }
     const db = admin.firestore();
     // The opponent must be a real app user (a profile doc is created on every login).
     const oppProfile = await db.doc(`profiles/${opponentUid}`).get();
@@ -1684,6 +1698,7 @@ exports.submitWarlordCommand = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_AP
     let ladder = null;
     const result = await db.runTransaction(async (tx) => {
         var _a;
+        ladder = null; // transaction callbacks re-run on contention — never reuse an aborted attempt's value
         const snap = await tx.get(ref);
         if (!snap.exists)
             throw new https_1.HttpsError("not-found", "Game not found.");
@@ -1739,6 +1754,7 @@ exports.forfeitWarlordBattle = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_AP
     const ref = db.doc(`games/${gameId}`);
     let ladder = null;
     const result = await db.runTransaction(async (tx) => {
+        ladder = null; // see above: reset per attempt so retries/early returns can't replay it
         const snap = await tx.get(ref);
         if (!snap.exists)
             throw new https_1.HttpsError("not-found", "Game not found.");

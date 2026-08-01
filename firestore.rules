@@ -157,13 +157,30 @@ service cloud.firestore {
     // just discovery shortcuts). Deliberately holds only game data — display name,
     // avatar, self-reported army power, W/L — never app PII like email.
     // wins/losses are SERVER-ONLY (written by the Warlord callables via Admin SDK).
+    // Every entry is world-readable and bulk-fetched into other players' UIs, so the
+    // client-writable shape is whitelisted and size-capped: no arbitrary fields (which
+    // would let a player smuggle payloads into everyone's picker), no oversized strings.
+    function warlordPlayerShapeOk() {
+      return request.resource.data.keys().hasOnly(
+               ['name', 'nameLower', 'photoURL', 'power', 'lastActive', 'wins', 'losses']) &&
+             request.resource.data.name is string &&
+             request.resource.data.name.size() <= 60 &&
+             request.resource.data.nameLower is string &&
+             request.resource.data.nameLower.size() <= 60 &&
+             request.resource.data.power is number &&
+             request.resource.data.power >= 0 && request.resource.data.power <= 1000000 &&
+             (request.resource.data.photoURL == null ||
+               (request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 500));
+    }
     match /warlordPlayers/{ownerId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.auth.uid == ownerId &&
+        warlordPlayerShapeOk() &&
         !request.resource.data.keys().hasAny(['wins', 'losses']);
       allow update: if isSignedIn() && request.auth.uid == ownerId &&
+        warlordPlayerShapeOk() &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['wins', 'losses'].toSet());
-      allow delete: if false;
+      allow delete: if false; // removed server-side on account deletion
     }
 
     // ── Warlord domains (per-user single-player kingdom, cloud-synced) ──

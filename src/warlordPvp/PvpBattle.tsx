@@ -32,7 +32,13 @@ export default function PvpBattle({ game, myUid, names, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   // The authoritative snapshot always wins; optimistic is only a latency mask.
-  useEffect(() => { setOptimistic(null); }, [game.state]);
+  // Keyed on turn/side/rngCursor rather than object identity: onSnapshot rebuilds a new
+  // object on EVERY emission (including unrelated battles in the same query), which would
+  // otherwise throw away a pending optimistic move and make the board flicker backwards.
+  const stateStamp = game.state
+    ? `${game.state.turn}:${game.state.side}:${game.state.rngCursor}:${game.state.status}`
+    : 'none';
+  useEffect(() => { setOptimistic(null); }, [stateStamp]);
 
   const battle = optimistic ?? game.state;
 

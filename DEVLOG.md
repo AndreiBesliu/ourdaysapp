@@ -150,6 +150,15 @@
 > - Client: `PvpPanel` challenge wizard replaced the group→opponent cascade with a world-roster picker (recently active list + debounced name search + a "known" badge for friends/group members).
 > - FIXED same session (caught by adversarial review, was live): acceptWarlordChallenge still read `groups/${g.groupId}` unconditionally — with groupId null that resolves to the valid-but-missing path "groups/null", so EVERY global challenge failed with permission-denied. Now guarded by a typed battleGroupId check; a group tag, when present, is still verified.
 > Build: functions tsc ✅, app tsc+build ✅. Deploy: functions ✅ + rules ✅ + hosting ✅.
+> FULL ADVERSARIAL REVIEW (re-run from scratch at Andrei's request; 24 agents, 19 confirmed findings — 2 refuted). Fixed in this pass:
+> - CRITICAL data loss: `warlordCloud.loadWarlordDomain` used getDoc, which resolves from Firestore's IndexedDB cache when offline — a stale blob was adopted and then written back over newer cloud progress. Now uses getDocFromServer plus a monotonic `rev` on both sides (bumped BEFORE the write, so a failed/offline write leaves local ahead and it gets promoted later). Neither side can silently clobber the other.
+> - MAJOR spam channel: createWarlordChallenge had no rate limit while writing a notification + FCM push to any user. Added a per-sender daily cap (WARLORD_CHALLENGE_DAILY_LIMIT, default 30) via the existing tryConsumeQuota, plus a slash guard on opponentUid.
+> - MAJOR ladder corruption: `ladder` was captured outside runTransaction, so a retry or an early return could replay an aborted attempt's value and double-count W/L. Now reset at the top of every transaction attempt (both callables).
+> - MAJOR account deletion: warlordPlayers/{uid} + warlordDomains/{uid} (+ the new quota doc) were left behind — undeletable by clients and world-readable. Now removed with the rest of the user's docs.
+> - MAJOR unfindable players: the roster name came from auth.displayName, which is null for every email/password signup. Now taken from the app's canonical `profiles` doc.
+> - MAJOR troop destruction: the unit picker offered units already staked in a live battle, so the same soldiers fought twice and each write-back subtracted casualties from the same unit. Committed units are now excluded.
+> - Hardening/UX: warlordPlayers rules got a field whitelist + size caps (world-readable doc); a Decline button for incoming challenges (anyone can now challenge you); search race guard + stuck spinner fix; roster refresh on opening the wizard; optimistic battle state keyed on turn/side/rngCursor instead of object identity; the arcade hub no longer shows a delete button for server-owned Warlord docs.
+> Deferred (documented): no turn timeout; orphaned warlordDeploys for challenges that are never answered.
 
 **Task Completed (Warlord — cloud-synced domain / real game account)**
 > Prompt: "fiecare user al aplicatiei OurDaysApp are un cont separat pentru jocul Warlords, sau intra toti pe acelasi joc?" → each user is a player; the app account IS the game account; make the kingdom cross-device.

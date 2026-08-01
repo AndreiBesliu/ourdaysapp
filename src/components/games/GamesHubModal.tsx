@@ -669,7 +669,10 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              {game.status === 'waiting' && game.createdBy === auth.currentUser?.uid && (
+                              {/* Warlord battles are server-owned: a client delete is denied by
+                                  the rules and would fail silently. They are cancelled from the
+                                  Warlord PvP panel (which routes through the forfeit callable). */}
+                              {game.status === 'waiting' && game.createdBy === auth.currentUser?.uid && game.gameType !== 'warlord-battle' && (
                                 <button
                                   onClick={(e) => handleCancelGame(game.id, e)}
                                   className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"

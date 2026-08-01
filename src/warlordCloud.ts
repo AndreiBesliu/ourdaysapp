@@ -2,48 +2,76 @@
 // real per-user account: the domain lives in Firestore at warlordDomains/{uid}, so it
 // follows the user across devices instead of being trapped in one browser's localStorage.
 //
-// Strategy: localStorage (warlord_save_{uid}) is a write-through CACHE and offline
-// fallback; Firestore is the durable source of truth. On load we pull the cloud doc
-// into localStorage so the game's synchronous hydrate picks it up unchanged; on every
-// save the game writes localStorage AND we debounce-write the cloud. This keeps the
-// synced game code (useGameState) storage-agnostic — it just calls onPersist(blob).
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+// Strategy: localStorage (warlord_save_{uid}) is a write-through CACHE; Firestore is the
+// durable copy. Both carry a monotonic REVISION so neither can silently clobber the other:
+//   • load  → take whichever side has the higher rev (and push local up if it wins)
+//   • save  → bump the local rev BEFORE writing, so a write that fails while offline
+//             leaves local ahead and it gets promoted on the next successful load.
+// The rev is what makes offline play safe: Firestore's getDoc can resolve from its
+// IndexedDB cache when offline, and without a rev an old cached blob would be adopted
+// and then written back over newer cloud progress.
+import { doc, getDocFromServer, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 
 const domainRef = (uid: string) => doc(db, 'warlordDomains', uid);
 const localKey = (uid: string) => `warlord_save_${uid}`;
+const revKey = (uid: string) => `warlord_rev_${uid}`;
 
-// Pull the cloud domain into localStorage (so the game hydrates from it). If the cloud
-// is empty but a local save exists (a pre-cloud player, or the legacy migration), push
-// that up so nothing is lost. Best-effort: on any error we fall back to the local cache.
-export async function loadWarlordDomain(uid: string): Promise<void> {
+function readLocalRev(uid: string): number {
+  const n = Number(localStorage.getItem(revKey(uid)));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function readLocalSave(uid: string): unknown | null {
   try {
-    const snap = await getDoc(domainRef(uid));
-    const cloud = snap.exists() ? snap.data()?.save : undefined;
-    if (cloud) {
-      localStorage.setItem(localKey(uid), JSON.stringify(cloud));
-      return;
-    }
-  } catch (e) {
-    console.error('Warlord cloud load failed (using local cache):', e);
-    return; // keep whatever is in localStorage
-  }
-  // Cloud empty → migrate an existing local save up (first-ever cloud write).
-  const local = localStorage.getItem(localKey(uid));
-  if (local) {
-    try {
-      await setDoc(domainRef(uid), { save: JSON.parse(local), updatedAt: serverTimestamp() }, { merge: true });
-    } catch (e) {
-      console.error('Warlord cloud migrate failed:', e);
-    }
+    const raw = localStorage.getItem(localKey(uid));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
   }
 }
 
-export async function saveWarlordDomain(uid: string, blob: unknown): Promise<void> {
+// Pull the newer of (cloud, local) into localStorage so the game's synchronous hydrate
+// picks it up. Best-effort: on any error we keep whatever is already cached locally.
+export async function loadWarlordDomain(uid: string): Promise<void> {
+  let cloudSave: unknown | undefined;
+  let cloudRev = -1; // -1 = no cloud doc at all
   try {
-    await setDoc(domainRef(uid), { save: blob, updatedAt: serverTimestamp() }, { merge: true });
+    // Prefer the SERVER copy: getDoc would happily resolve from the offline cache,
+    // and adopting a stale cached blob is how progress gets overwritten.
+    const snap = await getDocFromServer(domainRef(uid));
+    if (snap.exists()) {
+      cloudSave = snap.data()?.save;
+      cloudRev = Number(snap.data()?.rev ?? 0);
+    }
   } catch (e) {
-    console.error('Warlord cloud save failed:', e);
+    // Offline (or blocked): play from the local cache and do NOT touch the cloud —
+    // the local rev stays ahead, so this device's progress is promoted once online.
+    console.error('Warlord cloud load unavailable (using local cache):', e);
+    return;
+  }
+
+  const localRev = readLocalRev(uid);
+  const localSave = readLocalSave(uid);
+
+  if (cloudSave !== undefined && cloudRev >= localRev) {
+    localStorage.setItem(localKey(uid), JSON.stringify(cloudSave));
+    localStorage.setItem(revKey(uid), String(cloudRev));
+    return;
+  }
+  // Local is ahead (offline progress, or a pre-cloud save being migrated) → promote it.
+  if (localSave) await saveWarlordDomain(uid, localSave);
+}
+
+export async function saveWarlordDomain(uid: string, blob: unknown): Promise<void> {
+  // Bump the rev BEFORE the write: if this write fails (offline), local stays ahead of
+  // the cloud and wins the next comparison instead of being silently overwritten.
+  const rev = readLocalRev(uid) + 1;
+  localStorage.setItem(revKey(uid), String(rev));
+  try {
+    await setDoc(domainRef(uid), { save: blob, rev, updatedAt: serverTimestamp() }, { merge: true });
+  } catch (e) {
+    console.error('Warlord cloud save failed (kept locally, will retry):', e);
   }
 }
 
