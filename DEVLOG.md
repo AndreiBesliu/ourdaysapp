@@ -160,6 +160,18 @@
 > - Hardening/UX: warlordPlayers rules got a field whitelist + size caps (world-readable doc); a Decline button for incoming challenges (anyone can now challenge you); search race guard + stuck spinner fix; roster refresh on opening the wizard; optimistic battle state keyed on turn/side/rngCursor instead of object identity; the arcade hub no longer shows a delete button for server-owned Warlord docs.
 > Deferred (documented): orphaned warlordDeploys for challenges that are never answered; English-only PvP i18n.
 
+**Task Completed (Warlord — Tech Tree + Momentum)**
+> Prompt: "tech tree" (+ all four branches, subtle cross-branch effects, a separate Warlord admin later, and future PvP "arenas")
+> Model: Claude Opus 4.8
+> The last item from Warlord's original backlog. Research costs resources + days and permanently improves the domain; a new **Momentum** system makes wins and discoveries ripple across branches.
+> - `src/warlord/logic/research/`: the tech tree is DATA (12 techs, 4 branches × 3 tiers) with `resolveCatalog(overrides)` so the planned Warlord admin only supplies an override object — no migration, no rebuild. One `Modifiers` object is aggregated from researched techs AND active buffs, with caps.
+> - Cross-branch effects: a victory now grants War Spoils (+production) AND Martial Fervour (+training XP) for a few days; finishing research grants Breakthrough; a loss/retreat costs a little output. Re-winning refreshes rather than stacks.
+> - Modifiers feed existing knobs via optional params (default = unchanged): production, crafting, upkeep, food, training speed/slots/XP, battle loot, post-battle morale.
+> - New `ResearchTab` (branch columns, locked/available/in-progress/researched, live Momentum bar + total-effect panel).
+> - Deliberate scope: research affects the DOMAIN, not combat stats — the shared engine (3 byte-identical copies) is untouched and PvP stays vanilla-stat; the advantage carries over honestly through a bigger, better-trained army. A future "live armies" arena just includes the Modifiers object.
+> Build: standalone tsc + 40/40 tests + build ✅; embed tsc -b + build ✅; all 10 shared files verified identical. Deploy hosting ✅.
+> Caught by live verification (not by tests): the daily tick's change-guard compared only array lengths, so day decrements never persisted and research froze. Fixed.
+
 **Task Completed (Warlord PvP — turn timeout)**
 > Model: Claude Opus 4.8
 > Closes the last major gap, made urgent by the review fix that excludes committed units: an opponent who simply stopped playing locked those units out of every future deployment forever, with "retreat" (a self-inflicted loss) as the only exit.

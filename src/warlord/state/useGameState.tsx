@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 //logic
 import { GOLD, fmtCopper, Ranks, type Rank, type SoldierType, type Building, type ResourceMap } from '../logic/types'
@@ -23,6 +23,9 @@ import { Registry } from '../logic/registry'
 import { rollDailyEvent } from '../logic/events'
 import { loadSampleMod } from '../mods/sampleMod';
 import { useCampaign, emptyCampaign, hydrateCampaign, type CampaignReward } from './useCampaign'
+import { useResearch, emptyResearch, hydrateResearch, type ResearchProject } from './useResearch'
+import { resolveCatalog, techById, prereqsMet, type TechId } from '../logic/research/catalog'
+import { aggregate, availableTechs, onBattleWon, onBattleLost, onResearchCompleted, tickBuffs } from '../logic/research/momentum'
 import { applyCommand } from '../logic/combat/engine'
 import { chooseEnemyCommands } from '../logic/combat/ai'
 import { createBattle, MISSION_PRESETS, DIFFICULTIES, escalationMult, streakLootMult } from '../logic/combat/enemies'
@@ -92,6 +95,17 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
   const barr = useBarracks(saved ?? undefined)
   const unit = useUnits(saved?.units ?? undefined)
   const camp = useCampaign(saved?.campaign)
+  const rsc = useResearch(saved?.research)
+
+  // The tech catalog is DATA: resolveCatalog() merges any admin overrides over the
+  // defaults, so a future Warlord admin only has to supply an override object.
+  const catalog = useMemo(() => resolveCatalog(), [])
+  // THE single bonus pipeline: researched techs + active momentum buffs → one object
+  // that every boostable knob below reads. No parallel bonus system.
+  const mods = useMemo(
+    () => aggregate(rsc.research.unlocked, rsc.research.buffs, catalog),
+    [rsc.research.unlocked, rsc.research.buffs, catalog],
+  )
 
   useEffect(() => {
     if (saveKey !== hydratedKey) return // never clobber another key's save (see above)
@@ -102,10 +116,11 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
       recruits: barr.recruits, batches: barr.batches,
       units: unit.units,
       campaign: camp.campaign,
+      research: rsc.research,
     }
     localStorage.setItem(saveKey, JSON.stringify(blob)) // fast local cache / offline fallback
     onPersist?.(blob) // e.g. debounced cloud write (OurDaysApp embed)
-  }, [saveKey, day, log, econ.wallet, econ.inv, econ.buildings, econ.resources, barr.barracks, barr.barracksLevel, barr.recruits, barr.batches, unit.units, camp.campaign]) // econ.resources & camp.campaign included so those-only changes persist
+  }, [saveKey, day, log, econ.wallet, econ.inv, econ.buildings, econ.resources, barr.barracks, barr.barracksLevel, barr.recruits, barr.batches, unit.units, camp.campaign, rsc.research]) // econ.resources & camp.campaign included so those-only changes persist
 
   function loadSave() {
     const raw = localStorage.getItem(saveKey)
@@ -123,6 +138,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
       barr.setBatches(s.batches ?? [])
       unit.setUnits(s.units ?? [])
       camp.setCampaign(hydrateCampaign(s.campaign))
+      rsc.setResearch(hydrateResearch(s.research))
       addLog('Loaded save.')
     } catch { addLog('Failed to load save.') }
   }
@@ -139,6 +155,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     barr.setBatches([])
     unit.setUnits([])
     camp.setCampaign(emptyCampaign())
+    rsc.setResearch(emptyResearch())
     setMergePick([])
   }
 
@@ -245,6 +262,42 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     addLog(`Bought ${type} for ${fmtCopper(cost)} and resources.`)
   }
 
+  // Start a research project. Mirrors buyBuilding exactly: every check happens BEFORE
+  // any setState, costs are deducted as two independent updaters, then the queue grows.
+  function startResearch(techId: TechId) {
+    const t = techById(catalog, techId)
+    if (!t) { addLog('Unknown technology.'); return }
+    if (rsc.research.unlocked.includes(techId)) { addLog(`${t.name} is already researched.`); return }
+    if (rsc.research.queue.some(p => p.id === techId)) { addLog(`${t.name} is already being researched.`); return }
+    if (!prereqsMet(t, rsc.research.unlocked)) {
+      const missing = t.requires.filter(r => !rsc.research.unlocked.includes(r))
+        .map(r => techById(catalog, r)?.name ?? r)
+      addLog(`${t.name} requires: ${missing.join(', ')}.`)
+      return
+    }
+    if (econ.wallet < t.costCopper) {
+      addLog(`Not enough funds for ${t.name}. Need ${fmtCopper(t.costCopper)}.`)
+      return
+    }
+    const missingRes: string[] = []
+    for (const [res, amt] of Object.entries(t.costResources)) {
+      if ((econ.resources[res as keyof ResourceMap] || 0) < (amt as number)) missingRes.push(`${amt} ${res}`)
+    }
+    if (missingRes.length > 0) { addLog(`Not enough resources: need ${missingRes.join(', ')}.`); return }
+
+    econ.setWallet(w => w - t.costCopper)
+    econ.setResources(prev => {
+      const n = { ...prev }
+      for (const [res, amt] of Object.entries(t.costResources)) {
+        n[res as keyof ResourceMap] -= (amt as number)
+      }
+      return n
+    })
+    const project: ResearchProject = { id: t.id, name: t.name, daysRemaining: t.days }
+    rsc.setResearch(r => ({ ...r, queue: [...r.queue, project] }))
+    addLog(`🔬 Research started: ${t.name} (${t.days}d, ${fmtCopper(t.costCopper)}).`)
+  }
+
   function setBuildingFocus(id: string, pct: number) {
     econ.setBuildings(bs => bs.map(b => b.id === id ? { ...b, focusCoinPct: pct as any } : b))
   }
@@ -318,10 +371,11 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
   function toggleTraining(unitId: string) {
     // checks BEFORE setState (no addLog inside the updater)
     const used = unit.units.filter(u => u.training).length
+    const slots = barr.barracksLevel + mods.trainSlotsDelta
     const target = unit.units.find(u => u.id === unitId)
     if (!target) return
-    if (!target.training && used >= barr.barracksLevel) {
-      addLog(`Training queue full: ${used}/${barr.barracksLevel}.`)
+    if (!target.training && used >= slots) {
+      addLog(`Training queue full: ${used}/${slots}.`)
       return
     }
     unit.setUnits(us => us.map(u => u.id === unitId ? { ...u, training: !u.training } : u))
@@ -378,7 +432,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
 
   function runDailyTick() {
     const notes: string[] = []
-    const income = econ.applyBuildingIncome(s => notes.push(s))
+    const income = econ.applyBuildingIncome(s => notes.push(s), mods)
     const delta = income.walletDelta
     // Post-income/production values for this tick's checks: the setState updates from
     // applyBuildingIncome are queued, so the render snapshot is one day behind.
@@ -386,7 +440,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     const postRes = income.resources
 
     // Unit upkeep
-    const upkeep = dailyUpkeepCopper(unit.units)
+    const upkeep = dailyUpkeepCopper(unit.units, mods.upkeepMult)
     if (upkeep > 0) {
       econ.setWallet(w => w - upkeep)
       notes.push(`Upkeep ${fmtCopper(upkeep)}`)
@@ -396,7 +450,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     }
 
     // Food consumption (checked against TODAY's production, matching the decrement below)
-    const foodNeeded = dailyFoodConsumption(unit.units)
+    const foodNeeded = dailyFoodConsumption(unit.units, mods.foodMult)
     const foodHave = postRes.FOOD ?? 0
     const foodShortage = foodNeeded > 0 && foodHave < foodNeeded
     if (foodNeeded > 0) {
@@ -417,7 +471,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     // identical) — the state write itself stays a pure functional update.
     const applyDailyXP = (u: Unit) => {
       const base = u.training
-        ? u.buckets.map(b => ({ ...b, avgXP: b.avgXP + trainingGainPerDay(b.r) }))
+        ? u.buckets.map(b => ({ ...b, avgXP: b.avgXP + Math.round(trainingGainPerDay(b.r) * mods.trainXpMult) }))
         : u.buckets
       return promoteBuckets(base)
     }
@@ -460,6 +514,38 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
       notes.push(`${event.title} — ${event.description}`)
       addLog(`📅 Eveniment: ${event.title} — ${event.description}`)
     }
+
+    // Research progress + momentum expiry. Same shape as the training-batch pre-pass:
+    // compute over the current snapshot, then write with pure updaters. Placed BEFORE
+    // the day-summary log so finished research and expired buffs appear in it.
+    const keptProjects: ResearchProject[] = []
+    const doneProjects: ResearchProject[] = []
+    for (const p of rsc.research.queue) {
+      const left = p.daysRemaining - 1
+      if (left > 0) keptProjects.push({ ...p, daysRemaining: left })
+      else doneProjects.push(p)
+    }
+    const { buffs: keptBuffs, expired } = tickBuffs(rsc.research.buffs)
+    // Write whenever anything is in flight: the day decrement itself is a change even
+    // when nothing finished, so a length-only comparison would silently freeze research.
+    if (rsc.research.queue.length > 0 || rsc.research.buffs.length > 0) {
+      rsc.setResearch(r => {
+        let buffs = keptBuffs
+        // A discovery lifts the whole domain for a couple of days (cross-branch effect).
+        for (let i = 0; i < doneProjects.length; i++) buffs = onResearchCompleted(buffs)
+        return {
+          ...r,
+          unlocked: [...r.unlocked, ...doneProjects.map(p => p.id)],
+          queue: keptProjects,
+          buffs,
+        }
+      })
+    }
+    for (const p of doneProjects) {
+      notes.push(`🔬 ${p.name} researched`)
+      addLog(`🔬 Research complete: ${p.name}.`)
+    }
+    for (const name of expired) notes.push(`⏳ ${name} ended`)
 
     const nextDay = day + 1
     setDay(nextDay)
@@ -647,7 +733,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     // fully reproducible from the seed stored inside its state.
     const seed = (Math.floor(Math.random() * 0x7fffffff)) >>> 0
     const ratioMult = escalationMult(camp.campaign.clears?.[difficulty] ?? 0)
-    const rewardMult = streakLootMult(camp.campaign.streak ?? 0)
+    const rewardMult = streakLootMult(camp.campaign.streak ?? 0) * mods.lootMult
     const created = createBattle(chosen, difficulty, seed, { ratioMult, rewardMult })
     camp.setCampaign(c => ({
       ...c,
@@ -696,6 +782,16 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     for (const r of outcome.report) {
       for (const p of r.promotions) addLog(`⬆ ${p.count} ${r.name} promoted ${p.from} → ${p.to} in battle.`)
     }
+    // Cross-branch momentum: a victory doesn't just pay loot — it lifts the workshops
+    // AND the soldiers still in training for a few days. A defeat costs a little output.
+    rsc.setResearch(r => ({ ...r, buffs: won ? onBattleWon(r.buffs) : onBattleLost(r.buffs) }))
+    if (won) addLog('🔥 Momentum: War Spoils (+production) and Martial Fervour (+training XP).')
+    // Field surgeons etc. — research keeps survivors steadier after a fight.
+    if (mods.postBattleMoraleBonus > 0) {
+      unit.setUnits(us => us.map(u => outcome.report.some(r => r.unitId === u.id && !r.destroyed)
+        ? { ...u, morale: Math.max(0, Math.min(100, (u.morale ?? 100) + mods.postBattleMoraleBonus)) }
+        : u))
+    }
     camp.setCampaign(prev => ({
       ...prev,
       battle: null,
@@ -725,6 +821,7 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     const outcome = applyBattleResult(unit.units, { ...b, winner: 'ENEMY' }, camp.campaign.deployedIds)
     unit.setUnits(outcome.units)
     addLog(`⚑ Retreated from ${MISSION_PRESETS[b.difficulty].name}. Lost ${outcome.totalLosses} soldiers.`)
+    rsc.setResearch(r => ({ ...r, buffs: onBattleLost(r.buffs) }))
     camp.setCampaign(prev => ({
       ...prev,
       battle: null,
@@ -782,6 +879,13 @@ export function useGameState(saveKey = 'warlord_save', opts?: GameStatePersistOp
     // units slice passthroughs you had before…
     createUnitFromBarracks,   // <-- add this
     replenishUnit,            // <-- and this
+
+    // research / momentum
+    research: rsc.research,
+    mods,
+    catalog,
+    startResearch,
+    availableResearch: () => availableTechs(catalog, rsc.research.unlocked, rsc.research.queue.map(p => p.id)),
 
     // campaign / combat
     campaign: camp.campaign,

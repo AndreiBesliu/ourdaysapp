@@ -37,7 +37,11 @@ export function useEconomy(initialWallet = 5 * GOLD, defaultBuildings: () => Bui
 
   const hasStable = buildings.some(b => b.type === 'STABLE')
 
-  function applyBuildingIncome(addNote: (s: string) => void) {
+  // `mods` carries the research/momentum production bonuses (omitted = no bonuses).
+  function applyBuildingIncome(
+    addNote: (s: string) => void,
+    mods?: { prodMult?: number; craftEfficiency?: number },
+  ) {
     let walletDelta = 0
     const ninv = structuredClone(inv)
     const nres = { ...resources }
@@ -61,6 +65,8 @@ export function useEconomy(initialWallet = 5 * GOLD, defaultBuildings: () => Bui
         outputItem: row.outputItem ?? BuildingOutputChoices[row.type].options[0] ?? '',
         fractionalBuffer: row.fractionalBuffer ?? 0,
         level: row.level ?? 1,
+        outputMult: mods?.prodMult ?? 1,
+        craftEfficiency: mods?.craftEfficiency ?? 1,
       })
 
       walletDelta += coinGain

@@ -16,7 +16,8 @@ const UPKEEP_RANK_MULT: Record<Rank, number> = {
   NOVICE: 1.0, TRAINED: 1.1, ADVANCED: 1.25, VETERAN: 1.5, ELITE: 2.0,
 }
 
-export function dailyUpkeepCopper(units: Unit[]): number {
+// `mult` lets research/momentum lower upkeep (1 = unchanged).
+export function dailyUpkeepCopper(units: Unit[], mult = 1): number {
   let total = 0
   for (const u of units) {
     const base = UPKEEP_BASE[u.type] ?? 2
@@ -24,7 +25,7 @@ export function dailyUpkeepCopper(units: Unit[]): number {
       total += Math.round(base * (UPKEEP_RANK_MULT[b.r] ?? 1) * b.count)
     }
   }
-  return total
+  return Math.round(total * mult)
 }
 
 // Building costs (in copper)
@@ -133,13 +134,14 @@ const FOOD_BASE: Record<SoldierType, number> = {
   HORSE_ARCHER: 2,
 }
 
-export function dailyFoodConsumption(units: Unit[]): number {
+// `mult` lets research/momentum lower consumption (1 = unchanged).
+export function dailyFoodConsumption(units: Unit[], mult = 1): number {
   let total = 0
   for (const u of units) {
     const base = FOOD_BASE[u.type] ?? 1
     for (const b of u.buckets) total += base * b.count
   }
-  return total
+  return Math.round(total * mult)
 }
 
 // ---- Building levels ----
@@ -152,9 +154,14 @@ export function buildingLevelMult(level: number): number {
 }
 
 // Copper cost to upgrade FROM `currentLevel` to the next: 60% of base cost × current level.
-export function buildingUpgradeCostCopper(type: BuildingType, currentLevel: number): number {
+export function buildingUpgradeCostCopper(type: BuildingType, currentLevel: number, costMult = 1): number {
   const base = BuildingCostCopper[type] || 0
-  return Math.round(base * 0.6 * Math.max(1, currentLevel))
+  return Math.round(base * 0.6 * Math.max(1, currentLevel) * costMult)
+}
+
+// Copper price of a new building after research discounts (1 = unchanged).
+export function buildingCostCopper(type: BuildingType, costMult = 1): number {
+  return Math.round((BuildingCostCopper[type] || 0) * costMult)
 }
 
 export function passiveIncomeAndProduction(args: {
@@ -163,10 +170,13 @@ export function passiveIncomeAndProduction(args: {
   outputItem: string
   fractionalBuffer: number
   level?: number
+  outputMult?: number // research/momentum production bonus (1 = unchanged)
+  craftEfficiency?: number // research crafting bonus: more items per unit of value
 }): { coinGain: number; items: number; newBuffer: number } {
   const { costCopper, focusCoinPct, outputItem, fractionalBuffer } = args
 
-  const basePerDay = (RESOURCE_BUILDING_BASE_VALUE[outputItem] ?? (0.10 * costCopper)) * buildingLevelMult(args.level ?? 1)
+  const basePerDay = (RESOURCE_BUILDING_BASE_VALUE[outputItem] ?? (0.10 * costCopper))
+    * buildingLevelMult(args.level ?? 1) * (args.outputMult ?? 1)
   if (!basePerDay) return { coinGain: 0, items: 0, newBuffer: fractionalBuffer }
 
   const coinGain = Math.round(basePerDay * (focusCoinPct / 100))
@@ -177,8 +187,9 @@ export function passiveIncomeAndProduction(args: {
     return { coinGain, items: 0, newBuffer: fractionalBuffer }
   }
 
-  // Produce at 70% of market value (manufacturing efficiency bonus)
-  const itemsFloat = remainderValue / (0.7 * mv)
+  // Produce at 70% of market value (manufacturing efficiency bonus); research can
+  // improve that conversion further (craftEfficiency > 1 → cheaper per item).
+  const itemsFloat = remainderValue / ((0.7 / (args.craftEfficiency ?? 1)) * mv)
   const total = fractionalBuffer + itemsFloat
   const items = Math.floor(total)
   const newBuffer = total - items
