@@ -21,5 +21,8 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Tests run under Vitest, which has its own types and its own config; the app
+  // build must not typecheck them (and must not fail on their vitest imports).
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

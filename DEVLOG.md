@@ -145,6 +145,20 @@
 
 ## 📅 Session Log: August 2, 2026
 
+**Task Completed (Warlord și OurDaysApp unite într-un singur repo)**
+> Prompt: „vreau varianta care ne permite sa sincronizam proiectele cu github. si apropo, vreau sa unim proiectele warlord si OurDaysApp si in repo si in sesiunea asta" (venit din întrebarea „de ce tot primesc mail ca asta" despre CI-ul eșuat).
+> Model: Claude Opus 5
+>
+> **Contextul mailurilor:** repo-ul `AndreiBesliu/Warlord` avea un workflow care construia (verde) și apoi publica pe GitHub Pages (roșu). Eșua **la fiecare push din 4 decembrie 2025** — 17 eșecuri din 18 rulări. Cauza: workflow-ul n-avea bloc `permissions:`, iar token-ul din Actions e implicit read-only, deci `peaceiris/actions-gh-pages` nu putea scrie ramura `gh-pages` (care nu s-a creat niciodată; Pages nici nu era activat). Fiecare push din sesiunea de ieri = încă un mail.
+> **Ce s-a schimbat:** codul jocului exista în DOUĂ copii byte-identice — repo-ul separat și `src/warlord/` de aici — ținute sincronizate manual la fiecare modificare. Acum există **o singură copie**, aici.
+> - **Repo-ul Warlord e arhivat**: workflow-ul de CI șters (deci mailurile se opresc — am confirmat că push-ul de arhivare n-a mai declanșat nicio rulare), README înlocuit cu un pointer, `CLAUDE.md` marcat clar ca mort. Repo-ul rămâne pentru istoric.
+> - **Harness standalone, fără să duplicăm nimic:** `warlord.html` + `src/warlord/standalone.tsx` montează ACELAȘI `WarlordApp`, fără auth și fără Firebase, cu salvarea în `warlord_dev` (`npm run dev:warlord`). Ăsta era singurul motiv real pentru care repo-ul separat mai avea sens: puteam itera pe joc fără să pornesc aplicația și să mă autentific. **Nu intră în build-ul de producție** — verificat că `dist/warlord.html` nu există.
+> - **Cele 96 de teste au venit cu jocul:** Vitest adăugat în OurDaysApp, testele mutate în `src/warlord/**/*.test.ts` și excluse din `tsconfig.app.json` (le typechecks Vitest, nu build-ul aplicației).
+> - **CI nou aici** (`.github/workflows/ci.yml`): typecheck + teste + build la fiecare push. Deliberat **fără deploy** — livrarea rămâne manuală. Notă: repo-ul ăsta n-avea până acum NICIUN CI, iar cel din Warlord nu rula niciun test, doar build.
+> - **`CLAUDE.md` nou pentru OurDaysApp** (nu exista): infra, regulile de lucru, i18n cu excepția pentru Warlord, capcanele. Istoricul jocului dinainte de unificare a fost mutat în `docs/WARLORD_DEVLOG.md`.
+> - **A doua copie care ÎNCĂ rămâne, intenționat:** motorul de luptă din `functions/src/warlordCombat/`, necesar pentru PvP-ul server-authoritative. E documentat explicit în CLAUDE.md ca singura duplicare validă.
+> - Verificat: typecheck + 96 teste + build verzi; harness-ul standalone pornește jocul în browser fără autentificare.
+
 **Task Completed (Warlord — topbar cu resurse + prognoză zilnică)**
 > Prompt: „o sa vreau ca resursele sa poata fi vazute permanent in topbar, si vreau sa se vada si cat vor creste zilnic in functie de setarile cladirilor".
 > Model: Claude Opus 5
