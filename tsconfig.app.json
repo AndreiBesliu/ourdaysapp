@@ -5,6 +5,7 @@
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
     "types": ["vite/client"],
+    "paths": { "@warlord/*": ["./src/warlord/src/*"] },
     "skipLibCheck": true,
 
     /* Bundler mode */
@@ -24,5 +25,14 @@
   "include": ["src"],
   // Tests run under Vitest, which has its own types and its own config; the app
   // build must not typecheck them (and must not fail on their vitest imports).
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    // The submodule is a standalone app too: its own entry point and Vite/Node
+    // tooling are not part of this build.
+    "src/warlord/src/main.tsx",
+    "src/warlord/vite.config.ts",
+    "src/warlord/node_modules",
+    "src/warlord/dist"
+  ]
 }

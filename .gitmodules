@@ -1,0 +1,3 @@
+[submodule "src/warlord"]
+	path = src/warlord
+	url = https://github.com/AndreiBesliu/Warlord.git

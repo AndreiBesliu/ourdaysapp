@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
-import WarlordApp from '../warlord/WarlordApp';
+import WarlordApp from '@warlord/App';
 import PvpPanel from '../warlordPvp/PvpPanel';
 import { loadWarlordDomain, createDomainSync } from '../warlordCloud';
 import { loadWarlordConfig } from '../warlordAdmin/configApi';
 import WarlordAdminPanel from '../warlordAdmin/WarlordAdminPanel';
 import { adminCheck } from '../serverActions';
-import type { GameConfigOverrides } from '../warlord/logic/config';
+import type { GameConfigOverrides } from '@warlord/logic/config';
 
 // Embedded Warlord game, mounted as its own full-width route. Two views:
 //  • Domain — the single-player game. State is CLOUD-BACKED (warlordDomains/{uid} in

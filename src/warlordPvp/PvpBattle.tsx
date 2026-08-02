@@ -3,13 +3,13 @@
 // authority). The local applyCommand is used ONLY for optimistic display and is
 // discarded as soon as the authoritative snapshot arrives (identical by determinism).
 import { useEffect, useState } from 'react';
-import type { BattleState, Side, Command } from '../warlord/logic/combat/types';
-import { applyCommand, combatantById, legalTargets, forecastAttack } from '../warlord/logic/combat/engine';
-import { applyBattleResult, type BattleOutcome } from '../warlord/logic/combat/army';
-import BattleGrid from '../warlord/components/campaign/BattleGrid';
-import BattleLog from '../warlord/components/campaign/BattleLog';
-import GameIcon from '../warlord/components/common/GameIcon';
-import { getIconForGameItem } from '../warlord/logic/iconHelpers';
+import type { BattleState, Side, Command } from '@warlord/logic/combat/types';
+import { applyCommand, combatantById, legalTargets, forecastAttack } from '@warlord/logic/combat/engine';
+import { applyBattleResult, type BattleOutcome } from '@warlord/logic/combat/army';
+import BattleGrid from '@warlord/components/campaign/BattleGrid';
+import BattleLog from '@warlord/components/campaign/BattleLog';
+import GameIcon from '@warlord/components/common/GameIcon';
+import { getIconForGameItem } from '@warlord/logic/iconHelpers';
 import { submitWarlordCommand, forfeitWarlordBattle, claimWarlordTimeout } from '../serverActions';
 import {
   type WarlordGameDoc, readLocalArmy, writeLocalArmy, hasAppliedBattle, markBattleApplied,

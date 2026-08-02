@@ -4,7 +4,7 @@
 // enforce the write side (admins/{uid} must exist); this module is only the transport.
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { GameConfigOverrides } from '../warlord/logic/config';
+import type { GameConfigOverrides } from '@warlord/logic/config';
 
 const configRef = () => doc(db, 'warlordConfig', 'live');
 

@@ -12,7 +12,10 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
+      # The game is a submodule (its own repo) — without this the build has no game.
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: actions/setup-node@v4
         with:

@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { auth } from '../firebase';
 import { loadWarlordConfig, saveWarlordConfig, loadWarlordConfigMeta, pruneOverrides } from './configApi';
-import type { GameConfigOverrides } from '../warlord/logic/config';
-import { DEFAULT_TRAINING, DEFAULT_TICK } from '../warlord/logic/config';
+import type { GameConfigOverrides } from '@warlord/logic/config';
+import { DEFAULT_TRAINING, DEFAULT_TICK } from '@warlord/logic/config';
 import {
   BuildingCostCopper, ResourceBuildingCosts, UPKEEP_BASE, UPKEEP_RANK_MULT, FOOD_BASE,
   RESOURCE_BUILDING_BASE_VALUE,
-} from '../warlord/logic/economy';
-import { fmtCopper } from '../warlord/logic/types';
-import { DEFAULT_TECHS, BRANCH_LABEL } from '../warlord/logic/research/catalog';
-import type { TechDef } from '../warlord/logic/research/catalog';
-import { BUFF_DEFS } from '../warlord/logic/research/momentum';
-import type { EffectDelta } from '../warlord/logic/research/effects';
-import { MISSION_PRESETS } from '../warlord/logic/combat/enemies';
+} from '@warlord/logic/economy';
+import { fmtCopper } from '@warlord/logic/types';
+import { DEFAULT_TECHS, BRANCH_LABEL } from '@warlord/logic/research/catalog';
+import type { TechDef } from '@warlord/logic/research/catalog';
+import { BUFF_DEFS } from '@warlord/logic/research/momentum';
+import type { EffectDelta } from '@warlord/logic/research/effects';
+import { MISSION_PRESETS } from '@warlord/logic/combat/enemies';
 
 // Warlord balance editor. Every field is an OVERRIDE over the game's built-in default:
 // an empty box means "use the default", so the stored document only ever contains what

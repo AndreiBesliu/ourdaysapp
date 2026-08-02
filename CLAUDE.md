@@ -13,22 +13,38 @@ React + TypeScript + Vite + Tailwind, Firebase (Auth, Firestore, Functions, Host
 - **Deploy:** `npx firebase deploy --only hosting` / `--only functions` / `--only firestore:rules`
 - **CI:** `.github/workflows/ci.yml` — typecheck + teste + build la fiecare push pe `main`. **Nu** face deploy: livrarea rămâne manuală și deliberată.
 
-## ⚠️ Warlord trăiește AICI (din 2026-08-02)
-Jocul Warlord era într-un repo separat (`AndreiBesliu/Warlord`) și era **copiat** aici,
-două copii byte-identice ținute sincronizate manual. **Regula aceea a dispărut.** Repo-ul
-vechi e arhivat; singura copie a codului de joc e `src/warlord/**`, aici.
+## ⚠️ Warlord e un SUBMODUL, nu cod din repo-ul ăsta
+Jocul Warlord e produs propriu, cu repo propriu (`github.com/AndreiBesliu/Warlord`), pentru că
+poate fi distribuit și prin alte canale. `src/warlord` e un **submodul git** — un pointer către
+un commit din acel repo, nu o copie. Înainte de 2026-08-02 era o copie ținută identică manual;
+regula aceea a dispărut.
 
-- **Rută în aplicație:** `/warlord` (`src/screens/Warlord.tsx` — comută Domain / PvP / Admin, încarcă domeniul din cloud și configurarea de balans înainte de montare)
-- **Harness standalone de dezvoltare:** `npm run dev:warlord` → `warlord.html` montează ACELAȘI `src/warlord/WarlordApp.tsx`, fără auth, fără Firebase, cu salvarea în `warlord_dev`. **Nu intră în build-ul de producție** (nu e în `rollupOptions.input`). Îl folosești ca să verifici jocul în browser fără să te autentifici.
-- **Teste:** `src/warlord/**/*.test.ts` (96 la 2026-08-02). Sunt excluse din `tsconfig.app.json` — le typechecks Vitest, nu build-ul aplicației.
-- **Istoricul jocului** dinainte de unificare: `docs/WARLORD_DEVLOG.md`.
+- **Clonare:** `git clone --recurse-submodules`, sau `git submodule update --init` după.
+- **Import:** prin aliasul `@warlord/*` → `src/warlord/src/*` (definit în `vite.config.ts` și
+  `tsconfig.app.json`). Nu importa prin căi relative în submodul — aliasul e acolo ca să putem
+  schimba mecanismul (pachet npm, altă cale) fără să atingem fiecare fișier.
+- **`dedupe: ['react','react-dom']`** în `vite.config.ts` e OBLIGATORIU: submodulul își are
+  propriul `node_modules` când e dezvoltat standalone, iar altfel aplicația ajunge cu două
+  copii de React — simptomul e „Invalid hook call”, nu o eroare de modul.
+- **Actualizarea jocului în aplicație:** `git -C src/warlord pull` (sau
+  `git submodule update --remote`), apoi commit care urcă pointerul. **Fără commit-ul ăsta,
+  live-ul rămâne pe versiunea veche a jocului.**
+- **Teste:** `npm test` de aici rulează testele jocului DIN submodul
+  (`src/warlord/src/**/*.test.ts`) — deci CI-ul aplicației verifică exact codul de joc pe care
+  îl livrează. Sunt excluse din `tsconfig.app.json`, la fel ca `main.tsx`-ul și tooling-ul
+  submodulului (jocul e și o aplicație de sine stătătoare).
+- **Rută în aplicație:** `/warlord` (`src/screens/Warlord.tsx` — comută Domain / PvP / Admin,
+  încarcă domeniul din cloud și configurarea de balans înainte de montare).
+- Ce e OurDaysApp-only, nu joc: `src/screens/Warlord.tsx`, `src/warlordCloud.ts`,
+  `src/warlordPvp/`, `src/warlordAdmin/`.
 
-### ⚠️ A DOUA copie care ÎNCĂ există: motorul de luptă din `functions/`
+### ⚠️ Copia motorului de luptă din `functions/`
 PvP-ul e server-authoritative, deci Cloud Functions rulează ACELAȘI motor pur:
 `functions/src/warlordCombat/` conține byte-identic `logic/types.ts` +
-`logic/combat/{types,rng,stats,engine,pvp}.ts`. Orice modificare la aceste fișiere se
-aplică în AMBELE locuri (verifică: `diff -q`), apoi `firebase deploy --only functions`.
-`army.ts` / `ai.ts` / `enemies.ts` **nu** fac parte din copia server.
+`logic/combat/{types,rng,stats,engine,pvp}.ts` din joc. E singura duplicare rămasă și e
+intenționată (alt runtime, alt tsconfig). Orice modificare la aceste fișiere se aplică în
+AMBELE locuri (`diff -q`), apoi `firebase deploy --only functions`. `army.ts` / `ai.ts` /
+`enemies.ts` **nu** fac parte din copia server.
 
 ## Reguli de lucru (hard)
 - **Sync workflow:** după FIECARE task: `npx tsc -b` verde → `npm test` verde → `npm run build` verde → intrare în DEVLOG.md → commit → push

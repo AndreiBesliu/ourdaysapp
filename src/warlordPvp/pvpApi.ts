@@ -7,10 +7,10 @@ import {
   doc, onSnapshot, query, collection, where, getDoc, getDocs, setDoc, orderBy, limit, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Unit } from '../warlord/logic/types';
-import type { BattleState } from '../warlord/logic/combat/types';
-import { type DeployCombatantClaim, sanitizeDeploy } from '../warlord/logic/combat/pvp';
-import { fieldedStrength } from '../warlord/logic/combat/army';
+import type { Unit } from '@warlord/logic/types';
+import type { BattleState } from '@warlord/logic/combat/types';
+import { type DeployCombatantClaim, sanitizeDeploy } from '@warlord/logic/combat/pvp';
+import { fieldedStrength } from '@warlord/logic/combat/army';
 import { createWarlordChallenge, forfeitWarlordBattle } from '../serverActions';
 import { saveWarlordDomain } from '../warlordCloud';
 

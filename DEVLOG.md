@@ -145,7 +145,21 @@
 
 ## 📅 Session Log: August 2, 2026
 
-**Task Completed (Warlord și OurDaysApp unite într-un singur repo)**
+**Task Completed (Warlord devine SUBMODUL — repo separat, dar o singură copie de cod)**
+> Prompt: „poti sa lucrezi in continuare in acel folder, inclusiv sa pastram git repo separate, dar jocul si aplicatia trebuie sa lucreze impreuna pe live. in ideea ca poate la un moment dat jocul poate sa fie distribuit si prin alte canale, nu doar prin aplicatia OurDaysApp". Mecanism ales de Andrei dintre trei variante: **submodul git**.
+> Model: Claude Opus 5
+>
+> Unificarea într-un singur repo (mai devreme azi) a fost **anulată**: Warlord rămâne produs propriu, cu repo propriu, ca să poată fi distribuit și altfel. Dar constrângerea „să lucreze împreună pe live" cerea un mecanism — garanția de până acum era că eu copiam manual fișier cu fișier și verificam cu `diff -q`, adică exact genul de disciplină care cedează tăcut.
+> - **`src/warlord` e acum submodul git** către `AndreiBesliu/Warlord`, nu o copie. Aplicația fixează explicit ce commit de joc livrează — potrivit pentru un joc care va avea mai multe canale de distribuție.
+> - **Alias `@warlord/*` → `src/warlord/src/*`** (`vite.config.ts` + `tsconfig.app.json`), rescris în cele 6 fișiere care importau jocul. Aliasul există ca să putem schimba mecanismul (pachet npm, altă cale) fără să atingem fiecare import.
+> - **`dedupe: ['react','react-dom']`** — obligatoriu: submodulul își are propriul `node_modules` când e dezvoltat standalone, iar fără dedupe aplicația ajunge cu două copii de React. Simptomul ar fi fost „Invalid hook call", nu o eroare de modul — verificat live că jocul se montează curat, fără erori în consolă.
+> - **`tsconfig.app.json`** exclude ce e app-shell în submodul (`main.tsx`, `vite.config.ts`, `node_modules`, `dist`) și testele; restul codului de joc **e** typechecked de build-ul strict al aplicației.
+> - **CI-ul aplicației** face checkout cu `submodules: recursive` și rulează testele jocului DIN submodul — deci verifică exact codul pe care îl livrează.
+> - **Flux nou, important:** o modificare în joc cere DOUĂ commit-uri — unul în repo-ul jocului, unul aici care urcă pointerul. Fără al doilea, live-ul rămâne pe versiunea veche. Scris în ambele CLAUDE.md.
+> - Curățat ce rămăsese din unificare: `warlord.html`, `standalone.tsx`, `docs/WARLORD_DEVLOG.md` și testele copiate (vin din submodul).
+> - Verificat: typecheck + 96 teste (din submodul) + build verzi; `/warlord` se montează și rulează în browser, zero erori în consolă.
+
+**Task Completed (Warlord și OurDaysApp unite într-un singur repo) — ANULAT în aceeași zi, vezi intrarea de mai sus**
 > Prompt: „vreau varianta care ne permite sa sincronizam proiectele cu github. si apropo, vreau sa unim proiectele warlord si OurDaysApp si in repo si in sesiunea asta" (venit din întrebarea „de ce tot primesc mail ca asta" despre CI-ul eșuat).
 > Model: Claude Opus 5
 >

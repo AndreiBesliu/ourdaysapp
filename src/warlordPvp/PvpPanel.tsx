@@ -2,11 +2,11 @@
 // (pick group → opponent → deploy units from the local army), accepts incoming
 // challenges (pick units → server callable builds the authoritative battle).
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Unit } from '../warlord/logic/types';
-import { fieldedStrength, prettyName } from '../warlord/logic/combat/army';
-import { PVP_MAX_COMBATANTS } from '../warlord/logic/combat/pvp';
-import GameIcon from '../warlord/components/common/GameIcon';
-import { getIconForGameItem } from '../warlord/logic/iconHelpers';
+import type { Unit } from '@warlord/logic/types';
+import { fieldedStrength, prettyName } from '@warlord/logic/combat/army';
+import { PVP_MAX_COMBATANTS } from '@warlord/logic/combat/pvp';
+import GameIcon from '@warlord/components/common/GameIcon';
+import { getIconForGameItem } from '@warlord/logic/iconHelpers';
 import { acceptWarlordChallenge } from '../serverActions';
 import {
   type WarlordGameDoc, type WarlordPlayer,
@@ -14,7 +14,7 @@ import {
   createChallenge, cancelChallenge, readLocalArmy, unitToClaim,
   upsertWarlordPlayer, fetchRecentPlayers, searchPlayers, fetchKnownUids,
 } from './pvpApi';
-import { armyStrength } from '../warlord/logic/combat/army';
+import { armyStrength } from '@warlord/logic/combat/army';
 import { auth } from '../firebase';
 import PvpBattle from './PvpBattle';
 
