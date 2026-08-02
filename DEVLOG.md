@@ -145,6 +145,12 @@
 
 ## 📅 Session Log: August 2, 2026
 
+**Task Completed (Warlord: temă dark, iar embed-ul nu mai forțează light)**
+> Model: Claude Opus 5
+> - Jocul are acum tokenuri semantice și o temă dark caldă (detalii în -ul jocului / repo-ul Warlord, commit 243386d). Aici s-a scos **lacătul de light**:  învelea jocul în  pentru că fiecare componentă Warlord folosea clase Tailwind deschise — în dark, textul necolorat devenea alb pe alb.
+> - Ecranul-înveliș e tokenizat și pasează tema aplicației mai departe:  din  (). Când gazda dictează tema, jocul își ascunde propriul comutator — există un singur loc de unde se schimbă.
+> - Pointerul submodulului urcat la commit-ul cu tema. Verificat în aplicație: jocul randează dark, iar auditul de contrast pe toate taburile, în contextul aplicației, nu găsește nicio pereche sub 3:1.
+
 **Task Completed (Warlord devine SUBMODUL — repo separat, dar o singură copie de cod)**
 > Prompt: „poti sa lucrezi in continuare in acel folder, inclusiv sa pastram git repo separate, dar jocul si aplicatia trebuie sa lucreze impreuna pe live. in ideea ca poate la un moment dat jocul poate sa fie distribuit si prin alte canale, nu doar prin aplicatia OurDaysApp". Mecanism ales de Andrei dintre trei variante: **submodul git**.
 > Model: Claude Opus 5

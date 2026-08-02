@@ -1,4 +1,8 @@
 /** @type {import('tailwindcss').Config} */
+// The game is a submodule and is compiled by THIS config when embedded, so its colour
+// scale has to be registered here too. Single source: the file lives in the game repo.
+import { warlordColors } from './src/warlord/tailwind.warlord.js'
+
 export default {
   content: [
     "./index.html",
@@ -8,6 +12,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        ...warlordColors,
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

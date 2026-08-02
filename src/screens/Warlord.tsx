@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useThemeStore } from '../store';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
 import WarlordApp from '@warlord/App';
@@ -22,6 +23,11 @@ export default function Warlord() {
   const [isAdmin, setIsAdmin] = useState(false);
   // Admin-tuned balance values, loaded once alongside the domain (null = pure defaults).
   const [config, setConfig] = useState<GameConfigOverrides | null>(null);
+  // The game now has its own theme, driven by tokens, so it can finally follow the app
+  // instead of being pinned to light. (It was pinned because every Warlord component
+  // used stock light Tailwind classes: in dark mode its un-coloured text went white on white.)
+  const { isDarkMode, customThemeIsDark } = useThemeStore();
+  const dark = isDarkMode || customThemeIsDark;
   const realUid = auth.currentUser?.uid;
   const saveKey = `warlord_save_${realUid ?? 'anon'}`;
 
@@ -73,26 +79,22 @@ export default function Warlord() {
     };
   }, [sync]);
 
-  // Warlord is designed for a light theme (white cards, dark text) with stock Tailwind
-  // classes and no `dark:` variants. OurDaysApp may run in dark mode (`.dark` on <html>),
-  // which sets the inherited default text color to near-white via `--foreground`. Force a
-  // light context here so Warlord's un-colored text stays dark and native inputs render light.
   return (
-    <div className="min-h-screen bg-white text-zinc-900 [color-scheme:light]">
-      <div className="sticky top-0 z-20 flex items-center gap-3 px-4 py-2 border-b bg-white/90 backdrop-blur">
+    <div className={`warlord${dark ? ' dark' : ''} min-h-screen bg-wl-surface text-wl-ink`}>
+      <div className="sticky top-0 z-20 flex items-center gap-3 px-4 py-2 border-b border-wl-line bg-wl-panel/90 backdrop-blur">
         <button
           onClick={() => navigate('/')}
-          className="px-3 py-1 rounded border bg-white hover:bg-stone-50 text-sm text-zinc-800"
+          className="px-3 py-1 rounded border border-wl-line bg-wl-panel hover:bg-wl-panel-muted text-sm text-wl-ink"
         >
           ← Back to Our Days
         </button>
-        <span className="text-sm text-stone-500">Warlord</span>
+        <span className="text-sm text-wl-muted">Warlord</span>
         <div className="ml-auto flex gap-1">
           {([['DOMAIN', '🏰 Domain'], ['PVP', '⚔ PvP'], ...(isAdmin ? [['ADMIN', '⚙ Admin'] as const] : [])] as const).map(([k, label]) => (
             <button
               key={k}
               onClick={() => setView(k)}
-              className={`px-3 py-1 rounded text-sm border ${view === k ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`}
+              className={`px-3 py-1 rounded text-sm border ${view === k ? 'bg-wl-accent text-wl-accent-ink border-wl-accent' : 'bg-wl-panel text-wl-ink border-wl-line hover:bg-wl-panel-muted'}`}
             >
               {label}
             </button>
@@ -102,19 +104,19 @@ export default function Warlord() {
 
       {!ready ? (
         <div className="flex items-center justify-center py-24">
-          <div className="w-8 h-8 border-4 border-stone-300 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-4 border-wl-line border-t-transparent rounded-full animate-spin" />
         </div>
       ) : view === 'ADMIN' ? (
         <WarlordAdminPanel />
       ) : view === 'DOMAIN' ? (
         // key={saveKey}: an auth change while mounted remounts the game so it re-hydrates
         // from the new user's key. onPersist mirrors every save to the cloud (debounced).
-        <WarlordApp key={saveKey} saveKey={saveKey} onPersist={sync?.onPersist} config={config} />
+        <WarlordApp key={saveKey} saveKey={saveKey} onPersist={sync?.onPersist} config={config} theme={dark ? 'dark' : 'light'} />
       ) : (
         <div className="p-6 max-w-6xl mx-auto">
           {realUid
             ? <PvpPanel key={realUid} myUid={realUid} />
-            : <p className="text-sm text-stone-600">Sign in to play PvP battles.</p>}
+            : <p className="text-sm text-wl-muted">Sign in to play PvP battles.</p>}
         </div>
       )}
     </div>
