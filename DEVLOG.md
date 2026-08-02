@@ -143,6 +143,16 @@
 
 ---
 
+## 📅 Session Log: August 2, 2026
+
+**Task Completed (Warlord — topbar cu resurse + prognoză zilnică)**
+> Prompt: „o sa vreau ca resursele sa poata fi vazute permanent in topbar, si vreau sa se vada si cat vor creste zilnic in functie de setarile cladirilor".
+> Model: Claude Opus 5
+> - O zi de economie a devenit o funcție pură (`simulateEconomyDay`) pe care o rulează ȘI tick-ul ȘI bara de sus, deci numărul afișat nu poate devia de cel plătit. Bară persistentă în antet: monede + fiecare resursă cu stoc și `+n/−n` pe zi, roșu la înfometare, tooltip cu cine produce/consumă și zilele până la golire.
+> - Reparate trei locuri din UI care afișau altă matematică decât jocul (o ramură hardcodată în ProductionModal, textul din OverviewTab, FOOD lipsă din ResourcesTab) + un NaN latent la topire pe save-uri vechi.
+> - Cea mai utilă consecință: `buyBuilding` pune `focusCoinPct: 100` pe orice clădire nouă, iar la focus 100 nu se produce niciun bun — o fermă nouă face 800 de monede și ZERO hrană. Bara arată asta acum.
+> - 96 teste verzi (17 noi), verificat live că prognoza coincide exact cu ce produce „Run Day". Deploy hosting. Commit + push ×2.
+
 ## 📅 Session Log: August 1, 2026
 
 **Task Completed (Warlord — Research felia 1: Scriptorium + cerințe de infrastructură)**

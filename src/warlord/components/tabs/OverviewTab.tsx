@@ -18,7 +18,7 @@ export default function OverviewTab({ state }: { state: GameStateShape }) {
           ))}
         </ul>
         <div className="text-xs text-gray-500 mt-2">
-          Passive coin/day = 10% of cost. Foregone coin → items at 70% value.
+          Coin/day scales with the building price (or its resource value), its level and research. Coin you give up becomes goods — see the bar at the top for what tomorrow actually brings.
         </div>
       </Card>
 

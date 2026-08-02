@@ -9,7 +9,9 @@ type Props = {
 
 export default function ResourcesTab({ resources }: Props) {
     // Group resources
-    const raw = ['WOOD', 'STONE', 'COAL', 'IRON_ORE', 'COPPER_ORE', 'SILVER_ORE']
+    // FOOD belongs here too: it is the one resource the army eats every single day,
+    // and this tab used to omit it entirely.
+    const raw = ['FOOD', 'WOOD', 'STONE', 'COAL', 'IRON_ORE', 'COPPER_ORE', 'SILVER_ORE']
     const ingots = ['IRON_INGOT', 'COPPER_INGOT', 'SILVER_INGOT'] // and maybe STEEL later
 
     return (

@@ -49,10 +49,7 @@ export default function ProductionModal({ building, onClose, onSetOutput, onSetF
     let coinGain = 0
     let items = '0'
 
-    if (building.type === 'LUMBER_MILL' && building.outputItem === 'WOOD') {
-        coinGain = 0
-        items = '10'
-    } else {
+    {
         const out = passiveIncomeAndProduction({
             costCopper: buildingCostCopper(building.type),
             focusCoinPct: building.focusCoinPct,

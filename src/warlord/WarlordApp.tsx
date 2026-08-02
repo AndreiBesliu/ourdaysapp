@@ -10,12 +10,12 @@ import CampaignTab from './components/tabs/CampaignTab'
 import ResearchTab from './components/tabs/ResearchTab'
 
 import BarracksTab from './components/tabs/BarracksTab'
+import ResourceBar from './components/common/ResourceBar'
 import { useGameState } from './state/useGameState'
 import { GameConfig } from './logic/config'
 import { planTicks, mmss, humanDuration } from './logic/tick'
 import type { GameConfigOverrides } from './logic/config'
 
-import { fmtCopper as fmtCopperUtil } from './logic/types'
 
 // saveKey scopes ALL persistence (game save + tick timers). The OurDaysApp embed passes
 // a per-user key (warlord_save_<uid>) so users on one device don't share saves, and may
@@ -119,11 +119,8 @@ export default function App({
 
   const {
     day, wallet,
-    fmtCopper: fmtFromState,
     loadSave, resetAll,
   } = state
-
-  const fmtCopper = fmtFromState || fmtCopperUtil
 
   const [tab, setTab] = useState<'overview' | 'resources' | 'buildings' | 'barracks' | 'units' | 'market' | 'research' | 'campaign' | 'log'>('overview')
 
@@ -159,10 +156,16 @@ export default function App({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-4 items-center">
-        <span className="text-lg">Wallet:</span>
-        <span className="px-2 py-1 bg-gray-100 rounded font-mono">{fmtCopper(wallet)}</span>
-      </div>
+      {/* Stores and what tomorrow does to them — visible from every tab, so a change to a
+          building's focus can be judged without hunting through screens. */}
+      <ResourceBar
+        wallet={wallet}
+        resources={state.resources}
+        inv={state.inv}
+        buildings={state.buildings}
+        units={state.units}
+        mods={state.mods}
+      />
 
       <nav className="flex flex-wrap gap-2">
         {[

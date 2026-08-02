@@ -1,5 +1,6 @@
 // src/logic/economy.ts
-import type { BuildingType, ResourceMap, SoldierType, Unit, Rank } from './types'
+import type { Building, BuildingType, Inventories, ResourceMap, SoldierType, Unit, Rank } from './types'
+import { GOLD, fmtCopper, ResourceTypes, WeaponTypes, ArmorTypes } from './types'
 import { itemValueCopper } from './items'
 import { GameConfig } from './config'
 
@@ -209,4 +210,217 @@ export function passiveIncomeAndProduction(args: {
   const newBuffer = total - items
 
   return { coinGain, items, newBuffer }
+}
+
+// ── ONE DAY OF ECONOMY, AS A PURE FUNCTION ────────────────────────────────
+// This is THE per-day resource math. The daily tick runs it and commits the result;
+// the UI runs it on the current snapshot to forecast tomorrow. Nothing may
+// re-implement it: this codebase already shipped that bug twice (ProductionModal
+// advertising numbers the tick never paid), and a forecast that drifts is worse
+// than no forecast.
+//
+// Purity: no Math.random, no Date.now, no I/O, no React. Random events and battle
+// loot are deliberately NOT here — they are not promisable, so they stay in the tick.
+
+export interface DayEconomyInput {
+  buildings: Building[] // ORDER IS LOAD-BEARING: one running resource pool, in array order
+  resources: ResourceMap
+  inv: Inventories
+  units: Unit[] // pass [] to get income only (what the tick's income step does)
+  mods?: { prodMult?: number; craftEfficiency?: number; upkeepMult?: number; foodMult?: number }
+}
+
+export interface BuildingDayLine {
+  id: string
+  type: BuildingType
+  outputItem: string
+  skipped: boolean // produces nothing by design (Stable/Market/Barracks/Scriptorium)
+  coinGain: number
+  itemsFloat: number // the day-invariant RATE, before the integer buffer
+  itemsWanted: number // what the buffer would have released today
+  itemsProduced: number // what the inputs actually allowed
+  blocked: boolean // wanted > 0 but produced 0 — the shortfall is destroyed, not banked
+  inputsConsumed: Partial<Record<string, number>>
+}
+
+export interface DayEconomyResult {
+  resources: ResourceMap
+  inv: Inventories
+  buildings: Building[] // fractional buffers advanced
+  incomeWalletDelta: number // buildings + minter − stable upkeep
+  soldierUpkeep: number
+  walletDelta: number // incomeWalletDelta − soldierUpkeep (NOT floored: copper goes negative)
+  foodNeeded: number // what the army demands
+  foodConsumed: number // what it actually gets — the granary is clamped at 0
+  foodShortage: boolean
+  breakdown: BuildingDayLine[]
+  notes: string[]
+}
+
+export function simulateEconomyDay(input: DayEconomyInput): DayEconomyResult {
+  const { buildings, mods } = input
+  const notes: string[] = []
+  const breakdown: BuildingDayLine[] = []
+  let walletDelta = 0
+  const ninv: Inventories = structuredClone(input.inv)
+  const nres: ResourceMap = { ...input.resources }
+  const hasStable = buildings.some((b) => b.type === 'STABLE')
+
+  nres.WOOD = (nres.WOOD || 0) + 1
+  notes.push('Nature → +1 Wood')
+
+  const updated = buildings.map((b) => {
+    const row = { ...b }
+
+    if (['STABLE', 'MARKET', 'BARRACKS', 'SCRIPTORIUM'].includes(row.type)) {
+      breakdown.push({
+        id: row.id, type: row.type, outputItem: '', skipped: true,
+        coinGain: 0, itemsFloat: 0, itemsWanted: 0, itemsProduced: 0, blocked: false, inputsConsumed: {},
+      })
+      return row
+    }
+
+    // Config price only — a research BUILD discount must not shrink the income basis.
+    const cost = buildingCostCopper(row.type)
+    const outItem = row.outputItem ?? BuildingOutputChoices[row.type].options[0] ?? ''
+    const bufferBefore = row.fractionalBuffer ?? 0
+    const { coinGain, items, newBuffer } = passiveIncomeAndProduction({
+      costCopper: cost,
+      focusCoinPct: row.focusCoinPct,
+      outputItem: outItem,
+      fractionalBuffer: bufferBefore,
+      level: row.level ?? 1,
+      outputMult: mods?.prodMult ?? 1,
+      craftEfficiency: mods?.craftEfficiency ?? 1,
+    })
+
+    walletDelta += coinGain
+    row.fractionalBuffer = newBuffer
+
+    const line: BuildingDayLine = {
+      id: row.id, type: row.type, outputItem: outItem, skipped: false,
+      coinGain,
+      // The rate the buffer is filling at, independent of which day the integer lands.
+      itemsFloat: items + newBuffer - bufferBefore,
+      itemsWanted: items, itemsProduced: 0, blocked: false, inputsConsumed: {},
+    }
+
+    if (row.type === 'SMELTER') {
+      const recipe = SmelterRecipes[outItem]
+      if (recipe && items > 0) {
+        let maxAfford = items
+        for (const [res, qty] of Object.entries(recipe.input)) {
+          const avail = nres[res as keyof ResourceMap] || 0
+          maxAfford = Math.min(maxAfford, Math.floor(avail / qty))
+        }
+        if (maxAfford > 0) {
+          for (const [res, qty] of Object.entries(recipe.input)) {
+            nres[res as keyof ResourceMap] -= qty * maxAfford
+            line.inputsConsumed[res] = (line.inputsConsumed[res] ?? 0) + qty * maxAfford
+          }
+          // `|| 0`: a save written before an ingot key existed would make this NaN and
+          // poison the resource permanently.
+          nres[outItem as keyof ResourceMap] = (nres[outItem as keyof ResourceMap] || 0) + maxAfford
+          line.itemsProduced = maxAfford
+          notes.push(`${row.type} → Smelted ${maxAfford} ${outItem} (gain ${fmtCopper(coinGain)})`)
+        } else {
+          line.blocked = true
+          notes.push(`${row.type} → Idle (missing ore/coal)`)
+        }
+      }
+    } else if (row.type === 'MINTER') {
+      if (items > 0) {
+        const run = Math.min(items, nres['SILVER_INGOT'] || 0)
+        if (run > 0) {
+          nres['SILVER_INGOT'] -= run
+          line.inputsConsumed['SILVER_INGOT'] = run
+          const mintedValue = run * 600
+          walletDelta += mintedValue
+          line.coinGain += mintedValue
+          line.itemsProduced = run
+          notes.push(`${row.type} → Minted ${run} Silver Ingots into ${fmtCopper(mintedValue)}`)
+        } else {
+          line.blocked = true
+          notes.push(`${row.type} → Idle (missing silver)`)
+        }
+      }
+    } else {
+      if (items > 0 && outItem) {
+        const recipe = ManufacturingRecipes[outItem]
+        let actualItems = items
+
+        if (recipe) {
+          let maxAfford = items
+          for (const [res, qty] of Object.entries(recipe)) {
+            const avail = nres[res as keyof ResourceMap] || 0
+            maxAfford = Math.min(maxAfford, Math.floor(avail / qty))
+          }
+          actualItems = maxAfford
+          if (actualItems > 0) {
+            for (const [res, qty] of Object.entries(recipe)) {
+              nres[res as keyof ResourceMap] -= qty * actualItems
+              line.inputsConsumed[res] = (line.inputsConsumed[res] ?? 0) + qty * actualItems
+            }
+          }
+        }
+
+        line.itemsProduced = actualItems
+        if (actualItems > 0) {
+          if ((ResourceTypes as readonly string[]).includes(outItem)) {
+            nres[outItem as keyof ResourceMap] = (nres[outItem as keyof ResourceMap] || 0) + actualItems
+            notes.push(`${row.type} → +${actualItems} ${outItem}, +${fmtCopper(coinGain)}`)
+          } else if ((WeaponTypes as readonly string[]).includes(outItem)) {
+            ninv.weapons[outItem] = (ninv.weapons[outItem] ?? 0) + actualItems
+            notes.push(`${row.type} → +${actualItems} ${outItem}, +${fmtCopper(coinGain)}`)
+          } else if ((ArmorTypes as readonly string[]).includes(outItem)) {
+            ninv.armors[outItem] = (ninv.armors[outItem] ?? 0) + actualItems
+            notes.push(`${row.type} → +${actualItems} ${outItem}, +${fmtCopper(coinGain)}`)
+          }
+        } else {
+          line.blocked = true
+          notes.push(`${row.type} → Idle (missing resources for ${outItem}), +${fmtCopper(coinGain)}`)
+        }
+      } else if (coinGain > 0) {
+        notes.push(`${row.type} → +${fmtCopper(coinGain)}`)
+      }
+    }
+
+    breakdown.push(line)
+    return row
+  })
+
+  if (hasStable) {
+    const breedL = Math.floor(0.01 * (ninv.horses.LIGHT_HORSE.active || 0))
+    const breedH = Math.floor(0.01 * (ninv.horses.HEAVY_HORSE.active || 0))
+    ninv.horses.LIGHT_HORSE.active += breedL
+    ninv.horses.HEAVY_HORSE.active += breedH
+    // Counted AFTER breeding: today's foals are charged today.
+    const activeTotal = (ninv.horses.LIGHT_HORSE.active || 0) + (ninv.horses.HEAVY_HORSE.active || 0)
+    const upkeep = Math.round(activeTotal * (0.005 * GOLD))
+    walletDelta -= upkeep
+    notes.push(`Stable: +${breedL + breedH} foals; upkeep ${fmtCopper(upkeep)} for ${activeTotal} horses`)
+  }
+
+  const incomeWalletDelta = walletDelta
+
+  // The army half. Empty `units` reproduces the income-only step the tick commits first.
+  const soldierUpkeep = input.units.length > 0 ? dailyUpkeepCopper(input.units, mods?.upkeepMult) : 0
+  const foodNeeded = input.units.length > 0 ? dailyFoodConsumption(input.units, mods?.foodMult) : 0
+  const stock = nres.FOOD ?? 0
+  const foodConsumed = Math.min(foodNeeded, stock) // the granary floors at 0; there is no debt
+  if (foodNeeded > 0) nres.FOOD = stock - foodConsumed
+
+  return {
+    resources: nres,
+    inv: ninv,
+    buildings: updated,
+    incomeWalletDelta,
+    soldierUpkeep,
+    walletDelta: incomeWalletDelta - soldierUpkeep, // no floor: copper really does go negative
+    foodNeeded,
+    foodConsumed,
+    foodShortage: foodNeeded > foodConsumed,
+    breakdown,
+    notes,
+  }
 }
