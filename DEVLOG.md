@@ -145,6 +145,24 @@
 
 ## 📅 Session Log: August 2, 2026
 
+**Task Completed (Adminul Warlord: 5 defecte confirmate + tema + punctul orb)**
+> Prompt: „in primul rand adminul, si, vad ca adminul nu functioneaza bine" — apoi, concret: „am incercat sa schimb productia de lemn, si costul de lemn al unei cladiri si nu am vazut modificari".
+> Model: Claude Opus 5
+>
+> **Cauza raportului, gasita exact:** nu logica era stricata. Testele noi dovedesc că `resourceBaseValue.WOOD` chiar cvadruplează producția morii și că `buildingResourceCost` chiar schimbă costul (păstrând celelalte resurse). Ce se rupea era **livrarea**, în două feluri, ambele reparate:
+> 1. **Ieșirea din Admin arunca tăcut tot ce nu era salvat.** Vizualizările sunt un ternar în `screens/Warlord.tsx`: un click pe 🏰 Domain demontează panoul. Iar modul natural de a verifica o schimbare de balans e exact acela — să te duci să te uiți în joc. Deci acțiunea firească era și cea care îți ștergea munca, fără niciun avertisment; te întorceai și vedeai numerele vechi. Acum: **urmărire reală a modificărilor** (comparație cu ce e stocat, nu un contor care arăta la fel înainte și după salvare), antet care spune „Unsaved changes", confirmare la părăsirea panoului și `beforeunload`.
+> 2. **O salvare nu ajungea în joc până la un reload complet** — gazda încărca configurarea o singură dată, în poarta de montare. Acum panoul anunță gazda (`onSaved`) și balansul se aplică imediat.
+>
+> **Defectul cel mai grav, care nu se manifestase încă:** `loadWarlordConfig` întorcea `null` ȘI pentru „documentul nu există", ȘI pentru „citirea a eșuat". După o pică de rețea, panoul arăta toate valorile implicite și scria liniștitor „No overrides — pure defaults"; prima salvare ar fi **înlocuit întreaga configurare de balans a lumii, pentru toți jucătorii**, cu un document construit din formularul gol — și ar fi zis „Saved ✓". Acum încărcarea distinge cele două cazuri, iar la eșec **editorul refuză să se deschidă** și explică de ce. Verificat live: deconectat (deci citire refuzată de reguli), panoul arată ecranul de refuz, nu un formular.
+> **Scrierea are acum și o precondiție de versiune** (`runTransaction` pe `updatedAt`): doi admini sau două taburi se suprascriau reciproc fără niciun semnal. Conflictul e acum respins cu un mesaj clar.
+> **Alte două reparate:** ștergerea unui câmp de efect al unei tehnologii *fixa* valoarea implicită în document în loc s-o elimine (singura anulare era resetarea întregii secțiuni); și **Save ignora caseta JSON** — lipeai o configurare, apăsai Save, scria „Saved ✓" și nu conținea nimic din ce lipiseși. Ambele reparate și verificate.
+> **Tema:** panoul fusese scris înainte de tokenuri și stă acum în rădăcina `.warlord`, care merge pe dark. Măsurat: **82 de perechi de contrast sub 3:1 și 84 de suprafețe albe**. După tokenizare: **0 și 0**, în ambele teme.
+> **Punctul orb rezolvat:** `npm run dev:warlord-admin` (`warlord-admin.html` + `devHarness.tsx`) randează panoul real fără autentificare, cu comutator light/dark; `?demo=1` îi injectează o încărcare reușită printr-un prop `loader`, ca să se poată exercita și calea fericită. Nu intră în build-ul de producție — verificat.
+> - Investigația: workflow cu 5 lentile (round-trip, ajungerea override-urilor în joc, mașina de stări a UI-ului, permisiuni, temă) + verificare adversarială per constatare: **5 confirmate, 3 respinse** — iar cele respinse erau exact cele două pe care le reparasem între timp, ceea ce e o confirmare bună a metodei.
+> - 121 teste verzi (7 noi despre balanța lemnului), typecheck + build verzi în ambele proiecte.
+
+
+
 **Task Completed (Warlord: temă dark, iar embed-ul nu mai forțează light)**
 > Model: Claude Opus 5
 > - Jocul are acum tokenuri semantice și o temă dark caldă (detalii în DEVLOG-ul jocului, repo-ul Warlord, commit `243386d`). Aici s-a scos **lacătul de light**: `src/screens/Warlord.tsx` învelea jocul în `bg-white text-zinc-900 [color-scheme:light]` pentru că fiecare componentă Warlord folosea clase Tailwind deschise — în dark, textul necolorat devenea alb pe alb.

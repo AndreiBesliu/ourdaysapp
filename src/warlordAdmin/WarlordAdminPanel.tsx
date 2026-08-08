@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { auth } from '../firebase';
-import { loadWarlordConfig, saveWarlordConfig, loadWarlordConfigMeta, pruneOverrides } from './configApi';
+import { loadWarlordConfigFull, saveWarlordConfig, pruneOverrides, ConfigConflictError } from './configApi';
+import type { Timestamp } from 'firebase/firestore';
 import type { GameConfigOverrides } from '@warlord/logic/config';
 import { DEFAULT_TRAINING, DEFAULT_TICK } from '@warlord/logic/config';
 import {
@@ -45,16 +46,16 @@ function NumField({ label, def, value, onChange, hint }: {
   const changed = value !== undefined && value !== def;
   return (
     <label className="flex items-center gap-2 text-sm">
-      <span className={`w-40 shrink-0 ${changed ? 'font-semibold text-amber-700' : 'text-stone-600'}`}>{label}</span>
+      <span className={`w-40 shrink-0 ${changed ? 'font-semibold text-wl-accent' : 'text-wl-muted'}`}>{label}</span>
       <input
         type="number"
         step="any"
         value={value ?? ''}
         placeholder={String(def)}
         onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
-        className={`w-28 px-2 py-1 rounded border text-sm ${changed ? 'border-amber-500 bg-amber-50' : 'border-stone-300 bg-white'}`}
+        className={`w-28 px-2 py-1.5 min-h-[34px] rounded border text-sm text-wl-ink ${changed ? 'border-wl-accent bg-wl-accent-surface' : 'border-wl-line bg-wl-panel'}`}
       />
-      {hint && <span className="text-xs text-stone-400">{hint}</span>}
+      {hint && <span className="text-xs text-wl-subtle">{hint}</span>}
     </label>
   );
 }
@@ -68,26 +69,73 @@ function countOverrides(o: GameConfigOverrides): number {
   return n;
 }
 
-export default function WarlordAdminPanel() {
+// `onSaved` lets the host apply the new balance immediately. Without it the host keeps
+// the config it loaded when the screen mounted, so an admin saves, switches back to the
+// game, sees the OLD numbers, and reasonably concludes the admin is broken.
+export default function WarlordAdminPanel({
+  onSaved,
+  onDirtyChange,
+  loader,
+}: {
+  onSaved?: (o: GameConfigOverrides) => void;
+  // Testing seam: the panel lives behind auth, so without this its successful-load state
+  // cannot be exercised outside a real admin session (see warlord-admin.html).
+  loader?: () => Promise<import('./configApi').ConfigLoad>;
+  // The host blocks navigation while there is unsaved work — leaving used to discard it
+  // silently, which reads exactly like "the admin doesn't save".
+  onDirtyChange?: (dirty: boolean) => void;
+} = {}) {
   const [ov, setOv] = useState<GameConfigOverrides>({});
+  // What is actually stored right now. Everything unsaved is `ov` minus this.
+  const [savedOv, setSavedOv] = useState<GameConfigOverrides>({});
   const [section, setSection] = useState<Section>('ECONOMY');
   const [status, setStatus] = useState<'loading' | 'idle' | 'saving' | 'saved' | 'error'>('loading');
+  const [loadFailed, setLoadFailed] = useState(false);
   const [error, setError] = useState('');
   const [meta, setMeta] = useState<{ updatedBy?: string; updatedAt?: Date | null }>({});
+  // The version this edit is based on; the save is rejected if the live doc moved on.
+  const [baseVersion, setBaseVersion] = useState<Timestamp | null>(null);
   const [jsonDraft, setJsonDraft] = useState('');
 
   useEffect(() => {
     let alive = true;
-    Promise.all([loadWarlordConfig(), loadWarlordConfigMeta()]).then(([cfg, m]) => {
+    (loader ?? loadWarlordConfigFull)().then((r) => {
       if (!alive) return;
-      setOv(cfg ?? {});
-      setMeta(m);
+      if (!r.ok) {
+        // Refusing to edit is the whole point: an editor that cannot read the current
+        // configuration would save a document built from defaults over the live one.
+        setLoadFailed(true);
+        setError(r.error);
+        setStatus('error');
+        return;
+      }
+      setOv(r.overrides);
+      setSavedOv(r.overrides);
+      setBaseVersion(r.updatedAt);
+      setMeta({ updatedBy: r.updatedBy, updatedAt: r.updatedAt?.toDate() ?? null });
       setStatus('idle');
     });
     return () => { alive = false; };
-  }, []);
+  }, [loader]);
 
-  const dirtyCount = useMemo(() => countOverrides(ov), [ov]);
+  const storedCount = useMemo(() => countOverrides(ov), [ov]);
+
+  // Unsaved work, compared against what is actually stored — not a count of overrides,
+  // which reads the same before and after a save and told the admin nothing.
+  const pendingJson = useMemo(() => JSON.stringify(pruneOverrides(ov)), [ov]);
+  const savedJson = useMemo(() => JSON.stringify(pruneOverrides(savedOv)), [savedOv]);
+  const jsonPending = section === 'JSON' && jsonDraft.trim() !== '' && jsonDraft !== JSON.stringify(pruneOverrides(ov), null, 2);
+  const dirty = pendingJson !== savedJson || jsonPending;
+
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+
+  // A reload or a tab close is the other way unsaved work disappears.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
   // ---- generic setters: writing `undefined` removes the override entirely ----
   function setIn<K extends keyof GameConfigOverrides>(key: K, id: string, value: unknown) {
@@ -210,22 +258,68 @@ export default function WarlordAdminPanel() {
   async function save() {
     const uid = auth.currentUser?.uid;
     if (!uid) return;
+    if (loadFailed) {
+      setError('Reload before saving — the current configuration could not be read, so saving now would overwrite it.');
+      setStatus('error');
+      return;
+    }
     setStatus('saving'); setError('');
     try {
-      const clean = pruneOverrides(ov);
-      await saveWarlordConfig(clean, uid);
+      // A draft sitting in the JSON box was silently dropped by Save: the write succeeded,
+      // said "Saved ✓", and contained none of what had just been pasted.
+      let next = ov;
+      if (jsonPending) {
+        const parsed = JSON.parse(jsonDraft || '{}');
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('The JSON must be an object.');
+        next = parsed as GameConfigOverrides;
+        setOv(next);
+      }
+      const clean = pruneOverrides(next);
+      await saveWarlordConfig(clean, uid, baseVersion);
+      const after = await loadWarlordConfigFull();
       setOv(clean);
-      setMeta({ updatedBy: uid, updatedAt: new Date() });
+      setSavedOv(clean);
+      setJsonDraft(JSON.stringify(clean, null, 2));
+      if (after.ok) {
+        setBaseVersion(after.updatedAt);
+        setMeta({ updatedBy: after.updatedBy ?? uid, updatedAt: after.updatedAt?.toDate() ?? new Date() });
+      }
+      onSaved?.(clean);
       setStatus('saved');
       setTimeout(() => setStatus('idle'), 2500);
     } catch (e) {
       setStatus('error');
-      setError(e instanceof Error ? e.message : String(e));
+      setError(
+        e instanceof ConfigConflictError
+          ? 'Someone else saved while you were editing. Reload the panel to see their version — saving now would overwrite it.'
+          : e instanceof Error ? e.message : String(e),
+      );
     }
   }
 
   if (status === 'loading') {
-    return <div className="p-6 text-sm text-stone-500">Loading configuration…</div>;
+    return <div className="p-6 text-sm text-wl-muted">Loading configuration…</div>;
+  }
+
+  if (loadFailed) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto space-y-3">
+        <div className="rounded border border-wl-bad bg-wl-bad-surface p-4 text-sm text-wl-ink">
+          <p className="font-semibold text-wl-bad">The current configuration could not be read.</p>
+          <p className="mt-2">
+            The editor stays closed on purpose: it cannot show you what is live, and saving from a
+            blank form would replace the whole balance configuration for every player.
+          </p>
+          <p className="mt-2 font-mono text-xs text-wl-muted">{error}</p>
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 rounded bg-wl-accent text-wl-accent-ink text-sm"
+        >
+          Try again
+        </button>
+      </div>
+    );
   }
 
   const SECTIONS: [Section, string][] = [
@@ -234,7 +328,7 @@ export default function WarlordAdminPanel() {
 
   return (
     <div className="p-4 md:p-6 max-w-6xl mx-auto space-y-4">
-      <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+      <div className="rounded border border-wl-accent-line bg-wl-accent-surface p-3 text-sm text-wl-ink">
         <p className="font-semibold">Global, live configuration</p>
         <p className="mt-1">
           One shared world means one set of numbers: saving here changes the game for <b>every</b> player
@@ -249,29 +343,32 @@ export default function WarlordAdminPanel() {
           <button
             key={k}
             onClick={() => { if (k === 'JSON') setJsonDraft(JSON.stringify(pruneOverrides(ov), null, 2)); setSection(k); }}
-            className={`px-3 py-1 rounded text-sm border ${section === k ? 'bg-black text-white' : 'bg-white hover:bg-stone-50'}`}
+            className={`px-3 py-1 rounded text-sm border ${section === k ? 'bg-wl-accent text-wl-accent-ink' : 'bg-wl-panel hover:bg-wl-panel-muted'}`}
           >
             {label}
           </button>
         ))}
-        <span className="ml-auto text-xs text-stone-500">
-          {dirtyCount === 0 ? 'No overrides — pure defaults' : `${dirtyCount} override group(s) active`}
+        <span className="ml-auto text-xs text-wl-muted">
+          {dirty
+            ? <span className="text-wl-warn font-semibold">Unsaved changes</span>
+            : storedCount === 0 ? 'No overrides — pure defaults' : `${storedCount} override group(s) stored`}
           {meta.updatedAt && ` · last saved ${meta.updatedAt.toLocaleString()}`}
         </span>
         <button
           onClick={save}
-          disabled={status === 'saving'}
-          className="px-4 py-1.5 rounded bg-black text-white text-sm disabled:opacity-50"
+          disabled={status === 'saving' || loadFailed || !dirty}
+          title={loadFailed ? 'The current configuration could not be read — reload first' : !dirty ? 'Nothing to save' : 'Save for every player'}
+          className="px-4 py-1.5 min-h-[36px] rounded bg-wl-accent text-wl-accent-ink text-sm disabled:opacity-50"
         >
           {status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved ✓' : 'Save'}
         </button>
       </div>
       {status === 'error' && (
-        <p className="text-sm text-red-600">Save failed: {error}</p>
+        <p className="text-sm text-wl-bad">Save failed: {error}</p>
       )}
 
       {section !== 'JSON' && (
-        <button onClick={() => resetSection(section)} className="text-xs underline text-stone-500">
+        <button onClick={() => resetSection(section)} className="text-xs underline text-wl-muted">
           Reset this section to defaults
         </button>
       )}
@@ -293,7 +390,7 @@ export default function WarlordAdminPanel() {
                 />
               ))}
             </div>
-            <p className="mt-2 text-xs text-stone-500">
+            <p className="mt-2 text-xs text-wl-muted">
               A building's price is also its income basis (daily output ≈ 10% of price for
               crafting buildings), so lowering a price lowers what it earns.
             </p>
@@ -362,7 +459,7 @@ export default function WarlordAdminPanel() {
               <NumField label="Real minutes per day" def={DEFAULT_TICK.minutesPerDay} value={ov.tick?.minutesPerDay} onChange={(v) => setTick('minutesPerDay', v)} />
               <NumField label="Offline catch-up (days)" def={DEFAULT_TICK.maxOfflineDays} value={ov.tick?.maxOfflineDays} onChange={(v) => setTick('maxOfflineDays', v)} />
             </div>
-            <p className="mt-2 text-xs text-stone-500">
+            <p className="mt-2 text-xs text-wl-muted">
               The clock is anchored to the last completed day and stored in the save, so time
               spent away counts: on return the game resolves every whole day that elapsed, up to
               the catch-up limit (the excess is skipped, never banked). Each caught-up day still
@@ -378,7 +475,7 @@ export default function WarlordAdminPanel() {
               <NumField label="Minimum days" def={DEFAULT_TRAINING.minDays} value={ov.training?.minDays} onChange={(v) => setTraining('minDays', v)} />
               <NumField label="Max slots" def={DEFAULT_TRAINING.maxSlots} value={ov.training?.maxSlots} onChange={(v) => setTraining('maxSlots', v)} />
             </div>
-            <p className="mt-2 text-xs text-stone-500">
+            <p className="mt-2 text-xs text-wl-muted">
               A batch takes <code>max(baseDays − (level − 1), minDays)</code> days; slots are
               <code> min(level + 1, maxSlots)</code>. Research modifiers apply on top.
             </p>
@@ -392,7 +489,7 @@ export default function WarlordAdminPanel() {
                 if (!base || Object.keys(base).length === 0) return null;
                 const cur = ov.buildingResourceCost?.[t] ?? {};
                 return (
-                  <div key={t} className="flex flex-wrap items-center gap-3 border-b border-stone-100 pb-2">
+                  <div key={t} className="flex flex-wrap items-center gap-3 border-b border-wl-line pb-2">
                     <span className="w-40 shrink-0 text-sm font-medium">{t.replace(/_/g, ' ')}</span>
                     {Object.keys(base).map((res) => (
                       <NumField
@@ -423,16 +520,16 @@ export default function WarlordAdminPanel() {
             const disabled = (ov.catalog?.disabled ?? []).includes(t.id);
             const effKeys = Object.keys(t.effects).filter((k) => k !== 'unlocks') as (keyof EffectDelta)[];
             return (
-              <div key={t.id} className={`rounded border p-3 ${disabled ? 'opacity-50 bg-stone-50' : 'bg-white'}`}>
+              <div key={t.id} className={`rounded border p-3 ${disabled ? 'opacity-50 bg-wl-panel-muted' : 'bg-wl-panel'}`}>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs px-2 py-0.5 rounded bg-stone-200">{BRANCH_LABEL[t.branch]} · T{t.tier}</span>
+                  <span className="text-xs px-2 py-0.5 rounded bg-wl-panel-muted">{BRANCH_LABEL[t.branch]} · T{t.tier}</span>
                   <span className="font-semibold">{t.name}</span>
-                  <label className="ml-auto flex items-center gap-1 text-xs text-stone-600">
+                  <label className="ml-auto flex items-center gap-1 text-xs text-wl-muted">
                     <input type="checkbox" checked={disabled} onChange={(e) => toggleTechDisabled(t.id, e.target.checked)} />
                     Disabled
                   </label>
                 </div>
-                <p className="text-xs text-stone-500 mb-2">{t.desc}</p>
+                <p className="text-xs text-wl-muted mb-2">{t.desc}</p>
                 <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
                   <NumField label="Cost (copper)" def={t.costCopper} value={o.costCopper} onChange={(v) => setTech(t.id, { costCopper: v })} hint={fmtCopper(o.costCopper ?? t.costCopper)} />
                   <NumField label="Days" def={t.days} value={o.days} onChange={(v) => setTech(t.id, { days: v })} />
@@ -443,9 +540,12 @@ export default function WarlordAdminPanel() {
                       def={t.effects[k] as number}
                       value={(o.effects as Record<string, number> | undefined)?.[k]}
                       onChange={(v) => {
-                        const eff = { ...t.effects, ...(o.effects ?? {}) } as Record<string, unknown>;
-                        if (v === undefined) eff[k] = t.effects[k]; else eff[k] = v;
-                        setTech(t.id, { effects: eff as EffectDelta });
+                        // Clearing the box must DELETE the key. Writing the default back
+                        // in looked identical on screen but kept the override stored, so
+                        // the only way to undo an experiment was to reset the whole section.
+                        const eff = { ...(o.effects ?? {}) } as Record<string, unknown>;
+                        if (v === undefined) delete eff[k]; else eff[k] = v;
+                        setTech(t.id, { effects: (Object.keys(eff).length ? eff : undefined) as EffectDelta | undefined });
                       }}
                     />
                   ))}
@@ -453,7 +553,7 @@ export default function WarlordAdminPanel() {
               </div>
             );
           })}
-          <p className="text-xs text-stone-500">
+          <p className="text-xs text-wl-muted">
             Effects are capped by the engine (e.g. build cost never below ×0.5, production never
             above ×3), so an extreme value here is clamped rather than breaking the economy.
           </p>
@@ -463,7 +563,7 @@ export default function WarlordAdminPanel() {
       {/* ── MOMENTUM ── */}
       {section === 'MOMENTUM' && (
         <div className="space-y-4">
-          <p className="text-sm text-stone-600">
+          <p className="text-sm text-wl-muted">
             Temporary buffs triggered by events: a won battle grants War Spoils + Martial Fervour,
             a loss grants Licking Wounds, a completed research grants Breakthrough. Re-triggering
             refreshes the duration instead of stacking.
@@ -472,14 +572,14 @@ export default function WarlordAdminPanel() {
             const o = ov.buffs?.[b.id] ?? {};
             const effKeys = Object.keys(b.effects).filter((k) => k !== 'unlocks') as (keyof EffectDelta)[];
             return (
-              <div key={b.id} className="rounded border bg-white p-3">
+              <div key={b.id} className="rounded border bg-wl-panel p-3">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-xs px-2 py-0.5 rounded ${b.good ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                  <span className={`text-xs px-2 py-0.5 rounded ${b.good ? 'bg-wl-good-surface text-wl-good' : 'bg-wl-bad-surface text-wl-bad'}`}>
                     {b.good ? 'Boon' : 'Bane'}
                   </span>
                   <span className="font-semibold">{b.name}</span>
                 </div>
-                <p className="text-xs text-stone-500 mb-2">{b.desc}</p>
+                <p className="text-xs text-wl-muted mb-2">{b.desc}</p>
                 <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
                   <NumField label="Duration (days)" def={b.days} value={o.days} onChange={(v) => setBuff(b.id, { days: v })} />
                   {effKeys.map((k) => (
@@ -501,14 +601,14 @@ export default function WarlordAdminPanel() {
       {/* ── CAMPAIGN ── */}
       {section === 'CAMPAIGN' && (
         <div className="space-y-4">
-          <p className="text-sm text-stone-600">
+          <p className="text-sm text-wl-muted">
             PvE mission difficulty and rewards. <b>Ratio</b> is the enemy army strength relative to
             the army you deploy; escalation and win-streak multipliers apply on top.
           </p>
           {Object.values(MISSION_PRESETS).map((m) => {
             const o = (ov.missions?.[m.id] ?? {}) as Record<string, number>;
             return (
-              <div key={m.id} className="rounded border bg-white p-3">
+              <div key={m.id} className="rounded border bg-wl-panel p-3">
                 <div className="font-semibold mb-2">{m.name}</div>
                 <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
                   <NumField label="Strength ratio" def={m.ratio} value={o.ratio} onChange={(v) => setMission(m.id, { ratio: v })} />
@@ -517,7 +617,7 @@ export default function WarlordAdminPanel() {
                   <NumField label="Max enemy tokens" def={m.maxTokens} value={o.maxTokens} onChange={(v) => setMission(m.id, { maxTokens: v })} />
                   <NumField label="Enemy morale" def={m.baseMorale} value={o.baseMorale} onChange={(v) => setMission(m.id, { baseMorale: v })} />
                 </div>
-                <div className="mt-2 text-xs text-stone-500">
+                <div className="mt-2 text-xs text-wl-muted">
                   Reward resources: {Object.entries(m.rewardResources).map(([k, v]) => `${k} ${v}`).join(', ') || '—'} (edit via JSON)
                 </div>
               </div>
@@ -529,7 +629,7 @@ export default function WarlordAdminPanel() {
       {/* ── JSON ── */}
       {section === 'JSON' && (
         <div className="space-y-2">
-          <p className="text-sm text-stone-600">
+          <p className="text-sm text-wl-muted">
             The full override document. Edit for bulk changes (or to reach fields without a form,
             like mission reward resources), then Apply and Save. Invalid values are ignored by the
             game at load time rather than breaking it.
@@ -538,7 +638,7 @@ export default function WarlordAdminPanel() {
             value={jsonDraft}
             onChange={(e) => setJsonDraft(e.target.value)}
             spellCheck={false}
-            className="w-full h-96 font-mono text-xs p-3 rounded border border-stone-300 bg-white"
+            className="w-full h-96 font-mono text-xs p-3 rounded border border-wl-line bg-wl-panel text-wl-ink"
           />
           <div className="flex gap-2">
             <button
@@ -553,19 +653,19 @@ export default function WarlordAdminPanel() {
                   setStatus('error');
                 }
               }}
-              className="px-3 py-1 rounded border bg-white hover:bg-stone-50 text-sm"
+              className="px-3 py-1 rounded border bg-wl-panel hover:bg-wl-panel-muted text-sm"
             >
               Apply to form
             </button>
             <button
               onClick={() => setJsonDraft(JSON.stringify(pruneOverrides(ov), null, 2))}
-              className="px-3 py-1 rounded border bg-white hover:bg-stone-50 text-sm"
+              className="px-3 py-1 rounded border bg-wl-panel hover:bg-wl-panel-muted text-sm"
             >
               Reload from form
             </button>
             <button
               onClick={() => { setOv({}); setJsonDraft('{}'); }}
-              className="px-3 py-1 rounded border border-red-300 text-red-700 hover:bg-red-50 text-sm"
+              className="px-3 py-1 rounded border border-wl-bad text-wl-bad hover:bg-wl-bad-surface text-sm"
             >
               Clear ALL overrides
             </button>

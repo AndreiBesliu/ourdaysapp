@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev:warlord": "vite --open /warlord.html"
+    "dev:warlord": "vite --open /warlord.html",
+    "dev:warlord-admin": "vite --open /warlord-admin.html"
   },
   "dependencies": {
     "@capacitor/core": "^7.0.0",

@@ -23,6 +23,10 @@ export default function Warlord() {
   const [isAdmin, setIsAdmin] = useState(false);
   // Admin-tuned balance values, loaded once alongside the domain (null = pure defaults).
   const [config, setConfig] = useState<GameConfigOverrides | null>(null);
+  // Switching away from the admin unmounts it and discards every unsaved edit. The
+  // natural way to check a balance change is to go and look at the game — so the natural
+  // action was also the one that threw the work away, silently.
+  const [adminDirty, setAdminDirty] = useState(false);
   // The game now has its own theme, driven by tokens, so it can finally follow the app
   // instead of being pinned to light. (It was pinned because every Warlord component
   // used stock light Tailwind classes: in dark mode its un-coloured text went white on white.)
@@ -62,6 +66,14 @@ export default function Warlord() {
     return () => { alive = false; };
   }, [realUid]);
 
+  function leaveAdmin(next: 'DOMAIN' | 'PVP' | 'ADMIN'): void {
+    if (view === 'ADMIN' && next !== 'ADMIN' && adminDirty) {
+      if (!confirm('You have unsaved balance changes. Leaving the admin discards them. Leave anyway?')) return;
+      setAdminDirty(false);
+    }
+    setView(next);
+  }
+
   // Leaving the Domain view (e.g. to PvP) flushes any pending cloud write immediately.
   useEffect(() => { if (view !== 'DOMAIN') sync?.flush(); }, [view, sync]);
 
@@ -83,7 +95,10 @@ export default function Warlord() {
     <div className={`warlord${dark ? ' dark' : ''} min-h-screen bg-wl-surface text-wl-ink`}>
       <div className="sticky top-0 z-20 flex items-center gap-3 px-4 py-2 border-b border-wl-line bg-wl-panel/90 backdrop-blur">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => {
+            if (view === 'ADMIN' && adminDirty && !confirm('You have unsaved balance changes. Leaving discards them. Leave anyway?')) return;
+            navigate('/');
+          }}
           className="px-3 py-1 rounded border border-wl-line bg-wl-panel hover:bg-wl-panel-muted text-sm text-wl-ink"
         >
           ← Back to Our Days
@@ -93,7 +108,7 @@ export default function Warlord() {
           {([['DOMAIN', '🏰 Domain'], ['PVP', '⚔ PvP'], ...(isAdmin ? [['ADMIN', '⚙ Admin'] as const] : [])] as const).map(([k, label]) => (
             <button
               key={k}
-              onClick={() => setView(k)}
+              onClick={() => leaveAdmin(k)}
               className={`px-3 py-1 rounded text-sm border ${view === k ? 'bg-wl-accent text-wl-accent-ink border-wl-accent' : 'bg-wl-panel text-wl-ink border-wl-line hover:bg-wl-panel-muted'}`}
             >
               {label}
@@ -107,7 +122,7 @@ export default function Warlord() {
           <div className="w-8 h-8 border-4 border-wl-line border-t-transparent rounded-full animate-spin" />
         </div>
       ) : view === 'ADMIN' ? (
-        <WarlordAdminPanel />
+        <WarlordAdminPanel onSaved={setConfig} onDirtyChange={setAdminDirty} />
       ) : view === 'DOMAIN' ? (
         // key={saveKey}: an auth change while mounted remounts the game so it re-hydrates
         // from the new user's key. onPersist mirrors every save to the cloud (debounced).

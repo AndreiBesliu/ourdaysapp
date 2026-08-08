@@ -1,8 +1,8 @@
 // Warlord game configuration — read by every player, written only by admins.
 //
 // ONE shared world ⇒ ONE configuration document (`warlordConfig/live`). Firestore rules
-// enforce the write side (admins/{uid} must exist); this module is only the transport.
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+// enforce the write side (admins/{uid} must exist); this module is the transport.
+import { doc, getDoc, runTransaction, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { GameConfigOverrides } from '@warlord/logic/config';
 
@@ -14,33 +14,75 @@ export interface WarlordConfigDoc {
   updatedBy?: string;
 }
 
-// Best-effort: a config that fails to load must never block play — the game falls back
-// to its built-in defaults, which is exactly today's behaviour.
-export async function loadWarlordConfig(): Promise<GameConfigOverrides | null> {
+/**
+ * A load either succeeded (with possibly-empty overrides) or it did not.
+ *
+ * These two used to collapse into `null`, which was the panel's worst bug: a failed read
+ * looked exactly like "no overrides configured yet", the editor filled with defaults, and
+ * the next Save replaced the whole live document — wiping every tuned value for every
+ * player, while showing "Saved ✓".
+ */
+export type ConfigLoad =
+  | { ok: true; overrides: GameConfigOverrides; updatedBy?: string; updatedAt: Timestamp | null }
+  | { ok: false; error: string };
+
+export async function loadWarlordConfigFull(): Promise<ConfigLoad> {
   try {
     const snap = await getDoc(configRef());
-    if (!snap.exists()) return null;
-    const o = snap.data()?.overrides;
-    return o && typeof o === 'object' ? (o as GameConfigOverrides) : null;
+    if (!snap.exists()) return { ok: true, overrides: {}, updatedAt: null };
+    const d = snap.data() as { overrides?: unknown; updatedBy?: string; updatedAt?: Timestamp };
+    const o = d?.overrides;
+    return {
+      ok: true,
+      overrides: o && typeof o === 'object' ? (o as GameConfigOverrides) : {},
+      updatedBy: d?.updatedBy,
+      updatedAt: d?.updatedAt instanceof Timestamp ? d.updatedAt : null,
+    };
   } catch (e) {
-    console.error('Warlord config load failed (using defaults):', e);
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/**
+ * The players' read path. Here a failure genuinely IS "play on the built-in defaults" —
+ * a config that won't load must never stop someone playing — so it still collapses to
+ * null. The editor uses `loadWarlordConfigFull` instead, because for an editor the
+ * difference between "empty" and "unknown" is the difference between safe and destructive.
+ */
+export async function loadWarlordConfig(): Promise<GameConfigOverrides | null> {
+  const r = await loadWarlordConfigFull();
+  if (!r.ok) {
+    console.error('Warlord config load failed (using defaults):', r.error);
     return null;
   }
+  return Object.keys(r.overrides).length > 0 ? r.overrides : null;
 }
 
-export async function saveWarlordConfig(overrides: GameConfigOverrides, uid: string): Promise<void> {
-  await setDoc(configRef(), { overrides, updatedAt: serverTimestamp(), updatedBy: uid });
-}
-
-export async function loadWarlordConfigMeta(): Promise<{ updatedBy?: string; updatedAt?: Date | null }> {
-  try {
-    const snap = await getDoc(configRef());
-    if (!snap.exists()) return {};
-    const d = snap.data() as { updatedBy?: string; updatedAt?: { toDate?: () => Date } };
-    return { updatedBy: d.updatedBy, updatedAt: d.updatedAt?.toDate?.() ?? null };
-  } catch {
-    return {};
+export class ConfigConflictError extends Error {
+  constructor() {
+    super('Someone else saved this configuration while you were editing it.');
+    this.name = 'ConfigConflictError';
   }
+}
+
+/**
+ * Writes the whole overrides document, but only if nobody else has written since the copy
+ * being edited was loaded. Without the precondition, two admins (or two tabs) silently
+ * overwrite each other and the loser never finds out.
+ */
+export async function saveWarlordConfig(
+  overrides: GameConfigOverrides,
+  uid: string,
+  baseUpdatedAt: Timestamp | null,
+): Promise<void> {
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(configRef());
+    const live = snap.exists() ? (snap.data()?.updatedAt as Timestamp | undefined) : undefined;
+    const liveMs = live instanceof Timestamp ? live.toMillis() : null;
+    const baseMs = baseUpdatedAt instanceof Timestamp ? baseUpdatedAt.toMillis() : null;
+    if (liveMs !== baseMs) throw new ConfigConflictError();
+    tx.set(configRef(), { overrides, updatedAt: serverTimestamp(), updatedBy: uid });
+  });
 }
 
 // Strip empty branches so the stored doc only ever contains what an admin actually
