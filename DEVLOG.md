@@ -148,10 +148,10 @@
 **Task Completed (Economia: productia devine axa proprie, iar craftul adauga valoare)**
 > Prompt: Andrei a ales varianta 1 dintre cele doua propuse pentru dezechilibrul lemnului.
 > Model: Claude Opus 5
-> - **BUILDING_OUTPUT_VALUE inlocuieste regula "10%% din pretul cladirii".** Scara unui atelier era un accident al costului lui de constructie: un blacksmith de 100g scotea 100.000c de bunuri pe zi si manca 2.379 lemn, in timp ce o moara facea 14 — un atelier depasea o suta de mori. Productia e acum o axa proprie, comparabila intre cladiri si reglabila din admin; preturile raman doar poarta de constructie.
-> - **Rețetele nu mai distrug valoare.** Masurat inainte: un arc lua 500c de lemn ca sa produca 70c de arc; un scut 750c pentru 100c; o sabie 3.200c pentru 1.500c. Fiecare reteta era o pierdere, deci orice atelier era o metoda de a transforma resurse in mai putin decat aveai. Acum materialele sunt ~40-75%% din valoarea obiectului.
+> - **BUILDING_OUTPUT_VALUE inlocuieste regula "10% din prețul cladirii".** Scara unui atelier era un accident al costului lui de constructie: un blacksmith de 100g scotea 100.000c de bunuri pe zi si manca 2.379 lemn, in timp ce o moara facea 14 — un atelier depasea o suta de mori. Productia e acum o axa proprie, comparabila intre cladiri si reglabila din admin; preturile raman doar poarta de constructie.
+> - **Rețetele nu mai distrug valoare.** Masurat inainte: un arc lua 500c de lemn ca sa produca 70c de arc; un scut 750c pentru 100c; o sabie 3.200c pentru 1.500c. Fiecare reteta era o pierdere, deci orice atelier era o metoda de a transforma resurse in mai putin decat aveai. Acum materialele sunt ~40-75% din valoarea obiectului.
 > - **Rezultat masurat:** moara L3 +23 lemn/zi (neschimbat); woodworker pe arcuri -23/zi (era -399); **moara L3 + woodworker = net -1 lemn/zi**, adica o moara sustine un atelier; blacksmith pe sulite -27 (era -2379); un smelter acopera consumul mai multor blacksmith-uri.
-> - Ambele axe sunt in  (, ) si au sectiuni proprii in admin. Override-ul vechi  ramane onorat, ca o configurare existenta sa nu amuteasca in tacere.
+> - Ambele axe sunt în `GameConfig` (`buildingOutputValue`, `recipes`) și au secțiuni proprii în admin. Override-ul vechi `resourceBaseValue` rămâne onorat, ca o configurare existentă să nu amuțească în tăcere.
 > - 125 teste verzi; cele doua care fixau dezechilibrul fixeaza acum echilibrul, plus un test care verifica pentru FIECARE reteta ca materialele valoreaza mai putin decat obiectul.
 
 **Task Completed (Adminul Warlord: 5 defecte confirmate + tema + punctul orb)**
