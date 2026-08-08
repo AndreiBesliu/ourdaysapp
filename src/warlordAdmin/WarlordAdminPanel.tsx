@@ -6,7 +6,7 @@ import type { GameConfigOverrides } from '@warlord/logic/config';
 import { DEFAULT_TRAINING, DEFAULT_TICK } from '@warlord/logic/config';
 import {
   BuildingCostCopper, ResourceBuildingCosts, UPKEEP_BASE, UPKEEP_RANK_MULT, FOOD_BASE,
-  RESOURCE_BUILDING_BASE_VALUE,
+  BUILDING_OUTPUT_VALUE, ManufacturingRecipes,
 } from '@warlord/logic/economy';
 import { fmtCopper } from '@warlord/logic/types';
 import { DEFAULT_TECHS, BRANCH_LABEL } from '@warlord/logic/research/catalog';
@@ -218,6 +218,20 @@ export default function WarlordAdminPanel({
     });
   }
 
+  function setRecipe(item: string, res: string, v: number | undefined) {
+    setOv((prev) => {
+      const recipes: Record<string, unknown> = { ...(prev.recipes ?? {}) };
+      const cur: Record<string, unknown> = { ...((recipes[item] as Record<string, unknown>) ?? {}) };
+      if (v === undefined) delete cur[res]; else cur[res] = v;
+      if (Object.keys(cur).length === 0) delete recipes[item];
+      else recipes[item] = cur;
+      const next: Record<string, unknown> = { ...prev };
+      if (Object.keys(recipes).length === 0) delete next.recipes;
+      else next.recipes = recipes;
+      return next as GameConfigOverrides;
+    });
+  }
+
   function setTick(key: 'minutesPerDay' | 'maxOfflineDays', v: number | undefined) {
     setOv((prev) => {
       const t: Record<string, unknown> = { ...(prev.tick ?? {}) };
@@ -248,6 +262,7 @@ export default function WarlordAdminPanel({
       if (s === 'CAMPAIGN') delete next.missions;
       if (s === 'ECONOMY') {
         delete next.buildingCost; delete next.buildingResourceCost; delete next.resourceBaseValue;
+        delete next.buildingOutputValue; delete next.recipes;
         delete next.upkeepBase; delete next.upkeepRankMult; delete next.foodBase; delete next.training;
         delete next.tick;
       }
@@ -397,18 +412,53 @@ export default function WarlordAdminPanel({
           </section>
 
           <section>
-            <h3 className="font-bold mb-2">Resource building output (copper/day of value)</h3>
+            <h3 className="font-bold mb-2">Daily output per building (copper/day at L1)</h3>
             <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
-              {Object.keys(RESOURCE_BUILDING_BASE_VALUE).map((k) => (
+              {(Object.keys(BUILDING_OUTPUT_VALUE) as (keyof typeof BUILDING_OUTPUT_VALUE)[]).map((t) => (
                 <NumField
-                  key={k}
-                  label={k.replace(/_/g, ' ')}
-                  def={RESOURCE_BUILDING_BASE_VALUE[k] ?? 0}
-                  value={ov.resourceBaseValue?.[k]}
-                  onChange={(v) => setIn('resourceBaseValue', k, v)}
+                  key={t}
+                  label={String(t).replace(/_/g, ' ')}
+                  def={BUILDING_OUTPUT_VALUE[t] ?? 0}
+                  value={ov.buildingOutputValue?.[t]}
+                  onChange={(v) => setIn('buildingOutputValue', t, v)}
+                  hint={fmtCopper(ov.buildingOutputValue?.[t] ?? BUILDING_OUTPUT_VALUE[t] ?? 0)}
                 />
               ))}
             </div>
+            <p className="mt-2 text-xs text-wl-muted">
+              How much VALUE a building turns out per day, scaled by its level and by research.
+              This used to be 10% of the building's price, which made a workshop's scale an accident
+              of what it cost to build — a blacksmith produced a hundred times what a lumber mill did
+              and ate raw material to match. Prices now only gate construction.
+            </p>
+          </section>
+
+          <section>
+            <h3 className="font-bold mb-2">Crafting recipes (materials per item)</h3>
+            <div className="space-y-2">
+              {Object.entries(ManufacturingRecipes).map(([item, recipe]) => {
+                const cur = (ov.recipes?.[item] ?? {}) as Record<string, number>;
+                return (
+                  <div key={item} className="flex flex-wrap items-center gap-3 border-b border-wl-line pb-2">
+                    <span className="w-40 shrink-0 text-sm font-medium">{item.replace(/_/g, ' ')}</span>
+                    {Object.keys(recipe).map((r) => (
+                      <NumField
+                        key={r}
+                        label={r.replace(/_/g, ' ')}
+                        def={(recipe as Record<string, number>)[r]}
+                        value={cur[r]}
+                        onChange={(v) => setRecipe(item, r, v)}
+                      />
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-xs text-wl-muted">
+              Keep the materials worth LESS than the item, or crafting destroys value and a workshop
+              becomes a way to turn resources into less than you started with — which is exactly what
+              every recipe did before this was tunable.
+            </p>
           </section>
 
           <section>
