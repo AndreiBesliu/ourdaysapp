@@ -25,8 +25,13 @@ const demoLoad = async (): Promise<ConfigLoad> => ({
   updatedAt: null,
 })
 
+// `?theme=light` starts light. Toggling the class at runtime leaves the browser with a
+// half-recomputed set of custom properties (dark surface, light ink), which makes a
+// contrast audit report failures that do not exist — so each theme gets a clean load.
+const startDark = new URLSearchParams(location.search).get('theme') !== 'light'
+
 function Harness() {
-  const [dark, setDark] = useState(true)
+  const [dark, setDark] = useState(startDark)
   return (
     <div className={`warlord${dark ? ' dark' : ''} min-h-screen bg-wl-surface text-wl-ink`}>
       <div className="flex items-center gap-3 px-4 py-2 border-b border-wl-line bg-wl-panel">

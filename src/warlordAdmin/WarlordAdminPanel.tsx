@@ -8,7 +8,8 @@ import {
   BuildingCostCopper, ResourceBuildingCosts, UPKEEP_BASE, UPKEEP_RANK_MULT, FOOD_BASE,
   BUILDING_OUTPUT_VALUE, ManufacturingRecipes,
 } from '@warlord/logic/economy';
-import { fmtCopper } from '@warlord/logic/types';
+import { fmtCopper, type Rank } from '@warlord/logic/types';
+import { PendingEffect, BuildingEffect, RecipeEffect, CostEffect, CompanyEffect, MissionEffect } from './EffectPreview';
 import { DEFAULT_TECHS, BRANCH_LABEL } from '@warlord/logic/research/catalog';
 import type { TechDef } from '@warlord/logic/research/catalog';
 import { BUFF_DEFS } from '@warlord/logic/research/momentum';
@@ -36,16 +37,20 @@ const EFFECT_LABELS: Record<keyof EffectDelta, string> = {
   unlocks: 'Unlocks',
 };
 
-function NumField({ label, def, value, onChange, hint }: {
+function NumField({ label, def, value, onChange, hint, min }: {
   label: string;
   def: number;
   value: number | undefined;
   onChange: (v: number | undefined) => void;
   hint?: string;
+  // The game validates overrides at load and falls back to the default when one is out of
+  // range. Without saying so, the field would paint an "override" the game quietly ignores.
+  min?: number;
 }) {
   const changed = value !== undefined && value !== def;
+  const rejected = value !== undefined && (!Number.isFinite(value) || (min !== undefined && value < min));
   return (
-    <label className="flex items-center gap-2 text-sm">
+    <label className="flex flex-wrap items-center gap-2 text-sm">
       <span className={`w-40 shrink-0 ${changed ? 'font-semibold text-wl-accent' : 'text-wl-muted'}`}>{label}</span>
       <input
         type="number"
@@ -53,9 +58,16 @@ function NumField({ label, def, value, onChange, hint }: {
         value={value ?? ''}
         placeholder={String(def)}
         onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
-        className={`w-28 px-2 py-1.5 min-h-[34px] rounded border text-sm text-wl-ink ${changed ? 'border-wl-accent bg-wl-accent-surface' : 'border-wl-line bg-wl-panel'}`}
+        className={`w-28 px-2 py-1.5 min-h-[34px] rounded border text-sm text-wl-ink ${
+          rejected ? 'border-wl-bad bg-wl-bad-surface' : changed ? 'border-wl-accent bg-wl-accent-surface' : 'border-wl-line bg-wl-panel'
+        }`}
       />
-      {hint && <span className="text-xs text-wl-subtle">{hint}</span>}
+      {hint && !rejected && <span className="text-xs text-wl-subtle">{hint}</span>}
+      {rejected && (
+        <span className="text-xs text-wl-bad">
+          the game rejects this and keeps {def} — the value must be {min ?? 0} or more
+        </span>
+      )}
     </label>
   );
 }
@@ -96,6 +108,14 @@ export default function WarlordAdminPanel({
   // The version this edit is based on; the save is rejected if the live doc moved on.
   const [baseVersion, setBaseVersion] = useState<Timestamp | null>(null);
   const [jsonDraft, setJsonDraft] = useState('');
+  // Effects are shown at a chosen building level — a value that looks fine at L1 can be
+  // very different at L3, which is where a tuned domain actually sits.
+  const [previewLevel, setPreviewLevel] = useState(1);
+  // Upkeep and food are per-soldier numbers; they only mean something at the size an army
+  // actually reaches, so the panel prices a company rather than a man.
+  const [companySize, setCompanySize] = useState(20);
+  const [companyRank, setCompanyRank] = useState<Rank>('TRAINED');
+  const [deployStrength, setDeployStrength] = useState(100);
 
   useEffect(() => {
     let alive = true;
@@ -353,6 +373,8 @@ export default function WarlordAdminPanel({
         </p>
       </div>
 
+      <PendingEffect saved={savedOv} pending={ov} />
+
       <div className="flex flex-wrap items-center gap-2">
         {SECTIONS.map(([k, label]) => (
           <button
@@ -395,19 +417,23 @@ export default function WarlordAdminPanel({
             <h3 className="font-bold mb-2">Building prices (copper)</h3>
             <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
               {(Object.keys(BuildingCostCopper) as (keyof typeof BuildingCostCopper)[]).map((t) => (
-                <NumField
-                  key={t}
-                  label={t.replace(/_/g, ' ')}
-                  def={BuildingCostCopper[t]}
-                  value={ov.buildingCost?.[t]}
-                  onChange={(v) => setIn('buildingCost', t, v)}
-                  hint={fmtCopper(ov.buildingCost?.[t] ?? BuildingCostCopper[t])}
-                />
+                <div key={t} className="space-y-0.5">
+                  <NumField
+                    label={t.replace(/_/g, ' ')}
+                    def={BuildingCostCopper[t]}
+                    value={ov.buildingCost?.[t]}
+                    onChange={(v) => setIn('buildingCost', t, v)}
+                  min={0}
+                    hint={fmtCopper(ov.buildingCost?.[t] ?? BuildingCostCopper[t])}
+                  />
+                  <CostEffect type={t} config={ov} />
+                </div>
               ))}
             </div>
             <p className="mt-2 text-xs text-wl-muted">
-              A building's price is also its income basis (daily output ≈ 10% of price for
-              crafting buildings), so lowering a price lowers what it earns.
+              What it costs to build. For every building listed under “Daily output” below, the
+              price no longer decides what it earns — those are two independent knobs now. Only a
+              building with no output value of its own still falls back to 10% of its price per day.
             </p>
           </section>
 
@@ -415,21 +441,42 @@ export default function WarlordAdminPanel({
             <h3 className="font-bold mb-2">Daily output per building (copper/day at L1)</h3>
             <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
               {(Object.keys(BUILDING_OUTPUT_VALUE) as (keyof typeof BUILDING_OUTPUT_VALUE)[]).map((t) => (
-                <NumField
-                  key={t}
-                  label={String(t).replace(/_/g, ' ')}
-                  def={BUILDING_OUTPUT_VALUE[t] ?? 0}
-                  value={ov.buildingOutputValue?.[t]}
-                  onChange={(v) => setIn('buildingOutputValue', t, v)}
-                  hint={fmtCopper(ov.buildingOutputValue?.[t] ?? BUILDING_OUTPUT_VALUE[t] ?? 0)}
-                />
+                <div key={t} className="space-y-0.5">
+                  <NumField
+                    label={String(t).replace(/_/g, ' ')}
+                    def={BUILDING_OUTPUT_VALUE[t] ?? 0}
+                    value={ov.buildingOutputValue?.[t]}
+                    onChange={(v) => setIn('buildingOutputValue', t, v)}
+                  min={0}
+                    hint={fmtCopper(ov.buildingOutputValue?.[t] ?? BUILDING_OUTPUT_VALUE[t] ?? 0)}
+                  />
+                  <BuildingEffect type={t} level={previewLevel} config={ov} />
+                </div>
               ))}
             </div>
+            <label className="mt-3 flex items-center gap-2 text-xs text-wl-muted">
+              Show effects at building level
+              <select
+                value={previewLevel}
+                onChange={(e) => setPreviewLevel(Number(e.target.value))}
+                className="px-2 py-1 min-h-[32px] rounded border border-wl-line bg-wl-panel text-wl-ink"
+              >
+                <option value={1}>1</option>
+                <option value={2}>2</option>
+                <option value={3}>3</option>
+              </select>
+            </label>
             <p className="mt-2 text-xs text-wl-muted">
               How much VALUE a building turns out per day, scaled by its level and by research.
               This used to be 10% of the building's price, which made a workshop's scale an accident
               of what it cost to build — a blacksmith produced a hundred times what a lumber mill did
               and ate raw material to match. Prices now only gate construction.
+            </p>
+            <p className="mt-1 text-xs text-wl-warn">
+              A building's <b>focus slider</b> splits that value between coin and materials, and a
+              newly built one starts at <b>100% coin</b> — so raising a material output changes
+              nothing at all for a player who never moved the slider. If a change looks like it did
+              not apply, check the focus before checking the balance.
             </p>
           </section>
 
@@ -439,17 +486,21 @@ export default function WarlordAdminPanel({
               {Object.entries(ManufacturingRecipes).map(([item, recipe]) => {
                 const cur = (ov.recipes?.[item] ?? {}) as Record<string, number>;
                 return (
-                  <div key={item} className="flex flex-wrap items-center gap-3 border-b border-wl-line pb-2">
-                    <span className="w-40 shrink-0 text-sm font-medium">{item.replace(/_/g, ' ')}</span>
-                    {Object.keys(recipe).map((r) => (
-                      <NumField
-                        key={r}
-                        label={r.replace(/_/g, ' ')}
-                        def={(recipe as Record<string, number>)[r]}
-                        value={cur[r]}
-                        onChange={(v) => setRecipe(item, r, v)}
-                      />
-                    ))}
+                  <div key={item} className="border-b border-wl-line pb-2">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="w-40 shrink-0 text-sm font-medium">{item.replace(/_/g, ' ')}</span>
+                      {Object.keys(recipe).map((r) => (
+                        <NumField
+                          key={r}
+                          label={r.replace(/_/g, ' ')}
+                          def={(recipe as Record<string, number>)[r]}
+                          value={cur[r]}
+                          onChange={(v) => setRecipe(item, r, v)}
+                  min={0}
+                        />
+                      ))}
+                    </div>
+                    <div className="ml-40 pl-3"><RecipeEffect item={item} config={ov} /></div>
                   </div>
                 );
               })}
@@ -463,15 +514,36 @@ export default function WarlordAdminPanel({
 
           <section>
             <h3 className="font-bold mb-2">Soldier upkeep (copper/day, per soldier)</h3>
+            <label className="mb-2 flex flex-wrap items-center gap-2 text-xs text-wl-muted">
+              Show the cost of a company of
+              <input
+                type="number"
+                min={1}
+                value={companySize}
+                onChange={(e) => setCompanySize(Math.max(1, Number(e.target.value) || 1))}
+                className="w-20 px-2 py-1 min-h-[32px] rounded border border-wl-line bg-wl-panel text-wl-ink"
+              />
+              soldiers at rank
+              <select
+                value={companyRank}
+                onChange={(e) => setCompanyRank(e.target.value as Rank)}
+                className="px-2 py-1 min-h-[32px] rounded border border-wl-line bg-wl-panel text-wl-ink"
+              >
+                {(Object.keys(UPKEEP_RANK_MULT) as Rank[]).map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
             <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
               {(Object.keys(UPKEEP_BASE) as (keyof typeof UPKEEP_BASE)[]).map((t) => (
-                <NumField
-                  key={t}
-                  label={t.replace(/_/g, ' ')}
-                  def={UPKEEP_BASE[t]}
-                  value={ov.upkeepBase?.[t]}
-                  onChange={(v) => setIn('upkeepBase', t, v)}
-                />
+                <div key={t} className="space-y-0.5">
+                  <NumField
+                    label={t.replace(/_/g, ' ')}
+                    def={UPKEEP_BASE[t]}
+                    value={ov.upkeepBase?.[t]}
+                    onChange={(v) => setIn('upkeepBase', t, v)}
+                  min={0}
+                  />
+                  <CompanyEffect type={t} rank={companyRank} count={companySize} config={ov} />
+                </div>
               ))}
             </div>
             <h4 className="font-semibold mt-3 mb-1 text-sm">Rank multiplier</h4>
@@ -483,6 +555,7 @@ export default function WarlordAdminPanel({
                   def={UPKEEP_RANK_MULT[r]}
                   value={ov.upkeepRankMult?.[r]}
                   onChange={(v) => setIn('upkeepRankMult', r, v)}
+                  min={0}
                 />
               ))}
             </div>
@@ -492,15 +565,23 @@ export default function WarlordAdminPanel({
             <h3 className="font-bold mb-2">Food consumption (per soldier/day)</h3>
             <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
               {(Object.keys(FOOD_BASE) as (keyof typeof FOOD_BASE)[]).map((t) => (
-                <NumField
-                  key={t}
-                  label={t.replace(/_/g, ' ')}
-                  def={FOOD_BASE[t]}
-                  value={ov.foodBase?.[t]}
-                  onChange={(v) => setIn('foodBase', t, v)}
-                />
+                <div key={t} className="space-y-0.5">
+                  <NumField
+                    label={t.replace(/_/g, ' ')}
+                    def={FOOD_BASE[t]}
+                    value={ov.foodBase?.[t]}
+                    onChange={(v) => setIn('foodBase', t, v)}
+                  min={0}
+                  />
+                  <CompanyEffect type={t} rank={companyRank} count={companySize} config={ov} />
+                </div>
               ))}
             </div>
+            <p className="mt-2 text-xs text-wl-muted">
+              Food is eaten every day, including every day caught up after an absence. Compare a
+              company's appetite against what a farm produces per day above — an army that eats
+              more than the domain grows starves as soon as the stores run out.
+            </p>
           </section>
 
           <section>
@@ -655,6 +736,16 @@ export default function WarlordAdminPanel({
             PvE mission difficulty and rewards. <b>Ratio</b> is the enemy army strength relative to
             the army you deploy; escalation and win-streak multipliers apply on top.
           </p>
+          <label className="flex items-center gap-2 text-xs text-wl-muted">
+            Show what each mission does against an army of strength
+            <input
+              type="number"
+              min={1}
+              value={deployStrength}
+              onChange={(e) => setDeployStrength(Math.max(1, Number(e.target.value) || 1))}
+              className="w-24 px-2 py-1 min-h-[32px] rounded border border-wl-line bg-wl-panel text-wl-ink"
+            />
+          </label>
           {Object.values(MISSION_PRESETS).map((m) => {
             const o = (ov.missions?.[m.id] ?? {}) as Record<string, number>;
             return (
@@ -667,7 +758,8 @@ export default function WarlordAdminPanel({
                   <NumField label="Max enemy tokens" def={m.maxTokens} value={o.maxTokens} onChange={(v) => setMission(m.id, { maxTokens: v })} />
                   <NumField label="Enemy morale" def={m.baseMorale} value={o.baseMorale} onChange={(v) => setMission(m.id, { baseMorale: v })} />
                 </div>
-                <div className="mt-2 text-xs text-wl-muted">
+                <div className="mt-2"><MissionEffect id={m.id} deployedStrength={deployStrength} config={ov} /></div>
+                <div className="mt-1 text-xs text-wl-muted">
                   Reward resources: {Object.entries(m.rewardResources).map(([k, v]) => `${k} ${v}`).join(', ') || '—'} (edit via JSON)
                 </div>
               </div>

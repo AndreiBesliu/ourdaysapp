@@ -143,6 +143,23 @@
 
 ---
 
+## 📅 Session Log: August 8, 2026
+
+**Task Completed (adminul Warlord își arată efectul și formula, pentru valorile care se editează)**
+> Prompt: „se pare ca valoarea pe care o trecusem deja pentru costul unei cladiri a fost actualizat, si se pare ca si productia de lemn a crescut. o sa vreau in admin sa se vada mai clar ce efect au si vor avea in viitor modificarile pe care le face. vreau sa se vada formula de calcul etc."
+> Model: Claude Opus 5
+> - **Sub fiecare câmp stă acum o linie de efect și, la cerere, aritmetica în clar.** Cinci feluri: producția unei clădiri pe zi, prețul ei (construcție + drumul până la L3 + resurse), economia unei rețete, costul unei companii de soldați (întreținere + hrană) și ce scoate/plătește o misiune. Toate se evaluează SUB configurarea din formular, nu sub cea salvată (`logic/explain.ts`, în repo-ul jocului).
+> - **Trei lucruri pe care panoul le spunea greșit și acum le spune corect:**
+>   1. „Prețul clădirii e și baza venitului (10%)" — fals de la rebalansare: pentru orice clădire cu producție proprie, prețul și venitul sunt două butoane independente.
+>   2. **MINTER-ul „transformă toată valoarea în monezi"** — fals sub 100% focus pe monede: motorul plătește doar cota de monede și **aruncă restul**. Pe focus material, un Minter produce literalmente nimic. Linia și formula o spun acum, iar `valueLostPerDay` o măsoară rulând aceeași zi la 100% și scăzând.
+>   3. **Un câmp cu valoare negativă era pictat ca „modificat" deși jocul îl respinge și rămâne pe implicit.** Acum câmpul e roșu și scrie exact asta.
+> - **Nota care răspunde direct la reclamația inițială** („am schimbat producția de lemn și nu am văzut modificări"): o clădire nouă pornește la **100% focus pe monede**, deci o creștere de producție materială nu schimbă NIMIC până când jucătorul nu mută slider-ul. Scris în panou, lângă câmpurile de producție.
+> - `devHarness`: `?theme=light` pornește panoul în light. Comutarea temei la runtime lasă browserul cu proprietăți pe jumătate recalculate (fundal dark, text light) — auditul de contrast raporta așa două eșecuri inexistente.
+> - **Verificat în harness** (adminul e punct orb, e în spatele autentificării): 689 elemente cu toate cele 57 de formule deschise, **0 contraste sub 3:1 în AMBELE teme**, 0 overflow orizontal, și pe 375 px; ținta de atingere a comutatorului de formulă ridicată la 32 px. O rețetă dusă la 50 lemn/arc îi răspunde pe loc „crafting DESTROYS 24s 30c per item".
+> - 157 teste verzi, `tsc -b` + build verzi, harness-ul confirmat în afara build-ului de producție.
+
+---
+
 ## 📅 Session Log: August 2, 2026
 
 **Task Completed (Economia: productia devine axa proprie, iar craftul adauga valoare)**
