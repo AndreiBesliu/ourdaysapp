@@ -145,6 +145,17 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord revamp felia 5: de-emfaza nu mai ascunde informația)**
+> Prompt: „am salvat si merge, continua cu revamp-ul"
+> Model: Claude Opus 5
+> - Lista de observații UI era din 01.08 și patru felii trecuseră peste ea. Am verificat-o întâi (cinci verificări paralele + o pasă adversarială pe fiecare); **trei au picat cu argumente bune și le-am lăsat**: culoarea ramurilor din arborele de research, antetul, caseta de Momentum.
+> - **Constatarea care contează:** `opacity-70` compune și textul, și fundalul, deci pe un card blocat linia „Requires: ..." randa la **2,93:1** deși perechea declarată de tokenuri e 5,28:1. Auditul de contrast de la felia 1 măsura culori, iar opacitatea nu e o culoare — așa a trecut nevăzută. Acum de-emfaza stă în bordură punctată + titlu estompat. Același tratament la clădirile pe care nu ți le permiți.
+> - Tier-ul devine structură (separatoare „Tier 1/2/3" în loc de pastila de 10px); numele obiectului învinge acum butonul în cardurile de research și de piață; numărul zilei învinge titlul „Warlord".
+> - Două defecte văzute în browser: `SCRIPTORIUM` randa `<img>` fără `src` (iconiță ruptă pe clădirea care deschide toată cercetarea), și Overview încă descria regula dinainte de rebalansare.
+> - Verificat cu audit care ține cont de opacitate: **0 eșecuri în ambele teme**, desktop și 375px, 0 overflow, 0 imagini rupte. 157 teste verzi, `tsc -b` + build verzi.
+
+---
+
 **Task Completed (adminul Warlord își arată efectul și formula, pentru valorile care se editează)**
 > Prompt: „se pare ca valoarea pe care o trecusem deja pentru costul unei cladiri a fost actualizat, si se pare ca si productia de lemn a crescut. o sa vreau in admin sa se vada mai clar ce efect au si vor avea in viitor modificarile pe care le face. vreau sa se vada formula de calcul etc."
 > Model: Claude Opus 5
