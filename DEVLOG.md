@@ -145,6 +145,16 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: bucla de armată reparată și făcută onestă)**
+> Prompt: „vreau sa imbunatatim sistemul de recrutare si de training, plus ca nu functioneaza sistemul de creare unitati"
+> Model: Claude Opus 5
+> - **„Create Unit" arunca `TypeError` la fiecare apăsare, tăcut.** `UnitsTab` cerea `createUnit`, state-ul exportă `createUnitFromBarracks` — a trecut de typecheck fiindcă props-urile veneau prin `state as any`. Fiind SINGURA cale de la 0 unități la 1, armata nu putea fi pornită deloc. Am scos cast-ul, deci greșeala asta e acum eroare de compilare.
+> - Am parcurs bucla întreagă în browser și am găsit și restul: **recrutarea era gratis**, **fiecare refuz era tăcut** (doar în tabul Log, cu butonul activ), **rezervorul de soldatți antrenați era invizibil**, iar **echipamentul dispărea la creare** — o unitate plătită integral arăta „Ready 0/20".
+> - Unitatea își ține acum gearul (cu migrare pentru save-uri vechi și o gardă că nicio luptă nu se rebalansează tăcut), Replenish reactivat, Disband adăugat. Refuzurile trec prin același `evaluateCost` ca la Research și Clădiri: buton mort + ce lipsește, scris pe loc.
+> - 197 teste verzi — **15 noi în `logic/army.test.ts`, prima acoperire de vreodată pe traseul ăsta**, care e exact motivul pentru care un prop greșit a ajuns pe live.
+
+---
+
 **Task Completed (Warlord Research Felia 2: Studiul ca resursă produsă)**
 > Prompt: „continua" — următorul lucru din roadmap după ce revamp-ul s-a golit.
 > Model: Claude Opus 5
