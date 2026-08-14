@@ -145,6 +145,16 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: intensitatea de antrenament)**
+> Prompt: „cu care crezi ca e mai eficient" → „e ok"
+> Model: Claude Opus 5
+> - Antrenamentul de bază era o așteptare pură — aceleași zile, același rezultat, nicio alegere. Acum are **trei intensități**: RUSHED (rapid, o cincime nu termină), STANDARD (**identic cu azi**, deci save-urile și conversiile rămân neatinse), DRILLED (mai lung, soldă plătită în față, ies TRAINED).
+> - **Un lot promovează cel mult UN rang.** Testul scris ca regulă, nu ca număr, a prins gaura înainte de live: cu tehnologiile stivuite un lot ar fi scos ADVANCED direct, adică tot urcușul de ~22 de zile sărit dintr-o cumpărătură.
+> - **Două defecte reparate în același loc:** o conversie consuma ADVANCED+ și întorcea NOVICE (`takeByRank` se scria și nu se citea niciodată), iar sosirile nu diluau XP-ul slotului.
+> - Verificat în browser: ce scrie cardul înainte de apăsare (zile, soldă, câți ies, cu ce rang) e exact ce se întâmplă. 212 teste verzi.
+
+---
+
 **Task Completed (Warlord: bucla de armată reparată și făcută onestă)**
 > Prompt: „vreau sa imbunatatim sistemul de recrutare si de training, plus ca nu functioneaza sistemul de creare unitati"
 > Model: Claude Opus 5
