@@ -145,6 +145,21 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord Research Felia 2: Studiul ca resursă produsă)**
+> Prompt: „continua" — următorul lucru din roadmap după ce revamp-ul s-a golit.
+> Model: Claude Opus 5
+> - **Cercetarea nu mai e o coadă de așteptare, e un cost.** Un proiect număra zile și nu costa nimic din ce producea domeniul. Acum consumă **Studiu**, acumulat pe ramuri (Economy/Army/Campaign/Doctrine), produs de Scriptorium și de cât din producția zilnică a unei clădiri dedici studiului. Ziua rămâne unitatea de timp a jocului — venituri, upkeep, hrană, antrenament, campanie: neatinse.
+> - **Al treilea slider NU e o împărțire în trei.** Research ia prima felie din valoarea zilei; `focusCoinPct` împarte apoi ce rămâne, exact ca înainte. Un slider cu trei capete însumând 100 ar fi rescris tăcut intenția fiecărei clădiri din fiecare save existent. Câmp absent ⇒ 0 ⇒ comportament bit-identic (test de regresie explicit).
+> - **Calibrat ca sliderul să fie o decizie:** un Scriptorium singur e mai LENT decât vechiul ceas de zile la orice nivel (50/65/80 față de un ritm de referință de 100). Viteza veche e ceva ce cumperi deviind producție. Altfel sliderul ar fi doar un bonus.
+> - **Două lucruri din plan au picat la contactul cu codul:** (a) Scriptorium-ul **rămâne** în afara economiei de cupru — studiul lui e funcție de nivel, nu o valoare în cupru convertită; i-aș fi dat venit în monede la focus-ul implicit de 100%; (b) `GameConfig.init` rula **după** ce se hidratau feliile, deci migrarea unui proiect vechi ar fi folosit baseline-ul implicit în loc de cel din admin. Mutat.
+> - **Capcana care șterge stare în tăcere:** `hydrateResearch` enumeră câmpuri (spre deosebire de `hydrateCampaign`, care face spread), deci `pools` scris în localStorage ar fi dispărut la fiecare reload, fără nicio eroare. Adăugat acolo și testat direct, plus verificat live cu dublu reload.
+> - **Save-urile vechi se convertesc proporțional:** 2 zile din 3 ⇒ 2/3 din costul în Studiu. Verificat pe un save real forjat în forma pre-Studiu.
+> - **Adminul:** secțiune nouă „Study — the pace of research" cu linie de efect + formulă (prin `explainStudy`, care RULEAZĂ `studyPerDay`, nu redescrie formula); `days` reetichetat **Effort**; textul „Research already in progress keeps the days it was queued with" reparat — nu mai era adevărat.
+> - **Verificat în browser, nu doar la typecheck:** bara a promis Economy +56.4/zi, ziua a livrat exact +56.4; registrele se închid la virgulă (106,4 + 56,4 − 162,8 = 0); celelalte ramuri neatinse. 0 contraste sub 3:1 în ambele teme, în joc și în admin. Două „defecte" măsurate s-au dovedit artefacte ale panoului de browser cu lățime 0 — verificate a doua oară la 1280 real.
+> - 182 teste verzi (25 noi), `tsc -b` + build verzi în ambele proiecte. Fondurile și materialele dedicate rămân felia 2b.
+
+---
+
 **Task Completed (Warlord revamp felia 5: de-emfaza nu mai ascunde informația)**
 > Prompt: „am salvat si merge, continua cu revamp-ul"
 > Model: Claude Opus 5

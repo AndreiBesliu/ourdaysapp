@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   compareConfigs, explainBuilding, buildingFormula,
-  explainRecipe, explainBuildingCost, explainCompany, explainMission,
+  explainRecipe, explainBuildingCost, explainCompany, explainMission, explainStudy,
 } from '@warlord/logic/explain';
 import { fmtCopper, type BuildingType, type Rank, type SoldierType } from '@warlord/logic/types';
 import type { Difficulty } from '@warlord/logic/combat/types';
@@ -164,6 +164,33 @@ export function CompanyEffect({
           {count} {rank.toLowerCase()} → <span className="font-mono text-wl-ink">{fmtCopper(c.copperPerDay)}</span>/day
           {' '}and <span className="font-mono text-wl-ink">{c.foodPerDay}</span> food/day
         </span>
+      }
+    />
+  );
+}
+
+/** What the study rates mean: the pace a Scriptorium sets, and what a tech costs at it. */
+export function StudyEffect({
+  scriptoriumLevel, config,
+}: { scriptoriumLevel: number; config?: GameConfigOverrides | null }) {
+  const e = useMemo(() => explainStudy(scriptoriumLevel, config), [scriptoriumLevel, config]);
+  const slow = e.examples.find((x) => x.days === 3);
+  return (
+    <Explain
+      formula={e.lines}
+      summary={
+        <>
+          <span>
+            a Scriptorium L{scriptoriumLevel} alone →{' '}
+            <span className="font-mono text-wl-ink">{e.perBranch.ECONOMY}</span> study/day to every branch
+          </span>
+          {slow && (
+            <span>
+              · an Effort-3 tech takes <span className="font-mono text-wl-ink">{slow.daysAtPace ?? '∞'}</span> days
+              on that alone
+            </span>
+          )}
+        </>
       }
     />
   );

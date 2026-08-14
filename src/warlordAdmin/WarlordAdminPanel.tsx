@@ -3,13 +3,13 @@ import { auth } from '../firebase';
 import { loadWarlordConfigFull, saveWarlordConfig, pruneOverrides, ConfigConflictError } from './configApi';
 import type { Timestamp } from 'firebase/firestore';
 import type { GameConfigOverrides } from '@warlord/logic/config';
-import { DEFAULT_TRAINING, DEFAULT_TICK } from '@warlord/logic/config';
+import { DEFAULT_TRAINING, DEFAULT_TICK, DEFAULT_STUDY } from '@warlord/logic/config';
 import {
   BuildingCostCopper, ResourceBuildingCosts, UPKEEP_BASE, UPKEEP_RANK_MULT, FOOD_BASE,
   BUILDING_OUTPUT_VALUE, ManufacturingRecipes,
 } from '@warlord/logic/economy';
 import { fmtCopper, type Rank } from '@warlord/logic/types';
-import { PendingEffect, BuildingEffect, RecipeEffect, CostEffect, CompanyEffect, MissionEffect } from './EffectPreview';
+import { PendingEffect, BuildingEffect, RecipeEffect, CostEffect, CompanyEffect, MissionEffect, StudyEffect } from './EffectPreview';
 import { DEFAULT_TECHS, BRANCH_LABEL } from '@warlord/logic/research/catalog';
 import type { TechDef } from '@warlord/logic/research/catalog';
 import { BUFF_DEFS } from '@warlord/logic/research/momentum';
@@ -116,6 +116,7 @@ export default function WarlordAdminPanel({
   const [companySize, setCompanySize] = useState(20);
   const [companyRank, setCompanyRank] = useState<Rank>('TRAINED');
   const [deployStrength, setDeployStrength] = useState(100);
+  const [scriptoriumLevel, setScriptoriumLevel] = useState(1);
 
   useEffect(() => {
     let alive = true;
@@ -274,10 +275,23 @@ export default function WarlordAdminPanel({
     });
   }
 
+  function setStudy(key: 'baselinePerDay' | 'scriptoriumPerLevel' | 'poolCap' | 'copperPerStudy', v: number | undefined) {
+    setOv((prev) => {
+      const t: Record<string, unknown> = { ...(prev.study ?? {}) };
+      if (v === undefined) delete t[key]; else t[key] = v;
+      const next: Record<string, unknown> = { ...prev };
+      if (Object.keys(t).length === 0) delete next.study;
+      else next.study = t;
+      return next as GameConfigOverrides;
+    });
+  }
+
   function resetSection(s: Section) {
     setOv((prev) => {
       const next = { ...prev };
-      if (s === 'TECHS') delete next.catalog;
+      // Study lives with the techs it paces, not with the economy that produces it —
+      // resetting prices should not silently reset how long research takes.
+      if (s === 'TECHS') { delete next.catalog; delete next.study; }
       if (s === 'MOMENTUM') delete next.buffs;
       if (s === 'CAMPAIGN') delete next.missions;
       if (s === 'ECONOMY') {
@@ -367,9 +381,10 @@ export default function WarlordAdminPanel({
         <p className="font-semibold">Global, live configuration</p>
         <p className="mt-1">
           One shared world means one set of numbers: saving here changes the game for <b>every</b> player
-          the next time they open it. Research already in progress keeps the days it was queued with;
-          new prices and durations apply from the next start. Effects of <b>already unlocked</b> techs
-          are read from the current values, so a nerf applies retroactively.
+          the next time they open it. Research already in progress keeps the study total it was
+          started with, so a retune cannot move the finish line under a player mid-project; new costs
+          apply from the next start. Effects of <b>already unlocked</b> techs are read from the current
+          values, so a nerf applies retroactively.
         </p>
       </div>
 
@@ -646,6 +661,34 @@ export default function WarlordAdminPanel({
       {/* ── TECHS ── */}
       {section === 'TECHS' && (
         <div className="space-y-4">
+          <section className="rounded border border-wl-line bg-wl-panel p-3">
+            <h3 className="font-bold mb-2">Study — the pace of research</h3>
+            <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
+              <NumField label="Reference pace / day" def={DEFAULT_STUDY.baselinePerDay} value={ov.study?.baselinePerDay} onChange={(v) => setStudy('baselinePerDay', v)} min={1} />
+              <NumField label="Scriptorium / level" def={DEFAULT_STUDY.scriptoriumPerLevel} value={ov.study?.scriptoriumPerLevel} onChange={(v) => setStudy('scriptoriumPerLevel', v)} min={0} />
+              <NumField label="Copper per study point" def={DEFAULT_STUDY.copperPerStudy} value={ov.study?.copperPerStudy} onChange={(v) => setStudy('copperPerStudy', v)} min={1} />
+              <NumField label="Branch bank cap" def={DEFAULT_STUDY.poolCap} value={ov.study?.poolCap} onChange={(v) => setStudy('poolCap', v)} min={0} />
+            </div>
+            <label className="mt-3 flex items-center gap-2 text-xs text-wl-muted">
+              Show the pace of a Scriptorium at level
+              <select
+                value={scriptoriumLevel}
+                onChange={(e) => setScriptoriumLevel(Number(e.target.value))}
+                className="px-2 py-1 min-h-[32px] rounded border border-wl-line bg-wl-panel text-wl-ink"
+              >
+                <option value={1}>1</option><option value={2}>2</option><option value={3}>3</option>
+              </select>
+            </label>
+            <div className="mt-1"><StudyEffect scriptoriumLevel={scriptoriumLevel} config={ov} /></div>
+            <p className="mt-2 text-xs text-wl-muted">
+              A tech's <b>Effort</b> below is no longer elapsed time — it is multiplied by the reference
+              pace to get what the tech costs in Study. A Scriptorium is deliberately slower than that
+              pace on its own: the rest comes from buildings the player dedicates to study, which is the
+              decision the whole system exists for. Raising the Scriptorium toward the reference pace
+              makes research free again.
+            </p>
+          </section>
+
           {DEFAULT_TECHS.map((t) => {
             const o = ov.catalog?.techs?.[t.id] ?? {};
             const disabled = (ov.catalog?.disabled ?? []).includes(t.id);
@@ -663,7 +706,7 @@ export default function WarlordAdminPanel({
                 <p className="text-xs text-wl-muted mb-2">{t.desc}</p>
                 <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
                   <NumField label="Cost (copper)" def={t.costCopper} value={o.costCopper} onChange={(v) => setTech(t.id, { costCopper: v })} hint={fmtCopper(o.costCopper ?? t.costCopper)} />
-                  <NumField label="Days" def={t.days} value={o.days} onChange={(v) => setTech(t.id, { days: v })} />
+                  <NumField label="Effort (days at pace)" def={t.days} value={o.days} onChange={(v) => setTech(t.id, { days: v })} min={0} />
                   {effKeys.map((k) => (
                     <NumField
                       key={k}
