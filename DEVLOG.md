@@ -145,6 +145,16 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: capacitatea cazărmii)**
+> Prompt: „continua"
+> Model: Claude Opus 5
+> - Cazarma nu avea fund: puteai recruta la nesfârșit. Acum oamenii ocupă loc — **recruți + soldatți antrenați**, iar cei intrați într-o unitate NU se numără, fiindcă sunt pe teren. Asta face din „formează unități" supapa, și e invariantul fixat cu test.
+> - **Plafonul se aplică doar la recrutare**, dintr-o observație: antrenamentul și conversiile sunt nule la total (N recruți → N antrenați). Verificat și live.
+> - A închis **ultimul refuz tăcut din joc** — costul de recrutare se refuza încă doar în tabul Log, fiindcă verificarea exista dar formularul nu era legat la ea.
+> - Verificat în browser: 80/80 ⇒ buton mort cu motivul; lot terminat ⇒ tot 80; format o unitate ⇒ 60/80 și butonul reînvie. 223 teste verzi.
+
+---
+
 **Task Completed (Warlord: intensitatea de antrenament)**
 > Prompt: „cu care crezi ca e mai eficient" → „e ok"
 > Model: Claude Opus 5
