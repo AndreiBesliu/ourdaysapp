@@ -40,8 +40,11 @@ regula aceea a dispărut.
 
 ### ⚠️ Copia motorului de luptă din `functions/`
 PvP-ul e server-authoritative, deci Cloud Functions rulează ACELAȘI motor pur:
-`functions/src/warlordCombat/` conține byte-identic `logic/types.ts` +
-`logic/combat/{types,rng,stats,engine,pvp}.ts` din joc. E singura duplicare rămasă și e
+`functions/src/warlordCombat/` conține byte-identic
+`logic/combat/{types,rng,stats,engine,pvp}.ts` din joc. **`logic/types.ts` NU e byte-identic și
+nu trebuie să fie** — a divergat de mult, inert: serverul importă din el exact 7 simboluri
+(`SoldierType`, `SoldierTypes`, `Rank`, `Ranks`, `RankNumber`, `UnitBucket`, `Weapon`) și doar
+alea trebuie să rămână identice. `Unit` e declarat acolo dar nu-l importă nimic. E singura duplicare rămasă și e
 intenționată (alt runtime, alt tsconfig). Orice modificare la aceste fișiere se aplică în
 AMBELE locuri (`diff -q`), apoi `firebase deploy --only functions`. `army.ts` / `ai.ts` /
 `enemies.ts` **nu** fac parte din copia server.

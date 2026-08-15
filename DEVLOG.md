@@ -145,6 +145,17 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: legiunile — formațiuni care supraviețuiesc cohortelor)**
+> Prompt: „vreau ca fiecare unitate sa capete identitate ... legiunile Romane ... mai aproape de 40k", apoi corectura „legiunile nu se absorb, vreau un sistem similar cu Total War Rome 2"
+> Model: Claude Opus 5
+> - Legiunea e **formațiunea care conține unități**, ca armata din Rome 2 — deci compoziția mixtă vine gratis și **`Unit` nu primește niciun câmp**. Motorul de luptă și **copia lui din `functions/src/warlordCombat/` rămân neatinse**: niciun deploy de functions.
+> - Apartenența e o listă de id-uri **rezolvată la citire**, tocmai pentru că write-back-ul din PvP (`PvpBattle.tsx` → `writeLocalArmy`) rescrie armata salvată pe lângă state-ul jocului. Verificat ștergând o unitate direct din blob: registrele o mai numesc, ecranul nu.
+> - Plafon de 12 cohorte, legat de `PVP_MAX_COMBATANTS` (serverul refuză al 13-lea) și de defectul de stivuire al campaniei peste 24.
+> - **Corectat CLAUDE.md în ambele repo-uri:** „`logic/types.ts` byte-identic cu copia server" era fals de trei felii încoace și inert. Contractul real e 7 simboluri de combat.
+> - 282 teste verzi; 0 contraste sub prag în ambele teme și pe 375px; 0 ținte mici; 0 input-uri fără etichetă.
+
+---
+
 **Task Completed (Warlord: de unde vin oamenii + secțiunea Army din admin)**
 > Prompt: „ok, continua" (ultima din cele patru mecanici de adâncime agreate pentru armată)
 > Model: Claude Opus 5
