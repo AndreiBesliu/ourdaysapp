@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "our-days-2a939"
+    "default": "our-days-2a939",
+    "live": "our-days-2a939"
   }
 }
