@@ -145,6 +145,17 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: zona de armată devine un singur loc)**
+> Prompt: „vreau un UI mai frumos si o tranzitie mai smooth intre tab-urile ce tin de soldati si razboi"
+> Model: Claude Opus 5
+> - Barracks + Units + Campaign → **un tab „Army" cu cinci secțiuni** și sub-navigare mereu vizibilă. De la patru clicuri (și tot ce tastasei pierdut) la **un clic, cu state-ul păstrat**.
+> - **Zonele invizibile de click au dispărut fiindcă erau stricate:** două se suprapuneau și își furau clicurile, un tooltip se tăia pe telefon, niciuna nu era accesibilă la tastatură sau touch. Arta a rămas ca banner.
+> - **Zero enum-uri brute pe ecran** (verificat prin scanarea textului randat): un singur formator care folosește numele deja scrise în Registry.
+> - Reparate: `checkCreateUnit` scris și neimportat de nimeni, câmpurile fără plafon, gaura de auto-buy, formularele moarte cu cinci rânduri goale.
+> - **Mișcarea animă doar transform:** un fade de la 0 ținea secțiunea invizibilă când animatia nu progresa — prins de audit ca 41 de elemente la 1:1. 223 teste verzi, 0 contraste sub prag în ambele teme și pe 375px.
+
+---
+
 **Task Completed (Warlord: capacitatea cazărmii)**
 > Prompt: „continua"
 > Model: Claude Opus 5
