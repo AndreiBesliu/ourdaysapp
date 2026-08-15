@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import {
   compareConfigs, explainBuilding, buildingFormula,
   explainRecipe, explainBuildingCost, explainCompany, explainMission, explainStudy,
+  explainIntensity, explainCapacity, explainRecruitSources,
 } from '@warlord/logic/explain';
+import type { Intensity } from '@warlord/logic/batches';
 import { fmtCopper, type BuildingType, type Rank, type SoldierType } from '@warlord/logic/types';
 import type { Difficulty } from '@warlord/logic/combat/types';
 import type { GameConfigOverrides } from '@warlord/logic/config';
@@ -193,6 +195,87 @@ export function StudyEffect({
         </>
       }
     />
+  );
+}
+
+// The three below are the army half of the panel. `explainIntensity` and `explainCapacity`
+// were written when those mechanics shipped and then imported by nothing at all — the two
+// config branches they explain were editable only through the raw JSON tab. Wiring them is
+// half of what this section is for.
+
+/** Each training intensity, side by side: what it costs and what walks out. */
+export function IntensityEffect({
+  level, qty, xpMult, config,
+}: { level: number; qty: number; xpMult: number; config?: GameConfigOverrides | null }) {
+  const rows = useMemo(() => explainIntensity(level, qty, xpMult, config), [level, qty, xpMult, config]);
+  return (
+    <div className="space-y-1">
+      {rows.map((r) => (
+        <Explain
+          key={r.key}
+          formula={r.lines}
+          summary={
+            <>
+              <span className="w-24 shrink-0 font-semibold text-wl-ink">{nice(r.key)}</span>
+              <span><span className="font-mono text-wl-ink">{r.days}</span>d → <span className="font-mono text-wl-ink">{r.rank}</span></span>
+              {r.survivors < qty && <span className="text-wl-bad">{qty - r.survivors} wash out</span>}
+              {r.payCopper > 0 && <span>drill pay <span className="font-mono">{fmtCopper(r.payCopper)}</span></span>}
+            </>
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+/** How many men the barracks quarters, per level. */
+export function CapacityEffect({ config }: { config?: GameConfigOverrides | null }) {
+  const c = useMemo(() => explainCapacity(config), [config]);
+  return (
+    <Explain
+      formula={c.lines}
+      summary={
+        <span>
+          {c.perLevel.map((p) => (
+            <span key={p.level} className="mr-3">
+              L{p.level} <span className="font-mono text-wl-ink">{p.capacity}</span>
+            </span>
+          ))}
+        </span>
+      }
+    />
+  );
+}
+
+/** Each recruit source: the price, the head start, and what the ceiling does to it. */
+export function RecruitSourceEffect({
+  qty, intensity, xpMult, config,
+}: { qty: number; intensity: Intensity; xpMult: number; config?: GameConfigOverrides | null }) {
+  const rows = useMemo(
+    () => explainRecruitSources(qty, intensity, xpMult, config),
+    [qty, intensity, xpMult, config],
+  );
+  return (
+    <div className="space-y-1">
+      {rows.map((r) => (
+        <Explain
+          key={r.key}
+          formula={r.lines}
+          summary={
+            <>
+              <span className="w-28 shrink-0 font-semibold text-wl-ink">{nice(r.key)}</span>
+              <span><span className="font-mono text-wl-ink">{fmtCopper(r.perManCopper)}</span>/man</span>
+              <span>
+                {r.startingXp > 0
+                  ? <>head start <span className="font-mono text-wl-ink">{r.startingXp} XP</span></>
+                  : 'untrained'}
+              </span>
+              <span>→ <span className="font-mono text-wl-ink">{r.rankOutOfBarracks}</span></span>
+            </>
+          }
+        />
+      ))}
+    </div>
   );
 }
 

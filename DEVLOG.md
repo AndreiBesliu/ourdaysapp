@@ -145,6 +145,17 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: de unde vin oamenii + secțiunea Army din admin)**
+> Prompt: „ok, continua" (ultima din cele patru mecanici de adâncime agreate pentru armată)
+> Model: Claude Opus 5
+> - Trei surse de recruți (Levy / Volunteers / Mercenaries) care diferă la **preț și avans**, legate de un câmp care exista de la început și pe care **nu-l citea nimeni**.
+> - **Regula:** rangul se plătește în timp, niciodată în bani — plafon în getter, deci nici adminul nu-l poate încălca.
+> - Reparat un defect vechi de aritmetică: rezervorul re-deriva și trunchia media la fiecare scriere, **pierzând ~1/6 din XP-ul plătit** la amestecuri. Migrare din save-urile vechi, verificată pe viu.
+> - **Admin: secțiune nouă „Army"** care consumă `explainIntensity` și `explainCapacity` — scrise când au apărut mecanicile și rămase cod mort, cu `intensity`/`barracks` editabile doar din tabul JSON. Reparată și enumerarea din `resetSection` (o secțiune lipsă supraviețuia tăcut unui „Reset").
+> - 246 teste verzi; 0 contraste sub prag în ambele teme și pe 375px; cardul de antrenament și tick-ul livrează identic (verificat 12 zile pe viu).
+
+---
+
 **Task Completed (Warlord: zona de armată devine un singur loc)**
 > Prompt: „vreau un UI mai frumos si o tranzitie mai smooth intre tab-urile ce tin de soldati si razboi"
 > Model: Claude Opus 5

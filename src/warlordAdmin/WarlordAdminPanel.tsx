@@ -3,13 +3,20 @@ import { auth } from '../firebase';
 import { loadWarlordConfigFull, saveWarlordConfig, pruneOverrides, ConfigConflictError } from './configApi';
 import type { Timestamp } from 'firebase/firestore';
 import type { GameConfigOverrides } from '@warlord/logic/config';
-import { DEFAULT_TRAINING, DEFAULT_TICK, DEFAULT_STUDY } from '@warlord/logic/config';
+import {
+  DEFAULT_TRAINING, DEFAULT_TICK, DEFAULT_STUDY,
+  DEFAULT_RECRUIT_COST, DEFAULT_RECRUIT_SOURCES, DEFAULT_INTENSITY, DEFAULT_BARRACKS,
+} from '@warlord/logic/config';
+import { PROMOTE_AT } from '@warlord/logic/units';
 import {
   BuildingCostCopper, ResourceBuildingCosts, UPKEEP_BASE, UPKEEP_RANK_MULT, FOOD_BASE,
   BUILDING_OUTPUT_VALUE, ManufacturingRecipes,
 } from '@warlord/logic/economy';
 import { fmtCopper, type Rank } from '@warlord/logic/types';
-import { PendingEffect, BuildingEffect, RecipeEffect, CostEffect, CompanyEffect, MissionEffect, StudyEffect } from './EffectPreview';
+import {
+  PendingEffect, BuildingEffect, RecipeEffect, CostEffect, CompanyEffect, MissionEffect, StudyEffect,
+  IntensityEffect, CapacityEffect, RecruitSourceEffect,
+} from './EffectPreview';
 import { DEFAULT_TECHS, BRANCH_LABEL } from '@warlord/logic/research/catalog';
 import type { TechDef } from '@warlord/logic/research/catalog';
 import { BUFF_DEFS } from '@warlord/logic/research/momentum';
@@ -21,7 +28,7 @@ import { MISSION_PRESETS } from '@warlord/logic/combat/enemies';
 // an admin deliberately changed. Access is the OurDaysApp admin role (admins/{uid});
 // Firestore rules enforce the write, this panel only guards the UI.
 
-type Section = 'TECHS' | 'MOMENTUM' | 'ECONOMY' | 'CAMPAIGN' | 'JSON';
+type Section = 'TECHS' | 'MOMENTUM' | 'ECONOMY' | 'ARMY' | 'CAMPAIGN' | 'JSON';
 
 const EFFECT_LABELS: Record<keyof EffectDelta, string> = {
   prodMult: 'Production ×',
@@ -117,6 +124,11 @@ export default function WarlordAdminPanel({
   const [companyRank, setCompanyRank] = useState<Rank>('TRAINED');
   const [deployStrength, setDeployStrength] = useState(100);
   const [scriptoriumLevel, setScriptoriumLevel] = useState(1);
+  // Army previews. Kept up here with the other hooks on purpose: this component returns
+  // early while the configuration loads, and a hook declared below that return would take
+  // the whole panel down with React #310 — green typecheck, green tests, blank admin.
+  const [batchSize, setBatchSize] = useState(20);
+  const [previewXpMult, setPreviewXpMult] = useState(1);
 
   useEffect(() => {
     let alive = true;
@@ -286,6 +298,45 @@ export default function WarlordAdminPanel({
     });
   }
 
+  // Hand-enumerated, and therefore the same trap `hydrateResearch` carries: a branch that
+  // is missing from every clause below survives "Reset this section" in silence. `intensity`
+  // and `barracks` were exactly that until the Army section existed to own them.
+  // Keyed branches (one entry per source / per intensity), same delete-when-empty shape as
+  // the flat ones above so an emptied group leaves no husk in the stored document.
+  function setKeyed(
+    branch: 'recruitSources' | 'intensity',
+    key: string,
+    field: string,
+    v: number | undefined,
+  ) {
+    setOv((prev) => {
+      const all: Record<string, Record<string, unknown>> = { ...((prev[branch] ?? {}) as Record<string, Record<string, unknown>>) };
+      const one: Record<string, unknown> = { ...(all[key] ?? {}) };
+      if (v === undefined) delete one[field]; else one[field] = v;
+      if (Object.keys(one).length === 0) delete all[key]; else all[key] = one;
+      const next: Record<string, unknown> = { ...prev };
+      if (Object.keys(all).length === 0) delete next[branch];
+      else next[branch] = all;
+      return next as GameConfigOverrides;
+    });
+  }
+
+  const setRecruitSource = (key: string, field: 'costMult' | 'startingXp', v: number | undefined) =>
+    setKeyed('recruitSources', key, field, v);
+  const setIntensity = (key: string, field: 'dayMult' | 'payPerSoldier' | 'xpGranted' | 'washoutPct', v: number | undefined) =>
+    setKeyed('intensity', key, field, v);
+
+  function setBarracks(key: 'capacityBase' | 'capacityPerLevel', v: number | undefined) {
+    setOv((prev) => {
+      const t: Record<string, unknown> = { ...(prev.barracks ?? {}) };
+      if (v === undefined) delete t[key]; else t[key] = v;
+      const next: Record<string, unknown> = { ...prev };
+      if (Object.keys(t).length === 0) delete next.barracks;
+      else next.barracks = t;
+      return next as GameConfigOverrides;
+    });
+  }
+
   function resetSection(s: Section) {
     setOv((prev) => {
       const next = { ...prev };
@@ -294,10 +345,14 @@ export default function WarlordAdminPanel({
       if (s === 'TECHS') { delete next.catalog; delete next.study; }
       if (s === 'MOMENTUM') delete next.buffs;
       if (s === 'CAMPAIGN') delete next.missions;
+      if (s === 'ARMY') {
+        delete next.recruitCost; delete next.recruitSources;
+        delete next.barracks; delete next.intensity; delete next.training;
+      }
       if (s === 'ECONOMY') {
         delete next.buildingCost; delete next.buildingResourceCost; delete next.resourceBaseValue;
         delete next.buildingOutputValue; delete next.recipes;
-        delete next.upkeepBase; delete next.upkeepRankMult; delete next.foodBase; delete next.training;
+        delete next.upkeepBase; delete next.upkeepRankMult; delete next.foodBase;
         delete next.tick;
       }
       return next;
@@ -372,7 +427,7 @@ export default function WarlordAdminPanel({
   }
 
   const SECTIONS: [Section, string][] = [
-    ['ECONOMY', 'Economy'], ['TECHS', 'Techs'], ['MOMENTUM', 'Momentum'], ['CAMPAIGN', 'Campaign'], ['JSON', 'JSON'],
+    ['ECONOMY', 'Economy'], ['ARMY', 'Army'], ['TECHS', 'Techs'], ['MOMENTUM', 'Momentum'], ['CAMPAIGN', 'Campaign'], ['JSON', 'JSON'],
   ];
 
   return (
@@ -615,19 +670,6 @@ export default function WarlordAdminPanel({
           </section>
 
           <section>
-            <h3 className="font-bold mb-2">Training queue</h3>
-            <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
-              <NumField label="Base days (L1)" def={DEFAULT_TRAINING.baseDays} value={ov.training?.baseDays} onChange={(v) => setTraining('baseDays', v)} />
-              <NumField label="Minimum days" def={DEFAULT_TRAINING.minDays} value={ov.training?.minDays} onChange={(v) => setTraining('minDays', v)} />
-              <NumField label="Max slots" def={DEFAULT_TRAINING.maxSlots} value={ov.training?.maxSlots} onChange={(v) => setTraining('maxSlots', v)} />
-            </div>
-            <p className="mt-2 text-xs text-wl-muted">
-              A batch takes <code>max(baseDays − (level − 1), minDays)</code> days; slots are
-              <code> min(level + 1, maxSlots)</code>. Research modifiers apply on top.
-            </p>
-          </section>
-
-          <section>
             <h3 className="font-bold mb-2">Building resource costs</h3>
             <div className="space-y-2">
               {(Object.keys(ResourceBuildingCosts) as (keyof typeof ResourceBuildingCosts)[]).map((t) => {
@@ -654,6 +696,118 @@ export default function WarlordAdminPanel({
                 );
               })}
             </div>
+          </section>
+        </div>
+      )}
+
+      {/* ── ARMY ── */}
+      {/* Everything from "take on a man" to "he walks out of the barracks". Three of these
+          four branches had no form at all until now — they were reachable only by hand-editing
+          the JSON tab, which is why the two explain functions written for them sat unused. */}
+      {section === 'ARMY' && (
+        <div className="space-y-6">
+          <label className="flex flex-wrap items-center gap-2 text-xs text-wl-muted">
+            Show a batch of
+            <input
+              type="number"
+              min={1}
+              value={batchSize}
+              onChange={(e) => setBatchSize(Math.max(1, Number(e.target.value) || 1))}
+              className="w-20 px-2 py-1 min-h-[32px] rounded border border-wl-line bg-wl-panel text-wl-ink"
+            />
+            men at barracks level
+            <select
+              value={previewLevel}
+              onChange={(e) => setPreviewLevel(Number(e.target.value))}
+              className="px-2 py-1 min-h-[32px] rounded border border-wl-line bg-wl-panel text-wl-ink"
+            >
+              {[1, 2, 3, 4, 5].map((l) => <option key={l} value={l}>{l}</option>)}
+            </select>
+            with training research at ×
+            <input
+              type="number"
+              min={1}
+              step="0.05"
+              value={previewXpMult}
+              onChange={(e) => setPreviewXpMult(Math.max(1, Number(e.target.value) || 1))}
+              className="w-20 px-2 py-1 min-h-[32px] rounded border border-wl-line bg-wl-panel text-wl-ink"
+            />
+          </label>
+
+          <section>
+            <h3 className="font-bold mb-2">Recruiting</h3>
+            <NumField label="Base price / man" def={DEFAULT_RECRUIT_COST} value={ov.recruitCost} onChange={(v) => setOv((p) => { const n = { ...p }; if (v === undefined) delete n.recruitCost; else n.recruitCost = v; return n; })} min={0} hint={fmtCopper(ov.recruitCost ?? DEFAULT_RECRUIT_COST)} />
+            <div className="mt-3 space-y-3">
+              {Object.keys(DEFAULT_RECRUIT_SOURCES).map((key) => (
+                <div key={key} className="rounded border border-wl-line bg-wl-panel p-2 space-y-1">
+                  <div className="text-sm font-semibold">{key.replace(/_/g, ' ')}</div>
+                  <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
+                    <NumField label="Price ×" def={DEFAULT_RECRUIT_SOURCES[key].costMult} value={ov.recruitSources?.[key]?.costMult} onChange={(v) => setRecruitSource(key, 'costMult', v)} min={0} />
+                    <NumField label="Starting XP" def={DEFAULT_RECRUIT_SOURCES[key].startingXp} value={ov.recruitSources?.[key]?.startingXp} onChange={(v) => setRecruitSource(key, 'startingXp', v)} min={0} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2"><RecruitSourceEffect qty={batchSize} intensity="STANDARD" xpMult={previewXpMult} config={ov} /></div>
+            <p className="mt-2 text-xs text-wl-muted">
+              Starting XP is <b>capped below {PROMOTE_AT.NOVICE}</b> by the game, whatever you type
+              here: at or above the first promotion threshold a source would hand over a whole rank
+              for copper alone — no extra days, no drill pay, no wash-out — and rank is the one thing
+              this game only ever sells for time. Raise it past the cap and the effect line above
+              simply stops moving. Price is where the tiers are meant to differ.
+            </p>
+          </section>
+
+          <section>
+            <h3 className="font-bold mb-2">Training queue</h3>
+            <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
+              <NumField label="Base days (L1)" def={DEFAULT_TRAINING.baseDays} value={ov.training?.baseDays} onChange={(v) => setTraining('baseDays', v)} />
+              <NumField label="Minimum days" def={DEFAULT_TRAINING.minDays} value={ov.training?.minDays} onChange={(v) => setTraining('minDays', v)} />
+              <NumField label="Max slots" def={DEFAULT_TRAINING.maxSlots} value={ov.training?.maxSlots} onChange={(v) => setTraining('maxSlots', v)} />
+            </div>
+            <p className="mt-2 text-xs text-wl-muted">
+              A batch takes <code>max(baseDays − (level − 1), minDays)</code> days; slots are
+              <code> min(level + 1, maxSlots)</code>. Research modifiers apply on top.
+            </p>
+          </section>
+
+          <section>
+            <h3 className="font-bold mb-2">Training intensity</h3>
+            <div className="space-y-3">
+              {Object.keys(DEFAULT_INTENSITY).map((key) => (
+                <div key={key} className="rounded border border-wl-line bg-wl-panel p-2 space-y-1">
+                  <div className="text-sm font-semibold">{key.replace(/_/g, ' ')}</div>
+                  <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
+                    <NumField label="Days ×" def={DEFAULT_INTENSITY[key].dayMult} value={ov.intensity?.[key]?.dayMult} onChange={(v) => setIntensity(key, 'dayMult', v)} min={0.1} />
+                    <NumField label="Drill pay / soldier" def={DEFAULT_INTENSITY[key].payPerSoldier} value={ov.intensity?.[key]?.payPerSoldier} onChange={(v) => setIntensity(key, 'payPerSoldier', v)} min={0} />
+                    <NumField label="XP granted" def={DEFAULT_INTENSITY[key].xpGranted} value={ov.intensity?.[key]?.xpGranted} onChange={(v) => setIntensity(key, 'xpGranted', v)} min={0} />
+                    <NumField label="Wash-out %" def={DEFAULT_INTENSITY[key].washoutPct} value={ov.intensity?.[key]?.washoutPct} onChange={(v) => setIntensity(key, 'washoutPct', v)} min={0} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2"><IntensityEffect level={previewLevel} qty={batchSize} xpMult={previewXpMult} config={ov} /></div>
+            <p className="mt-2 text-xs text-wl-muted">
+              STANDARD is the neutral member — ×1 days, no pay, no XP, no wash-out — so a batch that
+              names no intensity behaves exactly as it always did. Wash-out destroys the lost men's
+              <b> equipment</b> as well, which is deliberate: it is what makes rushing men you paid a
+              premium for cost more than rushing levies. However far the XP is pushed here, a batch
+              still promotes at most one rank; the surplus is discarded and the recruit screen says so.
+            </p>
+          </section>
+
+          <section>
+            <h3 className="font-bold mb-2">Barracks capacity</h3>
+            <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
+              <NumField label="Places at L1" def={DEFAULT_BARRACKS.capacityBase} value={ov.barracks?.capacityBase} onChange={(v) => setBarracks('capacityBase', v)} min={1} />
+              <NumField label="Places per level" def={DEFAULT_BARRACKS.capacityPerLevel} value={ov.barracks?.capacityPerLevel} onChange={(v) => setBarracks('capacityPerLevel', v)} min={0} />
+            </div>
+            <div className="mt-2"><CapacityEffect config={ov} /></div>
+            <p className="mt-2 text-xs text-wl-muted">
+              Recruits and trained soldiers waiting to be formed take up room; soldiers already in a
+              unit are in the field and do not. Only recruiting can hit the ceiling — training and
+              conversion move men about without adding any.
+            </p>
           </section>
         </div>
       )}
