@@ -6,11 +6,12 @@ import type { GameConfigOverrides } from '@warlord/logic/config';
 import {
   DEFAULT_TRAINING, DEFAULT_TICK, DEFAULT_STUDY,
   DEFAULT_RECRUIT_COST, DEFAULT_RECRUIT_SOURCES, DEFAULT_INTENSITY, DEFAULT_BARRACKS,
-  DEFAULT_TRADITION_RULES, TRADITION_MORALE_CAP,
+  DEFAULT_TRADITION_RULES,
 } from '@warlord/logic/config';
 import { PROMOTE_AT } from '@warlord/logic/units';
-import { TRADITIONS, describeTradition } from '@warlord/logic/tradition';
-import { XP_CAP } from '@warlord/logic/combat/stats';
+import { EFFECT_PRIMS } from '@warlord/logic/traditionPalette';
+import { DUTIES } from '@warlord/logic/duty';
+import { DEFAULT_LEGION_DEEDS } from '@warlord/logic/config';
 import {
   BuildingCostCopper, ResourceBuildingCosts, UPKEEP_BASE, UPKEEP_RANK_MULT, FOOD_BASE,
   BUILDING_OUTPUT_VALUE, ManufacturingRecipes,
@@ -307,7 +308,7 @@ export default function WarlordAdminPanel({
   // Keyed branches (one entry per source / per intensity), same delete-when-empty shape as
   // the flat ones above so an emptied group leaves no husk in the stored document.
   function setKeyed(
-    branch: 'recruitSources' | 'intensity' | 'traditions',
+    branch: 'recruitSources' | 'intensity' | 'duties',
     key: string,
     field: string,
     v: number | undefined,
@@ -328,8 +329,19 @@ export default function WarlordAdminPanel({
     setKeyed('recruitSources', key, field, v);
   const setIntensity = (key: string, field: 'dayMult' | 'payPerSoldier' | 'xpGranted' | 'washoutPct', v: number | undefined) =>
     setKeyed('intensity', key, field, v);
-  const setTradition = (key: string, field: 'moraleBonus' | 'xpMult', v: number | undefined) =>
-    setKeyed('traditions', key, field, v);
+  const setDuty = (key: string, v: number | undefined) =>
+    setKeyed('duties', key, 'copperPerSoldier', v);
+
+  function setLegionDeeds(key: 'minSharePct' | 'heldTheLinePct' | 'killsPerBattleCap' | 'levelBase' | 'levelCurve' | 'maxLevel', v: number | undefined) {
+    setOv((prev) => {
+      const t: Record<string, unknown> = { ...(prev.legionDeeds ?? {}) };
+      if (v === undefined) delete t[key]; else t[key] = v;
+      const next: Record<string, unknown> = { ...prev };
+      if (Object.keys(t).length === 0) delete next.legionDeeds;
+      else next.legionDeeds = t;
+      return next as GameConfigOverrides;
+    });
+  }
 
   function setTraditionRules(key: 'minHonours' | 'adoptCostCopper', v: number | undefined) {
     setOv((prev) => {
@@ -365,6 +377,7 @@ export default function WarlordAdminPanel({
         delete next.recruitCost; delete next.recruitSources;
         delete next.barracks; delete next.intensity; delete next.training;
         delete next.traditions; delete next.traditionRules;
+        delete next.legionDeeds; delete next.duties;
       }
       if (s === 'ECONOMY') {
         delete next.buildingCost; delete next.buildingResourceCost; delete next.resourceBaseValue;
@@ -776,35 +789,43 @@ export default function WarlordAdminPanel({
           </section>
 
           <section>
-            <h3 className="font-bold mb-2">Legion traditions</h3>
+            <h3 className="font-bold mb-2">Legions</h3>
             <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
               <NumField label="Victories to swear" def={DEFAULT_TRADITION_RULES.minHonours} value={ov.traditionRules?.minHonours} onChange={(v) => setTraditionRules('minHonours', v)} min={0} />
               <NumField label="Oath cost (copper)" def={DEFAULT_TRADITION_RULES.adoptCostCopper} value={ov.traditionRules?.adoptCostCopper} onChange={(v) => setTraditionRules('adoptCostCopper', v)} min={0} hint={fmtCopper(ov.traditionRules?.adoptCostCopper ?? DEFAULT_TRADITION_RULES.adoptCostCopper)} />
+              <NumField label="Share of the line to be credited (%)" def={DEFAULT_LEGION_DEEDS.minSharePct} value={ov.legionDeeds?.minSharePct} onChange={(v) => setLegionDeeds('minSharePct', v)} min={1} />
+              <NumField label="Losses that count as a grim stand (%)" def={DEFAULT_LEGION_DEEDS.heldTheLinePct} value={ov.legionDeeds?.heldTheLinePct} onChange={(v) => setLegionDeeds('heldTheLinePct', v)} min={1} />
+              <NumField label="Kills counted per battle" def={DEFAULT_LEGION_DEEDS.killsPerBattleCap} value={ov.legionDeeds?.killsPerBattleCap} onChange={(v) => setLegionDeeds('killsPerBattleCap', v)} min={1} />
+              <NumField label="Max legion level" def={DEFAULT_LEGION_DEEDS.maxLevel} value={ov.legionDeeds?.maxLevel} onChange={(v) => setLegionDeeds('maxLevel', v)} min={1} />
+              <NumField label="Renown for level 2" def={DEFAULT_LEGION_DEEDS.levelBase} value={ov.legionDeeds?.levelBase} onChange={(v) => setLegionDeeds('levelBase', v)} min={1} />
+              <NumField label="Level curve" def={DEFAULT_LEGION_DEEDS.levelCurve} value={ov.legionDeeds?.levelCurve} onChange={(v) => setLegionDeeds('levelCurve', v)} min={1} />
             </div>
-            <div className="mt-3 space-y-3">
-              {TRADITIONS.map((t) => (
-                <div key={t.id} className="rounded border border-wl-line bg-wl-panel p-2 space-y-1">
-                  <div className="text-sm font-semibold">{t.name}</div>
-                  {/* Read back through the same describe the game screen uses, so what you
-                      typed and what the player is promised can never drift apart. */}
-                  <div className="text-xs text-wl-muted">
-                    Takes {describeTradition(t).refuses} · now gives {describeTradition(t).gives}
-                  </div>
-                  <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
-                    <NumField label="Morale after battle" def={t.moraleBonus} value={ov.traditions?.[t.id]?.moraleBonus} onChange={(v) => setTradition(t.id, 'moraleBonus', v)} min={0} />
-                    <NumField label="Battle XP ×" def={t.xpMult} value={ov.traditions?.[t.id]?.xpMult} onChange={(v) => setTradition(t.id, 'xpMult', v)} min={0} />
-                  </div>
-                </div>
-              ))}
+            <div className="mt-3 space-y-1">
+              <div className="text-sm font-semibold">Duties</div>
+              <div className="grid md:grid-cols-3 gap-x-6 gap-y-1">
+                {DUTIES.map((d) => (
+                  <NumField key={d.id} label={`${d.name} — copper/soldier/day`} def={d.copperPerSoldier} value={ov.duties?.[d.id]?.copperPerSoldier} onChange={(v) => setDuty(d.id, v)} />
+                ))}
+              </div>
+              <p className="text-xs text-wl-muted">A negative figure means the duty PAYS. That side is bounded harder than the cost side: a duty that pays too much is income proportional to army size.</p>
             </div>
-            <p className="mt-2 text-xs text-wl-muted">
-              What a tradition <b>refuses</b> is not tunable from here — the ban and the standing
-              requirement are the identity, and a legion sworn against horsemen that could be
-              retuned into accepting them would not be a tradition. Only the reward is a number.
-              Morale is capped at <b>{TRADITION_MORALE_CAP}</b>; battle XP is multiplied
-              <i> before</i> the absolute per-battle cap of <b>{XP_CAP}</b>, so a bigger multiplier
-              helps in an ordinary fight and does nothing in a massacre.
-            </p>
+            <div className="mt-3">
+              <div className="text-sm font-semibold mb-1">The palette players build from</div>
+              <div className="text-xs text-wl-muted space-y-0.5">
+                {EFFECT_PRIMS.map((p) => (
+                  <div key={p.id}>
+                    <b>{p.name}</b> — {p.channel}, {p.step > 0 ? '+' : ''}{p.step}/step, up to {p.maxSteps}, {p.points}pt · proof: {p.proofPerStep} {p.proof}/step
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-wl-muted">
+                Read-only on purpose. A tradition is <b>authored by the player</b> out of these pieces,
+                and a design stores piece ids and step counts — never numbers. That is what makes an
+                inflated tradition unrepresentable rather than merely refused, and it is why retuning
+                a piece here would apply retroactively to every tree already grown. Making the pieces
+                editable is its own slice, with its own migration.
+              </p>
+            </div>
           </section>
 
           <section>

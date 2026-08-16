@@ -145,6 +145,17 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: tradiția devine un arbore pe care îl CREȘTI + adminul refăcut)**
+> Prompt: „continua cu felia 3"
+> Model: Claude Opus 5
+> - Catalogul de patru a dispărut. **Nivelul** dă adâncimea, **dovada** dă care atribut, **punctele** dau cât. Dovada e proprietatea PIESEI, nu a designului — un atribut care plătește pentru călăreți uciși cere călăreți uciși, deci „exersează acțiuni relevante" e garantat prin construcție.
+> - Descoperire care a scos un concept din cod: atributele se adaugă **pe rând, când le poți lua**, deci a proiecta arborele și a-l crește sunt același lucru. Nu mai există listă separată de „câștigate".
+> - **Repreţuirea, prima:** moralul a devenit prag de jos; multiplicatorul de XP de luptă a fost șters (plafonul îl mănâncă și e pe dos). Învățatul s-a mutat în curtea de instrucție și în înfrângere.
+> - Cele patru trăiesc ca **date** și se migrează în `hydrateLegion`; testul `validateDesign(LEGACY_DESIGNS[*])` a prins **de două ori** o regulă prea strictă — și de fiecare dată reparația a fost regula, nu datele.
+> - `src/warlordAdmin/WarlordAdminPanel.tsx`: secțiunea **Legions** refăcută — praguri de jurământ, reglaje de fapte/nivel, costul îndeletnicirilor, plus paleta afișată **read-only** (a o face editabilă e propria felie, cu propria migrare).
+> - **Punctul orb confirmat din nou:** build-ul strict al gazdei (`verbatimModuleSyntax`, `noUnusedLocals`) a prins trei erori pe care `tsc --noEmit` din joc nu le vede. Ăla e build-ul care se livrează.
+> - `SAVE_SCHEMA` 3 → 4, primul bump **neaditiv**. 409 teste verzi, `tsc -b` + build verzi.
+
 **Task Completed (Warlord: îndeletnicirile de pace ale unei legiuni)**
 > Prompt: „continua cu felia 2"
 > Model: Claude Opus 5
