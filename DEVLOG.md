@@ -145,6 +145,14 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: un build vechi nu mai poate mânca un save nou)**
+> Prompt: „traditiile nu inlocuiesc nivelul ... vreau sa fie ceva ce userii creeaza" (constatare din analiza redesign-ului, verificată la sursă)
+> Model: Claude Opus 5
+> - **Lanțul, tot adevărat deja:** blob-ul de save e un literal fix de 14 chei, fără versiune; fiecare slice hidratează pe listă închisă; jocul n-are auto-actualizare (tab vechi = cod vechi la nesfârșit); iar `src/warlordCloud.ts` adoptă strict după `rev` **și incrementează `rev` la fiecare scriere**. Un tab vechi care avansează o zi scrie trunchiat, urcă `rev`-ul, împinge în Firestore, iar celălalt dispozitiv adoptă versiunea ciuntită. **Fără nicio eroare.** Legiunile livrate ieri erau deja expuse.
+> - Acum: un build care deschide un save ștampilat mai nou **refuză să persiste** (deci `onPersist` nu se cheamă, deci nu se scrie nici în cloud) și arată un banner nedemisibil. Cheile de nivel superior necunoscute sunt purtate mai departe.
+> - **Nu protejează retroactiv** — build-urile de dinainte n-au ce verifica.
+> - Verificat pe viu ambele jumătăți; 341 teste verzi, `tsc -b` + build verzi în aplicație.
+
 **Task Completed (Warlord: tradițiile legiunii + secțiunea lor din admin)**
 > Prompt: „continua cu traditiile"
 > Model: Claude Opus 5
