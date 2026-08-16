@@ -96,10 +96,75 @@ trebuie să-și lase o amprentă** — `meta/deployment` în propriul Firestore,
 `builtAt`, `deployedBy`. Fără ea panoul n-are ce compara și ar trebui să ghicească; cu ea,
 `git log <shaLive>..<shaTest>` dă exact lista de schimbări.
 
-### De decis O DATĂ cu Andrei, nu de patru ori
-Forma amprentei · mecanismul declanșatorului · forma documentului de jurnal. Patru sesiuni
-care inventează fiecare alt format înseamnă patru panouri care nu se pot compara între ele.
-**Nu porni implementarea fără confirmarea astea trei.**
+### DECIS cu Andrei, 2026-08-15 — nu redeschide fără el
+
+**Decizia 1 — amprenta.** `meta/deployment`, UN document, în Firestore-ul instanței, scris de
+deploy (niciodată de aplicație). Reguli: citire admin, scriere doar Admin SDK.
+```
+{ schema: 1, gitSha: "<40 caractere, NU scurt>", gitRef: "main",
+  builtAt, deployedAt (server), deployedBy: "ci" | "cli:<user>",
+  target: "test" | "live", projectId: "<id-ul REAL>", app: "<proiect>" }
+```
+`gitSha` complet fiindcă `git log a..b` cere referințe rezolvabile și cele scurte se ciocnesc.
+`schema` fiindcă formatul se va schimba. **`projectId` scris de deploy** fiindcă un alias e
+doar un nume — dacă „test" ajunge să numească proiectul live, amprenta o spune.
+Presto, DataRead și CNCVS calculează deja `__BUILD_HASH__`/`__BUILD_TIME__` prin Vite `define`
+(azi doar pe rândurile de eroare) — **aia e sursa, nu una nouă**.
+
+**Decizia 2 — declanșatorul: DIRECT.** Callable pe live → `workflow_dispatch`, tokenul în
+Secret Manager. Andrei a ales asta **după** ce i-am prezentat lanțul de risc: dispatch →
+deploy de funcție → cod arbitrar cu drepturile SA-ului de runtime. **E o decizie deliberată,
+nu o scăpare — nu o „repara" într-o sesiune viitoare.** Prețul ei sunt cele cinci obligatorii:
+1. **Precondiție:** doar CNCVectorStudio are `workflow_dispatch` azi. Celelalte patru n-au
+   niciun workflow de deploy — trebuie creat, ca prima felie.
+2. **Fixează sha-ul.** `deploy.yml` face azi `checkout` fără `ref`, deci publică `main` HEAD,
+   nu ce ai testat. Cererea numește un sha; workflow-ul îl verifică și refuză dacă nu e
+   strămoș al lui `main`. Asta e corectitudine, nu securitate.
+3. **Fixează SA-ul de runtime** (`serviceAccount:` în opțiunile funcției), ca „deploy de
+   funcții" să înceteze să însemne „devii admin pe Firestore".
+4. **Token minim:** GitHub App pe repo-urile țintă (token de instalare sub 1h) sau PAT
+   fine-grained cu `Actions: write` + `Contents: read`. **Niciodată `Contents: write`, niciodată
+   PAT clasic** — ăla e per-utilizator și acoperă toate repo-urile. GitHub **nu** are
+   granularitate per-workflow, deci îngustimea se pune în YAML, nu în token.
+5. **A doua confirmare pe alt canal:** GitHub Environment cu reviewer obligatoriu. Un al doilea
+   clic în același browser nu apără de nimic (același XSS, aceeași sesiune).
+
+Plus, în callable: **citește owner-ul din Firestore, nu din claim** (claim-urile sunt vechi
+până la reîmprospătare, deci retragerea drepturilor nu retrage butonul) și cere autentificare
+recentă. Și: **intrările noi de workflow trec prin `env:`**, niciodată `${{ }}` direct în `run:`
+— azi `deploy.yml` scapă doar pentru că `target` e `type: choice`.
+
+**Decizia 3 — jurnalul.** `meta/publishLog/{id}`, append-only (create de owner, update doar
+Admin SDK, delete niciodată).
+```
+{ schema: 1, at (server), by: {uid, email}, kind: "code" | "config",
+  fromSha, toSha, docs: [{path, fields}], backupPath, status, detail }
+```
+`docs` cu **exact ce a plecat** — „config" ca etichetă e neauditabil. Presto are deja
+`adminAudit` cu valorile dinainte și un `restoreFromAudit` funcțional: ăla e modelul.
+
+### Domeniul de aplicare
+**OurDaysApp NU primește butonul** (decis 2026-08-15). Nu are un nivel de owner deloc:
+`adminSetAdmin` e păzit de `assertAdmin`, deci orice admin poate face alt admin; iar
+`warlordConfig` se scrie direct din browser, fără callable pe care să atârni listă albă sau
+jurnal. Se reia după o felie separată de autorizare.
+*Capcană de denumire acolo:* `isOwner(uid)` din `firestore.rules` înseamnă „deține ACEST
+document", nu „e owner-ul aplicației" — e adevărat pentru orice user despre datele lui.
+
+### Promovarea configurării — direcția și interdicțiile
+- **Live trage din test**, niciodată invers. Regulile Firestore nu constrâng Admin SDK-ul, deci
+  cine scrie are scriere-pe-orice. Invers ar însemna un drept permanent de scriere pe live,
+  ținut în mediul mai puțin de încredere.
+- **Plan → aplică, bifă per document.** Niciodată „promovează tot". Lista albă e **codificată
+  în codul de pe LIVE**, nu citită de pe test — altfel test-ul își decide singur permisiunile.
+- **Interdicții explicite, nu simple absențe din listă:** `admins/*` la Presto declanșează
+  custom claims pe Auth; `settings/company.email` alimentează destinatarii alertelor
+  (promovat, taie tăcut detecția). Plus orice ține chei, id-uri de proiect sau URL-uri.
+- **Pre-imaginea se scrie înainte de fiecare scriere** (`configBackups/{promotionId}/…`) —
+  configurarea n-are rollback nativ, spre deosebire de Hosting.
+- Material refolosibil găsit: listele `hasOnly` din regulile CNCVS (liste albe literale, gata
+  făcute), `planContentApply` din DataRead (singura primitivă plan/diff existentă),
+  `adminAudit` + `restoreFromAudit` din Presto (singurul rollback funcțional).
 
 ## Capcane cunoscute
 - **Prerender/service worker:** `index.html` înregistrează `sw.js` dar nu cheamă niciodată `registration.update()`, iar gate-ul de versiune rulează doar la parsarea unui index.html PROASPĂT. Un tab deschis de ore rulează cod dinaintea deploy-ului. Workaround: hard-reload. (Item în roadmap.)
