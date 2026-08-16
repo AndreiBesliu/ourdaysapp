@@ -145,6 +145,16 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: fântâna de XP din completarea de efective)**
+> Prompt: „lasa DataRead, continua cu warlord"
+> Model: Claude Opus 5
+> - Completarea adăuga fiecărui nou-venit 10% din media unității **din nimic** — ~700 XP per apăsare pe o unitate veterană, compunându-se. Sursa buclei completează→desființează, dar se scurgea și la joc normal.
+> - Acum e **transfer**: ce câștigă noii veniți, plătesc veteranii. Totalul armatei nu mai poate crește. Plafonul e locul unde transferul se termină (un profesor nu-și duce elevul peste el), nu o clemă adăugată.
+> - Verificat pe viu: 28 000 → **27 980** (−20 din trunchiere). Înainte: 28 700.
+> - 294 teste verzi, `tsc -b` + build verzi în aplicație.
+
+---
+
 **Task Completed (Warlord: legiunile — formațiuni care supraviețuiesc cohortelor)**
 > Prompt: „vreau ca fiecare unitate sa capete identitate ... legiunile Romane ... mai aproape de 40k", apoi corectura „legiunile nu se absorb, vreau un sistem similar cu Total War Rome 2"
 > Model: Claude Opus 5
