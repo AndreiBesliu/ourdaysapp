@@ -145,6 +145,16 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: palmaresul unei legiuni + nivelul derivat din el)**
+> Prompt: „continua cu felia 1"
+> Model: Claude Opus 5
+> - Prima felie din redesign-ul tradițiilor cerut de Andrei („tradițiile nu înlocuiesc nivelul... un tree de atribute... ceva ce userii creează"). Aici doar **temelia**: fără nicio autorare.
+> - **Renumele** (singurul lucru care cumpără nivel) vine doar din ce nu se poate lua gratis — victorii, întoarceri nesângerate, poziții ținute cu preț, misiuni grele. **Palmaresul** (bătălii, înfrângeri, retrageri, uciși pe clase) se ține minte ca dovadă pentru nodurile viitoare, dar nu dă nivel.
+> - **Trei ferme închise, verificate pe viu:** cohorta simbolică (5 oameni lângă 400 → **nimic**, cu motivul în log), retragerea imediată (renume 8 → 8, doar `retreats+1`), plafonul de uciși per bătălie.
+> - Creditul merge la legiunea care **a mărșăluit**, dintr-un instantaneu luat la desfășurare — ambele taburi sunt montate simultan, deci altfel se putea muta creditul rearanjând cohortele în timpul bătăliei.
+> - `SAVE_SCHEMA` 1 → 2, prima aplicare a regulii scrise ieri.
+> - 376 teste verzi, `tsc -b` + build verzi în aplicație.
+
 **Task Completed (Warlord: un build vechi nu mai poate mânca un save nou)**
 > Prompt: „traditiile nu inlocuiesc nivelul ... vreau sa fie ceva ce userii creeaza" (constatare din analiza redesign-ului, verificată la sursă)
 > Model: Claude Opus 5
