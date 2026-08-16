@@ -65,7 +65,7 @@ un panou din care **vezi ce e pe test și nu e încă pe live, și îl publici p
 **Starea de azi:** `.firebaserc` are aliasul `live` lângă `default`; deploy-urile trec prin
 `--project live`. Instanța de **test nu există încă** — se creează, se adaugă `"test": "<id>"`
 în `.firebaserc`, și de-acolo deploy-urile cu `--project test` trec fără confirmare
-(guard-ul din `Apps/.claude/hooks/deploy-guard.py` le recunoaște deja).
+(guard-ul din `Apps/.claude/hooks/deploy-guard.py` le recunoaște deja). **Directorul `.claude/` NU e sub git** — copia canonică a guard-ului stă în `OurDaysApp/tools/claude/`. **Dacă guard-ul lipsește de pe mașina pe care lucrezi, cere confirmarea MANUAL înainte de fiecare deploy** — o plasă care dispare nu poate anunța că a dispărut, deci absența ei e tratată aici, nu acolo.
 
 ### Cele două lucruri care se publică sunt DIFERITE
 1. **Cod** — un build + deploy real. Un browser nu poate face asta: cere un declanșator
