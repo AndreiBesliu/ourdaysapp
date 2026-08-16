@@ -56,36 +56,50 @@ AMBELE locuri (`diff -q`), apoi `firebase deploy --only functions`. `army.ts` / 
 - **Save/load Warlord:** orice stare nouă adăugată în joc trebuie pusă în 4 locuri din `src/warlord/state/useGameState.tsx` — obiectul de save, dependency array-ul efectului de persistență, `loadSave` și `resetAll`.
 - **Adminul e punct orb la randare:** `/admin` și panoul Warlord cer autentificare, deci nu pot fi încărcate de mine în browser. Typecheck + teste + build pot fi toate verzi cu adminul căzut pe ErrorBoundary. Ancorează hook-urile lângă celelalte hook-uri, nu lângă un `return`.
 
-## ⚠️ REGULĂ (Andrei, 2026-08-15): fereastra „ce e pe testing și încă nu e pe live"
+## ⚠️ REGULĂ (Andrei, 2026-08-15): publicarea test → live, din adminul proiectului
 
-Fiecare proiect capătă **două instanțe Firebase — `test` și `live`** — și, în adminul lui, o
-**fereastră care arată tot ce e pe testing și nu a ajuns încă în live**. De implementat în
-sesiunea dedicată proiectului ăstuia.
+Fiecare proiect capătă **două instanțe Firebase — `test` și `live`** — și, în adminul lui,
+un panou din care **vezi ce e pe test și nu e încă pe live, și îl publici pe live**: și cod,
+și configurare. **Doar owner-ul, cu confirmare.** De implementat în sesiunea dedicată.
 
 **Starea de azi:** `.firebaserc` are aliasul `live` lângă `default`; deploy-urile trec prin
 `--project live`. Instanța de **test nu există încă** — se creează, se adaugă `"test": "<id>"`
 în `.firebaserc`, și de-acolo deploy-urile cu `--project test` trec fără confirmare
 (guard-ul din `Apps/.claude/hooks/deploy-guard.py` le recunoaște deja).
 
-**Ce trebuie să arate fereastra — două lucruri diferite, nu unul:**
-1. **Cod livrat** — ce commit-uri sunt pe test și nu pe live.
-2. **Configurare/conținut editat din admin** — documentele pe care le schimbi din panou și
-   care se *promovează* separat de cod (la Warlord `warlordConfig/live`, la Presto
-   `settings/*`, la DataRead conținutul per-pagină). Astea nu se mișcă la un deploy.
+### Cele două lucruri care se publică sunt DIFERITE
+1. **Cod** — un build + deploy real. Un browser nu poate face asta: cere un declanșator
+   privilegiat pe server (Cloud Function → `workflow_dispatch` în GitHub Actions, cu tokenul
+   în Secret Manager). **Tokenul nu ajunge niciodată în browser.**
+2. **Configurare/conținut editat din admin** — documente Firestore care se promovează
+   separat de cod (balansul la Warlord, `settings/*` la Presto, conținutul paginilor la
+   DataRead). Astea nu se mișcă la un deploy de cod.
 
-**PRECONDIȚIA care se plătește ieftin acum și scump mai târziu:** o aplicație de pe test
-nu are cum să știe ce e pe live decât dacă i se spune. Deci **fiecare deploy trebuie să-și
-lase o amprentă** — un document de tip `meta/deployment` scris în propriul Firestore, cu
-`gitSha`, `builtAt`, `deployedBy`. Fără amprenta asta fereastra n-are ce compara și ar
-trebui să ghicească. Cu ea, `git log <shaLive>..<shaTest>` dă exact lista de schimbări.
+### Capcanele care contează, ca să nu se descopere de patru ori
+- **Configurarea NU se copiază în bloc.** O parte din ea e specifică mediului — chei, id-uri
+  de proiect, URL-uri de webhook, praguri de test. Copiate de pe test peste live, strică
+  live-ul. Fiecare proiect are nevoie de o **listă albă explicită de documente promovabile**
+  și de câmpuri excluse. Asta e capcana cea mai scumpă din toată felia.
+- **Ordinea: întâi codul, apoi configurarea.** Configurare nouă peste cod vechi înseamnă
+  live care citește câmpuri pe care codul lui nu le știe.
+- **Calea de întoarcere trebuie să existe înainte de primul buton.** Hosting are rollback
+  de release; configurarea nu — deci versiunea anterioară a documentelor promovate se
+  păstrează, altfel „publică" e ireversibil.
+- **Verificarea de owner se face pe SERVER.** Un buton ascuns în UI nu e o protecție;
+  callable-ul trebuie să refuze pe cont care nu e owner-ul.
+- **Jurnal:** cine a apăsat, când, ce `gitSha` a plecat. Fără el, „ce e pe live" redevine
+  o presupunere.
 
-**Decizia de arhitectură (o dată, nu de patru ori):** cum citește adminul de pe test starea
-de pe live. Două variante — un serviciu de pe test cu drept de citire în proiectul live,
-sau un callable pe live care-și întoarce propria amprentă. **A doua e de preferat:** nu cere
-credențiale încrucișate și expune exact un câmp, nu toată baza.
+### PRECONDIȚIA, ieftină acum și scumpă mai târziu
+O aplicație de pe test nu are cum să știe ce e pe live decât dacă i se spune. **Fiecare deploy
+trebuie să-și lase o amprentă** — `meta/deployment` în propriul Firestore, cu `gitSha`,
+`builtAt`, `deployedBy`. Fără ea panoul n-are ce compara și ar trebui să ghicească; cu ea,
+`git log <shaLive>..<shaTest>` dă exact lista de schimbări.
 
-**Nu porni implementarea fără să confirmi cu Andrei forma amprentei** — patru sesiuni care
-inventează fiecare alt format înseamnă patru ferestre care nu se pot compara între ele.
+### De decis O DATĂ cu Andrei, nu de patru ori
+Forma amprentei · mecanismul declanșatorului · forma documentului de jurnal. Patru sesiuni
+care inventează fiecare alt format înseamnă patru panouri care nu se pot compara între ele.
+**Nu porni implementarea fără confirmarea astea trei.**
 
 ## Capcane cunoscute
 - **Prerender/service worker:** `index.html` înregistrează `sw.js` dar nu cheamă niciodată `registration.update()`, iar gate-ul de versiune rulează doar la parsarea unui index.html PROASPĂT. Un tab deschis de ore rulează cod dinaintea deploy-ului. Workaround: hard-reload. (Item în roadmap.)
