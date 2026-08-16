@@ -145,6 +145,18 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: tradițiile legiunii + secțiunea lor din admin)**
+> Prompt: „continua cu traditiile"
+> Model: Claude Opus 5
+> - A doua felie din north-star-ul legiunilor. O legiune **jură o dată, permanent**, la o tradiție care îi **refuză** anumite cohorte și îi cere o anumită formă; în schimb, cohortele ei ies din luptă mai bine. Constrângerea e ce transformă un buff în identitate — fără ea, toate legiunile converg.
+> - **Două feluri de constrângere, tratate diferit fiindcă altfel ar minți:** interdicțiile („niciodată călăreți") sunt monotone → refuză la intrare; cerințele de proporție se pot strica fără să faci nimic (îți moare o cohortă) → nu retrag jurământul, ci **suspendă bonusul** până readuci legiunea în formă.
+> - **Zero atingeri la motorul de luptă și niciun deploy de functions:** bonusurile merg pe canale de domeniu, regula scrisă deja în `research/effects.ts`. PvP-ul nu vede tradițiile și ecranul o spune.
+> - **Defect din felia trecută, găsit pe viu:** `assignToLegion` valida pe snapshot-ul de render, deci două atribuiri în același frame puneau o unitate în **două legiuni deodată**. Reparat repetând verificarea înăuntrul updater-ului.
+> - `src/warlordAdmin/WarlordAdminPanel.tsx`: secțiune **Legion traditions** în ARMY (praguri + răsplata per tradiție; ce refuză NU e reglabil — aia e identitatea).
+> - Verificat pe viu bucla întreagă (jurământ −25 000c, cavalerie refuzată cu motivul pe buton, suspendare la scăderea sub prag, moral 65 → **78** după victorie doar la cohortele legiunii). 328 teste verzi, `tsc -b` + build verzi în aplicație.
+
+---
+
 **Task Completed (Warlord: fântâna de XP din completarea de efective)**
 > Prompt: „lasa DataRead, continua cu warlord"
 > Model: Claude Opus 5

@@ -6,8 +6,11 @@ import type { GameConfigOverrides } from '@warlord/logic/config';
 import {
   DEFAULT_TRAINING, DEFAULT_TICK, DEFAULT_STUDY,
   DEFAULT_RECRUIT_COST, DEFAULT_RECRUIT_SOURCES, DEFAULT_INTENSITY, DEFAULT_BARRACKS,
+  DEFAULT_TRADITION_RULES, TRADITION_MORALE_CAP,
 } from '@warlord/logic/config';
 import { PROMOTE_AT } from '@warlord/logic/units';
+import { TRADITIONS, describeTradition } from '@warlord/logic/tradition';
+import { XP_CAP } from '@warlord/logic/combat/stats';
 import {
   BuildingCostCopper, ResourceBuildingCosts, UPKEEP_BASE, UPKEEP_RANK_MULT, FOOD_BASE,
   BUILDING_OUTPUT_VALUE, ManufacturingRecipes,
@@ -304,7 +307,7 @@ export default function WarlordAdminPanel({
   // Keyed branches (one entry per source / per intensity), same delete-when-empty shape as
   // the flat ones above so an emptied group leaves no husk in the stored document.
   function setKeyed(
-    branch: 'recruitSources' | 'intensity',
+    branch: 'recruitSources' | 'intensity' | 'traditions',
     key: string,
     field: string,
     v: number | undefined,
@@ -325,6 +328,19 @@ export default function WarlordAdminPanel({
     setKeyed('recruitSources', key, field, v);
   const setIntensity = (key: string, field: 'dayMult' | 'payPerSoldier' | 'xpGranted' | 'washoutPct', v: number | undefined) =>
     setKeyed('intensity', key, field, v);
+  const setTradition = (key: string, field: 'moraleBonus' | 'xpMult', v: number | undefined) =>
+    setKeyed('traditions', key, field, v);
+
+  function setTraditionRules(key: 'minHonours' | 'adoptCostCopper', v: number | undefined) {
+    setOv((prev) => {
+      const t: Record<string, unknown> = { ...(prev.traditionRules ?? {}) };
+      if (v === undefined) delete t[key]; else t[key] = v;
+      const next: Record<string, unknown> = { ...prev };
+      if (Object.keys(t).length === 0) delete next.traditionRules;
+      else next.traditionRules = t;
+      return next as GameConfigOverrides;
+    });
+  }
 
   function setBarracks(key: 'capacityBase' | 'capacityPerLevel', v: number | undefined) {
     setOv((prev) => {
@@ -348,6 +364,7 @@ export default function WarlordAdminPanel({
       if (s === 'ARMY') {
         delete next.recruitCost; delete next.recruitSources;
         delete next.barracks; delete next.intensity; delete next.training;
+        delete next.traditions; delete next.traditionRules;
       }
       if (s === 'ECONOMY') {
         delete next.buildingCost; delete next.buildingResourceCost; delete next.resourceBaseValue;
@@ -755,6 +772,38 @@ export default function WarlordAdminPanel({
               for copper alone — no extra days, no drill pay, no wash-out — and rank is the one thing
               this game only ever sells for time. Raise it past the cap and the effect line above
               simply stops moving. Price is where the tiers are meant to differ.
+            </p>
+          </section>
+
+          <section>
+            <h3 className="font-bold mb-2">Legion traditions</h3>
+            <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
+              <NumField label="Victories to swear" def={DEFAULT_TRADITION_RULES.minHonours} value={ov.traditionRules?.minHonours} onChange={(v) => setTraditionRules('minHonours', v)} min={0} />
+              <NumField label="Oath cost (copper)" def={DEFAULT_TRADITION_RULES.adoptCostCopper} value={ov.traditionRules?.adoptCostCopper} onChange={(v) => setTraditionRules('adoptCostCopper', v)} min={0} hint={fmtCopper(ov.traditionRules?.adoptCostCopper ?? DEFAULT_TRADITION_RULES.adoptCostCopper)} />
+            </div>
+            <div className="mt-3 space-y-3">
+              {TRADITIONS.map((t) => (
+                <div key={t.id} className="rounded border border-wl-line bg-wl-panel p-2 space-y-1">
+                  <div className="text-sm font-semibold">{t.name}</div>
+                  {/* Read back through the same describe the game screen uses, so what you
+                      typed and what the player is promised can never drift apart. */}
+                  <div className="text-xs text-wl-muted">
+                    Takes {describeTradition(t).refuses} · now gives {describeTradition(t).gives}
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
+                    <NumField label="Morale after battle" def={t.moraleBonus} value={ov.traditions?.[t.id]?.moraleBonus} onChange={(v) => setTradition(t.id, 'moraleBonus', v)} min={0} />
+                    <NumField label="Battle XP ×" def={t.xpMult} value={ov.traditions?.[t.id]?.xpMult} onChange={(v) => setTradition(t.id, 'xpMult', v)} min={0} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-wl-muted">
+              What a tradition <b>refuses</b> is not tunable from here — the ban and the standing
+              requirement are the identity, and a legion sworn against horsemen that could be
+              retuned into accepting them would not be a tradition. Only the reward is a number.
+              Morale is capped at <b>{TRADITION_MORALE_CAP}</b>; battle XP is multiplied
+              <i> before</i> the absolute per-battle cap of <b>{XP_CAP}</b>, so a bigger multiplier
+              helps in an ordinary fight and does nothing in a massacre.
             </p>
           </section>
 
