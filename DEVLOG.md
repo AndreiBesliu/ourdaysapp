@@ -145,6 +145,16 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: îndeletnicirile de pace ale unei legiuni)**
+> Prompt: „continua cu felia 2"
+> Model: Claude Opus 5
+> - Jocul dă **o luptă pe zi** pe tot domeniul, deci toate contoarele de bătălie se trag dintr-o singură fântână. Fără o a doua, ai o legiune reală și restul ornamente.
+> - **Bătăliile cumpără adâncime, îndeletnicirile cumpără direcție.** Zilele de serviciu sunt palmares, **niciodată renume** — o zi se obține așteptând, iar ceasul retro-creditează absența.
+> - Trei îndeletniciri ca trei forme economice: garnizoană (ieftină, moral dublu), instrucție (scumpă, cohortele se antrenează), patrulare (**aduce** bani). Niciun canal nou — instrucția refolosește calea de XP existentă, garnizoana adaugă pe aceeași condiție ca recuperarea obișnuită.
+> - Ocuparea e prețul, verificată în `startBattle`, nu doar în ecran.
+> - Verificat pe viu pe o zi: moral 50→60 la garnizoană vs 55 la restul, XP 10→35 doar la instrucție, `Duty 3s` în log, toate trei legiunile refuzate la muster.
+> - `SAVE_SCHEMA` 2 → 3. 392 teste verzi, `tsc -b` + build verzi în aplicație.
+
 **Task Completed (Warlord: palmaresul unei legiuni + nivelul derivat din el)**
 > Prompt: „continua cu felia 1"
 > Model: Claude Opus 5
