@@ -145,6 +145,15 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: stindardul — identitatea ca obiect care poate fi luat)**
+> Prompt: „continua cu stindardul"
+> Model: Claude Opus 5
+> - Stindardul cade când **fiecare cohortă pe care legiunea a pus-o în linie e nimicită** — fără port-drapel, deci fără corvoadă per bătălie și fără un câmp de întreținut prin split/merge. O legiune care a păstrat o cohortă și-a păstrat vulturul.
+> - Cât e pierdut, tradiția **doarme** (aceeași suspendare pe care `outOfKeeping` o avea deja — o singură idee în joc, nu două). Se recucerește câștigând la misiunea care ți l-a luat.
+> - **Nimic de fermat, scris ca test:** pierderea costă o desfășurare întreagă, recucerirea îți dă înapoi ce aveai.
+> - Verificat pe viu toată bucla: pierdere la Invasion → card + refuzuri pe fiecare buton → înfrângere care NU recuperează → victorie care aduce vulturul acasă.
+> - `SAVE_SCHEMA` 4 → 5. 447 teste verzi, `tsc -b` + build verzi în aplicație.
+
 **Task Completed (Warlord: forja — pași, adâncire, coduri de tradiție)**
 > Prompt: „continua cu felia 4"
 > Model: Claude Opus 5
