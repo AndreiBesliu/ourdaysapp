@@ -145,6 +145,17 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: comandantul — singura piesă a unei legiuni care se poate muta)**
+> Prompt: „continua cu comandantul"
+> Model: Claude Opus 5
+> - **Comandantul e piesa pe care o poți muta; tradiția e cea pe care nu.** Aia e decizia pe care o creează: veteranul tău stă cu legiunea care l-a făcut, iar mâine altă legiune trebuie să câștige.
+> - **Oastea îl face pe om:** trăsătura se DERIVĂ din ce făcuse legiunea, nu se alege — și scrie pe ecran ce ar ridica palmaresul ei **înainte** să plătești.
+> - Muritor și **determinist** (cade la o înfrângere care a costat peste jumătate din ce a pus în linie) — fără zar, fiindcă o bătălie se rejoacă exact din sămânța ei.
+> - Nu răspunde niciunui jurământ: valorează ceva și cu tradiția adormită, și cu stindardul pierdut. Dar **plafonul se aplică pe SUMĂ**, o dată, în locul care decide.
+> - Verificat pe viu tot lanțul: numire → mutare cu cariera intactă → cădere.
+> - **Punctul orb, din nou:** build-ul strict al gazdei a prins un import mort pe care `tsc --noEmit` din joc nu-l vede.
+> - `SAVE_SCHEMA` 5 → 6. 481 teste verzi, `tsc -b` + build verzi în aplicație.
+
 **Task Completed (Warlord: stindardul — identitatea ca obiect care poate fi luat)**
 > Prompt: „continua cu stindardul"
 > Model: Claude Opus 5
