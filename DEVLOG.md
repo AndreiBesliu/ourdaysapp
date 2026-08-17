@@ -145,6 +145,15 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: forja — pași, adâncire, coduri de tradiție)**
+> Prompt: „continua cu felia 4"
+> Model: Claude Opus 5
+> - A început cu un defect din felia trecută: refuzul spunea „deepen it instead of repeating it", iar jocul n-avea cum s-o adâncești. Acum plătești **diferența** de puncte, dar dovada se cere pentru **totalul nou**.
+> - Pașii se aleg la luare, cu prețul și dovada actualizate live.
+> - **Coduri de tradiție.** Un cod poartă id-uri, pași, părinți ca poziții și două șiruri — **niciun număr de joc**, toate recalculate din paleta celui care importă. O tradiție umflată nu e *reprezentabilă*. Sumă de control de patru caractere pentru cazul obișnuit: un cod tăiat de wrap-ul unui chat s-ar decoda tăcut într-o tradiție mai mică.
+> - **Poți primi o tradiție, niciodată o istorie:** codul aduce promisiunea și un arbore GOL. Verificat pe viu.
+> - 429 teste verzi, `tsc -b` + build verzi în aplicație.
+
 **Task Completed (Warlord: tradiția devine un arbore pe care îl CREȘTI + adminul refăcut)**
 > Prompt: „continua cu felia 3"
 > Model: Claude Opus 5
