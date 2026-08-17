@@ -145,6 +145,14 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: Minter-ul nu-și mai poate arde producția)**
+> Prompt: „minter-ul, din moment ce doar face bani, ca produs, ar trebui sa aiba doar slider de research"
+> Model: Claude Opus 5
+> - Nu doar un slider inutil: pe Minter, partea lăsată pe marfă **se anula** (n-are item de făcut). 4.800c/zi distruși la reglajul de 40%, cu ecranul explicându-ți politicos pierderea.
+> - O clădire fără item de făcut își plătește acum **toată valoarea (după studiu) în monedă**, iar sliderul de focus dispare de pe ea. Regula întreabă tabelul de output, nu o listă de nume.
+> - Scos codul mort care topea SILVER_INGOT (nu putea rula niciodată). Fără câmp nou de save.
+> - Submodul la `e531b6a`. 481 teste, `tsc -b` și build verzi.
+
 **Task Completed (Warlord: comandantul — singura piesă a unei legiuni care se poate muta)**
 > Prompt: „continua cu comandantul"
 > Model: Claude Opus 5
