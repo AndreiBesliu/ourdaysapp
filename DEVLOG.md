@@ -145,6 +145,14 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: populația — felia 1)**
+> Prompt: „continua cu felia 1"
+> Model: Claude Opus 5
+> - Un singur rezervor de suflete: recrutarea îl golește, postarea la o clădire îi multiplică ziua. Fără catalog de joburi — clădirea E jobul.
+> - Creșterea mănâncă **doar hrana produsă azi**. Altfel populația ar fi fost cumpărabilă: FOOD e marfă de piață la 50c în ambele sensuri, fără spread.
+> - Postările stau în aceeași cheie de save ca sufletele: separate, un build vechi ar fi șters una și ar fi păstrat-o pe cealaltă ⇒ `idle` negativ pe veci.
+> - `SAVE_SCHEMA` 6 → 7. Submodul la `4360f72`. 518 teste, `tsc -b` și build verzi.
+
 **Task Completed (Warlord: Minter-ul nu-și mai poate arde producția)**
 > Prompt: „minter-ul, din moment ce doar face bani, ca produs, ar trebui sa aiba doar slider de research"
 > Model: Claude Opus 5
