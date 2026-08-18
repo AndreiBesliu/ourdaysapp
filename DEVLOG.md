@@ -145,6 +145,14 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: vocabularul întreg al meșteșugului + arborele)**
+> Prompt: „continua"
+> Model: Claude Opus 5
+> - **Defect reparat din felia precedentă:** rabatul era `curent − promis`, iar jurământul cere să fii DEJA în ținere ⇒ cele două împreună forțau `curent === promis` și fiecare cerere procentuală valora ZERO. Repreţuit pe libertatea CEDATĂ — nenul și stabil.
+> - 8 piese, 3 canale, 8 dovezi distincte, primele trei rivale prin construcție. Arborele stă pe zile ȚINUTE, nu pe nivelul echipei.
+> - **Reparată o minciună veche de patru felii:** tabul Research calcula studiul fără populație și sub-raporta pentru fiecare casă încadrată, în timp ce antetul avea dreptate. Acum ambele spun același număr.
+> - Submodul la `8f71e26`. `SAVE_SCHEMA` neschimbat. 585 teste, `tsc -b` și build verzi.
+
 **Task Completed (Warlord: jurământul de meșteșug + manetele lui în admin)**
 > Prompt: „continua"
 > Model: Claude Opus 5
