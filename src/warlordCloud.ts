@@ -11,6 +11,7 @@
 // IndexedDB cache when offline, and without a rev an old cached blob would be adopted
 // and then written back over newer cloud progress.
 import { doc, getDocFromServer, setDoc, serverTimestamp } from 'firebase/firestore';
+import { inspectSave } from '@warlord/logic/saveSchema';
 import { db } from './firebase';
 
 const domainRef = (uid: string) => doc(db, 'warlordDomains', uid);
@@ -53,6 +54,31 @@ export async function loadWarlordDomain(uid: string): Promise<void> {
 
   const localRev = readLocalRev(uid);
   const localSave = readLocalSave(uid);
+
+  // THE SCHEMA OUTRANKS THE REV, in both directions.
+  //
+  // `rev` is a per-DEVICE counter, not a global clock: a tab running an old build can sit at
+  // a higher rev than the cloud purely by having ticked more days locally. Comparing revs
+  // alone therefore lets an older build's blob — already missing every field it never heard
+  // of — be promoted over a newer one. The game's own guard stops that tab from WRITING once
+  // it has read a newer save, but it cannot help a tab whose local cache is old and whose
+  // rev happens to be ahead.
+  //
+  // So: a lower schema never wins, whatever the rev says. Ties fall through to the rev rule
+  // below, which is still right.
+  // `-1` for "no save on this side at all", so an absent copy can never out-rank a present
+  // one. `inspectSave` reports a MISSING blob as the current schema, which would read as
+  // "as new as it gets" and is exactly the wrong answer here.
+  const cloudSchema = cloudSave !== undefined ? inspectSave(cloudSave).schema : -1;
+  const localSchema = localSave !== null ? inspectSave(localSave).schema : -1;
+
+  if (cloudSave !== undefined && cloudSchema > localSchema) {
+    localStorage.setItem(localKey(uid), JSON.stringify(cloudSave));
+    // The rev must not go BACKWARDS here or the next write would look stale to this device.
+    localStorage.setItem(revKey(uid), String(Math.max(cloudRev, localRev)));
+    return;
+  }
+  if (localSave !== null && localSchema < cloudSchema) return; // never push the older shape up
 
   // STRICTLY greater: after a successful write both sides sit at the same rev, and
   // localStorage is written synchronously on every state change while the cloud write is

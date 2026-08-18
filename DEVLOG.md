@@ -145,6 +145,14 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: catastiful casei + garda de schemă la sync)**
+> Prompt: „vreau sa dezvoltam sistemul din spatele jocului, vom calibra valorile mai tarziu"
+> Model: Claude Opus 5
+> - Fundația meșteșugului (felia 3 a populației): fiecare clădire ține un catastif monoton cu ce a SCOS, iar cele trei valori de canal sunt trei felii din același scalar — deci cotele sunt rivale și nu se pot ferma prin așteptare, cum se poate un contor de zile.
+> - **În repo-ul ăsta: `warlordCloud` — schema bate rev-ul, în ambele direcții.** `rev` e un contor PER-DISPOZITIV: un tab pe build vechi poate sta la un rev mai mare decât cloud-ul doar fiindcă a bifat mai multe zile local, iar promovarea lui ar împinge peste cloud un blob căruia îi lipsesc deja câmpurile pe care build-ul lui nu le știe. Garda din joc oprește tabul ăla să SCRIE după ce a citit un save mai nou, dar nu poate face nimic pentru unul al cărui cache local e vechi și al cărui rev e din întâmplare înainte.
+> - Se livrează ACUM, înainte să existe orice permanent în joc: altfel al doilea tab dă gratis exact respec-ul pe care un jurământ permanent îl interzice.
+> - Submodul la `8f7d0f7`. `SAVE_SCHEMA` 8 → 9. 549 teste, `tsc -b` și build verzi.
+
 **Task Completed (Warlord: populația — felia 2, echipa învață)**
 > Prompt: „continua"
 > Model: Claude Opus 5
