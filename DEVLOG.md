@@ -145,6 +145,14 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: populația — felia 2, echipa învață)**
+> Prompt: „continua"
+> Model: Claude Opus 5
+> - Nivel de echipă DERIVAT dintr-un contor monoton de zile lucrate; creditat de tick, deci recuperarea offline creditează fiecare zi o dată.
+> - Nivelul ridică valoarea muncii, NU eliberează mâini — altfel ar fi a doua plată pentru aceeași postare, în resursa pe care feature-ul o face rară.
+> - Ziua contează dacă a produs ceva pe oricare din cele trei canale. `!blocked` NU e testul: e cumpărabil cu sliderul de focus.
+> - `SAVE_SCHEMA` 7 → 8. Submodul la `f4cf6e8`. 535 teste, `tsc -b` și build verzi.
+
 **Task Completed (Warlord: populația — felia 1)**
 > Prompt: „continua cu felia 1"
 > Model: Claude Opus 5
