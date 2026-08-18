@@ -145,6 +145,15 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Warlord: jurământul de meșteșug + manetele lui în admin)**
+> Prompt: „continua"
+> Model: Claude Opus 5
+> - O clădire poate jura permanent un fel de a lucra: renunță la ceva și devine mai bună la ce a păstrat. Punctele vin EXCLUSIV din cereri — niciun buget liber.
+> - **În repo-ul ăsta: secțiunea „Population & crafts" din `WarlordAdminPanel`.** Manetele de populație (bonus de echipă, nivelurile, creșterea), mărimile de echipă per clădire și numerele meșteșugului. Se livrează în ACEEAȘI felie cu primul getter: un cadran care raportează tăcut zero e cel mai prost mod de eșec pentru un sistem a cărui premisă e „calibrăm mai târziu".
+> - Manetele meșteșugului sunt EDITABILE, spre deosebire de paleta de tradiții: un design de meșteșug ține id-uri și promisiuni, niciodată prețuri, deci o reglare se aplică retroactiv la fiecare jurământ deja jurat, fără migrare.
+> - `referencePopulation` dă previzualizării de efect un domeniu plin încadrat și jurat, ca reglajele să aibă ce măsura. Panoul per-clădire rămâne NEîncadrat — altfel fiecare număr existent din admin s-ar fi mișcat cu ×1,5.
+> - Submodul la `8534122`. `SAVE_SCHEMA` 9 → 10. 583 teste, `tsc -b` și build verzi.
+
 **Task Completed (Warlord: catastiful casei + garda de schemă la sync)**
 > Prompt: „vreau sa dezvoltam sistemul din spatele jocului, vom calibra valorile mai tarziu"
 > Model: Claude Opus 5

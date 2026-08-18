@@ -10,6 +10,9 @@ import {
 } from '@warlord/logic/config';
 import { PROMOTE_AT } from '@warlord/logic/units';
 import { EFFECT_PRIMS } from '@warlord/logic/traditionPalette';
+import { CREW_SIZE } from '@warlord/logic/population';
+import { CRAFT_PRIMS } from '@warlord/logic/craftPalette';
+import { DEFAULT_POPULATION, DEFAULT_CRAFT_RULES } from '@warlord/logic/config';
 import { DUTIES } from '@warlord/logic/duty';
 import { DEFAULT_LEGION_DEEDS } from '@warlord/logic/config';
 import {
@@ -308,7 +311,7 @@ export default function WarlordAdminPanel({
   // Keyed branches (one entry per source / per intensity), same delete-when-empty shape as
   // the flat ones above so an emptied group leaves no husk in the stored document.
   function setKeyed(
-    branch: 'recruitSources' | 'intensity' | 'duties',
+    branch: 'recruitSources' | 'intensity' | 'duties' | 'craftPrims',
     key: string,
     field: string,
     v: number | undefined,
@@ -331,6 +334,49 @@ export default function WarlordAdminPanel({
     setKeyed('intensity', key, field, v);
   const setDuty = (key: string, v: number | undefined) =>
     setKeyed('duties', key, 'copperPerSoldier', v);
+
+  function setPopulation(
+    key: 'staffBonus' | 'growthPctPerDay' | 'foodPerPerson' | 'growthFoodSharePct'
+      | 'perLevelBonus' | 'levelBase' | 'levelCurve' | 'maxCrewLevel',
+    v: number | undefined,
+  ) {
+    setOv((prev) => {
+      const t: Record<string, unknown> = { ...(prev.population ?? {}) };
+      if (v === undefined) delete t[key]; else t[key] = v;
+      const next: Record<string, unknown> = { ...prev };
+      if (Object.keys(t).length === 0) delete next.population;
+      else next.population = t;
+      return next as GameConfigOverrides;
+    });
+  }
+
+  function setCraftRules(
+    key: 'rebatePerTenPct' | 'rebatePerHand' | 'standingBase' | 'proofMinDays',
+    v: number | undefined,
+  ) {
+    setOv((prev) => {
+      const t: Record<string, unknown> = { ...(prev.craftRules ?? {}) };
+      if (v === undefined) delete t[key]; else t[key] = v;
+      const next: Record<string, unknown> = { ...prev };
+      if (Object.keys(t).length === 0) delete next.craftRules;
+      else next.craftRules = t;
+      return next as GameConfigOverrides;
+    });
+  }
+
+  const setCrew = (type: string, v: number | undefined) => {
+    setOv((prev) => {
+      const t: Record<string, unknown> = { ...(prev.crew ?? {}) };
+      if (v === undefined) delete t[type]; else t[type] = v;
+      const next: Record<string, unknown> = { ...prev };
+      if (Object.keys(t).length === 0) delete next.crew;
+      else next.crew = t;
+      return next as GameConfigOverrides;
+    });
+  };
+
+  const setCraftPrim = (id: string, field: 'step' | 'points' | 'proofPct', v: number | undefined) =>
+    setKeyed('craftPrims', id, field, v);
 
   function setLegionDeeds(key: 'minSharePct' | 'heldTheLinePct' | 'killsPerBattleCap' | 'levelBase' | 'levelCurve' | 'maxLevel', v: number | undefined) {
     setOv((prev) => {
@@ -824,6 +870,68 @@ export default function WarlordAdminPanel({
                 inflated tradition unrepresentable rather than merely refused, and it is why retuning
                 a piece here would apply retroactively to every tree already grown. Making the pieces
                 editable is its own slice, with its own migration.
+              </p>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="font-bold mb-2">Population &amp; crafts</h3>
+            <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
+              <NumField label="A full crew is worth (+x the day)" def={DEFAULT_POPULATION.staffBonus} value={ov.population?.staffBonus} onChange={(v) => setPopulation('staffBonus', v)} min={0} />
+              <NumField label="Each crew level above the first adds" def={DEFAULT_POPULATION.perLevelBonus} value={ov.population?.perLevelBonus} onChange={(v) => setPopulation('perLevelBonus', v)} min={0} />
+              <NumField label="Days worked for crew level 2" def={DEFAULT_POPULATION.levelBase} value={ov.population?.levelBase} onChange={(v) => setPopulation('levelBase', v)} min={1} />
+              <NumField label="Crew level curve" def={DEFAULT_POPULATION.levelCurve} value={ov.population?.levelCurve} onChange={(v) => setPopulation('levelCurve', v)} min={1} />
+              <NumField label="Max crew level" def={DEFAULT_POPULATION.maxCrewLevel} value={ov.population?.maxCrewLevel} onChange={(v) => setPopulation('maxCrewLevel', v)} min={1} />
+              <NumField label="Souls born per day (share)" def={DEFAULT_POPULATION.growthPctPerDay} value={ov.population?.growthPctPerDay} onChange={(v) => setPopulation('growthPctPerDay', v)} min={0} />
+              <NumField label="Food one newcomer eats" def={DEFAULT_POPULATION.foodPerPerson} value={ov.population?.foodPerPerson} onChange={(v) => setPopulation('foodPerPerson', v)} min={1} />
+              <NumField label="Harvest share growth may eat (%)" def={DEFAULT_POPULATION.growthFoodSharePct} value={ov.population?.growthFoodSharePct} onChange={(v) => setPopulation('growthFoodSharePct', v)} min={0} />
+            </div>
+            <p className="mt-2 text-xs text-wl-muted">
+              The per-level bonus is bounded <b>across</b> the other two: what has to stay under the
+              ceiling is staffBonus × levelMult(maxCrewLevel), and either of those can be raised on
+              its own. Growth eats only the food produced that day — never the granary, because food
+              is a market good in both directions and a granary-fed town is one you can buy.
+            </p>
+
+            <div className="mt-3 space-y-1">
+              <div className="text-sm font-semibold">Crew sizes</div>
+              <div className="grid md:grid-cols-3 gap-x-6 gap-y-1">
+                {(Object.keys(CREW_SIZE) as (keyof typeof CREW_SIZE)[]).map((t) => (
+                  <NumField key={t} label={String(t).replace(/_/g, ' ')} def={CREW_SIZE[t] ?? 0} value={ov.crew?.[t]} onChange={(v) => setCrew(String(t), v)} min={1} />
+                ))}
+              </div>
+              <p className="text-xs text-wl-muted">
+                A building with no row here has no crew at all, and an override cannot create one —
+                only resize an existing one. Otherwise a config edit would hand the barracks a
+                production bonus it has no way to earn.
+              </p>
+            </div>
+
+            <div className="mt-3 space-y-1">
+              <div className="text-sm font-semibold">What a sworn craft costs and buys</div>
+              <div className="grid md:grid-cols-2 gap-x-6 gap-y-1">
+                <NumField label="Points per ten percent given up" def={DEFAULT_CRAFT_RULES.rebatePerTenPct} value={ov.craftRules?.rebatePerTenPct} onChange={(v) => setCraftRules('rebatePerTenPct', v)} min={0.1} />
+                <NumField label="Points per hand promised" def={DEFAULT_CRAFT_RULES.rebatePerHand} value={ov.craftRules?.rebatePerHand} onChange={(v) => setCraftRules('rebatePerHand', v)} min={0.1} />
+                <NumField label="Days kept for the first depth" def={DEFAULT_CRAFT_RULES.standingBase} value={ov.craftRules?.standingBase} onChange={(v) => setCraftRules('standingBase', v)} min={1} />
+                <NumField label="Days of books a share-proof needs" def={DEFAULT_CRAFT_RULES.proofMinDays} value={ov.craftRules?.proofMinDays} onChange={(v) => setCraftRules('proofMinDays', v)} min={1} />
+              </div>
+              <div className="grid md:grid-cols-3 gap-x-6 gap-y-2 mt-2">
+                {CRAFT_PRIMS.map((p) => (
+                  <div key={p.id} className="space-y-1">
+                    <div className="text-xs font-semibold">
+                      {p.name} <span className="font-normal text-wl-muted">({p.channel}, proof: {p.proof})</span>
+                    </div>
+                    <NumField label="per step" def={p.step} value={ov.craftPrims?.[p.id]?.step} onChange={(v) => setCraftPrim(p.id, 'step', v)} min={0.001} />
+                    <NumField label="points" def={p.points} value={ov.craftPrims?.[p.id]?.points} onChange={(v) => setCraftPrim(p.id, 'points', v)} min={1} />
+                    <NumField label="proof (%)" def={p.proofPct} value={ov.craftPrims?.[p.id]?.proofPct} onChange={(v) => setCraftPrim(p.id, 'proofPct', v)} min={1} />
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-wl-muted">
+                Editable here, unlike the tradition palette — because a craft design stores piece ids
+                and promised amounts, never prices, so a retune applies retroactively to every oath
+                already sworn, with no migration. That is what makes calibrating these later free.
+                The aggregate ceiling still binds whatever you type.
               </p>
             </div>
           </section>
