@@ -145,6 +145,21 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (SECURITATE: trei defecte în firestore.rules, găsite proiectând asistentul AI)**
+> Prompt: „ok" (după ce i-am prezentat cele patru defecte verificate la sursă)
+> Model: Claude Opus 5
+> Găsite de pasele adversariale ale două workflow-uri de proiectare, apoi **verificate de mine la sursă** înainte de orice atingere. Trei deploy-uri separate, ca atribuirea să fie clară dacă se rupe ceva.
+>
+> **1. Expunere de citire pe `events`.** Ultima ramură a regulii era `resource.data.sharedWithFamily == true`, fără nicio altă condiție — deci orice cont autentificat putea citi orice eveniment care poartă flagul, **și le putea enumera**, fiindcă o interogare pe `sharedWithFamily == true` se potrivește exact cu ramura și e permisă. Evenimentele noi scriu `false`, dar câmpul se propagă la fiecare editare, deci documentele vechi îl au pe `true`. Ramura ștearsă: nimic legitim n-o cerea (fiecare eveniment de grup are și `groupId`, acoperit de ramura de apartenență) și **nicio interogare din aplicație nu filtrează pe el**.
+>
+> **2. Injectare în calendarul altcuiva.** `create` constrângea DOAR `ownerId`, iar regula de citire acordă acces celui NUMIT pe document. Deci orice cont putea crea un eveniment care numește un străin, cu text arbitrar, și acesta apărea în calendarul lui. Uid-urile nu sunt secrete: id-ul documentului `warlordPlayers/{uid}` **ESTE** uid-ul, iar colecția e citibilă de oricine autentificat. Închis pe scriere: `inviteeId` nu mai poate fi scris de client (**nimic din codebase nu-l scrie** — invitațiile reale trec prin `group_invites`; clientul doar îl citește și randează rezultatul ca invitație în așteptare), iar `assigneeIds`/`assigneeId` pot numi pe altcineva doar pe un eveniment dintr-un grup din care faci parte.
+>
+> **3. Orice membru putea ejecta pe oricine și șterge grupul.** `allow update, delete: if uid in members`, fără niciun test de proprietar — inclusiv asupra proprietarului, inclusiv ștergerea grupului cu tot cu evenimente. UI-ul intenționa deja owner-only (`isOwner` păzește și calea de ștergere, și butonul de scoatere); regula pur și simplu nu impunea ce promitea ecranul. Acum: proprietarul poate orice; un membru poate edita grupul cât timp nu atinge lista de membri, **cu excepția scoaterii lui însuși**, care e plecarea. Intrarea în grup e neatinsă — membrii se adaugă EXCLUSIV prin `acceptGroupInvite` (Admin SDK, pe care regulile nu-l constrâng).
+>
+> **RĂMÂNE DESCHIS, deliberat:** un FOST membru păstrează accesul de citire prin ramura `assigneeIds`, care n-are test de apartenență, iar ieșirea din grup curăță doar `members`. Nu l-am reparat aici fiindcă e singurul care **nu poate fi rezolvat doar din reguli**: interogarea clientului `where('assigneeIds','array-contains',uid)` ar începe să întoarcă `permission-denied` pe TOATĂ lista dacă un singur document nu mai trece — deci cere o schimbare coordonată client+reguli, cu verificare pe viu.
+>
+> Nu există suite de teste pentru reguli în proiectul ăsta; fiecare afirmație de aici a fost verificată citind regula ȘI scrierea corespondentă.
+
 **Task Completed (Warlord: vocabularul întreg al meșteșugului + arborele)**
 > Prompt: „continua"
 > Model: Claude Opus 5

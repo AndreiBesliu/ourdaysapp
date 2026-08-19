@@ -40,7 +40,27 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
         request.resource.data.ownerId == request.auth.uid &&
         request.auth.uid in request.resource.data.members;
-      allow update, delete: if isSignedIn() && request.auth.uid in resource.data.members;
+      // This used to be `update, delete: if uid in members` — which let ANY member eject any
+      // other member, the owner included, and delete the whole group with its events. The UI
+      // already intended owner-only (`isOwner` guards both the delete path and the remove
+      // button), so the rule was simply not enforcing what the screen promised.
+      //
+      // Joining is unaffected: members are added ONLY by the `acceptGroupInvite` Cloud
+      // Function, through the Admin SDK, which these rules do not constrain.
+      //
+      // A group created before `ownerId` was required has none, so the comparison is false
+      // and it can no longer be deleted from the UI. Its members can still edit it and still
+      // leave. That is the safe direction to fail.
+      allow update: if isSignedIn() && request.auth.uid in resource.data.members && (
+        // the owner may change anything, including the member list
+        resource.data.ownerId == request.auth.uid ||
+        // anyone else may edit the group as long as they do not touch who is in it…
+        request.resource.data.members.toSet() == resource.data.members.toSet() ||
+        // …except to remove THEMSELVES, which is leaving.
+        request.resource.data.members.toSet() ==
+          resource.data.members.toSet().difference([request.auth.uid].toSet())
+      );
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
 
       // Chat messages subcollection
       match /messages/{messageId} {
@@ -82,23 +102,60 @@ service cloud.firestore {
 
     // ── Events ──
     match /events/{eventId} {
+      // NO `sharedWithFamily == true` term. It used to be the last branch of this OR, and it
+      // had no other condition attached — so ANY signed-in account could read ANY event
+      // carrying the flag, and could ENUMERATE them, because a query filtering on
+      // `sharedWithFamily == true` matches that branch exactly and is therefore permitted.
+      // Newly created events write `false` (AddEventModal), but the field is carried forward
+      // on every edit, so legacy documents still hold `true`.
+      // Nothing legitimate needed it: every group event also carries `groupId`, which the
+      // membership branch below already covers, and no query in the app filters on it.
       allow read: if isSignedIn() && (
         resource.data.ownerId == request.auth.uid ||
         (resource.data.groupId != null && isMemberOfGroup(resource.data.groupId)) ||
         (resource.data.assigneeIds != null && request.auth.uid in resource.data.assigneeIds) ||
         resource.data.assigneeId == request.auth.uid ||
-        resource.data.inviteeId == request.auth.uid ||
-        resource.data.sharedWithFamily == true
+        resource.data.inviteeId == request.auth.uid
       );
       // Client-created events must be owned by the caller, and group events
       // require group membership. The one path that creates an event owned by
       // someone else — a recurring single-occurrence override — now goes through
       // the `createEventOverride` Cloud Function (Admin SDK bypasses this rule).
+      //
+      // The two clauses after that close an injection path. Owning the document was the
+      // ONLY thing constrained here, while the read rule grants access to whoever is NAMED
+      // on it — so any signed-in account could create an event naming a stranger and have
+      // arbitrary text appear in that stranger's calendar. Uids are not secret: the doc id
+      // of `warlordPlayers/{uid}` IS the uid, and that collection is readable by anyone
+      // signed in.
+      //
+      //   inviteeId — NOTHING in this codebase ever writes it. Event-level invites are a
+      //     vestigial feature; real invitations go through `group_invites`. The client only
+      //     reads it (CalendarHome queries `where('inviteeId','==',uid)` and renders the
+      //     result as a pending invitation), so a client write can only be an injection.
+      //   assigneeIds / assigneeId — you may name other people only on an event belonging to
+      //     a group you are in, which the clause above already verifies. Anywhere else, the
+      //     only name you may write is your own. Personal events assign nobody, so this
+      //     costs no real flow.
       allow create: if isSignedIn() &&
         request.resource.data.ownerId == request.auth.uid && (
           !('groupId' in request.resource.data) ||
           request.resource.data.groupId == null ||
           isMemberOfGroup(request.resource.data.groupId)
+        ) && (
+          !('inviteeId' in request.resource.data) ||
+          request.resource.data.inviteeId == null
+        ) && (
+          (request.resource.data.groupId != null &&
+            isMemberOfGroup(request.resource.data.groupId)) ||
+          (
+            (!('assigneeIds' in request.resource.data) ||
+              request.resource.data.assigneeIds == null ||
+              request.resource.data.assigneeIds.hasOnly([request.auth.uid])) &&
+            (!('assigneeId' in request.resource.data) ||
+              request.resource.data.assigneeId == null ||
+              request.resource.data.assigneeId == request.auth.uid)
+          )
         );
       allow update: if isSignedIn() && (
         resource.data.ownerId == request.auth.uid ||
