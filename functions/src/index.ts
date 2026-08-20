@@ -7,6 +7,9 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { applyCommand } from "./warlordCombat/combat/engine";
 import { sanitizeDeploy, createPvpBattle } from "./warlordCombat/combat/pvp";
 import type { BattleState, Command } from "./warlordCombat/combat/types";
+import { deriveScope } from "./aiScope";
+import { fetchAssets, fetchChat, fetchEvents, fetchExpenses } from "./aiSources";
+import { dayRangePeriod, monthPeriod, periodDays } from "./period";
 
 admin.initializeApp();
 
@@ -21,6 +24,14 @@ const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 // written only by the Admin SDK here (clients have no matching rule → denied).
 const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 50);
 const NOTIF_DAILY_LIMIT = Number(process.env.NOTIF_DAILY_LIMIT || 100);
+// The visibility preview gets its OWN bucket. Five callables already share `ai_usage`, so a
+// preview drawing on it would starve the checklist and the category suggestion.
+const AI_PREVIEW_DAILY_LIMIT = Number(process.env.AI_PREVIEW_DAILY_LIMIT || 60);
+// The user picks the period, so the user picks the input size. This is the first bound.
+const AI_MAX_PERIOD_DAYS = Number(process.env.AI_MAX_PERIOD_DAYS || 400);
+// Documents one turn may read, distributed as `limit()` values BEFORE any read — you do not
+// pay Firestore to fetch a corpus you are then going to throw away at the token ceiling.
+const AI_DOC_BUDGET = Number(process.env.AI_DOC_BUDGET || 600);
 const WARLORD_CHALLENGE_DAILY_LIMIT = Number(process.env.WARLORD_CHALLENGE_DAILY_LIMIT || 30);
 // A battle where the opponent simply stops playing would otherwise lock the units
 // staked in it forever (they are excluded from new deployments). After this many hours
@@ -1946,3 +1957,75 @@ export const onWarlordBattleUpdated = onDocumentUpdated("games/{gameId}", async 
   }
 });
 
+
+// ── The assistant's visibility oracle ───────────────────────────────────────────────────
+//
+// Slice 1 of the cross-group assistant, and deliberately NOT the assistant: this calls no
+// model, persists nothing and costs no tokens. It answers one question — "what would the
+// assistant be able to see for me, in this period?" — as numbers and titles, so the whole
+// privacy claim can be checked against the calendar on screen BEFORE a single token is spent.
+//
+// It reads only through `deriveScope`, whose branded return type is the only thing the
+// fetchers accept, and it uses its OWN quota bucket: the shared `ai_usage` bucket is already
+// split between five callables, and letting a preview eat it would starve the checklist and
+// the category suggestion by lunchtime.
+export const aiPreviewScope = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+  if (!(await tryConsumeQuota(uid, "ai_preview_usage", AI_PREVIEW_DAILY_LIMIT))) {
+    throw new HttpsError("resource-exhausted", "Daily preview limit reached.");
+  }
+
+  const { from, to, year, month } = (request.data || {}) as Record<string, unknown>;
+  const period =
+    typeof from === "string" && typeof to === "string"
+      ? dayRangePeriod(from, to)
+      : typeof year === "number" && typeof month === "number"
+        ? monthPeriod(year, month)
+        : null;
+  if (!period) {
+    // Refuses rather than guessing: a guessed period answers about a different month than the
+    // one asked about, and the caller could never see that it had happened.
+    throw new HttpsError("invalid-argument", "Give either {from,to} as yyyy-MM-dd, or {year,month}.");
+  }
+  if (periodDays(period) > AI_MAX_PERIOD_DAYS) {
+    throw new HttpsError("invalid-argument", `A period may not exceed ${AI_MAX_PERIOD_DAYS} days.`);
+  }
+
+  try {
+    const scope = await deriveScope(uid);
+    const [events, chat, assets, expenses] = await Promise.all([
+      fetchEvents(scope, period, AI_DOC_BUDGET),
+      fetchChat(scope, period, Math.floor(AI_DOC_BUDGET / 2)),
+      fetchAssets(scope, Math.floor(AI_DOC_BUDGET / 4)),
+      fetchExpenses(),
+    ]);
+
+    return {
+      period: { fromDay: period.fromDay, toDay: period.toDay, days: periodDays(period) },
+      scope: {
+        groups: scope.groupIds.length,
+        totalGroups: scope.totalGroups,
+        truncated: scope.truncated,
+      },
+      events: {
+        count: events.items.length,
+        complete: events.complete,
+        // Titles, so this can be compared against the calendar by eye. Nothing else from the
+        // document: no description, no location, no checklist, no assignees.
+        preview: events.items.slice(0, 200).map((e) => ({
+          day: e.day, title: e.title, isTask: e.isTask,
+          scopeLabel: e.scopeLabel, outOfScope: e.outOfScope, virtual: e.virtual,
+        })),
+      },
+      chat: { count: chat.items.length, complete: chat.complete },
+      assets: { count: assets.items.length, complete: assets.complete },
+      expenses: { count: 0, unavailable: expenses.unavailable },
+    };
+  } catch (error: any) {
+    void logServerError(error?.message || "aiPreviewScope failed", "ai:previewScope", { stack: error?.stack });
+    throw new HttpsError("internal", "Could not read your data.");
+  }
+});

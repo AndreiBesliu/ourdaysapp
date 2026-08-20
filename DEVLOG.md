@@ -145,6 +145,24 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Asistent felia 1: oracolul de vizibilitate — zero apeluri de model)**
+> Prompt: „ok"
+> Model: Claude Opus 5
+> - Fundația pe care stă toată pretenția de confidențialitate a asistentului, **testabilă înainte să se cheltuie un singur token**. Nu cheamă niciun model, nu persistă nimic.
+> - **`Scope` e un TIP branded cu un singur constructor** (`deriveScope`). Fetcherele nu acceptă altceva, deci „un fetcher a primit un domeniu vechi sau falsificat" e eroare de compilare, nu o observație pierdută la review. `functions/tsconfig.json` are `strict: true` și build-ul e `tsc` real, deci verificarea chiar rulează.
+> - **Se re-derivă la fiecare apel, niciodată cache.** Apartenența la grup e singura acordare cross-user din aplicație și se poate retrage fără NICIUN semnal — `handleRemoveMember` e un `arrayRemove` gol, fără trigger, fără notificare, fără `joinedAt`. Nu există la ce s-ar putea agăța o invalidare.
+> - **`groups/{id}.get()` e interzis în afara lui `deriveScope`.** Un eveniment al cărui `groupId` nu e în domeniu primește un COD („former-group"), niciodată un nume — citirea numelui ar fi o citire pe care apelantul n-o poate face singur.
+> - **Invariantul `visibleTo` e scris de la zero, NU portat.** Filtrul din client e învelit în `activeGroupId !== 'personal'`, o variabilă de UI pe care serverul n-o are; portat literal, cu apelantul „în vizualizare personală", condiția scurtcircuitează la false și **fiecare eveniment ascuns deliberat intră în contextul cross-grup**.
+> - **Ramura `sharedWithFamily` e absentă deliberat**, iar fișierul nu depinde de faptul că am scos-o azi și din reguli. A fi mai îngust decât regulile e întotdeauna sigur.
+> - **`collectionGroup` interzis** pentru chat: pe Admin SDK întoarce fiecare grup din bază și produce un răspuns plauzibil, nu o eroare. Mesajele cu `isDeleted` se sar integral, timestamp inclusiv — coaja produce „X a spus ceva la 14:03" despre un mesaj retras.
+> - **Recurența pe server:** două pase mărginite de frecvență (400 zile / 5 ani, din orizonturile clientului), toleranță de ±1 zi pe chei DOAR pentru weekly/monthly/yearly (la daily ar șterge două ocurențe reale per excepție), și dedupe pe `overrideOfParent` — singura ramură pe care n-o poate învinge niciun fus.
+> - **Perioada se construiește din ȘIRURI LITERALE**, niciodată dintr-un `Date` local prin `toISOString()`. Pentru un apelant din New York, `startOfMonth(martie).toISOString()` e `2026-03-01T05:00:00.000Z` — evenimentul de 1 martie cade sub limită și cel de 1 aprilie intră, deci fiecare răspuns despre „martie" ar fi tăcut 2 martie–1 aprilie. **11 teste, două fusuri, șiruri identice.**
+> - `expenses` NU e sursă: zero potriviri în toate cele 273 de linii din `firestore.rules`, fără catch-all ⇒ refuzată implicit; iar documentul n-are nici `groupId`, nici `ownerId`, deci n-ar exista după ce filtra. Serverul întoarce un COD, clientul compune propoziția — diferența dintre o lipsă și o minciună.
+> - Numele vin din `profiles/`, **niciodată din `users/`** (digestul existent citește `users/`, date pe care apelantul nu le poate citi singur).
+> - `aiPreviewScope` are **găleata lui de cotă** — cinci callable-uri împart deja `ai_usage`, iar o previzualizare pe cheia comună ar înfometa checklistul până la prânz. Plus plafon de perioadă (400 zile) și buget de documente distribuit ca `limit()` ÎNAINTE de citiri.
+> - **Primul `firestore.indexes.json` din repo**, legat în `firebase.json` — până acum indecșii compoziți existau doar ca artefacte de consolă.
+> - 596 teste verzi (11 noi), `tsc -b` și build verzi. Deploy: indecși + `aiPreviewScope` pe live.
+
 **Task Completed (SECURITATE: exfiltrare de chat privat prin `generateGroupDigest`)**
 > Prompt: „ok, continua"
 > Model: Claude Opus 5

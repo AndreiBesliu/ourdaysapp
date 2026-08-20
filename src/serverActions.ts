@@ -146,3 +146,35 @@ export async function adminGetGrowth(): Promise<any> {
 // and every admin callable re-check server-side). Keep in sync with the
 // functions' BOOTSTRAP_ADMIN_EMAILS.
 export const ADMIN_BOOTSTRAP_EMAILS = ["besliandrei@gmail.com"];
+
+// ── The assistant's visibility preview ─────────────────────────────────────────────────
+//
+// Slice 1 of the cross-group assistant. Calls no model and persists nothing: it answers
+// "what would the assistant be able to see for me, in this period?" as counts and titles, so
+// the privacy claim can be checked against the calendar on screen before a token is spent.
+//
+// Give it either an explicit day range or a month. Both are refused rather than guessed if
+// malformed — a guessed period answers about a different month than the one asked about, and
+// that is a failure the caller can never see.
+export interface ScopePreview {
+  period: { fromDay: string; toDay: string; days: number };
+  scope: { groups: number; totalGroups: number; truncated: boolean };
+  events: {
+    count: number;
+    complete: boolean;
+    preview: {
+      day: string; title: string; isTask: boolean;
+      scopeLabel: string; outOfScope: boolean; virtual: boolean;
+    }[];
+  };
+  chat: { count: number; complete: boolean };
+  assets: { count: number; complete: boolean };
+  expenses: { count: number; unavailable?: string };
+}
+
+export async function aiPreviewScope(
+  input: { from: string; to: string } | { year: number; month: number },
+): Promise<ScopePreview> {
+  const fn = httpsCallable(getFunctions(app), "aiPreviewScope");
+  return (await fn(input)).data as ScopePreview;
+}

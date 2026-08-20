@@ -11,7 +11,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
+exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -19,6 +19,9 @@ const crypto = require("crypto");
 const generative_ai_1 = require("@google/generative-ai");
 const engine_1 = require("./warlordCombat/combat/engine");
 const pvp_1 = require("./warlordCombat/combat/pvp");
+const aiScope_1 = require("./aiScope");
+const aiSources_1 = require("./aiSources");
+const period_1 = require("./period");
 admin.initializeApp();
 // App Check enforcement is toggled via env so it can be switched on AFTER the
 // reCAPTCHA key is registered and verified in monitor mode in the Firebase
@@ -30,6 +33,14 @@ const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 // written only by the Admin SDK here (clients have no matching rule → denied).
 const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 50);
 const NOTIF_DAILY_LIMIT = Number(process.env.NOTIF_DAILY_LIMIT || 100);
+// The visibility preview gets its OWN bucket. Five callables already share `ai_usage`, so a
+// preview drawing on it would starve the checklist and the category suggestion.
+const AI_PREVIEW_DAILY_LIMIT = Number(process.env.AI_PREVIEW_DAILY_LIMIT || 60);
+// The user picks the period, so the user picks the input size. This is the first bound.
+const AI_MAX_PERIOD_DAYS = Number(process.env.AI_MAX_PERIOD_DAYS || 400);
+// Documents one turn may read, distributed as `limit()` values BEFORE any read — you do not
+// pay Firestore to fetch a corpus you are then going to throw away at the token ceiling.
+const AI_DOC_BUDGET = Number(process.env.AI_DOC_BUDGET || 600);
 const WARLORD_CHALLENGE_DAILY_LIMIT = Number(process.env.WARLORD_CHALLENGE_DAILY_LIMIT || 30);
 // A battle where the opponent simply stops playing would otherwise lock the units
 // staked in it forever (they are excluded from new deployments). After this many hours
@@ -356,10 +367,18 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
 exports.generateGroupDigest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c, _d;
     const { groupId, language = 'en-US' } = request.data;
-    if (!groupId) {
+    if (!groupId || typeof groupId !== 'string') {
         throw new https_1.HttpsError('invalid-argument', 'groupId is required.');
     }
-    await assertAiCallerAllowed(request);
+    const callerUid = await assertAiCallerAllowed(request);
+    // MEMBERSHIP. This was missing, and its absence was not a rules gap — everything below
+    // reads through the Admin SDK, which ignores firestore.rules entirely. So any signed-in
+    // account that knew or guessed a group id received an AI-written summary of that group's
+    // private chat. `assertAiCallerAllowed` only proves who you are and that you have quota
+    // left; it says nothing about what you may read.
+    if (!(await userInGroup(callerUid, groupId))) {
+        throw new https_1.HttpsError('permission-denied', 'You are not a member of that group.');
+    }
     try {
         const key = process.env.GEMINI_API_KEY_LOCAL;
         if (!key) {
@@ -1933,6 +1952,75 @@ exports.onWarlordBattleUpdated = (0, firestore_1.onDocumentUpdated)("games/{game
     }
     catch (error) {
         console.error("Error sending Warlord FCM:", error);
+    }
+});
+// ── The assistant's visibility oracle ───────────────────────────────────────────────────
+//
+// Slice 1 of the cross-group assistant, and deliberately NOT the assistant: this calls no
+// model, persists nothing and costs no tokens. It answers one question — "what would the
+// assistant be able to see for me, in this period?" — as numbers and titles, so the whole
+// privacy claim can be checked against the calendar on screen BEFORE a single token is spent.
+//
+// It reads only through `deriveScope`, whose branded return type is the only thing the
+// fetchers accept, and it uses its OWN quota bucket: the shared `ai_usage` bucket is already
+// split between five callables, and letting a preview eat it would starve the checklist and
+// the category suggestion by lunchtime.
+exports.aiPreviewScope = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    var _a;
+    const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
+    if (!uid) {
+        throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
+    }
+    if (!(await tryConsumeQuota(uid, "ai_preview_usage", AI_PREVIEW_DAILY_LIMIT))) {
+        throw new https_1.HttpsError("resource-exhausted", "Daily preview limit reached.");
+    }
+    const { from, to, year, month } = (request.data || {});
+    const period = typeof from === "string" && typeof to === "string"
+        ? (0, period_1.dayRangePeriod)(from, to)
+        : typeof year === "number" && typeof month === "number"
+            ? (0, period_1.monthPeriod)(year, month)
+            : null;
+    if (!period) {
+        // Refuses rather than guessing: a guessed period answers about a different month than the
+        // one asked about, and the caller could never see that it had happened.
+        throw new https_1.HttpsError("invalid-argument", "Give either {from,to} as yyyy-MM-dd, or {year,month}.");
+    }
+    if ((0, period_1.periodDays)(period) > AI_MAX_PERIOD_DAYS) {
+        throw new https_1.HttpsError("invalid-argument", `A period may not exceed ${AI_MAX_PERIOD_DAYS} days.`);
+    }
+    try {
+        const scope = await (0, aiScope_1.deriveScope)(uid);
+        const [events, chat, assets, expenses] = await Promise.all([
+            (0, aiSources_1.fetchEvents)(scope, period, AI_DOC_BUDGET),
+            (0, aiSources_1.fetchChat)(scope, period, Math.floor(AI_DOC_BUDGET / 2)),
+            (0, aiSources_1.fetchAssets)(scope, Math.floor(AI_DOC_BUDGET / 4)),
+            (0, aiSources_1.fetchExpenses)(),
+        ]);
+        return {
+            period: { fromDay: period.fromDay, toDay: period.toDay, days: (0, period_1.periodDays)(period) },
+            scope: {
+                groups: scope.groupIds.length,
+                totalGroups: scope.totalGroups,
+                truncated: scope.truncated,
+            },
+            events: {
+                count: events.items.length,
+                complete: events.complete,
+                // Titles, so this can be compared against the calendar by eye. Nothing else from the
+                // document: no description, no location, no checklist, no assignees.
+                preview: events.items.slice(0, 200).map((e) => ({
+                    day: e.day, title: e.title, isTask: e.isTask,
+                    scopeLabel: e.scopeLabel, outOfScope: e.outOfScope, virtual: e.virtual,
+                })),
+            },
+            chat: { count: chat.items.length, complete: chat.complete },
+            assets: { count: assets.items.length, complete: assets.complete },
+            expenses: { count: 0, unavailable: expenses.unavailable },
+        };
+    }
+    catch (error) {
+        void logServerError((error === null || error === void 0 ? void 0 : error.message) || "aiPreviewScope failed", "ai:previewScope", { stack: error === null || error === void 0 ? void 0 : error.stack });
+        throw new https_1.HttpsError("internal", "Could not read your data.");
     }
 });
 //# sourceMappingURL=index.js.map
