@@ -376,10 +376,19 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
 
 export const generateGroupDigest = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const { groupId, language = 'en-US' } = request.data;
-  if (!groupId) {
+  if (!groupId || typeof groupId !== 'string') {
     throw new HttpsError('invalid-argument', 'groupId is required.');
   }
-  await assertAiCallerAllowed(request);
+  const callerUid = await assertAiCallerAllowed(request);
+
+  // MEMBERSHIP. This was missing, and its absence was not a rules gap — everything below
+  // reads through the Admin SDK, which ignores firestore.rules entirely. So any signed-in
+  // account that knew or guessed a group id received an AI-written summary of that group's
+  // private chat. `assertAiCallerAllowed` only proves who you are and that you have quota
+  // left; it says nothing about what you may read.
+  if (!(await userInGroup(callerUid, groupId))) {
+    throw new HttpsError('permission-denied', 'You are not a member of that group.');
+  }
 
   try {
     const key = process.env.GEMINI_API_KEY_LOCAL;

@@ -145,6 +145,15 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (SECURITATE: exfiltrare de chat privat prin `generateGroupDigest`)**
+> Prompt: „ok, continua"
+> Model: Claude Opus 5
+> - **Al patrulea defect, și cel mai grav.** `generateGroupDigest` lua `groupId` din `request.data`, chema `assertAiCallerAllowed` — care verifică DOAR autentificarea și cota — și apoi citea numele grupului, 48h de chat privat și evenimentele săptămânii **prin Admin SDK**, fără să cheme niciodată `userInGroup`. Funcția aia exista deja în fișier (linia 94) și e folosită corect în altă parte (`createEventOverride`, linia 595). Aici pur și simplu lipsea.
+> - **Nu era o gaură de reguli — era una peste ele.** Admin SDK ignoră complet `firestore.rules`, deci cele trei fixuri de reguli de mai devreme n-o atingeau deloc. Orice cont autentificat care știa sau ghicea un id de grup primea un **rezumat scris de AI al chatului privat al acelui grup**.
+> - Fix: `permission-denied` dacă apelantul nu e membru, cu motivul scris deasupra — că `assertAiCallerAllowed` dovedește cine ești și că mai ai cotă, dar nu spune nimic despre ce ai voie să citești.
+> - **Scanat restul suprafeței:** din cele 27 de callable-uri, singurele care citesc date după un id din `request.data` sunt `transferAssetCopy` (verifică proprietatea ȘI grupul comun ✔), `createEventOverride` (cheamă `userInGroup` ✔) și `generateGroupDigest` (nu verifica nimic ✘). Celelalte AI-uri — `generateAIChecklist`, `suggestEventCategory`, `suggestAssetForText` — nu citesc Firestore deloc; primesc textul de la client.
+> - Găsit de felia 0 a specului „Recall", verificat de mine la sursă înainte de orice atingere. Deploy țintit pe funcția respectivă.
+
 **Task Completed (SECURITATE: trei defecte în firestore.rules, găsite proiectând asistentul AI)**
 > Prompt: „ok" (după ce i-am prezentat cele patru defecte verificate la sursă)
 > Model: Claude Opus 5
