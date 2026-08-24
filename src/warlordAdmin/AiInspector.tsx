@@ -84,7 +84,7 @@ export default function AiInspector() {
     const seen = new Map<AiRuleId, number>();
     for (const t of replay?.turns ?? []) {
       for (const id of t.rules) seen.set(id, (seen.get(id) ?? 0) + 1);
-      for (const u of t.units) for (const id of u.rules) seen.set(id, (seen.get(id) ?? 0) + 1);
+      for (const u of t.units) for (const id of [...u.rules, ...u.weighed]) seen.set(id, (seen.get(id) ?? 0) + 1);
     }
     return seen;
   }, [replay]);
@@ -223,7 +223,7 @@ export default function AiInspector() {
             </div>
 
             {replay.turns.map((t, i) => {
-              const rows = focus ? t.units.filter((u) => u.rules.includes(focus)) : t.units;
+              const rows = focus ? t.units.filter((u) => u.rules.includes(focus) || u.weighed.includes(focus)) : t.units;
               return (
                 <div key={i} className="rounded-lg border border-wl-line bg-wl-panel">
                   <div className="flex flex-wrap items-center gap-2 border-b border-wl-line px-3 py-2">
@@ -259,9 +259,19 @@ export default function AiInspector() {
                             </span>
                           </div>
                           <div className="text-xs">{u.detail}</div>
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="text-[10px] uppercase tracking-wide text-wl-muted mr-1">decided by</span>
                             {u.rules.map((id) => <RuleChip key={id} id={id} onPick={setFocus} />)}
                           </div>
+                          {u.weighed.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1">
+                              {/* Separate on purpose: these fired while weighing options that LOST.
+                                  Shown, because the ask was to log everything the AI does — but
+                                  never mixed with what actually decided the action. */}
+                              <span className="text-[10px] uppercase tracking-wide text-wl-muted mr-1">also weighed</span>
+                              {u.weighed.map((id) => <RuleChip key={id} id={id} onPick={setFocus} />)}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
