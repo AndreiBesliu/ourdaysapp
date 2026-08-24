@@ -145,6 +145,22 @@
 
 ## 📅 Session Log: August 8, 2026
 
+**Task Completed (Asistent felia 2: ledgerul de cost, bugetul tranzacțional, plafonul global)**
+> Prompt: „continua"
+> Model: Claude Opus 5
+> - Îndeplinește regula permanentă „un rând per apel plătit" **pe toată aplicația, ÎNAINTE** să existe funcția scumpă. Cinci callable-uri AI livrau de luni de zile fără nicio idee ce cheltuie.
+> - **Bugetul e o TRANZACȚIE, nu verifică-apoi-incrementează.** Verificarea la intrare plus incrementul la ieșire nu mărginesc nimic sub concurență: N apeluri paralele dintr-un cont citesc toate aceeași valoare pre-cheltuială și trec toate. Acum se ia o **rezervare pesimistă a plafonului apelului în aceeași tranzacție**, reconciliată în jos după. Modul de eșec devine supra-taxarea — direcția sigură.
+> - **Rândul se deschide ÎNAINTE de apel și se închide pe AMBELE căi.** Un apel care arde tokeni și apoi aruncă tot a costat bani. `withLedger` ține toată forma într-un loc, deci niciun apelant nu poate uita jumătate din ea.
+> - **Plafon GLOBAL pe lângă cel per-utilizator**, incrementat în aceeași tranzacție. Fiecare limită per-utilizator e denominată în conturi, iar conturile sunt gratis: înscrierea e deschisă, `assertAiCallerAllowed` nu verifică `email_verified`, App Check nu e aplicat. `_global` e singura limită care mărginește factura.
+> - **Raportul caractere/token se auto-calibrează per utilizator**, pornind pesimist de la 2,5, nu de la 4. „Patru caractere pe token" e o presupunere englezească; corpusul ăsta e chat de familie în șase limbi, cu diacritice românești și germane și emoji.
+> - **Prețuit LA SCRIERE și niciodată recalculat.** Un rând care își recalculează costul din tabelul de azi rescrie tăcut cheltuiala de luna trecută.
+> - **Un rând nu conține NICIODATĂ text de prompt sau de răspuns.** Altfel ledgerul devine o a doua copie, nereglementată, exact a datelor private de care are grijă tot restul designului — într-o colecție al cărei rost e să fie citită de operatori.
+> - **Refuzul se convertește într-UN singur loc**, ca eroare de fir cu un COD stabil (`ai-budget/user-budget`), nu ca o clasă pe care cele cinci apelante ar trebui să-și amintească s-o traducă. Clientul compune propoziția prin `t()` — cele șase limbi rămân treaba lui, serverul nu livrează niciodată engleză unui utilizator.
+> - Colecțiile noi sunt refuzate **EXPLICIT** (`if false`), nu prin absența unei reguli: o absență se citește ca o scăpare, iar în ziua în care cineva adaugă un catch-all s-ar deschide cu el.
+> - `adminGetAiSpend` (agregate 1/7/30 zile, per feature, top utilizatori) + `adminGetAiLedger` (drill-down filtrat pe zi și uid).
+> - 596 teste verzi, `tsc -b` și build verzi. Deploy: reguli + 7 funcții + hosting.
+> - **Rămâne la owner:** aplicarea App Check din consolă, cotă pe cheia Gemini și alertă de buget GCP — singurele limite care supraviețuiesc unui bug din codul nostru.
+
 **Task Completed (Asistent felia 1: oracolul de vizibilitate — zero apeluri de model)**
 > Prompt: „ok"
 > Model: Claude Opus 5

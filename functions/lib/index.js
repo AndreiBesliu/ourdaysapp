@@ -11,7 +11,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
+exports.adminGetAiLedger = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -22,6 +22,7 @@ const pvp_1 = require("./warlordCombat/combat/pvp");
 const aiScope_1 = require("./aiScope");
 const aiSources_1 = require("./aiSources");
 const period_1 = require("./period");
+const aiLedger_1 = require("./aiLedger");
 admin.initializeApp();
 // App Check enforcement is toggled via env so it can be switched on AFTER the
 // reCAPTCHA key is registered and verified in monitor mode in the Firebase
@@ -41,6 +42,8 @@ const AI_MAX_PERIOD_DAYS = Number(process.env.AI_MAX_PERIOD_DAYS || 400);
 // Documents one turn may read, distributed as `limit()` values BEFORE any read — you do not
 // pay Firestore to fetch a corpus you are then going to throw away at the token ceiling.
 const AI_DOC_BUDGET = Number(process.env.AI_DOC_BUDGET || 600);
+// One place for the model id, so the ledger's `model` column and the call can never disagree.
+const AI_MODEL = "gemini-2.5-flash-lite";
 const WARLORD_CHALLENGE_DAILY_LIMIT = Number(process.env.WARLORD_CHALLENGE_DAILY_LIMIT || 30);
 // A battle where the opponent simply stops playing would otherwise lock the units
 // staked in it forever (they are excluded from new deployments). After this many hours
@@ -154,7 +157,7 @@ exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)({
             return;
         }
         const genAI = new generative_ai_1.GoogleGenerativeAI(key);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+        const model = genAI.getGenerativeModel({ model: AI_MODEL });
         const prompt = `You are a helpful AI Assistant for a family organization app. 
 The user created a task/event titled "${title}".
 ${description ? `The description is: "${description}".` : ""}
@@ -165,7 +168,7 @@ If this looks like a Grocery or Shopping list, generate a checklist grouped by s
 Otherwise, generate a checklist of 3 to 7 actionable, brief steps or items needed to complete this task.
 Return ONLY a valid JSON array of strings, nothing else. No markdown formatting.
 Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1", "Step 2"]`;
-        const result = await model.generateContent(prompt);
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'auto-checklist', model: AI_MODEL, uid: ownerId || 'system' }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(ownerId || 'system')), () => model.generateContent(prompt), aiLedger_1.usageOf, prompt.length);
         const text = result.response.text();
         const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
         const list = JSON.parse(cleanText);
@@ -301,14 +304,14 @@ exports.generateAIChecklist = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
     if (!title) {
         throw new https_1.HttpsError('invalid-argument', 'Title is required.');
     }
-    await assertAiCallerAllowed(request);
+    const callerUid = await assertAiCallerAllowed(request);
     try {
         const key = process.env.GEMINI_API_KEY_LOCAL;
         if (!key) {
             throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
         }
         const genAI = new generative_ai_1.GoogleGenerativeAI(key);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+        const model = genAI.getGenerativeModel({ model: AI_MODEL });
         const prompt = `You are a helpful AI Assistant for a family organization app. 
 The user is creating a task/event titled "${title}".
 ${description ? `The description is: "${description}".` : ""}
@@ -319,7 +322,7 @@ If this looks like a Grocery or Shopping list, generate a checklist grouped by s
 Otherwise, generate a checklist of 3 to 7 actionable, brief steps or items needed to complete this task.
 Return ONLY a valid JSON array of strings, nothing else. No markdown formatting.
 Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1", "Step 2"]`;
-        const result = await model.generateContent(prompt);
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'checklist', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => model.generateContent(prompt), aiLedger_1.usageOf, prompt.length);
         const text = result.response.text();
         const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
         const list = JSON.parse(cleanText);
@@ -339,20 +342,20 @@ exports.suggestEventCategory = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_AP
     if (!title) {
         throw new https_1.HttpsError('invalid-argument', 'Title is required.');
     }
-    await assertAiCallerAllowed(request);
+    const callerUid = await assertAiCallerAllowed(request);
     try {
         const key = process.env.GEMINI_API_KEY_LOCAL;
         if (!key) {
             throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
         }
         const genAI = new generative_ai_1.GoogleGenerativeAI(key);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+        const model = genAI.getGenerativeModel({ model: AI_MODEL });
         const prompt = `You are a helpful AI Assistant. Given an event title and optional description, categorize it into exactly one of the following category IDs: "work", "family_time", "chores", "health", "other".
 Title: "${title}"
 ${description ? `Description: "${description}"` : ""}
 
 Return ONLY the category ID string, nothing else. No markdown formatting.`;
-        const result = await model.generateContent(prompt);
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'category', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => model.generateContent(prompt), aiLedger_1.usageOf, prompt.length);
         const text = result.response.text().trim().toLowerCase();
         const validCategories = ["work", "family_time", "chores", "health", "other"];
         const matchedCategory = validCategories.find(c => text.includes(c)) || "other";
@@ -432,7 +435,7 @@ exports.generateGroupDigest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
             });
         }
         const genAI = new generative_ai_1.GoogleGenerativeAI(key);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+        const model = genAI.getGenerativeModel({ model: AI_MODEL });
         const prompt = `You are a helpful AI Assistant for a family/group organization app.
 Summarize the recent activity and upcoming events for the group "${groupName}".
 Translate your summary to this exact locale language: "${language}".
@@ -442,7 +445,7 @@ ${chatHistory}
 ${upcomingEvents}
 
 Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highlights what happened recently and what is coming up. Keep it concise. No markdown headers.`;
-        const result = await model.generateContent(prompt);
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'group-digest', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => model.generateContent(prompt), aiLedger_1.usageOf, prompt.length);
         const text = result.response.text().trim();
         return { digest: text };
     }
@@ -457,14 +460,14 @@ exports.suggestAssetForText = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
     if (!text || !availableAssets || !Array.isArray(availableAssets)) {
         throw new https_1.HttpsError('invalid-argument', 'text and availableAssets are required.');
     }
-    await assertAiCallerAllowed(request);
+    const callerUid = await assertAiCallerAllowed(request);
     try {
         const key = process.env.GEMINI_API_KEY_LOCAL;
         if (!key) {
             throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
         }
         const genAI = new generative_ai_1.GoogleGenerativeAI(key);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+        const model = genAI.getGenerativeModel({ model: AI_MODEL });
         const prompt = `You are an AI that maps text to the most relevant asset card.
 Text: "${text}"
 
@@ -478,7 +481,7 @@ Rules:
 4. Return ONLY the exact string ID of the best matching asset.
 5. If no asset matches reasonably well, return the exact string "none".
 Do not include any other text or markdown formatting.`;
-        const result = await model.generateContent(prompt);
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'asset-suggest', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => model.generateContent(prompt), aiLedger_1.usageOf, prompt.length);
         const resultText = result.response.text().trim();
         // Validate that the returned ID is actually in the list, unless it's "none"
         const matchedAsset = availableAssets.find((a) => a.id === resultText);
@@ -2022,5 +2025,82 @@ exports.aiPreviewScope = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
         void logServerError((error === null || error === void 0 ? void 0 : error.message) || "aiPreviewScope failed", "ai:previewScope", { stack: error === null || error === void 0 ? void 0 : error.stack });
         throw new https_1.HttpsError("internal", "Could not read your data.");
     }
+});
+// ── AI spend, for the admin ─────────────────────────────────────────────────────────────
+//
+// Reads the rollups written beside every ledger row. Aggregates first, drill-down second:
+// a per-row list is the thing you reach for once you already know WHICH day and WHICH
+// feature is spending, and reading a month of rows to find that out is itself a cost.
+exports.adminGetAiSpend = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    await assertAdmin(request);
+    const db = admin.firestore();
+    const days = [];
+    for (let i = 0; i < 30; i++) {
+        days.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
+    }
+    const snaps = await Promise.all(days.map((d) => db.doc(`aiSpendDaily/${d}`).get()));
+    const daily = snaps.map((s, i) => {
+        const d = s.exists ? s.data() || {} : {};
+        return {
+            date: days[i],
+            calls: d.calls || 0,
+            failures: d.failures || 0,
+            promptTokens: d.promptTokens || 0,
+            completionTokens: d.completionTokens || 0,
+            usd: (d.microUsd || 0) / 1000000,
+        };
+    });
+    const sum = (n) => daily.slice(0, n).reduce((a, r) => a + r.usd, 0);
+    const today = days[0];
+    const [featureSnap, userSnap] = await Promise.all([
+        db.collection(`aiSpendDaily/${today}/features`).get(),
+        db.collection(`aiSpendDaily/${today}/users`).orderBy("microUsd", "desc").limit(10).get(),
+    ]);
+    return {
+        daily,
+        totals: { today: sum(1), week: sum(7), month: sum(30) },
+        byFeature: featureSnap.docs.map((d) => ({
+            feature: d.id,
+            calls: d.data().calls || 0,
+            failures: d.data().failures || 0,
+            usd: (d.data().microUsd || 0) / 1000000,
+        })).sort((a, b) => b.usd - a.usd),
+        topUsers: userSnap.docs.map((d) => ({
+            uid: d.id,
+            calls: d.data().calls || 0,
+            usd: (d.data().microUsd || 0) / 1000000,
+        })),
+    };
+});
+/** Row-level drill-down, filtered. Never returns prompt or response text — there is none. */
+exports.adminGetAiLedger = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    await assertAdmin(request);
+    const { date, uid } = (request.data || {});
+    const day = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)
+        ? date
+        : new Date().toISOString().slice(0, 10);
+    let q = admin.firestore().collection("aiLedger").where("date", "==", day);
+    if (typeof uid === "string" && uid)
+        q = q.where("uid", "==", uid);
+    const snap = await q.limit(200).get();
+    return {
+        date: day,
+        rows: snap.docs.map((d) => {
+            const r = d.data() || {};
+            return {
+                id: d.id,
+                uid: r.uid || "",
+                feature: r.feature || "",
+                model: r.model || "",
+                ok: r.ok,
+                errorCode: r.errorCode || null,
+                promptTokens: r.promptTokens || 0,
+                completionTokens: r.completionTokens || 0,
+                costUsd: r.costUsd || 0,
+                computeMs: r.computeMs || 0,
+            };
+        }),
+        truncated: snap.size >= 200,
+    };
 });
 //# sourceMappingURL=index.js.map

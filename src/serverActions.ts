@@ -178,3 +178,29 @@ export async function aiPreviewScope(
   const fn = httpsCallable(getFunctions(app), "aiPreviewScope");
   return (await fn(input)).data as ScopePreview;
 }
+
+// ── AI spend (admin) ───────────────────────────────────────────────────────────────────
+export interface AiSpend {
+  daily: { date: string; calls: number; failures: number; promptTokens: number; completionTokens: number; usd: number }[];
+  totals: { today: number; week: number; month: number };
+  byFeature: { feature: string; calls: number; failures: number; usd: number }[];
+  topUsers: { uid: string; calls: number; usd: number }[];
+}
+
+export async function adminGetAiSpend(): Promise<AiSpend> {
+  const fn = httpsCallable(getFunctions(app), "adminGetAiSpend");
+  return (await fn({})).data as AiSpend;
+}
+
+export interface AiLedgerRow {
+  id: string; uid: string; feature: string; model: string;
+  ok: boolean | null; errorCode: string | null;
+  promptTokens: number; completionTokens: number; costUsd: number; computeMs: number;
+}
+
+export async function adminGetAiLedger(
+  input: { date?: string; uid?: string } = {},
+): Promise<{ date: string; rows: AiLedgerRow[]; truncated: boolean }> {
+  const fn = httpsCallable(getFunctions(app), "adminGetAiLedger");
+  return (await fn(input)).data as { date: string; rows: AiLedgerRow[]; truncated: boolean };
+}

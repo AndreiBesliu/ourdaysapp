@@ -1,6 +1,19 @@
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { app } from "./firebase";
 import { useThemeStore } from "./store";
+import { t } from "./utils/i18n";
+
+// The server refuses a paid call with a stable CODE (`ai-budget/user-budget`, `/global-budget`,
+// `/kill-switch`) and never with a sentence — the six languages stay the client's job. Anything
+// that is not one of those codes keeps its old behaviour.
+export function aiErrorMessage(error: any): string {
+  const lang = useThemeStore.getState().language || 'en-US';
+  const raw = String(error?.message || '');
+  if (raw.includes('ai-budget/user-budget')) return t('aiBudgetUser', lang);
+  if (raw.includes('ai-budget/global-budget')) return t('aiBudgetGlobal', lang);
+  if (raw.includes('ai-budget/kill-switch')) return t('aiBudgetOff', lang);
+  return raw || 'Unknown error';
+}
 
 export async function generateChecklistForTask(title: string, description: string): Promise<string[]> {
   const functions = getFunctions(app);
@@ -13,7 +26,7 @@ export async function generateChecklistForTask(title: string, description: strin
     return data.suggestions || [];
   } catch (error: any) {
     console.error("AI Generation Error", error);
-    throw new Error(`AI Error: ${error.message || 'Unknown error'}`);
+    throw new Error(aiErrorMessage(error));
   }
 }
 
@@ -42,7 +55,7 @@ export async function generateGroupDigestAI(groupId: string): Promise<string> {
     return data.digest || 'No recent activity.';
   } catch (error: any) {
     console.error("AI Group Digest Error", error);
-    throw new Error(`AI Error: ${error.message || 'Unknown error'}`);
+    throw new Error(aiErrorMessage(error));
   }
 }
 

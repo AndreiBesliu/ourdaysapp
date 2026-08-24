@@ -278,6 +278,30 @@ service cloud.firestore {
       allow update, delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
 
+    // ── AI cost ledger, spend rollups, and budget counters ──
+    // Written ONLY by the Admin SDK; read only through `adminGetAiLedger` / `adminGetHealth`,
+    // which apply the admin gate themselves.
+    //
+    // Denied EXPLICITLY rather than by the absence of a rule. An absence reads as an oversight,
+    // and the day somebody adds a catch-all these would open with it. Saying `if false` out loud
+    // means a future reader has to delete a line to make a mistake, not just forget one.
+    //
+    // Ledger rows carry no prompt and no response text — see `functions/src/aiLedger.ts`. A
+    // ledger over a family app would otherwise be a second, unregulated copy of exactly the
+    // private data everything else here is careful about.
+    match /aiLedger/{rowId} {
+      allow read, write: if false;
+    }
+    match /aiSpendDaily/{day} {
+      allow read, write: if false;
+      match /{sub=**} {
+        allow read, write: if false;
+      }
+    }
+    match /ai_budget/{docId} {
+      allow read, write: if false;
+    }
+
     // ── Notifications ──
     // Recipient (userId) controls read/update/delete. Direct client CREATE is
     // forbidden — notifications are created only by the `notifyUsers` Cloud
