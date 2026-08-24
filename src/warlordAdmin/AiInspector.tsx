@@ -78,13 +78,35 @@ export default function AiInspector({ overrides }: { overrides: GameConfigOverri
   const [cohorts, setCohorts] = useState(4);
   const [size, setSize] = useState(40);
   const [maxTurns, setMaxTurns] = useState(12);
-  const [ran, setRan] = useState(0);
+  // The inputs are DRAFTS until Run is pressed. They used to be memo dependencies, which made the
+  // Run button decorative and re-ran a whole battle on every keystroke of the seed field — up to
+  // 24 cohorts x 60 turns of synchronous work per character, on a page that cannot be opened
+  // without an account and so has nobody to notice it freeze.
+  const [request, setRequest] = useState<{
+    difficulty: Difficulty; seed: number; cohorts: number; size: number; maxTurns: number;
+    overrides: GameConfigOverrides; n: number;
+  } | null>(null);
   const [focus, setFocus] = useState<AiRuleId | null>(null);
   const [showAllRules, setShowAllRules] = useState(true);
 
   const replay = useMemo(
-    () => (ran === 0 ? null : runReplay(difficulty, seed, cohorts, size, maxTurns, overrides)),
-    [ran, difficulty, seed, cohorts, size, maxTurns, overrides],
+    () => (request === null
+      ? null
+      : runReplay(request.difficulty, request.seed, request.cohorts, request.size, request.maxTurns, request.overrides)),
+    [request],
+  );
+
+  const run = (nextSeed = seed) => {
+    setSeed(nextSeed);
+    setRequest((prev) => ({
+      difficulty, seed: nextSeed, cohorts, size, maxTurns, overrides, n: (prev?.n ?? 0) + 1,
+    }));
+  };
+  // True when the drafts have moved on from what is displayed, so the operator is never left
+  // reading a replay that no longer matches the controls above it without being told.
+  const stale = !!request && (
+    request.difficulty !== difficulty || request.seed !== seed || request.cohorts !== cohorts ||
+    request.size !== size || request.maxTurns !== maxTurns || request.overrides !== overrides
   );
 
   const usage = useMemo(() => {
@@ -200,14 +222,20 @@ export default function AiInspector({ overrides }: { overrides: GameConfigOverri
             <input type="number" value={maxTurns} onChange={(e) => setMaxTurns(num(e.target.value, maxTurns, 1, 60))}
               className="w-20 px-2 py-1 rounded border border-wl-line bg-wl-panel text-sm font-mono" />
           </label>
-          <button onClick={() => setRan((n) => n + 1)} className="px-4 py-1.5 rounded bg-wl-accent text-wl-accent-ink text-sm">
+          <button onClick={() => run()} className="px-4 py-1.5 rounded bg-wl-accent text-wl-accent-ink text-sm">
             Run
           </button>
-          <button onClick={() => { setSeed((seed * 1103515245 + 12345) % 2147483647); setRan((n) => n + 1); }}
+          <button onClick={() => run((seed * 1103515245 + 12345) % 2147483647)}
             className="px-3 py-1.5 rounded border border-wl-line bg-wl-panel text-sm">
-            New seed & run
+            New seed &amp; run
           </button>
         </div>
+
+        {stale && (
+          <p className="text-sm text-wl-bad-ink">
+            These settings have changed since the replay below. Press <strong>Run</strong> to use them.
+          </p>
+        )}
 
         <p className="text-xs text-wl-muted">
           The player side <strong>stands still</strong> for the whole replay. That is deliberate — it lets the

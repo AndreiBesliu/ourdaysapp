@@ -1779,3 +1779,19 @@ care chiar dețin override-uri) și `resetSection` transformat în `switch` exha
 never` — următoarea secțiune adăugată devine eroare de typecheck, nu un link mort.
 
 `npx tsc -b` verde · teste verzi · `npm run build` verde.
+
+## 2026-08-24 — Inspectorul de AI: butonul Run era decorativ
+
+**Model:** Claude Opus 5 (constatare a reviziei, verificată)
+
+Toate cele cinci intrări erau dependențe ale memo-ului de replay, deci bătălia se re-rula la
+fiecare tastă din câmpul de seed — până la 24 de cohorte × 60 de ture de muncă **sincronă** pe
+caracter, pe o pagină care nu se poate deschide fără cont și deci n-are cine s-o vadă înghețând.
+`Run` nu declanșa nimic ce nu se întâmplase deja.
+
+Acum intrările sunt **ciorne**: `Run` (și „New seed & run") fixează o cerere, iar memo-ul depinde
+doar de ea. Și, ca să nu citești niciodată un replay care nu mai corespunde controalelor de
+deasupra, apare o linie chiar sub ele când ciornele au divergit: „These settings have changed since
+the replay below."
+
+`npx tsc -b` verde · 657 teste verzi · `npm run build` verde.
