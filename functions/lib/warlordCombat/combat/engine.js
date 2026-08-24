@@ -1,7 +1,15 @@
 "use strict";
 // src/logic/combat/engine.ts
-// The pure, deterministic combat reducer. Same code runs client-side (PvE) now and
-// inside a Cloud Function (PvP) later. No React, no Firestore, no wall-clock.
+//
+// TWO COPIES. This file is duplicated byte-for-byte in
+// OurDaysApp/functions/src/warlordCombat/combat/, because PvP is server-authoritative and the
+// Cloud Functions run on another runtime with another tsconfig. Edit one, edit the other, then
+// `firebase deploy --only functions`. A divergence has no error of its own: the server would
+// simply resolve a battle differently from the client that submitted the move.
+// Enforced by OurDaysApp/src/warlordServerCopy.test.ts, which normalises line endings so that a
+// failure there is always a real difference and never a checkout artefact.
+// The pure, deterministic combat reducer. The same code runs client-side for PvE and inside
+// a Cloud Function for PvP, which has been live for months. No React, no Firestore, no clock.
 //
 // applyCommand(state, cmd) -> state is the single entry point for advancing a battle.
 // An illegal/stale command returns state unchanged with a `skipped` log entry — it

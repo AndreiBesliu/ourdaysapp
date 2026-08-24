@@ -1,8 +1,14 @@
 "use strict";
 // src/logic/combat/pvp.ts
-// PvP battle setup + deploy-payload sanitization. PURE: no React, no firebase, no
-// Registry — this file has a THIRD copy in OurDaysApp/functions/src/warlordCombat/
-// (the server authority) and must stay byte-identical across all three locations.
+//
+// TWO COPIES. This file is duplicated byte-for-byte in
+// OurDaysApp/functions/src/warlordCombat/combat/, because PvP is server-authoritative and the
+// Cloud Functions run on another runtime with another tsconfig. Edit one, edit the other, then
+// `firebase deploy --only functions`. A divergence has no error of its own: the server would
+// simply resolve a battle differently from the client that submitted the move.
+// Enforced by OurDaysApp/src/warlordServerCopy.test.ts, which normalises line endings so that a
+// failure there is always a real difference and never a checkout artefact.
+// PvP battle setup + deploy-payload sanitization. PURE: no React, no firebase, no Registry.
 //
 // Trust model: each player's army lives only in their own localStorage, so a deploy
 // payload is inherently client-claimed. The server cannot verify provenance — it
