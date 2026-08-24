@@ -46,7 +46,11 @@ nu trebuie să fie** — a divergat de mult, inert: serverul importă din el exa
 (`SoldierType`, `SoldierTypes`, `Rank`, `Ranks`, `RankNumber`, `UnitBucket`, `Weapon`) și doar
 alea trebuie să rămână identice. `Unit` e declarat acolo dar nu-l importă nimic. E singura duplicare rămasă și e
 intenționată (alt runtime, alt tsconfig). Orice modificare la aceste fișiere se aplică în
-AMBELE locuri (`diff -q`), apoi `firebase deploy --only functions`. `army.ts` / `ai.ts` /
+AMBELE locuri, apoi `firebase deploy --only functions`. **Din 24.08 regula e APLICATĂ:**
+`src/warlordServerCopy.test.ts` (15 teste) refuză divergența și fixează contractul de 7 simboluri.
+**NU verifica de mână cu `diff -q`** — submodulul e checkout Windows (CRLF), copia din functions e
+LF, deci un diff brut spune „diferă" pe toate cinci fără ca nimic să fi divergat. Testul
+normalizează sfârșiturile de linie tocmai ca să nu ajungi să-l ignori. `army.ts` / `ai.ts` /
 `enemies.ts` **nu** fac parte din copia server.
 
 ## Reguli de lucru (hard)
