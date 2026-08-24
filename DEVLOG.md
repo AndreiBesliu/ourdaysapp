@@ -1763,3 +1763,19 @@ Efectul lateral util: poți edita balansul și vedea imediat cum se schimbă dec
 înainte să salvezi pentru toți jucătorii.
 
 `npx tsc -b` verde · 654 teste verzi · `npm run build` verde.
+
+## 2026-08-24 — Adminul: „Reset this section to defaults" era un control mort în secțiunea Enemy AI
+
+**Model:** Claude Opus 5 (constatare a reviziei adversariale, verificată la sursă)
+
+Linkul se randa pentru `section !== 'JSON'`, deci și în AI — dar `resetSection` n-avea ramură `AI`
+și cădea pe `setOv(prev => ({...prev}))`. Un clic care **nu face nimic și nu spune nimic**: exact
+tiparul pe care regulile repo-ului îl numesc singurul inacceptabil. Cost de ordinul doi: obiectul
+nou curgea în `<AiInspector overrides={ov} />` și e dependență a memo-ului de replay, deci clicul
+care nu făcea nimic **re-rula toată bătălia**.
+
+Reparat pe două căi, ca să nu se repete: lista explicită `SECTIONS_WITH_RESET` (doar secțiunile
+care chiar dețin override-uri) și `resetSection` transformat în `switch` exhaustiv cu `default:
+never` — următoarea secțiune adăugată devine eroare de typecheck, nu un link mort.
+
+`npx tsc -b` verde · teste verzi · `npm run build` verde.

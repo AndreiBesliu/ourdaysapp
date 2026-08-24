@@ -38,6 +38,9 @@ import { MISSION_PRESETS } from '@warlord/logic/combat/enemies';
 
 type Section = 'TECHS' | 'MOMENTUM' | 'ECONOMY' | 'ARMY' | 'CAMPAIGN' | 'AI' | 'JSON';
 
+/** The sections that own overrides, and so have something a reset could remove. */
+const SECTIONS_WITH_RESET: Section[] = ['ECONOMY', 'ARMY', 'TECHS', 'MOMENTUM', 'CAMPAIGN'];
+
 const EFFECT_LABELS: Record<keyof EffectDelta, string> = {
   prodMult: 'Production ×',
   craftEfficiency: 'Craft eff. ×',
@@ -417,9 +420,22 @@ export default function WarlordAdminPanel({
       const next = { ...prev };
       // Study lives with the techs it paces, not with the economy that produces it —
       // resetting prices should not silently reset how long research takes.
-      if (s === 'TECHS') { delete next.catalog; delete next.study; }
-      if (s === 'MOMENTUM') delete next.buffs;
-      if (s === 'CAMPAIGN') delete next.missions;
+      // An exhaustive switch, so the NEXT section added here is a typecheck error rather than a
+      // link that renders and silently does nothing — which is what 'AI' was.
+      switch (s) {
+        case 'TECHS': { delete next.catalog; delete next.study; break; }
+        case 'MOMENTUM': { delete next.buffs; break; }
+        case 'CAMPAIGN': { delete next.missions; break; }
+        case 'AI':
+        case 'JSON':
+          // Neither owns any override of its own: the AI inspector READS the whole configuration
+          // and the JSON view edits it wholesale. Their reset link is not rendered.
+          break;
+        case 'ARMY':
+        case 'ECONOMY':
+          break;
+        default: { const unreachable: never = s; void unreachable; }
+      }
       if (s === 'ARMY') {
         delete next.recruitCost; delete next.recruitSources;
         delete next.barracks; delete next.intensity; delete next.training;
@@ -551,7 +567,10 @@ export default function WarlordAdminPanel({
         <p className="text-sm text-wl-bad">Save failed: {error}</p>
       )}
 
-      {section !== 'JSON' && (
+      {/* Only for sections that actually own overrides. A control that renders and refuses in
+          silence is the one thing this repo's rules single out as never acceptable — and here it
+          also churned the object identity, re-running the AI replay on a click that did nothing. */}
+      {SECTIONS_WITH_RESET.includes(section) && (
         <button onClick={() => resetSection(section)} className="text-xs underline text-wl-muted">
           Reset this section to defaults
         </button>
