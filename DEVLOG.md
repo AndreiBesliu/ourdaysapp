@@ -1795,3 +1795,33 @@ deasupra, apare o linie chiar sub ele când ciornele au divergit: „These setti
 the replay below."
 
 `npx tsc -b` verde · 657 teste verzi · `npm run build` verde.
+
+## 2026-08-24 — Copia server a motorului: regula devine test
+
+**Model:** Claude Opus 5
+
+`src/warlordServerCopy.test.ts` — 15 teste care aplică ce era doar scris în două `CLAUDE.md`:
+
+1. Cele cinci fișiere oglindite (`combat/{types,rng,stats,engine,pvp}.ts`) trebuie să fie identice
+   între joc și `functions/src/warlordCombat/`, **normalizând sfârșiturile de linie**.
+2. Serverul importă din `logic/types.ts` **exact** cele 7 simboluri din contract — nici unul în
+   plus. Un al optulea nu e interzis, doar trebuie adăugat aici întâi, ceea ce obligă pe cineva să
+   verifice că se potrivește.
+3. Cele 7 simboluri înseamnă același lucru pe ambele părți (se compară declarația, nu doar numele).
+4. Iar `logic/types.ts` **NU** trebuie să fie identic — scris ca test, ca să nu-l „repare" nimeni
+   copiind fișierul întreg peste, ceea ce a costat deja un deploy de functions degeaba.
+
+**De ce normalizarea nu e o slăbire, ci tot rostul:** verificat manual azi, toate cele cinci
+fișiere raportau DIFERIT — 832 de linii doar în `engine.ts`. Era CRLF contra LF. Nimic nu divergase.
+O verificare care țipă la fiecare rulare e mai rea decât niciuna, fiindcă primul lucru pe care-l
+înveți e s-o ignori. Mesajul de eșec spune fișierul, linia, ambele variante, și ce înseamnă:
+serverul ar rezolva bătălia altfel decât clientul care a trimis mutarea, fără nicio eroare nicăieri.
+
+**Dovedit că mușcă:** otrăvită o divergență reală în `engine.ts` (prinsă, cu linia și textul) și un
+simbol de contract schimbat în `types.ts`-ul serverului (prins).
+
+Copiile din `functions/` sunt acum **generate** din cele de joc, deci identitatea e prin
+construcție. Schimbarea e doar de comentarii — `functions` compilează (`tsc`, exit 0) și nu s-a
+făcut deploy, fiindcă niciun comportament nu s-a schimbat.
+
+`npx tsc -b` verde · 672 teste verzi (33 fișiere) · `npm run build` verde.

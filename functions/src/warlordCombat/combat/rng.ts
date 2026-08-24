@@ -1,4 +1,12 @@
 // src/logic/combat/rng.ts
+//
+// TWO COPIES. This file is duplicated byte-for-byte in
+// OurDaysApp/functions/src/warlordCombat/combat/, because PvP is server-authoritative and the
+// Cloud Functions run on another runtime with another tsconfig. Edit one, edit the other, then
+// `firebase deploy --only functions`. A divergence has no error of its own: the server would
+// simply resolve a battle differently from the client that submitted the move.
+// Enforced by OurDaysApp/src/warlordServerCopy.test.ts, which normalises line endings so that a
+// failure there is always a real difference and never a checkout artefact.
 // Deterministic, seeded pseudo-random numbers. The PRNG "position" is captured
 // entirely by an integer cursor, so a serialized BattleState round-trips and can
 // be replayed or resumed from any point — no hidden 32-bit state to persist.
