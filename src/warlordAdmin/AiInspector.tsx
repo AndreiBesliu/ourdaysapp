@@ -21,6 +21,7 @@ import type { AiReplay } from '@warlord/logic/combat/aiReplay';
 import { DIFFICULTIES } from '@warlord/logic/combat/enemies';
 import { Registry } from '@warlord/logic/registry';
 import type { Difficulty } from '@warlord/logic/combat/types';
+import type { GameConfigOverrides } from '@warlord/logic/config';
 
 const DECISION_STYLE: Record<AiUnitTrace['decision'], { label: string; cls: string }> = {
   ATTACK: { label: 'Strikes', cls: 'bg-wl-bad-surface text-wl-bad-ink' },
@@ -38,13 +39,19 @@ type Replay = AiReplay & { error?: string };
  * typecheck, tests and build can all be green with it crashed on an ErrorBoundary. Anything with
  * a termination condition belongs on the other side of that line.
  */
-function runReplay(difficulty: Difficulty, seed: number, cohorts: number, size: number, maxTurns: number): Replay {
+function runReplay(
+  difficulty: Difficulty, seed: number, cohorts: number, size: number, maxTurns: number,
+  overrides: GameConfigOverrides,
+): Replay {
   try {
     Registry.init();
-    return replayEnemyTurns(syntheticCohorts(cohorts, size), difficulty, seed, maxTurns);
+    // Passed explicitly, and restored by the callee. Without it the replay ran against whatever
+    // the process global happened to hold — empty here until the game mounts — so the same seed
+    // gave different battles depending on whether the operator had opened the Domain tab.
+    return replayEnemyTurns(syntheticCohorts(cohorts, size), difficulty, seed, maxTurns, overrides);
   } catch (e) {
     return {
-      turns: [], outcome: '—', winner: null, playerCohorts: 0, enemyCohorts: 0,
+      turns: [], outcome: '—', winner: null, playerCohorts: 0, enemyCohorts: 0, ranAgainst: 'defaults',
       error: e instanceof Error ? e.message : String(e),
     };
   }
@@ -63,7 +70,7 @@ function RuleChip({ id, onPick }: { id: AiRuleId; onPick: (id: AiRuleId) => void
   );
 }
 
-export default function AiInspector() {
+export default function AiInspector({ overrides }: { overrides: GameConfigOverrides }) {
   // Every hook up here, together. `/admin` cannot be loaded in a browser without an account, so
   // a hook placed next to a return is a crash nobody sees until a real operator opens the page.
   const [difficulty, setDifficulty] = useState<Difficulty>('BANDIT_RAID');
@@ -76,8 +83,8 @@ export default function AiInspector() {
   const [showAllRules, setShowAllRules] = useState(true);
 
   const replay = useMemo(
-    () => (ran === 0 ? null : runReplay(difficulty, seed, cohorts, size, maxTurns)),
-    [ran, difficulty, seed, cohorts, size, maxTurns],
+    () => (ran === 0 ? null : runReplay(difficulty, seed, cohorts, size, maxTurns, overrides)),
+    [ran, difficulty, seed, cohorts, size, maxTurns, overrides],
   );
 
   const usage = useMemo(() => {
@@ -219,6 +226,12 @@ export default function AiInspector() {
             <div className="text-sm">
               <span className="font-mono">{replay.playerCohorts}</span> player cohorts vs{' '}
               <span className="font-mono">{replay.enemyCohorts}</span> enemy · {replay.outcome}
+              {' · '}
+              <span className="text-wl-muted">
+                ran against {replay.ranAgainst === 'overrides'
+                  ? 'the configuration in this editor, unsaved changes included'
+                  : 'the built-in defaults (no overrides set)'}
+              </span>
               {replay.turns.length === 0 && ' · the enemy never got a turn'}
             </div>
 

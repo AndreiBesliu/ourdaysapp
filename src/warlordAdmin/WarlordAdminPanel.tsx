@@ -1145,7 +1145,7 @@ export default function WarlordAdminPanel({
       )}
 
       {/* ── JSON ── */}
-      {section === 'AI' && <AiInspector />}
+      {section === 'AI' && <AiInspector overrides={ov} />}
 
       {section === 'JSON' && (
         <div className="space-y-2">

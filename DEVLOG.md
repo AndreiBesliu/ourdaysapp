@@ -1744,3 +1744,22 @@ mutat dincolo de linia aia, unde îl acoperă teste.
 o simulare de balans**.
 
 `npx tsc -b` verde · 647 teste verzi · `npm run build` verde.
+
+## 2026-08-24 — Inspectorul de AI rulează pe configurarea din editor
+
+**Model:** Claude Opus 5
+
+Revizia adversarială a găsit că replay-ul nu era funcție de argumentele lui: `createBattle`
+rezolvă preset-urile prin singleton-ul global `GameConfig`, care în admin e **gol** până montează
+jocul. Deci același (misiune, seed, oaste) dădea bătălii diferite în același build, după cum
+operatorul deschisese sau nu tabul Domain înainte.
+
+Adminul îi trimite acum explicit `ov` — chiar configurarea din editor, **cu tot cu modificările
+nesalvate** — iar jocul o pune la loc după rulare (o unealtă de balans n-are voie să schimbe
+lucrul pe care-l măsoară). Rândul de rezultat spune pe ce a rulat, citit din ce e efectiv în
+vigoare, nu din ce s-a pasat.
+
+Efectul lateral util: poți edita balansul și vedea imediat cum se schimbă deciziile AI-ului,
+înainte să salvezi pentru toți jucătorii.
+
+`npx tsc -b` verde · 654 teste verzi · `npm run build` verde.
