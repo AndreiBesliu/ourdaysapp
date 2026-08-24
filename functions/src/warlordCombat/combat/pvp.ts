@@ -210,11 +210,18 @@ export function createPvpBattle(
   seed: number,
 ): BattleState {
   const terrain = generatePvpTerrain(seed)
-  placePvpArmy(challengerCombatants, PVP_WIDTH, [PVP_HEIGHT - 1, PVP_HEIGHT - 2])
-  placePvpArmy(defenderCombatants, PVP_WIDTH, [0, 1])
+  // CLONE FIRST. `placePvpArmy` writes x/y onto the objects it is given, and the caller keeps
+  // using these arrays: `acceptWarlordChallenge` stores them as the public record of what each
+  // player submitted. Mutating them replaced the `-1,-1` sentinel `sanitizeDeploy` deliberately
+  // wrote with the engine's spawn tiles, so the deploy mirror stopped being a record of the
+  // submission and became a copy of the opening position.
+  const challenger = structuredClone(challengerCombatants)
+  const defender = structuredClone(defenderCombatants)
+  placePvpArmy(challenger, PVP_WIDTH, [PVP_HEIGHT - 1, PVP_HEIGHT - 2])
+  placePvpArmy(defender, PVP_WIDTH, [0, 1])
   return buildBattle({
-    playerCombatants: challengerCombatants,
-    enemyCombatants: defenderCombatants,
+    playerCombatants: challenger,
+    enemyCombatants: defender,
     terrain,
     width: PVP_WIDTH,
     height: PVP_HEIGHT,

@@ -1825,3 +1825,19 @@ construcție. Schimbarea e doar de comentarii — `functions` compilează (`tsc`
 făcut deploy, fiindcă niciun comportament nu s-a schimbat.
 
 `npx tsc -b` verde · 672 teste verzi (33 fișiere) · `npm run build` verde.
+
+## 2026-08-24 — `createPvpBattle` nu mai scrie peste ce i se dă
+
+**Model:** Claude Opus 5
+
+`placePvpArmy` scria `x`/`y` direct pe obiectele primite, iar `acceptWarlordChallenge`
+(`functions/src/index.ts`) păstrează **aceleași** tablouri și le salvează în `deploy` ca
+înregistrare publică a ce a trimis fiecare jucător. Deci santinela `-1,-1` scrisă intenționat de
+`sanitizeDeploy` dispărea până la scriere, iar înregistrarea devenea o copie a poziției de start.
+
+Clonare la intrare, în joc. Copia din `functions/` regenerată, `tsc` verde, `lib/` la zi.
+
+**Cere deploy de funcții** (schimbare reală de comportament în `warlordCombat/combat/pvp.ts`) —
+NEfăcut, se confirmă cu Andrei.
+
+`npx tsc -b` verde · 674 teste verzi · `npm run build` verde.
