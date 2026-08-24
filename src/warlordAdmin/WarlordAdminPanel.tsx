@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { auth } from '../firebase';
 import { loadWarlordConfigFull, saveWarlordConfig, pruneOverrides, ConfigConflictError } from './configApi';
+import AiInspector from './AiInspector';
 import type { Timestamp } from 'firebase/firestore';
 import type { GameConfigOverrides } from '@warlord/logic/config';
 import {
@@ -35,7 +36,7 @@ import { MISSION_PRESETS } from '@warlord/logic/combat/enemies';
 // an admin deliberately changed. Access is the OurDaysApp admin role (admins/{uid});
 // Firestore rules enforce the write, this panel only guards the UI.
 
-type Section = 'TECHS' | 'MOMENTUM' | 'ECONOMY' | 'ARMY' | 'CAMPAIGN' | 'JSON';
+type Section = 'TECHS' | 'MOMENTUM' | 'ECONOMY' | 'ARMY' | 'CAMPAIGN' | 'AI' | 'JSON';
 
 const EFFECT_LABELS: Record<keyof EffectDelta, string> = {
   prodMult: 'Production ×',
@@ -503,7 +504,7 @@ export default function WarlordAdminPanel({
   }
 
   const SECTIONS: [Section, string][] = [
-    ['ECONOMY', 'Economy'], ['ARMY', 'Army'], ['TECHS', 'Techs'], ['MOMENTUM', 'Momentum'], ['CAMPAIGN', 'Campaign'], ['JSON', 'JSON'],
+    ['ECONOMY', 'Economy'], ['ARMY', 'Army'], ['TECHS', 'Techs'], ['MOMENTUM', 'Momentum'], ['CAMPAIGN', 'Campaign'], ['AI', 'Enemy AI'], ['JSON', 'JSON'],
   ];
 
   return (
@@ -1144,6 +1145,8 @@ export default function WarlordAdminPanel({
       )}
 
       {/* ── JSON ── */}
+      {section === 'AI' && <AiInspector />}
+
       {section === 'JSON' && (
         <div className="space-y-2">
           <p className="text-sm text-wl-muted">

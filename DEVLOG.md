@@ -1714,3 +1714,33 @@ App built, deployed to Firebase Hosting, and pushed to GitHub.
 > - Updated the Deferred Security Work item: impersonation CLOSED; residual read-disclosure downgraded to LOW (needs conditional listeners before gating read rules).
 > Build OK (functions tsc + web tsc/vite). Deployed functions + hosting. Committed, pushed.
 > Model: Claude Opus 4.8 (1M context)
+
+## 2026-08-24 — Admin: secțiunea „Enemy AI"
+
+**Model:** Claude Opus 5
+**Prompt:** „vreau ca log-ul sa apara undeva in admin"
+
+`src/warlordAdmin/AiInspector.tsx`, secțiune nouă în panoul Warlord. Două părți:
+
+**Regulile** — randate din `AI_RULES` din joc, adică exact tabelul pe care planificatorul îl
+citează. O regulă nu poate fi descrisă aici și să se comporte altfel acolo. Fiecare arată
+`effect` (aritmetica) și `why`, plus de câte ori s-a declanșat în replay-ul curent — sau că nu s-a
+declanșat deloc, ceea ce e la fel de informativ.
+
+**Replay-ul** — alegi misiune, seed, cohorte, mărime, plafon de ture; vezi tură cu tură ce a decis
+fiecare cohortă inamică, cu propoziția care o explică și id-urile regulilor declanșate. Clic pe un
+id filtrează doar cohortele care l-au citat.
+
+**De ce merge fără niciun cablaj de date:** AI-ul e o funcție PURĂ de stare și bătălia e
+reproductibilă din seed, deci adminul rulează același planificator peste aceeași stare și obține
+aceeași urmă pe care ar produce-o dispozitivul unui jucător. Nu e o reconstrucție.
+
+**Bucla stă în JOC, nu aici** (`@warlord/logic/combat/aiReplay`). Adminul cere cont, deci nu-l pot
+încărca în browser: typecheck + teste + build pot fi toate verzi cu panoul căzut pe ErrorBoundary.
+Singurul lucru de aici cu o condiție de terminare — o buclă care ar putea îngheța pagina — a fost
+mutat dincolo de linia aia, unde îl acoperă teste.
+
+**Limită scrisă în UI:** partea jucătorului stă pe loc în replay. Deliberat, dar înseamnă că **nu e
+o simulare de balans**.
+
+`npx tsc -b` verde · 647 teste verzi · `npm run build` verde.
