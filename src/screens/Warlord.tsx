@@ -3,6 +3,7 @@ import { useThemeStore } from '../store';
 import { useNavigate } from 'react-router-dom';
 import { auth } from '../firebase';
 import WarlordApp from '@warlord/App';
+import GameBoundary from '@warlord/components/common/GameBoundary';
 import PvpPanel from '../warlordPvp/PvpPanel';
 import { loadWarlordDomain, createDomainSync } from '../warlordCloud';
 import { loadWarlordConfig } from '../warlordAdmin/configApi';
@@ -126,7 +127,14 @@ export default function Warlord() {
       ) : view === 'DOMAIN' ? (
         // key={saveKey}: an auth change while mounted remounts the game so it re-hydrates
         // from the new user's key. onPersist mirrors every save to the cloud (debounced).
-        <WarlordApp key={saveKey} saveKey={saveKey} onPersist={sync?.onPersist} config={config} theme={dark ? 'dark' : 'light'} />
+        // `external`: localStorage is a write-through CACHE here, not the source. warlordCloud
+        // pulls the newer of (cloud, local) into it before the game hydrates, so clearing it
+        // would be undone on the next load — and if the local rev were ahead, an empty domain
+        // could be promoted over the real one. The boundary may still hand the save back; it
+        // must not offer to delete something it cannot actually delete.
+        <GameBoundary saveKey={saveKey} external theme={dark ? 'dark' : 'light'}>
+          <WarlordApp key={saveKey} saveKey={saveKey} onPersist={sync?.onPersist} config={config} theme={dark ? 'dark' : 'light'} />
+        </GameBoundary>
       ) : (
         <div className="p-6 max-w-6xl mx-auto">
           {realUid

@@ -1841,3 +1841,28 @@ Clonare la intrare, în joc. Copia din `functions/` regenerată, `tsc` verde, `l
 NEfăcut, se confirmă cu Andrei.
 
 `npx tsc -b` verde · 674 teste verzi · `npm run build` verde.
+
+## 2026-08-25 — ErrorBoundary: nu mai oferi un buton care nu poate repara
+
+**Model:** Claude Opus 5
+
+Singura ofertă a gărzii era `window.location.reload()`. Pentru un crash cauzat de stare
+PERSISTATĂ, reload-ul rehidratează același lucru și moare din nou — deci butonul nu poate face ce
+spune, exact lucrul pe care regulile casei îl numesc singurul inacceptabil.
+
+Acum un marcaj în `sessionStorage` pus înainte de reload: a doua oară mesajul devine „Reloading did
+not help, so this is not a passing glitch", iar butonul se numește „Reload again". Aceeași scăpare
+prinsă și aici ca în joc: `componentDidMount` se declanșează și când garda montează afișând
+eroarea, deci marcajul se curăță doar când aplicația chiar a randat.
+
+**Jocul primește `GameBoundary` cu `external`.** `warlordCloud` trage cea mai nouă dintre (cloud,
+local) în localStorage ÎNAINTE de hidratare — localStorage e cache write-through, nu sursa. O
+ștergere locală ar fi anulată la următoarea încărcare, iar cu rev-ul local înainte un domeniu gol
+ar putea fi promovat peste cel real. Garda oferă save-ul înapoi, dar **nu** oferă să șteargă ceva
+ce nu poate șterge.
+
+Contrast: toate perechile de tokeni ale ecranului de recuperare erau deja măsurate în trecerea de
+azi, în afară de butonul distructiv (`bad-ink` pe `bad-surface`), calculat separat: **5,57 light /
+6,37 dark**.
+
+`npx tsc -b` verde · 686 teste verzi · `npm run build` verde (coduri de ieșire reale, nu prin țeavă).
