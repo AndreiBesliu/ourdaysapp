@@ -484,7 +484,7 @@ export default function Wallet() {
             onClick={() => setActiveTab('expenses')}
             className={`pb-3 text-sm font-bold transition-colors ${activeTab === 'expenses' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
           >
-            Group Expenses
+            {t('expensesTitle', language)}
           </button>
         </div>
       </div>

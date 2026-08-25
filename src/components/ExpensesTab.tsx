@@ -116,8 +116,8 @@ export default function ExpensesTab(
   const personalTotal = personal.reduce((a, e) => a + (Number(e.amount) || 0), 0);
 
   const getUserName = (uid: string) => {
-    if (uid === auth.currentUser?.uid) return 'You';
-    return sharedUsers.find(u => u.id === uid)?.name || 'Someone';
+    if (uid === auth.currentUser?.uid) return t('expenseYou', language);
+    return sharedUsers.find(u => u.id === uid)?.name || t('expenseSomeone', language);
   };
 
   return (
@@ -154,7 +154,7 @@ export default function ExpensesTab(
           <select
             value={groupId}
             onChange={(e) => setGroupId(e.target.value)}
-            aria-label="Whose ledger this expense belongs to"
+            aria-label={t('expenseLedgerLabel', language)}
             className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm"
           >
             {/* Personal is the default because it is the safe one: a personal expense is seen by
@@ -165,7 +165,7 @@ export default function ExpensesTab(
         )}
         <input 
           type="text" 
-          placeholder="What was it for? (e.g., Groceries)" 
+          placeholder={t('expenseWhatFor', language)} 
           value={description} 
           onChange={e => setDescription(e.target.value)} 
           required 
@@ -173,7 +173,7 @@ export default function ExpensesTab(
         />
         <input 
           type="number" 
-          placeholder="Amount" 
+          placeholder={t('expenseAmount', language)} 
           value={amount} 
           onChange={e => setAmount(e.target.value)} 
           required 
@@ -202,7 +202,7 @@ export default function ExpensesTab(
             <span>{t('expensesLoadFailed', language)}</span>
           </p>
         ) : expenses.length === 0 ? (
-          <p className="text-center text-zinc-500 italic py-4">No expenses recorded yet.</p>
+          <p className="text-center text-zinc-500 italic py-4">{t('expensesNone', language)}</p>
         ) : (
           expenses.map(exp => (
             <div key={exp.id} className="flex items-center justify-between p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-sm">
@@ -213,7 +213,7 @@ export default function ExpensesTab(
                 <div>
                   <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100">{exp.description}</p>
                   <p className="text-xs text-zinc-500">
-                  Paid by {getUserName(exp.paidBy)}
+                  {t('expensePaidBy', language)} {getUserName(exp.paidBy)}
                   {/* Personal rows sit in the same list but in no balance, so they have to say
                       which they are — otherwise the totals look like they lost money. */}
                   {!exp.groupId && <> · {t('expensePersonal', language)}</>}

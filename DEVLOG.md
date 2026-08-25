@@ -1949,3 +1949,19 @@ personale, fiindcă stau în aceeași listă dar în niciun sold.
 membri a grupului.
 
 `npx tsc -b` verde · 693 teste verzi · `npm run build` verde · livrat.
+
+## 2026-08-25 — Tabul de cheltuieli vorbea englezește într-o aplicație pe română
+
+**Model:** Claude Opus 5 · văzut în captura lui Andrei: antet „Portofel", dedesubt „Group Expenses",
+„What was it for? (e.g., Groceries" (tăiat pe telefon), „Paid by You", „No expenses recorded yet."
+
+Regula casei e că TOT textul vizibil trece prin `t()` în 6 limbi — singura excepție decisă e
+interfața Warlord. Tabul ăsta o încălca de la bun început; eu doar am adăugat text peste.
+
+Opt chei noi × 6 limbi: titlul tabului, lista goală, „plătită de", cele două placeholder-uri,
+„Tu"/„Cineva" din numele afișat, și eticheta accesibilă a selectorului de registru.
+
+Placeholder-ul lung („What was it for? (e.g., Groceries)") se tăia pe 375px; textele noi sunt
+scurte în fiecare limbă („Pentru ce?"), deci se rezolvă de la sine, nu prin CSS.
+
+`npx tsc -b` verde · 693 teste verzi · livrat.
