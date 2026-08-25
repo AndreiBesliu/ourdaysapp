@@ -2033,8 +2033,14 @@ export const aiPreviewScope = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
       fetchEvents(scope, period, AI_DOC_BUDGET),
       fetchChat(scope, period, Math.floor(AI_DOC_BUDGET / 2)),
       fetchAssets(scope, Math.floor(AI_DOC_BUDGET / 4)),
-      fetchExpenses(),
+      fetchExpenses(scope, period, Math.floor(AI_DOC_BUDGET / 4)),
     ]);
+
+    if (expenses.unavailable) {
+      // The fetcher stays free of side effects and reports the condition as data; logging is the
+      // caller's job. A missing composite index looks exactly like a quiet month otherwise.
+      void logServerError(`expenses ${expenses.unavailable}`, "ai:previewScope", { uid });
+    }
 
     return {
       period: { fromDay: period.fromDay, toDay: period.toDay, days: periodDays(period) },
@@ -2055,7 +2061,22 @@ export const aiPreviewScope = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
       },
       chat: { count: chat.items.length, complete: chat.complete },
       assets: { count: assets.items.length, complete: assets.complete },
-      expenses: { count: 0, unavailable: expenses.unavailable },
+      expenses: {
+        count: expenses.items.length,
+        complete: expenses.complete,
+        // Carried through, so "could not read" never arrives looking like "nothing to read".
+        ...(expenses.unavailable ? { unavailable: expenses.unavailable } : {}),
+        // The same shape as the events preview, and `description` is not an inconsistency with
+        // it: an event has a title AND a description and only the title comes back, while an
+        // expense has no title — `description` IS its label, the "Cina restaurant" on the row.
+        // Withholding it would return rows of bare numbers that could not be checked against
+        // anything. `paidBy` stays out: it adds nothing to a scope check and it is the one field
+        // that names a person.
+        preview: expenses.items.slice(0, 200).map((e) => ({
+          day: e.day, amount: e.amount, description: e.description,
+          scopeLabel: e.groupId ? (scope.groupNames[e.groupId] || "group") : "personal",
+        })),
+      },
     };
   } catch (error: any) {
     void logServerError(error?.message || "aiPreviewScope failed", "ai:previewScope", { stack: error?.stack });

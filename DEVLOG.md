@@ -1965,3 +1965,40 @@ Placeholder-ul lung („What was it for? (e.g., Groceries)") se tăia pe 375px; 
 scurte în fiecare limbă („Pentru ce?"), deci se rezolvă de la sine, nu prin CSS.
 
 `npx tsc -b` verde · 693 teste verzi · livrat.
+
+## 2026-08-25 — Cheltuielile intră în asistent, după o revizie care a spus NU la scurgere
+
+**Model:** Claude Opus 5 · revizie adversarială cu 3 lentile + refutare (8 agenți)
+
+`fetchExpenses` era un ciot care întorcea `unavailable: "no-scoping-field"` — adevărul, nu o
+ridicare din umeri: documentele n-aveau după ce fi filtrate. Acum au, deci citește ca toate
+celelalte surse: oglindește regula (`ownerId == uid || groupId ∈ grupurile mele`), o interogare per
+grup, niciodată `collectionGroup`.
+
+**Verdictul pe scurgere: NU.** Ambele interogări sunt mărginite de apartenență, `scope.groupIds`
+vine doar din `members array-contains uid` — chiar câmpul pe care-l citește `isMemberOfGroup` —
+iar trunchierea la plafonul de fan-out îngustează, nu lărgește. Garda mea de la linia 272 e cod
+mort (o interogare `groupId == g` nu poate întoarce `gid === null`), dar e o apărare inertă, nu o
+gaură.
+
+**Trei reparații înainte de livrare, toate reale:**
+1. **Trunchierea păstra cele mai VECHI rânduri.** `orderBy asc + limit` înseamnă că, atunci când
+   plafonul mușcă, supraviețuiesc cele mai timpurii — iar tabul Portofel sortează invers. Cele două
+   liste puteau să nu aibă niciun rând comun, adică o verificare de scopare pe care n-o poți face.
+   Trecut pe `desc`.
+2. **`complete` ignora `scope.truncated`.** `deriveScope` plafonează fan-out-ul, deci peste plafon
+   registre întregi nu sunt interogate deloc — și sursa raporta că a citit tot. Acum pornește din
+   `!scope.truncated`, aici și în `fetchChat`, care avea defectul identic.
+3. **Un eșec total de citire se citea ca „n-ai cheltuieli".** Exact greșeala care a ținut colecția
+   moartă trei luni. Acum întoarce `unavailable: "read-failed"`, iar apelantul îl trece prin
+   `logServerError` — fetcher-ul rămâne fără efecte laterale și raportează condiția ca DATE.
+
+**Ordinea de deploy a contat:** `desc` cere indecși compuși `createdAt DESCENDING`. Fără ei
+interogarea aruncă, `.catch` o înghite și rezultatul arată ca zero cheltuieli. Indecșii au plecat
+ÎNTÂI, verificați pe live, abia apoi funcția.
+
+Plus tipul din client: declara `unavailable?` singur — un câmp pe care serverul nici nu-l trimitea
+pe drumul fericit — și omitea `complete` și `preview`, pe care le trimite. Cast-ul `as ScopePreview`
+ascundea diferența, deci tipul era documentație care contrazicea sârma.
+
+`npx tsc -b` verde · 693 teste verzi · functions compilează · livrat în ordinea corectă.

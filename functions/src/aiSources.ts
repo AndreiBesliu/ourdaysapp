@@ -168,7 +168,7 @@ export async function fetchChat(scope: Scope, period: Period, budget: number): P
     )
   );
 
-  let complete = true;
+  let complete = !scope.truncated; // see fetchExpenses: a capped fan-out is an incomplete read
   const items: ChatItem[] = [];
   for (const entry of snaps) {
     if (!entry) { complete = false; continue; }
@@ -207,17 +207,93 @@ export async function fetchAssets(scope: Scope, budget: number): Promise<SourceR
   };
 }
 
+export interface ExpenseItem {
+  id: string;
+  day: string;
+  amount: number;
+  description: string;
+  paidBy: string;
+  /** null for a personal expense — it belongs to no ledger but the caller's own. */
+  groupId: string | null;
+}
+
 /**
- * Expenses are NOT a source, and this stub says why in code rather than staying silent.
+ * Shared and personal spending, mirroring the rule this collection finally has:
+ *   ownerId == uid || (groupId != null && isMemberOfGroup(groupId))
  *
- * `expenses` appears nowhere in `firestore.rules` and there is no catch-all, so the collection
- * is denied by default — the app's own client cannot read it either. The document shape is
- * `{amount, description, paidBy, createdAt}`: no `groupId`, no `ownerId`. A Cloud Function
- * ingesting it would read EVERY expense in the database, with no field to filter on.
+ * It returned `unavailable: "no-scoping-field"` until 2026-08-25, and that was the truth rather
+ * than a shrug: the documents carried only {amount, description, paidBy, createdAt}, so a Cloud
+ * Function would have had to read EVERY expense in the database with nothing to filter on. The
+ * collection now carries `ownerId` and `groupId`, so it can be read the same way as everything
+ * else here — one query per group, never `collectionGroup`.
  *
- * The server returns a CODE; the client renders the sentence through `t()`. The difference
- * between an absence and a lie is that the absence is stated.
+ * The two branches overlap for anything the caller paid inside a group, so results are keyed by
+ * document id. Amounts are numbers, descriptions are the player's own words: both are things the
+ * caller can already see, which is the only test that matters in this file.
  */
-export async function fetchExpenses(): Promise<SourceResult<never>> {
-  return { items: [], complete: true, unavailable: "no-scoping-field" };
+export async function fetchExpenses(
+  scope: Scope, period: Period, budget: number,
+): Promise<SourceResult<ExpenseItem>> {
+  const db = admin.firestore();
+  const from = admin.firestore.Timestamp.fromDate(new Date(period.from));
+  const to = admin.firestore.Timestamp.fromDate(new Date(period.to));
+  // One share for the caller's own, the rest split across the groups — so a member of many groups
+  // does not lose sight of their own spending.
+  const perQuery = Math.max(10, Math.floor(budget / (scope.groupIds.length + 1)));
+
+  const run = (q: FirebaseFirestore.Query) =>
+    q.where("createdAt", ">=", from)
+      .where("createdAt", "<=", to)
+      // DESC, not asc: when `limit` bites, the rows that survive must be the RECENT ones. The
+      // Wallet tab sorts newest-first, so an ascending limit could leave the preview and that tab
+      // sharing no rows at all — a scope check nobody can actually perform. Needs the matching
+      // `createdAt DESCENDING` composite index, which is why the indexes ship first.
+      .orderBy("createdAt", "desc")
+      .limit(perQuery)
+      .get()
+      // Swallowing the reason would recreate the exact failure this collection is famous for: a
+      // MISSING COMPOSITE INDEX throws, and an empty result then looks identical to "no expenses".
+      // `complete: false` travels with the data, and the reason goes to Cloud Logging so it can be
+      // told apart from a quiet month.
+      .catch((err) => { console.error("fetchExpenses query failed", err?.message || err); return null; });
+
+  const col = db.collection("expenses");
+  const snaps = await Promise.all([
+    run(col.where("ownerId", "==", scope.uid)),
+    ...scope.groupIds.map((g) => run(col.where("groupId", "==", g))),
+  ]);
+
+  // Seeded from the scope, not from `true`: `deriveScope` caps the fan-out, so past that cap whole
+  // ledgers are never queried at all. Starting at `true` would report a read as complete when
+  // entire groups had been dropped before a single query ran.
+  let complete = !scope.truncated;
+  const byId = new Map<string, ExpenseItem>();
+  for (const snap of snaps) {
+    if (!snap) { complete = false; continue; }
+    if (snap.size >= perQuery) complete = false;
+    for (const doc of snap.docs) {
+      const d = doc.data() as Record<string, unknown>;
+      const gid = typeof d.groupId === "string" && d.groupId ? d.groupId : null;
+      // Belt and braces against a document the query matched but the rule would not: a group id
+      // outside the caller's scope can only mean the data drifted from the rule.
+      if (gid !== null && !inScope(scope, gid) && d.ownerId !== scope.uid) continue;
+      const created = d.createdAt as { toDate?: () => Date } | undefined;
+      const when = created && typeof created.toDate === "function" ? created.toDate() : null;
+      if (!when) continue;
+      byId.set(doc.id, {
+        id: doc.id,
+        day: when.toISOString().slice(0, 10),
+        amount: typeof d.amount === "number" && Number.isFinite(d.amount) ? d.amount : 0,
+        description: typeof d.description === "string" ? d.description : "",
+        paidBy: typeof d.paidBy === "string" ? d.paidBy : "",
+        groupId: gid,
+      });
+    }
+  }
+  // Every query failing is not a quiet month. Saying so is the whole reason this collection was
+  // broken for three months without anyone noticing.
+  if (snaps.length > 0 && snaps.every((x) => x === null)) {
+    return { items: [], complete: false, unavailable: "read-failed" };
+  }
+  return { items: [...byId.values()], complete };
 }

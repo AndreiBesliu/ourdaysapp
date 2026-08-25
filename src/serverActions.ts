@@ -169,7 +169,17 @@ export interface ScopePreview {
   };
   chat: { count: number; complete: boolean };
   assets: { count: number; complete: boolean };
-  expenses: { count: number; unavailable?: string };
+  // Declared to match what the server actually sends. It used to say `unavailable?` alone —
+  // a field the server no longer emits on the happy path — while omitting `complete` and
+  // `preview`, which it does send. The `as ScopePreview` cast below hid the difference, so the
+  // type was documentation that disagreed with the wire.
+  expenses: {
+    count: number;
+    complete: boolean;
+    preview: { day: string; amount: number; description: string; scopeLabel: string }[];
+    /** Present only when the source could not be served at all — a CODE, translated by the client. */
+    unavailable?: string;
+  };
 }
 
 export async function aiPreviewScope(
