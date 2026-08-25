@@ -58,6 +58,10 @@ normalizează sfârșiturile de linie tocmai ca să nu ajungi să-l ignori. `arm
 - **DEVLOG.md** (append-only): Task Started + Task Completed cu prompt-ul exact și modelul
 - **i18n:** TOT textul vizibil din aplicație trece prin `t()` (6 limbi). **Excepție decisă de Andrei:** interfața Warlord rămâne doar în engleză.
 - **Save/load Warlord:** orice stare nouă adăugată în joc trebuie pusă în 4 locuri din `src/warlord/state/useGameState.tsx` — obiectul de save, dependency array-ul efectului de persistență, `loadSave` și `resetAll`.
+- **`OWNER_VERIFY.md` e lista lucrurilor pe care NU le pot verifica eu** (admin, ecrane în spatele
+  autentificării) plus deciziile care-i aparțin lui Andrei. Când livrezi ceva ce nu poți vedea
+  singur, adaugă-l acolo cu „ce te uiți" și „cum arată bine" — nu în DEVLOG, care e append-only și
+  se citește ca istorie, nu ca listă de bifat.
 - **Adminul e punct orb la randare:** `/admin` și panoul Warlord cer autentificare, deci nu pot fi încărcate de mine în browser. Typecheck + teste + build pot fi toate verzi cu adminul căzut pe ErrorBoundary. Ancorează hook-urile lângă celelalte hook-uri, nu lângă un `return`.
 
 ## ⚠️ REGULĂ (Andrei, 2026-08-15): publicarea test → live, din adminul proiectului
