@@ -1866,3 +1866,36 @@ azi, în afară de butonul distructiv (`bad-ink` pe `bad-surface`), calculat sep
 6,37 dark**.
 
 `npx tsc -b` verde · 686 teste verzi · `npm run build` verde (coduri de ieșire reale, nu prin țeavă).
+
+## 2026-08-25 — Tabul de cheltuieli e mort de trei luni, tăcut
+
+**Model:** Claude Opus 5 · găsit pornind de la `fetchExpenses` din asistent, care raportează
+`unavailable: "no-scoping-field"`
+
+### Ce am stabilit, cu date
+- `firestore.rules` **n-a avut niciodată** un bloc `match /expenses` (verificat cu
+  `git log -S "match /expenses"` — gol), și nu există nici regulă atrapă-tot. Firestore refuză ce
+  nu e permis explicit.
+- `ExpensesTab` a apărut pe **2026-05-07**, când proiectul n-avea reguli deloc — deci funcționa.
+- Regulile au apărut pe **2026-05-22** și au sărit peste colecție.
+
+Deci de peste trei luni fiecare citire și scriere pe `expenses` e refuzată. Tabul e montat real, la
+`Wallet.tsx:491`, pe ruta `/wallet` din meniul principal.
+
+### De ce n-a observat nimeni: AMBELE căi de eșec erau mute
+`onSnapshot` n-avea callback de eroare — o listă goală și o listă refuzată arată identic. Iar
+`addDoc` era prins într-un `catch` care doar scria în consolă, deci un „Adaugă" care nu salva nimic
+arăta ca unul care funcționase.
+
+Reparat: ambele raportează acum prin `reportError` (deci ajung în jurnalul de erori al aplicației)
+**și** se văd la controlul care a refuzat, în cele 6 limbi. Formularul își păstrează dinadins
+valorile, ca nimic tastat să nu se piardă.
+
+### Ce NU am reparat, fiindcă e decizia lui Andrei
+Documentele sunt `{amount, description, paidBy, createdAt}` — **fără `groupId`, fără `ownerId`**. O
+regulă permisivă (`allow read: if isSignedIn()`) ar lăsa orice utilizator să citească toate
+cheltuielile din bază. Reparația corectă cere un câmp de scopare, deci o schimbare de model de date
+plus migrarea documentelor scrise între 07.05 și 22.05. Și tot asta blochează includerea
+cheltuielilor în asistent, unde Andrei ceruse „tot".
+
+`npx tsc -b` verde · 693 teste verzi · `npm run build` verde.

@@ -1,20 +1,41 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
 import { collection, query, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, orderBy } from 'firebase/firestore';
-import { Plus, Trash2, Receipt, TrendingUp } from 'lucide-react';
+import { Plus, Trash2, Receipt, TrendingUp, AlertTriangle } from 'lucide-react';
+import { useThemeStore } from '../store';
+import { t } from '../utils/i18n';
+import { reportError } from '../reportError';
 
 export default function ExpensesTab({ sharedUsers }: { sharedUsers: any[] }) {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
+  // Every read and write on `expenses` has been denied since the Firestore rules landed on
+  // 2026-05-22: the collection has no `match` block, and Firestore denies what is not explicitly
+  // allowed. The tab shipped on 05-07, while the project was still in open mode, so it worked
+  // once. It went unnoticed for three months because BOTH failure paths were silent — onSnapshot
+  // had no error callback and the add was swallowed by `console.error`. Whatever the fix to the
+  // data model turns out to be, a refusal has to be visible where it happened.
+  const [loadError, setLoadError] = useState(false);
+  const [addError, setAddError] = useState(false);
+  const { language } = useThemeStore();
 
   useEffect(() => {
     if (!auth.currentUser) return;
     const q = query(collection(db, 'expenses'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setLoadError(false);
+        setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      },
+      (err) => {
+        // An empty list and a denied list look identical on screen. They are not.
+        setLoadError(true);
+        reportError(err?.message || 'expenses snapshot failed', { context: 'ExpensesTab.onSnapshot' });
+      },
+    );
     return () => unsub();
   }, []);
 
@@ -22,6 +43,7 @@ export default function ExpensesTab({ sharedUsers }: { sharedUsers: any[] }) {
     e.preventDefault();
     if (!auth.currentUser || !amount || !description) return;
     setLoading(true);
+    setAddError(false);
     try {
       await addDoc(collection(db, 'expenses'), {
         amount: parseFloat(amount),
@@ -32,7 +54,10 @@ export default function ExpensesTab({ sharedUsers }: { sharedUsers: any[] }) {
       setAmount('');
       setDescription('');
     } catch (err) {
-      console.error(err);
+      // Was `console.error` alone, which is why an Add that saved nothing looked like an Add
+      // that had worked. The form deliberately keeps its values so nothing typed is lost.
+      setAddError(true);
+      reportError(err instanceof Error ? err.message : String(err), { context: 'ExpensesTab.addDoc' });
     }
     setLoading(false);
   };
@@ -98,8 +123,22 @@ export default function ExpensesTab({ sharedUsers }: { sharedUsers: any[] }) {
         </button>
       </form>
 
+      {/* At the control that refused, not in a console nobody opens. */}
+      {addError && (
+        <p role="alert" className="flex items-start gap-2 text-sm text-rose-700 dark:text-rose-300">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{t('expensesAddFailed', language)}</span>
+        </p>
+      )}
+
       <div className="space-y-2 pb-10">
-        {expenses.length === 0 ? (
+        {loadError ? (
+          // An empty list and a denied list look the same. Saying which is the whole fix here.
+          <p role="alert" className="flex items-start gap-2 text-sm text-rose-700 dark:text-rose-300 py-4">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>{t('expensesLoadFailed', language)}</span>
+          </p>
+        ) : expenses.length === 0 ? (
           <p className="text-center text-zinc-500 italic py-4">No expenses recorded yet.</p>
         ) : (
           expenses.map(exp => (
