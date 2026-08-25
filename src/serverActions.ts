@@ -204,3 +204,16 @@ export async function adminGetAiLedger(
   const fn = httpsCallable(getFunctions(app), "adminGetAiLedger");
   return (await fn(input)).data as { date: string; rows: AiLedgerRow[]; truncated: boolean };
 }
+
+/**
+ * Backfill the scoping fields `expenses` never had. DRY RUN unless `apply` is true — the server
+ * writes nothing otherwise, and never guesses a group for an author who is in several.
+ */
+export async function adminBackfillExpenses(apply = false): Promise<{
+  dryRun: boolean; total: number; alreadyScoped: number; noPaidBy: number;
+  wouldSetOwnerOnly: number; wouldSetOwnerAndGroup: number;
+  ambiguous: { id: string; paidBy: string; groups: number }[]; applied: number;
+}> {
+  const fn = httpsCallable(getFunctions(app), "adminBackfillExpenses");
+  return (await fn({ apply })).data as any;
+}

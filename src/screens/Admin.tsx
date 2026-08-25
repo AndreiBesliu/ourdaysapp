@@ -10,6 +10,7 @@ import { auth } from '../firebase';
 import {
   adminCheck, adminGetStats, adminListProfiles, adminListAdmins, adminSetAdmin,
   adminGetHealth, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
+  adminBackfillExpenses,
 } from '../serverActions';
 
 type Tab = 'overview' | 'profiles' | 'groups' | 'admins' | 'health' | 'broadcast';
@@ -91,6 +92,11 @@ function GrowthChart({ label, series, color }: { label: string; series: { date: 
 export default function Admin() {
   const navigate = useNavigate();
   const [access, setAccess] = useState<'checking' | 'granted' | 'denied'>('checking');
+  // Every hook stays up here with the others: /admin needs an account, so a hook next to a return
+  // is a crash nobody sees until a real operator opens the page.
+  const [backfill, setBackfill] = useState<any>(null);
+  const [backfillBusy, setBackfillBusy] = useState(false);
+  const [backfillErr, setBackfillErr] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
 
   const [stats, setStats] = useState<any>(null);
@@ -326,6 +332,53 @@ export default function Admin() {
                 <Breakdown title="Friend requests" data={so.friendRequests} />
                 <Breakdown title="Group invites" data={so.groupInvites} />
                 <Breakdown title="Notification types" data={no.byType} />
+              </div>
+
+              {/* Expenses had no Firestore rule from 2026-05-22 until 2026-08-25, so every read
+                  and write was denied and anything written before that carries no scoping field.
+                  This reports what a backfill would do; it writes only when Apply is pressed. */}
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 p-3 space-y-2">
+                <p className="text-sm font-semibold">Expenses backfill</p>
+                <p className="text-xs text-zinc-500">
+                  Sets <code>ownerId</code> from <code>paidBy</code>. A group is assigned only when the
+                  author belongs to exactly one; anyone in several is left personal and listed below,
+                  because putting private spending into a group ledger cannot be undone.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    disabled={backfillBusy}
+                    onClick={async () => {
+                      setBackfillBusy(true); setBackfillErr(null);
+                      try { setBackfill(await adminBackfillExpenses(false)); }
+                      catch (e: any) { setBackfillErr(e?.message || String(e)); }
+                      setBackfillBusy(false);
+                    }}
+                    className="px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-800 disabled:opacity-50"
+                  >
+                    {backfillBusy ? 'Working…' : 'Dry run'}
+                  </button>
+                  <button
+                    disabled={backfillBusy || !backfill || backfill.dryRun === false}
+                    onClick={async () => {
+                      setBackfillBusy(true); setBackfillErr(null);
+                      try { setBackfill(await adminBackfillExpenses(true)); }
+                      catch (e: any) { setBackfillErr(e?.message || String(e)); }
+                      setBackfillBusy(false);
+                    }}
+                    title={!backfill ? 'Run the dry run first' : 'Write the fields'}
+                    className="px-3 py-2 text-sm rounded-lg bg-primary text-white disabled:opacity-50"
+                  >
+                    Apply
+                  </button>
+                </div>
+                {backfillErr && (
+                  <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">{backfillErr}</p>
+                )}
+                {backfill && (
+                  <pre className="text-[11px] font-mono whitespace-pre-wrap bg-zinc-50 dark:bg-zinc-900 rounded p-2 overflow-x-auto">
+{JSON.stringify(backfill, null, 2)}
+                  </pre>
+                )}
               </div>
             </Section>
 
