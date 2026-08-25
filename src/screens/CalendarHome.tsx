@@ -3,7 +3,7 @@ import { isSameDay, format, startOfMonth, endOfMonth, addMonths, subMonths } fro
 import { auth, db, messaging } from '../firebase';
 import { getToken } from 'firebase/messaging';
 import { collection, query, onSnapshot, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
-import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu, ShieldCheck, Swords } from 'lucide-react';
+import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu, ShieldCheck, Swords, ClipboardList } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import CalendarGrid from '../components/CalendarGrid';
@@ -459,6 +459,13 @@ export default function CalendarHome() {
           >
             <Repeat className="w-5 h-5" />
           </button>
+          <button
+            onClick={() => navigate('/log')}
+            className="hidden sm:flex p-2 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-full transition-colors"
+            title={t('logTitle', language)}
+          >
+            <ClipboardList className="w-5 h-5" />
+          </button>
           <button 
             onClick={() => navigate('/wallet')}
             className="hidden sm:flex p-2 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-full transition-colors"
@@ -514,6 +521,12 @@ export default function CalendarHome() {
                   className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-indigo-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
                 >
                   <Repeat className="w-4 h-4" /> {t('recurring', language)}
+                </button>
+                <button
+                  onClick={() => { navigate('/log'); setIsMobileMenuOpen(false); }}
+                  className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-indigo-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
+                >
+                  <ClipboardList className="w-4 h-4" /> {t('logTitle', language)}
                 </button>
                 <button 
                   onClick={() => { navigate('/wallet'); setIsMobileMenuOpen(false); }}

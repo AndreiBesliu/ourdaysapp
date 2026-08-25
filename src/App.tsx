@@ -18,6 +18,7 @@ const Admin = lazy(() => import('./screens/Admin')); // owner-only, rarely used 
 
 installGlobalErrorHandlers();
 const Warlord = lazy(() => import('./screens/Warlord')); // large embedded game → lazy chunk
+const PeriodLog = lazy(() => import('./screens/PeriodLog'));
 import { useThemeStore } from './store';
 
 function App() {
@@ -252,6 +253,10 @@ function App() {
         <Route
           path="/admin"
           element={user ? <Suspense fallback={null}><Admin /></Suspense> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/log"
+          element={user ? <Suspense fallback={null}><PeriodLog /></Suspense> : <Navigate to="/login" />}
         />
         <Route
           path="/warlord"

@@ -38,7 +38,24 @@ fiindcă acolo o ștergere locală n-ar repara nimic și ar putea promova un dom
       apară în schimb **„The domain could not be drawn"** cu butonul **Copy my save**.
 - [ ] Dacă apare: apasă **Copy my save** ÎNAINTE de orice altceva și trimite-mi textul.
 
-## 3. Panoul de admin general (OurDaysApp)
+## 3. Ecranul nou „Ce s-a întâmplat" (`/log`) — PRIORITATE
+
+**De ce nu pot eu:** e în spatele autentificării, ca adminul. Am verificat că tipurile, testele și
+build-ul sunt verzi și că apelul server e deja livrat și revizuit, dar randarea rămâne oarbă pentru
+mine. **Nu costă nimic să-l deschizi** — nu cheamă niciun model.
+
+- [ ] Iconița de listă (indigo) apare lângă Portofel în bara de sus, și în meniul de pe telefon.
+- [ ] `/log` se deschide și **Arată luna asta** aduce ceva (nu ecran alb, nu eroare).
+- [ ] Zilele apar de la cea mai nouă la cea mai veche, cu evenimente și cheltuieli amestecate în
+      aceeași zi.
+- [ ] Săgețile ← → schimbă luna și reîncarcă.
+- [ ] Cheltuiala „Cina restaurant" (400) apare în ziua în care ai adăugat-o, cu eticheta *Family*;
+      cea personală (200) apare cu *personal*.
+- [ ] Dacă apare o casetk galbenă cu avertismente, trimite-mi textul — înseamnă că serverul a citit
+      mai puțin decât întrebarea, și vreau să știu care dintre motive.
+- [ ] Textul e în română peste tot.
+
+## 4. Panoul de admin general (OurDaysApp)
 
 **De ce nu pot eu:** aceeași autentificare.
 
@@ -46,7 +63,7 @@ fiindcă acolo o ștergere locală n-ar repara nimic și ar putea promova un dom
 - [ ] Secțiunea **Expenses backfill** din *Wallet & Social* arată raportul (deja verificat: 3
       documente, toate scopate — nu e nimic de migrat, **nu apăsa Apply**).
 
-## 4. Decizii care sunt ale tale, nu verificări
+## 5. Decizii care sunt ale tale, nu verificări
 
 - [ ] **PvP se desfășoară pe o singură linie.** `PVP_MAX_COMBATANTS` e exact lățimea tablei (12),
       deci al doilea rând de start nu e atins niciodată: zero adâncime, zero flancare, două ranguri
@@ -54,7 +71,7 @@ fiindcă acolo o ștergere locală n-ar repara nimic și ar putea promova un dom
       schimbă cum se simte PvP-ul, deci decizi tu.
 - [ ] **Calibrarea Warlord** rămâne amânată explicit de tine. Nu o ridic nesolicitat.
 
-## 5. Restanțe vechi, doar din consolă (dinainte de sesiunea asta)
+## 6. Restanțe vechi, doar din consolă (dinainte de sesiunea asta)
 
 Le las aici ca să nu se piardă; nu s-au mișcat.
 
