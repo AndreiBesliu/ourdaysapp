@@ -1899,3 +1899,32 @@ plus migrarea documentelor scrise între 07.05 și 22.05. Și tot asta blocheaz�
 cheltuielilor în asistent, unde Andrei ceruse „tot".
 
 `npx tsc -b` verde · 693 teste verzi · `npm run build` verde.
+
+## 2026-08-25 — Cheltuielile capătă scopare: grupul dă accesul, ce ai plătit rămâne al tău
+
+**Model:** Claude Opus 5
+**Decizia lui Andrei:** „1 în principii, dar cheltuiala personală din grupuri trebuie să poată fi
+văzută și în panoul personal" + migrare după `paidBy`.
+
+Tiparul cerut **exista deja** în `events`, deci l-am oglindit în loc să inventez:
+`ownerId == uid || (groupId != null && isMemberOfGroup(groupId))`. Amândouă ramurile sunt
+satisfăcute de câte o interogare — `where ownerId == me` și `where groupId == g` — ceea ce e chiar
+motivul pentru care panoul personal și registrul de grup pot exista în paralel.
+
+**Reguli** (`match /expenses`, scris explicit): `paidBy` e fixat pe apelant la creare, din același
+motiv ca `assigneeIds` la evenimente — regula de citire dă acces unui GRUP, deci un câmp de autor
+nefixat ar lăsa pe oricine să pună o cheltuială în registrul grupului pe numele altcuiva. Editarea
+și ștergerea rămân doar ale proprietarului: apartenența la grup îți dă dreptul să VEZI registrul,
+nu să rescrii ce a trecut altul.
+
+**Client:** două ascultări unite după id, fiindcă Firestore nu poate valida o singură interogare cu
+SAU între câmpuri. Selectorul de grup la adăugare are **Personal ca implicit**, fiindcă e varianta
+sigură: personală n-o vede nimeni, iar punerea într-un grup e un act deliberat. `Wallet.tsx` arunca
+id-urile grupurilor (`doc.data()` singur) — reparat.
+
+**Migrare:** `adminBackfillExpenses`, **dry-run implicit**. `ownerId` vine din `paidBy`, care e
+cert. Grupul NU se ghicește: dacă autorul e în exact un grup, îl primește; dacă e în mai multe, e
+raportat ca AMBIGUU și lăsat personal. A pune cheltuiala privată a cuiva într-un registru de grup
+pe baza unei monede aruncate e exact greșeala care nu se poate repara după.
+
+`npx tsc -b` verde · 693 teste verzi · `npm run build` verde · functions compilează.

@@ -2145,3 +2145,73 @@ export const adminGetAiLedger = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, a
     truncated: snap.size >= 200,
   };
 });
+
+/**
+ * Backfill the scoping fields the `expenses` collection never had.
+ *
+ * Why it exists: `firestore.rules` had no `match /expenses` block until 2026-08-25, which in
+ * Firestore means denied. The tab shipped 2026-05-07 while the project was still open, the rules
+ * landed 2026-05-22 without it, and everything written in that window carries only
+ * `{amount, description, paidBy, createdAt}` — no field the new rule can read, so those documents
+ * are invisible to their own authors.
+ *
+ * DRY RUN BY DEFAULT. It reports what it would do and writes nothing unless `apply` is true, and
+ * it never guesses a group: `ownerId` comes from `paidBy`, which is certain, while a document
+ * whose author belongs to several groups is reported as AMBIGUOUS and left alone. Assigning it
+ * would put someone's private spending into a group ledger on a coin toss.
+ */
+export const adminBackfillExpenses = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  await assertAdmin(request);
+  const apply = (request.data || {}).apply === true;
+  const db = admin.firestore();
+
+  const [expenses, groups] = await Promise.all([
+    db.collection("expenses").limit(5000).get(),
+    db.collection("groups").limit(2000).get(),
+  ]);
+
+  const groupsOf: Record<string, string[]> = {};
+  groups.forEach((g) => {
+    const members: string[] = Array.isArray(g.data()?.members) ? g.data().members : [];
+    for (const uid of members) (groupsOf[uid] ||= []).push(g.id);
+  });
+
+  const report = {
+    total: expenses.size,
+    alreadyScoped: 0,
+    noPaidBy: 0,
+    wouldSetOwnerOnly: 0,   // author is in no group, or in several — personal is the safe landing
+    wouldSetOwnerAndGroup: 0, // author is in exactly one group, so there is nothing to guess
+    ambiguous: [] as { id: string; paidBy: string; groups: number }[],
+    applied: 0,
+  };
+
+  const batch = db.batch();
+  let queued = 0;
+
+  for (const d of expenses.docs) {
+    const data = d.data() || {};
+    if (typeof data.ownerId === "string" && data.ownerId) { report.alreadyScoped++; continue; }
+    const paidBy = typeof data.paidBy === "string" ? data.paidBy : "";
+    if (!paidBy) { report.noPaidBy++; continue; }
+
+    const mine = groupsOf[paidBy] || [];
+    const patch: Record<string, unknown> = { ownerId: paidBy };
+    if (mine.length === 1) {
+      patch.groupId = mine[0];
+      report.wouldSetOwnerAndGroup++;
+    } else {
+      // Personal. Recoverable by hand afterwards; the opposite is not.
+      patch.groupId = null;
+      report.wouldSetOwnerOnly++;
+      if (mine.length > 1) report.ambiguous.push({ id: d.id, paidBy, groups: mine.length });
+    }
+    if (apply && queued < 450) { batch.update(d.ref, patch); queued++; }
+  }
+
+  if (apply && queued > 0) {
+    await batch.commit();
+    report.applied = queued;
+  }
+  return { dryRun: !apply, ...report };
+});

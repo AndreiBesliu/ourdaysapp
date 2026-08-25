@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
-import { collection, query, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, where } from 'firebase/firestore';
 import { Plus, Trash2, Receipt, TrendingUp, AlertTriangle } from 'lucide-react';
 import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
 import { reportError } from '../reportError';
 
-export default function ExpensesTab({ sharedUsers }: { sharedUsers: any[] }) {
+export default function ExpensesTab(
+  { sharedUsers, myGroups = [] }: { sharedUsers: any[]; myGroups?: { id: string; name: string }[] },
+) {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
+  // '' means personal: mine alone, wherever I am. Anything else is a group ledger.
+  const [groupId, setGroupId] = useState('');
   const [loading, setLoading] = useState(false);
   // Every read and write on `expenses` has been denied since the Firestore rules landed on
   // 2026-05-22: the collection has no `match` block, and Firestore denies what is not explicitly
@@ -22,22 +26,43 @@ export default function ExpensesTab({ sharedUsers }: { sharedUsers: any[] }) {
   const { language } = useThemeStore();
 
   useEffect(() => {
-    if (!auth.currentUser) return;
-    const q = query(collection(db, 'expenses'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        setLoadError(false);
-        setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      },
-      (err) => {
-        // An empty list and a denied list look identical on screen. They are not.
-        setLoadError(true);
-        reportError(err?.message || 'expenses snapshot failed', { context: 'ExpensesTab.onSnapshot' });
-      },
-    );
-    return () => unsub();
-  }, []);
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    // TWO listeners, merged, because the rule has two branches and Firestore cannot validate a
+    // single query that ORs across fields. `ownerId == me` is the personal panel; `groupId in
+    // mine` is the group ledgers. An expense I paid inside a group matches both, so the merge is
+    // by document id.
+    const mine = new Map<string, any>();
+    const theirs = new Map<string, any>();
+    const publish = () => {
+      const all = new Map([...mine, ...theirs]);
+      setExpenses([...all.values()].sort(
+        (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
+      ));
+    };
+    const fail = (where: string) => (err: any) => {
+      // An empty list and a denied list look identical on screen. They are not.
+      setLoadError(true);
+      reportError(err?.message || 'expenses snapshot failed', { context: `ExpensesTab.${where}` });
+    };
+
+    const unsubs: (() => void)[] = [];
+    unsubs.push(onSnapshot(
+      query(collection(db, 'expenses'), where('ownerId', '==', uid)),
+      (snap) => { mine.clear(); snap.docs.forEach(d => mine.set(d.id, { id: d.id, ...d.data() })); setLoadError(false); publish(); },
+      fail('own'),
+    ));
+    // `in` takes at most 30 values; nobody here is in thirty groups, but slicing beats throwing.
+    const ids = myGroups.map(g => g.id).slice(0, 30);
+    if (ids.length) {
+      unsubs.push(onSnapshot(
+        query(collection(db, 'expenses'), where('groupId', 'in', ids)),
+        (snap) => { theirs.clear(); snap.docs.forEach(d => theirs.set(d.id, { id: d.id, ...d.data() })); setLoadError(false); publish(); },
+        fail('groups'),
+      ));
+    }
+    return () => unsubs.forEach(u => u());
+  }, [myGroups.map(g => g.id).join(',')]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +74,10 @@ export default function ExpensesTab({ sharedUsers }: { sharedUsers: any[] }) {
         amount: parseFloat(amount),
         description,
         paidBy: auth.currentUser.uid,
+        // `ownerId` is what the rule reads, and it is pinned to the caller on create so nobody can
+        // file an expense in a group ledger under someone else's name.
+        ownerId: auth.currentUser.uid,
+        groupId: groupId || null,
         createdAt: serverTimestamp()
       });
       setAmount('');
@@ -99,7 +128,20 @@ export default function ExpensesTab({ sharedUsers }: { sharedUsers: any[] }) {
         </div>
       </div>
 
-      <form onSubmit={handleAdd} className="flex gap-2">
+      <form onSubmit={handleAdd} className="flex flex-wrap gap-2">
+        {myGroups.length > 0 && (
+          <select
+            value={groupId}
+            onChange={(e) => setGroupId(e.target.value)}
+            aria-label="Whose ledger this expense belongs to"
+            className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm"
+          >
+            {/* Personal is the default because it is the safe one: a personal expense is seen by
+                nobody else, and putting it in a group is a deliberate act. */}
+            <option value="">{t('expensePersonal', language)}</option>
+            {myGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+        )}
         <input 
           type="text" 
           placeholder="What was it for? (e.g., Groceries)" 

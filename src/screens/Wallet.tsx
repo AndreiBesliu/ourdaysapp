@@ -43,6 +43,9 @@ export default function Wallet() {
   const [transferToUserId, setTransferToUserId] = useState('');
   const [keepCopy, setKeepCopy] = useState(true);
   const [sharedUsers, setSharedUsers] = useState<any[]>([]);
+  // The ids were being thrown away — `doc.data()` only — and an expense needs the group it
+  // belongs to, not just who is in it.
+  const [myGroups, setMyGroups] = useState<{ id: string; name: string }[]>([]);
   const { language } = useThemeStore();
 
   const navigate = useNavigate();
@@ -71,7 +74,8 @@ export default function Wallet() {
 
     const qGroups = query(collection(db, 'groups'), where('members', 'array-contains', auth.currentUser.uid));
     const unsubGroups = onSnapshot(qGroups, async (snapshot) => {
-      const fetchedGroups = snapshot.docs.map(doc => doc.data());
+      const fetchedGroups = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+      setMyGroups(fetchedGroups.map(g => ({ id: g.id, name: g.name || 'Group' })));
       const memberIds = new Set<string>();
       fetchedGroups.forEach((g: any) => g.members?.forEach((id: string) => memberIds.add(id)));
       
@@ -488,7 +492,7 @@ export default function Wallet() {
       <main className="flex-1 max-w-5xl w-full mx-auto p-4 flex flex-col gap-8">
         
         {activeTab === 'expenses' ? (
-          <ExpensesTab sharedUsers={sharedUsers} />
+          <ExpensesTab sharedUsers={sharedUsers} myGroups={myGroups} />
         ) : (
           <>
         {/* Categories Panel */}

@@ -272,6 +272,34 @@ service cloud.firestore {
     // (which creates an asset owned by the RECIPIENT) goes through the
     // `transferAssetCopy` Cloud Function (Admin SDK bypasses this rule). A full
     // transfer is still a client `update` (allowed — you own the source doc).
+    // ── Shared expenses ──
+    // This collection had NO rule at all until 2026-08-25, which in Firestore means denied. The
+    // tab shipped 2026-05-07 while the project was still open, the rules landed 2026-05-22 without
+    // it, and every read and write was refused for three months — silently, because the client had
+    // no error handler on either path. The lesson is the one written on the aiLedger block below:
+    // an absence reads as an oversight, so say it out loud.
+    //
+    // Scoping mirrors `events`, which is the shape Andrei asked for: the GROUP grants access, and
+    // whatever you paid for yourself stays yours to see wherever it lives. Both branches are
+    // satisfiable by a query — `where ownerId == me` and `where groupId == g` — which is what lets
+    // the personal panel and the group view exist side by side.
+    match /expenses/{expenseId} {
+      allow read: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.groupId != null && isMemberOfGroup(resource.data.groupId))
+      );
+      // `paidBy` is pinned to the caller for the same reason `assigneeIds` is on events: the read
+      // rule grants access to a group, so an unpinned author field would let anyone put an expense
+      // in a group ledger under someone else's name. A null groupId is a personal expense.
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.paidBy == request.auth.uid
+        && (request.resource.data.groupId == null || isMemberOfGroup(request.resource.data.groupId));
+      // Only the owner edits or removes it — being in the group lets you SEE the ledger, not
+      // rewrite what someone else recorded.
+      allow update, delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
     match /assets/{assetId} {
       allow read: if isSignedIn() && resource.data.ownerId == request.auth.uid;
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
