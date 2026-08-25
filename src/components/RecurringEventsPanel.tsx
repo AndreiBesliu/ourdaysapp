@@ -7,6 +7,7 @@ import { useModalBack } from '../hooks/useModalBack';
 import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
+import { reportError } from '../reportError';
 
 
 interface RecurringEventsPanelProps {
@@ -26,6 +27,7 @@ const FREQ_COLORS: Record<string, string> = {
 export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEvent }: RecurringEventsPanelProps) {
   const { language } = useThemeStore();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   
   useModalBack(isOpen, onClose);
 
@@ -45,18 +47,36 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
   }
 
   const handleDeleteSeries = async (ev: any) => {
-    if (!confirm(`Delete the entire "${ev.title}" recurring series?`)) return;
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    if (!confirm(t('recurringDeleteConfirm', language).replace('{title}', ev.title))) return;
     setDeletingId(ev.id);
+    setDeleteError(null);
     try {
-      await deleteDoc(doc(db, 'events', ev.id));
-      // Clean up override docs
-      const overridesQuery = query(collection(db, 'events'), where('overrideOfParent', '==', ev.id));
+      // The overrides FIRST, while the parent still exists to identify them.
+      //
+      // This query used to filter on `overrideOfParent` alone, and no branch of the events read
+      // rule mentions that field — Firestore validates a LIST query against the rules without
+      // reading documents, so it was denied outright. The catch below swallowed it, and the
+      // master had already been deleted by then: the series vanished from this panel while its
+      // individually-edited occurrences stayed in the calendar forever, with nothing said.
+      //
+      // `ownerId == uid` is both the fix and the whole truth: `createEventOverride` writes
+      // `ownerId: p.ownerId`, keeping the PARENT's owner, and this button only renders for a
+      // series you own — so the filter satisfies the owner branch and still finds every override.
+      const overridesQuery = query(
+        collection(db, 'events'),
+        where('overrideOfParent', '==', ev.id),
+        where('ownerId', '==', uid),
+      );
       const overrideSnap = await getDocs(overridesQuery);
-      for (const d of overrideSnap.docs) {
-        await deleteDoc(doc(db, 'events', d.id));
-      }
+      await Promise.all(overrideSnap.docs.map((d) => deleteDoc(doc(db, 'events', d.id))));
+      await deleteDoc(doc(db, 'events', ev.id));
     } catch (e) {
-      console.error('Failed to delete series', e);
+      // Was `console.error` alone. A half-finished delete that looks finished is the worst of the
+      // three outcomes, so it says so and leaves the series in the list.
+      setDeleteError(t('recurringDeleteFailed', language));
+      reportError(e instanceof Error ? e.message : String(e), { context: 'RecurringEventsPanel.deleteSeries' });
     } finally {
       setDeletingId(null);
     }
@@ -72,7 +92,7 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
         <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
           <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
             <Repeat className="w-5 h-5 text-indigo-500" />
-            Recurring Events
+            {t('recurring', language)}
           </h3>
           <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 rounded-full transition-colors">
             <X className="w-5 h-5" />
@@ -81,6 +101,9 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
 
         {/* Content */}
         <div className="p-4 overflow-y-auto flex-1 flex flex-col gap-5">
+          {deleteError && (
+            <p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{deleteError}</p>
+          )}
           {recurringEvents.length === 0 ? (
             <div className="text-center py-12">
               <Repeat className="w-10 h-10 text-zinc-300 dark:text-zinc-600 mx-auto mb-3" />

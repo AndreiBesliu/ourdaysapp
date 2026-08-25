@@ -2049,3 +2049,33 @@ care-l importa ar fi avut nevoie de un cont de serviciu ca să verifice o adunar
 din suita aplicației, fiindcă `functions/` n-are runner propriu.
 
 `npx tsc -b` verde · 721 teste verzi (34 fișiere) · livrat.
+
+## 2026-08-25 — Ștergerea unei serii recurente lăsa excepțiile orfane, tăcut
+
+**Model:** Claude Opus 5 · găsit cu verificarea sistematică „interogare contra regulă", pornită după
+bugul cu cheltuielile
+
+Întâi, verificarea care nu mai are ce găsi: **fiecare colecție atinsă de client are acum bloc de
+reguli**, subcolecțiile de mesaje și typing incluse. Golul de la `expenses` era singurul.
+
+Dar „are regulă" nu înseamnă „interogarea trece". Firestore validează o interogare de LISTĂ contra
+regulilor **fără să citească documente**, deci constrângerile interogării trebuie să garanteze
+singure regula. `RecurringEventsPanel` filtra doar pe `overrideOfParent`, câmp care nu apare în
+nicio ramură a regulii de citire a evenimentelor. Refuzată din start.
+
+**Consecința era o ștergere pe jumătate**, nu o listă goală:
+1. `deleteDoc` pe seria-mamă — reușea (ramura de proprietar).
+2. Interogarea de curățare — refuzată, arunca.
+3. `catch (e) { console.error }` — o înghițea.
+
+Seria dispărea din panou, iar ocurențele editate individual rămâneau în calendar pentru totdeauna,
+fără ca nimeni să afle.
+
+Reparat pe trei căi: ordinea inversată (excepțiile ÎNTÂI, cât părintele încă există ca să le
+identifice), filtru `ownerId == uid` — care e și reparația, și adevărul complet, fiindcă
+`createEventOverride` scrie `ownerId: p.ownerId`, păstrând proprietarul PĂRINTELUI, iar butonul se
+randează doar pentru o serie a ta — și eșecul se **spune**, plus ajunge în jurnalul de erori.
+
+Traduse pe drum confirmarea de ștergere și titlul panoului, care erau în engleză.
+
+`npx tsc -b` verde · 721 teste verzi · livrat.
