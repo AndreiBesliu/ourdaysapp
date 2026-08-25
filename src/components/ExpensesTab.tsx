@@ -7,7 +7,7 @@ import { t } from '../utils/i18n';
 import { reportError } from '../reportError';
 
 export default function ExpensesTab(
-  { sharedUsers, myGroups = [] }: { sharedUsers: any[]; myGroups?: { id: string; name: string }[] },
+  { sharedUsers, myGroups = [] }: { sharedUsers: any[]; myGroups?: { id: string; name: string; members: string[] }[] },
 ) {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [amount, setAmount] = useState('');
@@ -91,15 +91,29 @@ export default function ExpensesTab(
     setLoading(false);
   };
 
-  const totalPeople = sharedUsers.length + 1; // plus current user
-  
-  const paidTotals: Record<string, number> = {};
-  expenses.forEach(exp => {
-     paidTotals[exp.paidBy] = (paidTotals[exp.paidBy] || 0) + exp.amount;
-  });
+  // Balances are computed PER GROUP, over that group's expenses only.
+  //
+  // Two things went wrong the moment an expense could be personal or belong to one of several
+  // groups, and both were introduced by giving it a scope: a PERSONAL expense counted into the
+  // shared split, so private spending looked like a debt other people owed; and with more than one
+  // group, a Family expense was divided among the members of every group at once, because the
+  // divisor was "everyone I share any group with".
+  const ledgers = myGroups
+    .map(g => {
+      const mine = expenses.filter(e => e.groupId === g.id);
+      const paid: Record<string, number> = {};
+      mine.forEach(e => { paid[e.paidBy] = (paid[e.paidBy] || 0) + (Number(e.amount) || 0); });
+      const total = Object.values(paid).reduce((a, b) => a + b, 0);
+      const members = g.members.length ? g.members : [auth.currentUser?.uid].filter(Boolean) as string[];
+      const share = members.length > 0 ? total / members.length : 0;
+      return { group: g, members, paid, share, count: mine.length };
+    })
+    .filter(l => l.count > 0);
 
-  const totalSpent = Object.values(paidTotals).reduce((a, b) => a + b, 0);
-  const averagePerPerson = totalPeople > 0 ? totalSpent / totalPeople : 0;
+  // Never part of a balance — nobody owes anybody for these. Counted separately so the money is
+  // still visible rather than silently dropped from the screen.
+  const personal = expenses.filter(e => !e.groupId);
+  const personalTotal = personal.reduce((a, e) => a + (Number(e.amount) || 0), 0);
 
   const getUserName = (uid: string) => {
     if (uid === auth.currentUser?.uid) return 'You';
@@ -108,25 +122,32 @@ export default function ExpensesTab(
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
-        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-          <TrendingUp className="w-4 h-4"/> Group Balances
-        </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {[auth.currentUser?.uid, ...sharedUsers.map(u => u.id)].filter(Boolean).map(uid => {
-            const paid = paidTotals[uid!] || 0;
-            const balance = paid - averagePerPerson;
-            return (
-              <div key={uid} className="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg border border-zinc-100 dark:border-zinc-800">
-                <p className="font-medium text-zinc-800 dark:text-zinc-200 text-sm">{getUserName(uid!)}</p>
-                <p className={`text-lg font-bold ${balance > 0 ? 'text-emerald-500' : balance < 0 ? 'text-red-500' : 'text-zinc-500'}`}>
-                  {balance > 0 ? '+' : ''}{balance.toFixed(2)}
-                </p>
-              </div>
-            );
-          })}
+      {ledgers.map(l => (
+        <div key={l.group.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
+          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4"/> {l.group.name}
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {l.members.map(uid => {
+              const balance = (l.paid[uid] || 0) - l.share;
+              return (
+                <div key={uid} className="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg border border-zinc-100 dark:border-zinc-800">
+                  <p className="font-medium text-zinc-800 dark:text-zinc-200 text-sm">{getUserName(uid)}</p>
+                  <p className={`text-lg font-bold ${balance > 0.005 ? 'text-emerald-500' : balance < -0.005 ? 'text-red-500' : 'text-zinc-500'}`}>
+                    {balance > 0 ? '+' : ''}{balance.toFixed(2)}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      ))}
+
+      {personalTotal > 0 && (
+        <p className="text-xs text-zinc-500">
+          {t('expensePersonal', language)}: <span className="font-mono">{personalTotal.toFixed(2)}</span> — {t('expensePersonalNotShared', language)}
+        </p>
+      )}
 
       <form onSubmit={handleAdd} className="flex flex-wrap gap-2">
         {myGroups.length > 0 && (
@@ -191,7 +212,14 @@ export default function ExpensesTab(
                 </div>
                 <div>
                   <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100">{exp.description}</p>
-                  <p className="text-xs text-zinc-500">Paid by {getUserName(exp.paidBy)}</p>
+                  <p className="text-xs text-zinc-500">
+                  Paid by {getUserName(exp.paidBy)}
+                  {/* Personal rows sit in the same list but in no balance, so they have to say
+                      which they are — otherwise the totals look like they lost money. */}
+                  {!exp.groupId && <> · {t('expensePersonal', language)}</>}
+                  {exp.groupId && myGroups.find(g => g.id === exp.groupId)
+                    && <> · {myGroups.find(g => g.id === exp.groupId)!.name}</>}
+                </p>
                 </div>
               </div>
               <div className="flex items-center gap-3">

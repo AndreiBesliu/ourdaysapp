@@ -1928,3 +1928,24 @@ raportat ca AMBIGUU și lăsat personal. A pune cheltuiala privată a cuiva înt
 pe baza unei monede aruncate e exact greșeala care nu se poate repara după.
 
 `npx tsc -b` verde · 693 teste verzi · `npm run build` verde · functions compilează.
+
+## 2026-08-25 — Soldurile se calculează per grup, iar personalele nu intră în ele
+
+**Model:** Claude Opus 5 · prins din capturile lui Andrei, imediat după ce am livrat scoparea
+
+Livrarea scopării a introdus două greșeli, amândouă în același loc:
+1. O cheltuială **personală** intra în împărțirea comună — `paidTotals` mergea peste TOATE
+   cheltuielile — deci cheltuiala ta privată arăta ca o datorie pe care ți-o are altcineva.
+2. Împărțitorul era `sharedUsers.length + 1`, adică **toți oamenii din toate grupurile tale**. Cu
+   un singur grup e corect din întâmplare; cu două, o cheltuială din „Family" s-ar fi împărțit și
+   la membrii celuilalt grup.
+
+Acum: un bloc de solduri **per grup**, peste cheltuielile acelui grup și împărțit la membrii ACELUI
+grup. Personalele sunt scoase din orice sold, dar totalul lor rămâne afișat separat — altfel banii
+ar dispărea tăcut de pe ecran. Rândurile din listă spun acum cărui grup aparțin, sau că sunt
+personale, fiindcă stau în aceeași listă dar în niciun sold.
+
+`Wallet.tsx` trimite acum și `members`, nu doar id și nume — împărțitorul corect e chiar lista de
+membri a grupului.
+
+`npx tsc -b` verde · 693 teste verzi · `npm run build` verde · livrat.
