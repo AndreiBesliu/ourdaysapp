@@ -51,7 +51,7 @@ mine. **Nu costă nimic să-l deschizi** — nu cheamă niciun model.
 - [ ] Săgețile ← → schimbă luna și reîncarcă.
 - [ ] Cheltuiala „Cina restaurant" (400) apare în ziua în care ai adăugat-o, cu eticheta *Family*;
       cea personală (200) apare cu *personal*.
-- [ ] Dacă apare o casetk galbenă cu avertismente, trimite-mi textul — înseamnă că serverul a citit
+- [ ] Dacă apare o casetă galbenă cu avertismente, trimite-mi textul — înseamnă că serverul a citit
       mai puțin decât întrebarea, și vreau să știu care dintre motive.
 - [ ] Textul e în română peste tot.
 
