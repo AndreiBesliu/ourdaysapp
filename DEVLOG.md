@@ -2079,3 +2079,30 @@ randează doar pentru o serie a ta — și eșecul se **spune**, plus ajunge în
 Traduse pe drum confirmarea de ștergere și titlul panoului, care erau în engleză.
 
 `npx tsc -b` verde · 721 teste verzi · livrat.
+
+## 2026-08-25 — Clopoțelul de notificări n-avea indexul de care depinde
+
+**Model:** Claude Opus 5 · audit adversarial cu 4 lentile, constatarea verificată la sursă cu un
+declanșator deja latent
+
+`NotificationsDropdown` interoghează `where('userId','==',uid)` **plus** `orderBy('createdAt','desc')`
+— o egalitate pe un câmp și o ordonare pe altul, ceea ce Firestore poate servi DOAR dintr-un index
+compus. Indexul acela nu era declarat în `firestore.indexes.json`, iar pe live **nu exista deloc**:
+doar `events` (5) și `expenses` (2). Verificat cu `firestore:indexes`, nu presupus.
+
+Iar `onSnapshot` n-avea callback de eroare, deci ascultătorul pur și simplu nu se declanșa niciodată:
+starea rămânea `[]` și clopoțelul arăta „nicio notificare", identic cu un cont fără notificări.
+
+**Deploy-ul meu de indecși de mai devreme n-a șters nimic** — verificat în log, doar creează. Indexul
+n-a existat niciodată.
+
+`liveQuery` — un ascultător care nu poate eșua tăcut. `onError` e OBLIGATORIU, iar raportarea se face
+înăuntru ca niciun apel să n-o poată uita. Motivul pentru care argumentul ăla nu e opțional:
+SDK-ul nici nu aruncă, nici nu respinge — `AsyncObserver.error` scrie o linie în `console.error`
+când n-are handler, deci nici cârligele globale din `reportError.ts` nu se declanșează, nimic nu
+ajunge în `errorLogs`, iar tabul Health din admin arată curat.
+
+Auditul a numărat **28 din 30 de ascultători** în forma asta. Am convertit deocamdată pe cel dovedit
+stricat; restul e o trecere separată, cu unealta deja la locul ei.
+
+`npx tsc -b` verde · 721 teste verzi · index livrat și confirmat pe live, apoi hosting.

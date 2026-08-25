@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Bell, Check, Trash2, MessageCircle, UserPlus } from 'lucide-react';
-import { collection, query, where, onSnapshot, orderBy, updateDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, orderBy, updateDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { liveQuery } from '../utils/liveQuery';
 import { db, auth } from '../firebase';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
@@ -10,6 +11,7 @@ export default function NotificationsDropdown() {
   const { language } = useThemeStore();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [loadError, setLoadError] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -20,9 +22,17 @@ export default function NotificationsDropdown() {
       orderBy('createdAt', 'desc')
     );
     
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setNotifications(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    // This query pairs `where(userId ==)` with `orderBy(createdAt)`, which Firestore can only
+    // serve from a COMPOSITE index — and that index was never declared in firestore.indexes.json,
+    // so it exists only if somebody once clicked the link in a console error. Declared now. Until
+    // it finishes building, the listener errors, and this is what says so instead of showing an
+    // empty bell.
+    const unsubscribe = liveQuery<Record<string, unknown>>(
+      q,
+      'NotificationsDropdown.notifications',
+      (docs) => { setLoadError(false); setNotifications(docs); },
+      () => setLoadError(true),
+    );
 
     return () => unsubscribe();
   }, []);
@@ -93,7 +103,7 @@ export default function NotificationsDropdown() {
           <div className="overflow-y-auto flex-1">
             {notifications.length === 0 ? (
               <div className="p-6 text-center text-zinc-500 text-sm">
-                {t('noNotificationsYet', language)}
+                {loadError ? t('notificationsLoadFailed', language) : t('noNotificationsYet', language)}
               </div>
             ) : (
               <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
