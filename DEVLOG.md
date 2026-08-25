@@ -2026,3 +2026,26 @@ cu sfârșiturile de linie normalizate — aceeași lecție ca la motorul de lup
 țipă mereu e una pe care înveți s-o ignori. Dovedit că mușcă printr-o divergență plantată.
 
 `npx tsc -b` verde · 705 teste verzi (33 fișiere) · functions compilează · livrat.
+
+## 2026-08-25 — Reparația pe jumătate din revizie, terminată
+
+**Model:** Claude Opus 5
+
+Reparasem trei din patru constatări. Verificând ce a rămas:
+
+1. **`fetchEvents` fusese lăsat în urmă.** `fetchChat` și `fetchExpenses` primiseră
+   `let complete = !scope.truncated`, el nu. Supra-declararea e mai MICĂ acolo — ramurile pe
+   `ownerId`/`assignee`/`invitee` prind în continuare evenimentele dintr-un grup scăpat, dacă
+   apelantul le deține sau e numit pe ele, deci se pierd doar cele de membru pasiv. Dar o minciună
+   mai mică e tot o minciună, iar steagul ăsta e chiar lucrul pe baza căruia decide cineva.
+2. **Pragul de 10 documente pe interogare spărgea bugetul.** 26 de interogări × 10 = 260 de citiri
+   contra unui buget de 150 — cu 73% peste. Un buget depășit tăcut nu e buget. Pragul rămâne
+   (o citire de un document pe grup nu spune nimic) și se **taie fan-out-ul** ca să încapă, iar
+   tăierea se raportează prin `complete: false` în loc să se ascundă.
+
+Aritmetica — chiar lucrul care era greșit — a ieșit din `aiSources.ts` în `functions/src/fanOut.ts`,
+un fișier fără niciun import. Motivul e prozaic: `aiSources` trage `firebase-admin`, deci un test
+care-l importa ar fi avut nevoie de un cont de serviciu ca să verifice o adunare. 16 teste, rulate
+din suita aplicației, fiindcă `functions/` n-are runner propriu.
+
+`npx tsc -b` verde · 721 teste verzi (34 fișiere) · livrat.

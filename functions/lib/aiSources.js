@@ -23,6 +23,7 @@ exports.fetchExpenses = fetchExpenses;
 const admin = require("firebase-admin");
 const aiScope_1 = require("./aiScope");
 const recurrenceServer_1 = require("./recurrenceServer");
+const fanOut_1 = require("./fanOut");
 /**
  * THE visibility invariant for one event, written from scratch.
  *
@@ -74,7 +75,11 @@ async function fetchEvents(scope, period, budget) {
         queries.push(col.where("groupId", "==", g).where("date", ">=", longFrom).where("date", "<=", period.to).limit(perQuery));
     }
     const snaps = await Promise.all(queries.map((q) => q.get().catch(() => null)));
-    let complete = true;
+    // Seeded from the scope, like the other fan-out fetchers. The over-claim is SMALLER here than
+    // in chat — the ownerId/assignee/invitee branches still catch events inside a dropped group when
+    // the caller owns or is named on them, so only passive-member group events go missing — but a
+    // smaller lie is still a lie, and this flag is what a caller decides to trust on.
+    let complete = !scope.truncated;
     const byId = new Map();
     for (let i = 0; i < snaps.length; i++) {
         const snap = snaps[i];
@@ -194,7 +199,15 @@ async function fetchExpenses(scope, period, budget) {
     const to = admin.firestore.Timestamp.fromDate(new Date(period.to));
     // One share for the caller's own, the rest split across the groups — so a member of many groups
     // does not lose sight of their own spending.
-    const perQuery = Math.max(10, Math.floor(budget / (scope.groupIds.length + 1)));
+    //
+    // The floor of 10 is what makes a per-group share usable at all, but it USED TO BREAK THE BUDGET:
+    // 26 queries at a floor of 10 reads 260 documents against a budget of 150. A budget that is
+    // silently exceeded is not a budget. So the floor stays and the FAN-OUT is trimmed to fit it,
+    // and trimming is reported rather than hidden — the caller is told the answer is narrower.
+    const plan = (0, fanOut_1.planFanOut)(budget, scope.groupIds.length);
+    const groupIds = scope.groupIds.slice(0, plan.take);
+    const trimmed = plan.trimmed;
+    const perQuery = plan.perQuery;
     const run = (q) => q.where("createdAt", ">=", from)
         .where("createdAt", "<=", to)
         // DESC, not asc: when `limit` bites, the rows that survive must be the RECENT ones. The
@@ -212,12 +225,12 @@ async function fetchExpenses(scope, period, budget) {
     const col = db.collection("expenses");
     const snaps = await Promise.all([
         run(col.where("ownerId", "==", scope.uid)),
-        ...scope.groupIds.map((g) => run(col.where("groupId", "==", g))),
+        ...groupIds.map((g) => run(col.where("groupId", "==", g))),
     ]);
     // Seeded from the scope, not from `true`: `deriveScope` caps the fan-out, so past that cap whole
     // ledgers are never queried at all. Starting at `true` would report a read as complete when
     // entire groups had been dropped before a single query ran.
-    let complete = !scope.truncated;
+    let complete = !scope.truncated && !trimmed;
     const byId = new Map();
     for (const snap of snaps) {
         if (!snap) {
