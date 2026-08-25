@@ -2002,3 +2002,27 @@ pe drumul fericit — și omitea `complete` și `preview`, pe care le trimite. C
 ascundea diferența, deci tipul era documentație care contrazicea sârma.
 
 `npx tsc -b` verde · 693 teste verzi · functions compilează · livrat în ordinea corectă.
+
+## 2026-08-25 — O zi trebuie să existe în calendar, nu doar să arate ca o dată
+
+**Model:** Claude Opus 5 · restanța marcată „poate aștepta" de revizia anterioară, reparată acum
+fiindcă ecranul asistentului e cel care va trimite date acolo
+
+`dayRangePeriod` verifica doar forma (`/^\d{4}-\d{2}-\d{2}$/`). `2026-02-30` trecea, iar
+`new Date("2026-02-30T00:00:00.000Z")` **nu aruncă** — se rostogolește în 2 martie.
+
+Partea urâtă nu e fereastra greșită, ci că **sursele nu erau de acord între ele**: cheltuielile și
+chatul compară Timestamp-uri reale și ar fi folosit 2 martie, iar evenimentele compară șiruri ISO
+și ar fi folosit literalul `2026-02-30`. O întrebare, două ferestre, nicio eroare.
+
+`isRealDay` refuză acum, folosind `daysInMonth` care exista deja în fișier. Teste pe zilele
+imposibile, pe 29 februarie într-un an bisect și într-unul obișnuit, plus regula seculară (1900 nu
+e bisect, 2000 e).
+
+**Și verificarea pe care antetul o cerea de la început.** `period.ts` există în două copii, fiindcă
+`functions/` nu poate importa din `src/`, iar antetul scrie negru pe alb: „o schimbare aici
+nemirorată dincolo e o schimbare pe care n-o verifică nimic". Nimic n-o verifica. Acum e un test,
+cu sfârșiturile de linie normalizate — aceeași lecție ca la motorul de luptă: o verificare care
+țipă mereu e una pe care înveți s-o ignori. Dovedit că mușcă printr-o divergență plantată.
+
+`npx tsc -b` verde · 705 teste verzi (33 fișiere) · functions compilează · livrat.

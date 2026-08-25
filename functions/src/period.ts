@@ -73,12 +73,28 @@ export function monthPeriod(year: number, month: number): Period {
 const DAY = /^\d{4}-\d{2}-\d{2}$/
 
 /**
+ * A day that exists in the calendar, not merely one shaped like a date.
+ *
+ * The regex alone let `2026-02-30` through, and `new Date("2026-02-30T00:00:00.000Z")` does not
+ * throw — it ROLLS OVER to March 2. So a period built from it silently answered about a window
+ * nobody asked for, and worse, the sources disagreed with each other: expenses and chat compare
+ * real Timestamps and would have used Mar 2, while events compare ISO strings and would have used
+ * the literal `2026-02-30`. One question, two windows, no error.
+ */
+export function isRealDay(day: string): boolean {
+  if (!DAY.test(day)) return false
+  const [y, m, d] = day.split('-').map(Number)
+  if (m < 1 || m > 12) return false
+  return d >= 1 && d <= daysInMonth(y, m)
+}
+
+/**
  * An explicit range, given as two `yyyy-MM-dd` days. Returns `null` when either day is
  * malformed or the range is inverted — the caller refuses rather than guessing, because a
  * guessed range would silently answer about a different month than the one asked about.
  */
 export function dayRangePeriod(fromDay: string, toDay: string): Period | null {
-  if (!DAY.test(fromDay) || !DAY.test(toDay)) return null
+  if (!isRealDay(fromDay) || !isRealDay(toDay)) return null
   if (fromDay > toDay) return null
   return bounds(fromDay, toDay)
 }
