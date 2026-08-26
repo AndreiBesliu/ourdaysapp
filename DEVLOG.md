@@ -2230,3 +2230,47 @@ login-ul apare în română și în germană, cu diacritice.
 - Corectate **113 valori** pe care le scrisesem fără diacritice.
 
 `npx tsc -b` verde · **732 teste verzi** · build verde · verificat în browser pe trei limbi.
+
+## 2026-08-26 — Reîncărcarea chiar aduce versiunea nouă (până azi, nu o aducea)
+
+**Model:** Claude Opus 5 · pornit de la „ce pot verifica singur cât verifici tu"
+
+Voiam să mă asigur că un tab care se întoarce vede deploy-ul de azi. Am măsurat antetele de pe live
+și am găsit altceva decât scria în notă:
+
+```
+/              Cache-Control: max-age=3600
+/log           Cache-Control: max-age=3600
+/wallet        Cache-Control: max-age=3600
+/index.html    Cache-Control: no-cache, no-store, must-revalidate
+```
+
+`firebase.json` cerea `no-cache` pentru `**/*.html`. **Hosting potrivește antetele pe CALEA CERERII,
+nu pe fișierul rezolvat** — iar nicio adresă pe care o vizitează cineva nu se termină în `.html`.
+Deci singurul URL care primea antetul era exact cel pe care nu-l deschide nimeni. Toate rutele reale
+stăteau o oră în cache: puteai reîncărca oricât, primeai vechiul `index.html`, deci vechiul hash de
+bundle, deci codul vechi.
+
+Asta nu era o fatalitate de PWA, cum sugera nota din `OWNER_VERIFY.md` — era un glob greșit.
+
+**Măsurat, nu presupus, pe un canal de preview** (`hosting:channel:deploy cachefix`, live neatins):
+prima variantă a pus regula de assets prima și pe cea generală a doua, iar rezultatul a fost că
+**assets-urile au ieșit `no-cache`** — Firebase aplică **ultima regulă care se potrivește**, nu pe
+cea mai specifică. Adică fiecare navigare ar fi re-descărcat 1,4 MB. Am inversat ordinea și am
+re-măsurat:
+
+```
+/ · /log · /index.html · /manifest.json · /sw.js   → no-cache, no-store, must-revalidate
+/assets/index-D1OdOYH2.js                          → public, max-age=31536000, immutable
+```
+
+`immutable` pe `/assets/**` e sigur fiindcă **toate cele 54 de fișiere** de acolo au hash de conținut
+în nume (verificat, nu presupus) — conținutul se schimbă ⇒ numele se schimbă. Iar `/sw.js` rămâne
+`no-cache`, ceea ce e corect pentru un service worker.
+
+**Consecință pentru verificare:** de la deploy-ul ăsta încolo, o reîncărcare normală ajunge. Excepție
+tranzitorie: un browser care are deja `index.html` în cache de dinainte poate rămâne pe versiunea
+veche **până la o oră** — o singură dată, ultima oară.
+
+Rămâne separat, și e altă problemă: un tab lăsat deschis fără reîncărcare rulează codul deja încărcat
+în memorie. Asta nu ține de antete, ci de faptul că nimeni nu cheamă `registration.update()`.

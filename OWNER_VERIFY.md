@@ -5,10 +5,14 @@ Acoperă și Warlord, fiindcă se livrează prin aplicația asta.
 
 Când bifezi ceva, taie-l de aici. Dacă un punct pică, spune-mi *ce ai văzut*, nu doar că n-a mers.
 
-> **Reload dur înainte de orice.** `index.html` înregistrează `sw.js` dar nu cheamă niciodată
-> `registration.update()`, iar poarta de versiune rulează doar la parsarea unui `index.html`
-> proaspăt. Un tab deschis de ore rulează cod dinaintea deploy-ului, oricâte reîmprospătări normale
-> ai da. Închide complet tabul sau aplicația.
+> **Reîncarcă înainte de orice.** Reparat 26.08: până azi, `/`, `/log`, `/wallet` și toate rutele
+> reale veneau cu `max-age=3600`, deci reîncărcarea îți dădea tot codul vechi timp de o oră. Acum
+> vin cu `no-cache`, iar o reîncărcare normală ajunge (măsurat pe un canal de preview).
+>
+> **Două excepții rămân:** (1) dacă browserul tău are deja `index.html` din cache de dinainte de
+> reparație, poate sta pe versiunea veche **încă până la o oră** — o singură dată; (2) un tab lăsat
+> deschis fără reîncărcare rulează codul din memorie, oricât de proaspăt e serverul, fiindcă nimeni
+> nu cheamă `registration.update()`. Dacă ceva pare vechi: închide tabul complet și redeschide-l.
 
 ---
 
@@ -131,3 +135,6 @@ Măsurate, nu presupuse — le scriu ca să știi unde **nu** trebuie să te ui�
 - Fiecare deploy: chunk-ul de pe live comparat **byte cu byte** cu ce am construit local.
 - Login-ul în română și în germană, pe viu, cu diacritice corecte; cele șase dicționare au aceleași
   chei, fără duplicate și fără blocuri scrise în ASCII (test, nu ochiul meu).
+- Antetele de cache de pe live, pe 7 rute: rutele reale sunt `no-cache`, assets-urile `immutable`,
+  toate cele 54 de fișiere din `/assets` au hash de conținut în nume. Măsurat pe canal de preview
+  înainte de a atinge live-ul.
