@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { isSameDay, format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { auth, db, messaging } from '../firebase';
 import { getToken } from 'firebase/messaging';
-import { collection, query, onSnapshot, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
-import { liveQuery } from '../utils/liveQuery';
+import { collection, query, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
+import { liveQuery, liveDoc } from '../utils/liveQuery';
 import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu, ShieldCheck, Swords, ClipboardList } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -29,6 +29,7 @@ export default function CalendarHome() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeGroupId, setActiveGroupId] = useState<string | 'personal'>('personal');
   const [groups, setGroups] = useState<any[]>([]);
+  const [groupsLoadError, setGroupsLoadError] = useState(false);
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
   const [isLeaveGroupModalOpen, setIsLeaveGroupModalOpen] = useState(false);
   
@@ -102,13 +103,15 @@ export default function CalendarHome() {
     
     // Legacy support for familyMembers just in case
     let legacyFamily: string[] = [];
-    const unsubUser = onSnapshot(doc(db, 'users', auth.currentUser.uid), (docSnap) => {
-      if (docSnap.exists()) legacyFamily = docSnap.data().familyMembers || [];
-    });
+    const unsubUser = liveDoc<any>(doc(db, 'users', auth.currentUser.uid), 'CalendarHome.userDoc',
+      (data) => { if (data) legacyFamily = data.familyMembers || []; },
+      // Legacy-only enrichment: losing it costs a few avatars, not the calendar. Reported anyway,
+      // because a failing read of your OWN document usually means something bigger is wrong.
+      () => {});
 
     const qGroups = query(collection(db, 'groups'), where('members', 'array-contains', auth.currentUser.uid));
-    const unsubscribeGroups = onSnapshot(qGroups, async (snapshot) => {
-      const fetchedGroups = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const unsubscribeGroups = liveQuery<any>(qGroups, 'CalendarHome.groups', async (fetchedGroups) => {
+      setGroupsLoadError(false);
       setGroups(fetchedGroups);
       
       const map: Record<string, any> = {};
@@ -132,7 +135,11 @@ export default function CalendarHome() {
         }
       }
       setUserMap(map);
-    });
+    },
+    // Your groups failing to load is the loudest possible failure on this screen: every shared
+    // calendar, every member avatar and the group switcher all go quiet at once, and the app
+    // looks exactly like a brand-new account. It says so instead.
+    () => setGroupsLoadError(true));
     
     return () => {
       unsubUser();
@@ -154,11 +161,10 @@ export default function CalendarHome() {
       where('date', '==', dateStr)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const games = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-      const active = games.filter(g => g.status === 'playing' || g.status === 'waiting');
+    const unsubscribe = liveQuery<any>(q, 'CalendarHome.activeGames', (games) => {
+      const active = games.filter((g: any) => g.status === 'playing' || g.status === 'waiting');
       setActiveGames(active);
-    });
+    }, () => setActiveGames([]));
 
     return () => unsubscribe();
   }, [activeGroupId, selectedDate]);
@@ -188,11 +194,13 @@ export default function CalendarHome() {
     let byEmail = new Set<string>();
     const update = () => setPendingFriendCount(new Set([...byId, ...byEmail]).size);
     const qId = query(collection(db, 'friend_requests'), where('toId', '==', uid), where('status', '==', 'pending'));
-    const unsubId = onSnapshot(qId, (s) => { byId = new Set(s.docs.map(d => d.id)); update(); });
+    const unsubId = liveQuery<any>(qId, 'CalendarHome.pendingById',
+      (docs) => { byId = new Set(docs.map((d) => d.id)); update(); }, () => {});
     let unsubEmail = () => {};
     if (myEmail) {
       const qEmail = query(collection(db, 'friend_requests'), where('toEmail', '==', myEmail), where('status', '==', 'pending'));
-      unsubEmail = onSnapshot(qEmail, (s) => { byEmail = new Set(s.docs.map(d => d.id)); update(); });
+      unsubEmail = liveQuery<any>(qEmail, 'CalendarHome.pendingByEmail',
+        (docs) => { byEmail = new Set(docs.map((d) => d.id)); update(); }, () => {});
     }
     return () => { unsubId(); unsubEmail(); };
   }, []);
@@ -439,6 +447,11 @@ export default function CalendarHome() {
 
   return (
     <div className="min-h-screen bg-transparent flex flex-col relative pt-[60px]">
+      {groupsLoadError && (
+        <p role="alert" className="mx-4 mb-2 rounded-xl bg-rose-50 dark:bg-rose-500/10 px-4 py-2 text-sm text-rose-700 dark:text-rose-300">
+          {t('groupsLoadFailed', language)}
+        </p>
+      )}
       {/* Header */}
       <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 py-3 fixed top-0 left-0 right-0 w-full z-[100] shadow-sm">
        <div className="max-w-5xl w-full mx-auto px-4 flex items-center justify-between">

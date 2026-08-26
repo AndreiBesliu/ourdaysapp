@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db, storage } from '../firebase';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, where } from 'firebase/firestore';
+import { collection, query, addDoc, updateDoc, deleteDoc, doc, getDoc, where } from 'firebase/firestore';
+import { liveQuery, liveDoc } from '../utils/liveQuery';
 import { ref, uploadBytes, getDownloadURL, listAll } from 'firebase/storage';
 import { Wallet as WalletIcon, Plus, Image as ImageIcon, Trash2, Users, User, HeartPulse, Home, Car, DollarSign, Settings2, Folder, Edit2, Check, X, ScanLine, QrCode } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -12,9 +13,13 @@ import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
 import { transferAssetCopy } from '../serverActions';
 
+// One list, used by the initial state and by both fallbacks below.
+const DEFAULT_CATEGORIES = ['Home & Living', 'Health & Medical', 'Vehicles', 'Financial'];
+
 export default function Wallet() {
   const [assets, setAssets] = useState<any[]>([]);
-  const [categories, setCategories] = useState<string[]>(['Home & Living', 'Health & Medical', 'Vehicles', 'Financial']);
+  const [assetsLoadError, setAssetsLoadError] = useState(false);
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [isAdding, setIsAdding] = useState(false);
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'assets' | 'expenses'>('assets');
@@ -60,21 +65,18 @@ export default function Wallet() {
     const uid = auth.currentUser.uid;
     const q = query(collection(db, 'assets'), where('ownerId', '==', uid));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setAssets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    const unsubscribe = liveQuery<any>(q, 'Wallet.assets',
+      (docs) => { setAssetsLoadError(false); setAssets(docs); },
+      () => setAssetsLoadError(true));
 
-    const unsubUser = onSnapshot(doc(db, 'users', auth.currentUser.uid), (docSnap) => {
-      if (docSnap.exists() && docSnap.data().walletCategories) {
-        setCategories(docSnap.data().walletCategories);
-      } else {
-        setCategories(['Home & Living', 'Health & Medical', 'Vehicles', 'Financial']);
-      }
-    });
+    const unsubUser = liveDoc<any>(doc(db, 'users', auth.currentUser.uid), 'Wallet.userDoc',
+      (data) => setCategories(data?.walletCategories || DEFAULT_CATEGORIES),
+      // Falling back to the defaults is right here — but only after the failure is on record,
+      // otherwise a denied read looks like "this account has no custom categories".
+      () => setCategories(DEFAULT_CATEGORIES));
 
     const qGroups = query(collection(db, 'groups'), where('members', 'array-contains', auth.currentUser.uid));
-    const unsubGroups = onSnapshot(qGroups, async (snapshot) => {
-      const fetchedGroups = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+    const unsubGroups = liveQuery<any>(qGroups, 'Wallet.groups', async (fetchedGroups) => {
       setMyGroups(fetchedGroups.map(g => ({ id: g.id, name: g.name || 'Group', members: Array.isArray(g.members) ? g.members : [] })));
       const memberIds = new Set<string>();
       fetchedGroups.forEach((g: any) => g.members?.forEach((id: string) => memberIds.add(id)));
@@ -90,7 +92,7 @@ export default function Wallet() {
         }
       }
       setSharedUsers(fetchedUsers);
-    });
+    }, () => { setMyGroups([]); setSharedUsers([]); });
 
     return () => {
       unsubscribe();
@@ -521,10 +523,10 @@ export default function Wallet() {
         </section>
 
         {assets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center opacity-50">
+          <div className={`flex flex-col items-center justify-center py-20 text-center ${assetsLoadError ? 'text-rose-600 dark:text-rose-400' : 'opacity-50'}`}>
             <WalletIcon className="w-16 h-16 mb-4" />
-            <p className="text-lg font-medium">No assets yet.</p>
-            <p className="text-sm">Store loyalty cards or grocery items here.</p>
+            <p className="text-lg font-medium">{assetsLoadError ? t('assetsLoadFailed', language) : t('walletNoAssets', language)}</p>
+            {!assetsLoadError && <p className="text-sm">{t('walletNoAssetsHint', language)}</p>}
           </div>
         ) : activeFilters.length > 0 ? (
           <div>

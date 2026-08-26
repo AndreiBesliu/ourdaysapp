@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, Sparkles, GripVertical, Search, Check } from 'lucide-react';
 import { addDoc, collection, query, where, updateDoc, doc } from 'firebase/firestore';
+import { liveQuery } from '../utils/liveQuery';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
 import { notifyUsers } from '../notifications';
 import { createEventOverride } from '../serverActions';
-import { onSnapshot } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
 import { useModalBack } from '../hooks/useModalBack';
@@ -155,9 +155,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     // owned by others aren't readable under the current rule — see DEVLOG.)
     const uid = auth.currentUser.uid;
     const assetsQuery = query(collection(db, 'assets'), where('ownerId', '==', uid));
-    const unsubAssets = onSnapshot(assetsQuery, (snapshot) => {
-      setAssets(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    const unsubAssets = liveQuery<any>(assetsQuery, 'AddEventModal.assets',
+      (docs) => setAssets(docs),
+      () => setAssets([]));
 
     return () => unsubAssets();
   }, [isOpen]);

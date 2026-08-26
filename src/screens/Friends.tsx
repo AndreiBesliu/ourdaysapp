@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, where, onSnapshot, doc, addDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { collection, query, where, doc, addDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { liveQuery, liveDoc } from '../utils/liveQuery';
 import { db, auth } from '../firebase';
 import { ArrowLeft, UserPlus, Mail, Check, X, Users, Clock, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useThemeStore } from '../store';
@@ -20,6 +21,7 @@ export default function Friends() {
   const [incomingById, setIncomingById] = useState<FriendRequest[]>([]);
   const [incomingByEmail, setIncomingByEmail] = useState<FriendRequest[]>([]);
   const [outgoing, setOutgoing] = useState<FriendRequest[]>([]);
+  const [requestsLoadError, setRequestsLoadError] = useState(false);
   const [photoMap, setPhotoMap] = useState<Record<string, string>>({});
 
   const [email, setEmail] = useState('');
@@ -32,11 +34,13 @@ export default function Friends() {
   // My own user doc → friends array + name.
   useEffect(() => {
     if (!auth.currentUser) return;
-    const unsub = onSnapshot(doc(db, 'users', auth.currentUser.uid), (snap) => {
-      const data = snap.data();
-      setFriends(Array.isArray(data?.friends) ? data!.friends : []);
-      setMyName(data?.name || auth.currentUser?.displayName || (myEmail.split('@')[0] || 'Me'));
-    });
+    const unsub = liveDoc<any>(doc(db, 'users', auth.currentUser.uid), 'Friends.myUserDoc',
+      (data) => {
+        setFriends(Array.isArray(data?.friends) ? data.friends : []);
+        setMyName(data?.name || auth.currentUser?.displayName || (myEmail.split('@')[0] || 'Me'));
+      },
+      // The friend list going blank is the same lie as everywhere else on this screen.
+      () => setRequestsLoadError(true));
     return () => unsub();
   }, [myEmail]);
 
@@ -45,11 +49,17 @@ export default function Friends() {
     if (!auth.currentUser) return;
     const uid = auth.currentUser.uid;
     const qId = query(collection(db, 'friend_requests'), where('toId', '==', uid), where('status', '==', 'pending'));
-    const unsubId = onSnapshot(qId, (s) => setIncomingById(s.docs.map(d => ({ id: d.id, ...(d.data() as any) }))));
+    // A friend request you were never shown is indistinguishable from one nobody sent, and the
+    // person waiting on your answer cannot tell either.
+    const unsubId = liveQuery<any>(qId, 'Friends.incomingById',
+      (docs) => { setRequestsLoadError(false); setIncomingById(docs); },
+      () => setRequestsLoadError(true));
     let unsubEmail = () => {};
     if (myEmail) {
       const qEmail = query(collection(db, 'friend_requests'), where('toEmail', '==', myEmail), where('status', '==', 'pending'));
-      unsubEmail = onSnapshot(qEmail, (s) => setIncomingByEmail(s.docs.map(d => ({ id: d.id, ...(d.data() as any) }))));
+      unsubEmail = liveQuery<any>(qEmail, 'Friends.incomingByEmail',
+        (docs) => setIncomingByEmail(docs),
+        () => setRequestsLoadError(true));
     }
     return () => { unsubId(); unsubEmail(); };
   }, [myEmail]);
@@ -58,7 +68,9 @@ export default function Friends() {
   useEffect(() => {
     if (!auth.currentUser) return;
     const qOut = query(collection(db, 'friend_requests'), where('fromId', '==', auth.currentUser.uid), where('status', '==', 'pending'));
-    const unsub = onSnapshot(qOut, (s) => setOutgoing(s.docs.map(d => ({ id: d.id, ...(d.data() as any) }))));
+    const unsub = liveQuery<any>(qOut, 'Friends.outgoing',
+      (docs) => setOutgoing(docs),
+      () => setRequestsLoadError(true));
     return () => unsub();
   }, []);
 
@@ -230,7 +242,11 @@ export default function Friends() {
             <div>
               <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">{t('incomingLabel', language)}</h3>
               {incoming.length === 0 ? (
-                <p className="text-sm text-zinc-500">{t('noRequestsYet', language)}</p>
+                // "Nobody asked" and "we could not check" are the same picture otherwise, and the
+                // person waiting on an answer is the one who pays for the confusion.
+                <p className={`text-sm ${requestsLoadError ? 'text-rose-500' : 'text-zinc-500'}`}>
+                  {requestsLoadError ? t('requestsLoadFailed', language) : t('noRequestsYet', language)}
+                </p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {incoming.map((r) => (

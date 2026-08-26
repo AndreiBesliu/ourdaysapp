@@ -2152,3 +2152,46 @@ mecanic, cu `liveQuery` deja la locul lui — dar cei rămași citesc profiluri,
 prieteni, unde o listă goală e mai puțin costisitoare decât un calendar gol.
 
 `npx tsc -b` verde · 721 teste verzi · livrat.
+
+## 2026-08-26 — Ultimii 22 de ascultatori, si o poarta care ii tine asa
+
+**Model:** Claude Opus 5 · continuarea trecerii incepute mai devreme azi
+
+Convertiti **toti** ascultatorii ramasi din aplicatie (submodulul Warlord nu are Firestore
+propriu, deci e in afara). Zero `onSnapshot` brut mai exista in `src/`, cu doua exceptii
+declarate: `liveQuery.ts` insusi si `ExpensesTab.tsx`, care isi trecea deja propriile handlere.
+
+`liveDoc` — fratele lui `liveQuery` pentru un singur document. O citire de document refuzata e
+si mai tacuta decat una de colectie: callback-ul nu ruleaza deloc, deci ecranul pastreaza ce
+avea, de obicei valorile implicite cu care a fost construit. Asa devine „citirea profilului a
+esuat" in „nu apartii niciunui grup".
+
+Ce spune acum fiecare, cand pica:
+- **grupurile din CalendarHome** — banner rosu sus: e cea mai zgomotoasa cadere de pe ecran,
+  fiindca dispar simultan calendarul partajat, avatarurile si comutatorul de grup, iar
+  aplicatia arata exact ca un cont nou-nout;
+- **cererile de prietenie** (`Friends`, ambele directii + lista de prieteni) — „Cererile nu au
+  putut fi incarcate" acolo unde statea „Nicio cerere";
+- **portofelul** — „Portofelul nu a putut fi incarcat" in locul lui „Niciun bun inca";
+- **jocurile si clasamentul** — la fel;
+- **conversatia de grup** — „Conversatia nu a putut fi incarcata";
+- **bataliile PvP** — spune ca o provocare care te asteapta poate sa nu fie afisata.
+
+Trei au ramas deliberat mute in UI, si scrie in cod de ce: punctele de „scrie acum" (o bulina
+absenta si una stricata arata la fel), enrichment-ul legacy din CalendarHome, si campurile din
+Settings — acolo golirea lor te invita sa „repari" salvand peste un profil pe care nu l-ai
+putut citi, adica exact cum se pierd date. Toate trei **raporteaza** in `errorLogs`.
+
+Pe drum, text englezesc netradus scos din patru locuri (`Start the conversation!`, `No assets
+yet.` + indiciul ei) — 6 limbi.
+
+**Partea care tine:** `src/utils/silentListeners.test.ts` refuza orice `onSnapshot` brut nou in
+`src/`. Verificat ca musca: am adaugat unul intr-un ecran real, testul a picat numindu-l, l-am
+scos, a trecut. Fara poarta asta, sinteza de azi se desface la urmatoarea functionalitate.
+
+O corectie pe care am facut-o mie: am pus intai `text-wl-bad-ink` pe mesajul din PvP dupa ce am
+cautat token-ul in `tailwind.config.js` si nu l-am gasit. Se rezolva de fapt — intra prin
+`...warlordColors`. L-am lasat totusi pe `rose`, fiindca niciun alt fisier din `src/warlordPvp/`
+nu foloseste tokenuri `wl-*` si consecventa fisierului bate consecventa cu jocul.
+
+`npx tsc -b` verde · **724 teste verzi** · build verde · pornire in browser fara erori de consola.

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Gamepad2, Play, Clock, Trash2, Info, Flag, Cat, Apple, Plane, Sun } from 'lucide-react';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, deleteDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, addDoc, serverTimestamp, deleteDoc, updateDoc, doc } from 'firebase/firestore';
+import { liveQuery } from '../../utils/liveQuery';
 import { db, auth } from '../../firebase';
 import { THEME_IDS, THEME_PACKS, buildMemoryBoard, DEFAULT_THEME } from './memoryThemes';
 import TicTacToe from './TicTacToe';
@@ -296,6 +297,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
   const [playingGameId, setPlayingGameId] = useState<string | null>(null);
   const [view, setView] = useState<'arcade' | 'leaderboard'>('arcade');
   const [leaderboard, setLeaderboard] = useState<{uid: string, wins: number, points?: number}[]>([]);
+  const [gamesLoadError, setGamesLoadError] = useState(false);
   const [showRulesFor, setShowRulesFor] = useState<string | null>(null);
   const [confirmingEndId, setConfirmingEndId] = useState<string | null>(null);
   const [showThemePicker, setShowThemePicker] = useState(false);
@@ -326,10 +328,9 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
       where('date', '==', dateStr)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const games = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setActiveGames(games.sort((a: any, b: any) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0)));
-    });
+    const unsubscribe = liveQuery<any>(q, 'GamesHubModal.activeGames',
+      (games) => { setGamesLoadError(false); setActiveGames(games.sort((a: any, b: any) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0))); },
+      () => setGamesLoadError(true));
 
     return () => unsubscribe();
   }, [isOpen, groupId, selectedDate]);
@@ -340,8 +341,8 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
 
     const q = query(collection(db, 'games'), where('groupId', '==', groupId), where('status', '==', 'finished'));
     
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const games = snapshot.docs.map(d => d.data());
+    const unsubscribe = liveQuery<any>(q, 'GamesHubModal.leaderboard', (games) => {
+      setGamesLoadError(false);
       const statsMap: Record<string, { wins: number; points: number }> = {};
       
       games.forEach(g => {
@@ -370,7 +371,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
         .sort((a, b) => b.wins - a.wins);
 
       setLeaderboard(sortedLeaderboard);
-    });
+    }, () => setGamesLoadError(true));
 
     return () => unsubscribe();
   }, [isOpen, groupId, view]);
@@ -717,8 +718,10 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
 
                   {leaderboard.length === 0 ? (
                     <div className="text-center py-12 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800">
-                      <p className="text-zinc-500">{t('noGamesCompleted', language)}</p>
-                      <p className="text-zinc-400 text-sm mt-1">{t('startPlayingGetOnBoard', language)}</p>
+                      <p className={gamesLoadError ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-500'}>
+                        {gamesLoadError ? t('gamesLoadFailed', language) : t('noGamesCompleted', language)}
+                      </p>
+                      {!gamesLoadError && <p className="text-zinc-400 text-sm mt-1">{t('startPlayingGetOnBoard', language)}</p>}
                     </div>
                   ) : (
                     <div className="flex flex-col gap-3">

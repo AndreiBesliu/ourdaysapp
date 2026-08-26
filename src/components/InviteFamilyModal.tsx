@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { X, UserPlus, Mail, AlertCircle, CheckCircle2, Share2, Check, Users } from 'lucide-react';
 import { db, auth } from '../firebase';
-import { collection, addDoc, doc, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, doc } from 'firebase/firestore';
+import { liveDoc } from '../utils/liveQuery';
 import { useModalBack } from '../hooks/useModalBack';
 import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
@@ -44,10 +45,9 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName,
   // Load my friends so I can invite them with one tap.
   useEffect(() => {
     if (!isOpen || !auth.currentUser) return;
-    const unsub = onSnapshot(doc(db, 'users', auth.currentUser.uid), (snap) => {
-      const data = snap.data();
-      setFriends(Array.isArray(data?.friends) ? data!.friends : []);
-    });
+    const unsub = liveDoc<any>(doc(db, 'users', auth.currentUser.uid), 'InviteFamilyModal.friends',
+      (data) => setFriends(Array.isArray(data?.friends) ? data.friends : []),
+      () => setFriends([]));
     return () => unsub();
   }, [isOpen]);
 

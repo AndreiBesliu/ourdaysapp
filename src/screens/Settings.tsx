@@ -5,7 +5,8 @@ import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { auth, db, storage } from '../firebase';
 import { signOut, updateProfile } from 'firebase/auth';
-import { doc, updateDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, updateDoc, setDoc } from 'firebase/firestore';
+import { liveDoc } from '../utils/liveQuery';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const THEME_COLORS = [
@@ -59,14 +60,16 @@ export default function Settings() {
   useEffect(() => {
     if (!auth.currentUser) return;
 
-    const unsub = onSnapshot(doc(db, 'users', auth.currentUser.uid), async (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
+    const unsub = liveDoc<any>(doc(db, 'users', auth.currentUser.uid), 'Settings.userDoc',
+      (data) => {
+        if (!data) return;
         setPhotoURL(data.photoURL || null);
         setBirthday(data.birthday || '');
         setName(data.name || auth.currentUser?.displayName || '');
-      }
-    });
+      },
+      // Leaves the fields as they are rather than blanking them: an empty name box invites you to
+      // "fix" it by saving, and saving over a profile you could not read is how data is lost.
+      () => {});
 
     return () => unsub();
   }, []);

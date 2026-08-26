@@ -60,6 +60,7 @@ function UnitPicker({ units, picked, onToggle }: {
 
 export default function PvpPanel({ myUid }: { myUid: string }) {
   const [battles, setBattles] = useState<WarlordGameDoc[]>([]);
+  const [battlesError, setBattlesError] = useState(false);
   const [names, setNames] = useState<Record<string, string>>({});
   const [view, setView] = useState<'LIST' | 'CHALLENGE' | { accept: string } | { battle: string }>('LIST');
   const [busy, setBusy] = useState(false);
@@ -90,7 +91,9 @@ export default function PvpPanel({ myUid }: { myUid: string }) {
   const army = useMemo(() => fullArmy.filter((u) => !committedUnitIds.has(u.id)), [fullArmy, committedUnitIds]);
   const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
 
-  useEffect(() => subscribeMyBattles(myUid, setBattles), [myUid]);
+  // Warlord's UI stays English by decision, so no t() here.
+  useEffect(() => subscribeMyBattles(myUid, (b) => { setBattlesError(false); setBattles(b); },
+    () => setBattlesError(true)), [myUid]);
 
   // Announce myself in the world roster and load it. The name comes from the app's
   // canonical `profiles` doc (auth.displayName is null for email/password signups,
@@ -299,10 +302,17 @@ export default function PvpPanel({ myUid }: { myUid: string }) {
       </div>
 
       {battles.length === 0 && (
-        <p className="text-sm text-stone-600">
-          No battles yet. Challenge a group member — you both deploy a detachment from your own
-          army, and the server referees every move.
-        </p>
+        battlesError ? (
+          <p role="alert" className="text-sm text-rose-700 dark:text-rose-400">
+            Your battles could not be loaded, so a challenge waiting on you may not be shown here.
+            Reload the page.
+          </p>
+        ) : (
+          <p className="text-sm text-stone-600">
+            No battles yet. Challenge a group member — you both deploy a detachment from your own
+            army, and the server referees every move.
+          </p>
+        )
       )}
 
       <div className="space-y-2">

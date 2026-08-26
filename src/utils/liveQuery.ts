@@ -19,7 +19,7 @@
 // So the error argument is not optional here. `onError` is required, and the failure is reported
 // with a context string that says which screen and which collection it was.
 
-import { onSnapshot, type Query, type DocumentData, type Unsubscribe } from 'firebase/firestore';
+import { onSnapshot, type Query, type DocumentReference, type DocumentData, type Unsubscribe } from 'firebase/firestore';
 import { reportError } from '../reportError';
 
 /**
@@ -42,6 +42,32 @@ export function liveQuery<T = DocumentData>(
       // A permission error and a missing index arrive the same way and matter the same amount:
       // both mean the screen below is about to lie about being empty.
       reportError(err?.message || 'snapshot failed', {
+        context,
+        stack: (err as { code?: string })?.code ? `code=${(err as { code?: string }).code}` : undefined,
+      });
+      onError(err);
+    },
+  );
+}
+
+/**
+ * The same contract for a single document.
+ *
+ * A denied document read is quieter still than a denied query: the callback never runs, so the
+ * screen keeps whatever it had before — usually the defaults it was constructed with. That is how
+ * a profile read failing turns into "you belong to no groups" rather than into an error.
+ */
+export function liveDoc<T = DocumentData>(
+  ref: DocumentReference<DocumentData>,
+  context: string,
+  onNext: (data: (T & { id: string }) | null) => void,
+  onError: (err: unknown) => void,
+): Unsubscribe {
+  return onSnapshot(
+    ref,
+    (snap) => onNext(snap.exists() ? ({ id: snap.id, ...(snap.data() as T) }) : null),
+    (err) => {
+      reportError(err?.message || 'document snapshot failed', {
         context,
         stack: (err as { code?: string })?.code ? `code=${(err as { code?: string }).code}` : undefined,
       });

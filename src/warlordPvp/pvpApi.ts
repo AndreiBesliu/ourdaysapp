@@ -3,9 +3,8 @@
 // talks to Firestore/callables. The server (functions/src/warlordCombat/) is the
 // authority; this file only creates inert challenge docs and reads.
 
-import {
-  doc, onSnapshot, query, collection, where, getDoc, getDocs, setDoc, orderBy, limit, serverTimestamp,
-} from 'firebase/firestore';
+import { doc, query, collection, where, getDoc, getDocs, setDoc, orderBy, limit, serverTimestamp } from 'firebase/firestore';
+import { liveQuery, liveDoc } from '../utils/liveQuery';
 import { db } from '../firebase';
 import type { Unit } from '@warlord/logic/types';
 import type { BattleState } from '@warlord/logic/combat/types';
@@ -135,24 +134,29 @@ export async function cancelChallenge(gameId: string): Promise<void> {
 
 // All my Warlord battles (any group). Single array-contains clause — no composite
 // index needed; only warlord docs carry a top-level `players` array.
-export function subscribeMyBattles(uid: string, cb: (games: WarlordGameDoc[]) => void): () => void {
+export function subscribeMyBattles(
+  uid: string,
+  cb: (games: WarlordGameDoc[]) => void,
+  onError: () => void = () => {},
+): () => void {
   const q = query(collection(db, 'games'), where('players', 'array-contains', uid));
-  return onSnapshot(q, (snap) => {
-    const games = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() } as WarlordGameDoc))
+  return liveQuery<WarlordGameDoc>(q, 'pvpApi.myBattles', (docs) => {
+    const games = docs
       .filter((g) => g.gameType === WARLORD_GAME_TYPE)
       .sort((a, b) => {
         const rank = (s: string) => (s === 'playing' ? 0 : s === 'waiting' ? 1 : 2);
         return rank(a.status) - rank(b.status);
       });
     cb(games);
-  });
+  }, onError);
 }
 
-export function subscribeBattle(gameId: string, cb: (game: WarlordGameDoc | null) => void): () => void {
-  return onSnapshot(doc(db, 'games', gameId), (snap) => {
-    cb(snap.exists() ? ({ id: snap.id, ...snap.data() } as WarlordGameDoc) : null);
-  });
+export function subscribeBattle(
+  gameId: string,
+  cb: (game: WarlordGameDoc | null) => void,
+  onError: () => void = () => {},
+): () => void {
+  return liveDoc<WarlordGameDoc>(doc(db, 'games', gameId), 'pvpApi.battle', (game) => cb(game), onError);
 }
 
 // ── Groups + member names (same recipe CalendarHome uses; profiles are readable
@@ -164,14 +168,15 @@ export interface GroupInfo {
   members: string[];
 }
 
-export function subscribeMyGroups(uid: string, cb: (groups: GroupInfo[]) => void): () => void {
+export function subscribeMyGroups(
+  uid: string,
+  cb: (groups: GroupInfo[]) => void,
+  onError: () => void = () => {},
+): () => void {
   const q = query(collection(db, 'groups'), where('members', 'array-contains', uid));
-  return onSnapshot(q, (snap) => {
-    cb(snap.docs.map((d) => {
-      const data = d.data();
-      return { id: d.id, name: data.name || 'Group', members: data.members || [] };
-    }));
-  });
+  return liveQuery<any>(q, 'pvpApi.myGroups', (docs) => {
+    cb(docs.map((d) => ({ id: d.id, name: d.name || 'Group', members: d.members || [] })));
+  }, onError);
 }
 
 export async function fetchProfileNames(uids: string[]): Promise<Record<string, string>> {

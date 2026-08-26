@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck, Reply, Pencil, Trash2, Ban, Pin, Search, Mic, ChevronUp, ChevronDown, Play, Pause, Sparkles } from 'lucide-react';
 import { format, isSameDay, isToday, isYesterday } from 'date-fns';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { liveQuery } from '../utils/liveQuery';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { playTone } from '../utils/sounds';
@@ -78,6 +79,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   const { language } = useThemeStore();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
+  const [chatLoadError, setChatLoadError] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -125,8 +127,10 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
       orderBy('createdAt', 'asc')
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedMessages = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
+    // An unreadable conversation and an empty one look the same, and in a chat that is the
+    // difference between "nobody has written" and "you are not seeing what they wrote".
+    const unsubscribe = liveQuery<any>(q, 'GroupChatWidget.messages', (fetchedMessages) => {
+      setChatLoadError(false);
       setMessages(fetchedMessages);
 
       if (!isOpen) {
@@ -140,22 +144,19 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
         setUnreadCount(0);
         setLastRead(Date.now());
       }
-    });
+    }, () => setChatLoadError(true));
 
     // Listen to typing status
     const typingQuery = query(collection(db, `groups/${groupId}/typing`));
-    const unsubTyping = onSnapshot(typingQuery, (snapshot) => {
-      const currentlyTyping: string[] = [];
+    // Typing dots are the one listener here with nothing to show on failure: an absent dot and a
+    // broken dot look the same to a reader and neither is a lie. It still reports, so the pattern
+    // stays uniform and the admin log sees it if the whole subcollection is denied.
+    const unsubTyping = liveQuery<any>(typingQuery, 'GroupChatWidget.typing', (docs) => {
       const now = Date.now();
-      snapshot.forEach(docSnap => {
-        const data = docSnap.data();
-        // Only show typing if updated within last 5 seconds
-        if (docSnap.id !== auth.currentUser?.uid && data.updatedAt && (now - data.updatedAt.toMillis()) < 5000) {
-          currentlyTyping.push(docSnap.id);
-        }
-      });
-      setTypingUsers(currentlyTyping);
-    });
+      setTypingUsers(docs
+        .filter((d: any) => d.id !== auth.currentUser?.uid && d.updatedAt && (now - d.updatedAt.toMillis()) < 5000)
+        .map((d: any) => d.id));
+    }, () => setTypingUsers([]));
 
     return () => {
       unsubscribe();
@@ -666,7 +667,9 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
           {/* Messages */}
           <div className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col gap-3 bg-zinc-50/50 dark:bg-zinc-900/50">
             {messages.length === 0 ? (
-              <p className="text-center text-xs text-zinc-400 mt-10">Start the conversation!</p>
+              <p className={`text-center text-xs mt-10 ${chatLoadError ? 'text-rose-500' : 'text-zinc-400'}`}>
+                {chatLoadError ? t('chatLoadFailed', language) : t('chatStart', language)}
+              </p>
             ) : (
               messages.map((msg, index) => {
                 const isMe = msg.senderId === auth.currentUser?.uid;

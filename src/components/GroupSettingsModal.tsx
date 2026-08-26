@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { X, Settings2, Edit2, Check, Trash2, LogOut, UserMinus, UserPlus, AlertTriangle } from 'lucide-react';
 import { db, auth } from '../firebase';
-import { doc, updateDoc, arrayRemove, collection, query, where, getDocs, deleteDoc, addDoc, onSnapshot } from 'firebase/firestore';
+import { doc, updateDoc, arrayRemove, collection, query, where, getDocs, deleteDoc, addDoc } from 'firebase/firestore';
+import { liveDoc } from '../utils/liveQuery';
 import { useModalBack } from '../hooks/useModalBack';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
@@ -45,10 +46,11 @@ export default function GroupSettingsModal({
   // My current friends (to hide the add-friend button for people I already have).
   useEffect(() => {
     if (!isOpen || !auth.currentUser) return;
-    const unsub = onSnapshot(doc(db, 'users', auth.currentUser.uid), (snap) => {
-      const list = snap.data()?.friends || [];
-      setFriendUids(new Set(list.map((f: any) => f.uid)));
-    });
+    const unsub = liveDoc<any>(doc(db, 'users', auth.currentUser.uid), 'GroupSettingsModal.friends',
+      (data) => setFriendUids(new Set((data?.friends || []).map((f: any) => f.uid))),
+      // Failing open here shows "Add friend" next to people who already are one; the request is
+      // idempotent, so the cost is a wasted tap rather than a wrong state.
+      () => setFriendUids(new Set()));
     return () => unsub();
   }, [isOpen]);
 
