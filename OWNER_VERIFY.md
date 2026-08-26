@@ -119,6 +119,18 @@ germană. Ce e după login rămâne punctul orb.
 Ce rămâne **intenționat în engleză**: tot `/admin` (e consola ta) și interfața Warlord (decizia ta
 veche). Numele limbilor din Setări (English, Français, Deutsch...) rămân în limba lor — asta e ideea.
 
+## 9. Camera si microfonul, dupa anteturile noi (26.08)
+
+**De ce nu pot eu:** am adaugat anteturi de securitate pe live si am verificat in browser ca
+politica **permite** camera si microfonul (`document.featurePolicy` spune `true` pentru amandoua).
+Dar n-am camera si n-am cont, deci nu pot apasa efectiv butoanele.
+
+- [ ] Portofel -> adaugi un bun -> **Scaneaza codul**: camera porneste normal.
+- [ ] Chat de grup -> **mesaj vocal**: microfonul porneste si mesajul se trimite.
+
+Daca vreunul spune ca permisiunea e blocata, spune-mi imediat - se scoate directiva din
+`firebase.json` cu un singur deploy.
+
 ---
 
 ## Ce am verificat eu, ca să nu le mai faci
@@ -138,3 +150,5 @@ Măsurate, nu presupuse — le scriu ca să știi unde **nu** trebuie să te ui�
 - Antetele de cache de pe live, pe 7 rute: rutele reale sunt `no-cache`, assets-urile `immutable`,
   toate cele 54 de fișiere din `/assets` au hash de conținut în nume. Măsurat pe canal de preview
   înainte de a atinge live-ul.
+- Anteturile de securitate pe canal de preview: camera si microfonul PERMISE (verificat cu
+  `document.featurePolicy` in browser), geolocatia refuzata, zero violari CSP.

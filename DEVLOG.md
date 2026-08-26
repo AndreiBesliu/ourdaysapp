@@ -2274,3 +2274,37 @@ veche **până la o oră** — o singură dată, ultima oară.
 
 Rămâne separat, și e altă problemă: un tab lăsat deschis fără reîncărcare rulează codul deja încărcat
 în memorie. Asta nu ține de antete, ci de faptul că nimeni nu cheamă `registration.update()`.
+
+## 2026-08-26 - Anteturile de securitate, portate MASURAT (era sa taie camera si microfonul)
+
+**Model:** Claude Opus 5
+
+Verificand fixul de cache, am comparat `firebase.json` intre proiecte. Presto si CNCVS aveau deja
+exact forma la care ajunsesem eu masurand (`**` intai, `/assets/**` dupa) - deci OurDaysApp era
+singurul ramas in urma, iar fixul de dinainte il aduce in rand cu casa.
+
+Dar comparatia a scos altceva: **OurDaysApp nu avea NICIUN antet de securitate.** Masurat pe live:
+Presto trimite CSP + nosniff + Referrer-Policy + Permissions-Policy; OurDaysApp trimitea doar
+HSTS-ul pus de Firebase.
+
+**Capcana, si de ce nu am copiat pur si simplu:** politica lui Presto contine
+`camera=(), microphone=()`. OurDaysApp foloseste **amandoua** - scanerul de coduri de bare
+(`html5-qrcode`, `facingMode: "environment"`) si mesajele vocale din chat
+(`getUserMedia({audio:true})` + `MediaRecorder`). Copiata verbatim, ar fi omorat doua functionalitati
+de pe live, tacut, cu o eroare doar in consola. Aia e exact lectia din DataRead: nu porta securitate
+fara sa MASORI ce foloseste aplicatia.
+
+Ce am pus, dupa ce am cautat fiecare capabilitate in cod:
+```
+Content-Security-Policy: object-src 'none'; base-uri 'self'; frame-ancestors 'self'
+X-Content-Type-Options: nosniff
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: camera=(self), microphone=(self), geolocation=(), browsing-topics=()
+```
+Geolocatia chiar nu e folosita nicaieri (cautata), si nimic nu incadreaza aplicatia intr-un iframe.
+CSP-ul ramane fara `default-src`, la fel ca la Presto: inchide gaurile care nu cer cunoasterea
+aplicatiei, fara sa riste o pagina rupta pe un `script-src` pe care nu-l poate sti.
+
+**Verificat pe canal de preview, in browser, nu doar din anteturi** - `document.featurePolicy`:
+`camera: true`, `microphone: true`, `geolocation: false`, `getUserMedia: function`, zero violari CSP
+in consola. Abia apoi pe live. Canalul de preview a fost sters.
