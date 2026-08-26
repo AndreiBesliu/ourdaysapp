@@ -131,6 +131,40 @@ Dar n-am camera si n-am cont, deci nu pot apasa efectiv butoanele.
 Daca vreunul spune ca permisiunea e blocata, spune-mi imediat - se scoate directiva din
 `firebase.json` cu un singur deploy.
 
+## 10. Stergerea unui grup s-a SCHIMBAT (26.08) — citeste inainte sa testezi
+
+**De ce nu pot eu:** e in spatele autentificarii si e ireversibila. Nu o incerc pe date reale.
+
+Pana azi, "sterge grupul" nu putea sa se termine niciodata: bucla de pe client stergea evenimentele
+unul cate unul si se opria cu eroare la primul care apartinea altui membru — dupa ce o parte din
+ale tale erau deja sterse. Acum e un apel server.
+
+**Comportamentul nou, ca sa nu te surprinda:**
+- Evenimentele TALE nebifate: se sterg (ca inainte, dar acum chiar functioneaza pana la capat).
+- Evenimentele TALE bifate: devin personale.
+- Evenimentele ALTOR MEMBRI: **NU se mai sterg** — devin personale, la ei. Nu erai indreptatit
+  sa le stergi, iar incercarea era chiar ce rupea fluxul.
+- Chatul grupului se sterge si el (inainte ramanea in Firestore, nereachabil si tot platit).
+
+- [ ] **Pe un grup de test, nu pe Family.** Creezi un grup, pui 2-3 evenimente, il stergi.
+      Grupul dispare, evenimentele bifate raman ca personale, cele nebifate dispar.
+- [ ] Butonul rosu e **dezactivat** cat timp lista de evenimente nu s-a incarcat.
+- [ ] Textul modalului e **in romana**, tot (era in engleza pana azi, inclusiv randul care spune
+      ce se sterge definitiv).
+- [ ] Daca apare o eroare, trimite-mi textul — acum ajunge si in `/admin` → erori.
+
+## 11. Restul lucrurilor din 26.08
+
+- [ ] **Bara "A aparut o versiune mai noua"** poate sa apara jos, in mijloc, cand tii un tab
+      deschis peste un deploy. Are **Reincarca** si **Nu acum**. Nu reincarca singura niciodata.
+      Daca apare cand NU am livrat nimic, spune-mi — ala ar fi un fals pozitiv si e exact ce am
+      incercat sa fac imposibil.
+- [ ] **Login-ul in romana** (l-am verificat singur, dar uita-te si tu): deconectat sau in
+      fereastra privata.
+- [ ] Mesaje de eroare mai precise la autentificare: incearca sa te inregistrezi cu adresa ta
+      existenta — trebuie sa scrie "Adresa asta are deja cont", nu un mesaj generic.
+- [ ] **Prieteni**: lista si cererile arata normal; nimic rosu.
+
 ---
 
 ## Ce am verificat eu, ca să nu le mai faci
@@ -152,3 +186,7 @@ Măsurate, nu presupuse — le scriu ca să știi unde **nu** trebuie să te ui�
   înainte de a atinge live-ul.
 - Anteturile de securitate pe canal de preview: camera si microfonul PERMISE (verificat cu
   `document.featurePolicy` in browser), geolocatia refuzata, zero violari CSP.
+- Cele 46 de constatari ale auditului au trecut fiecare printr-o pasa de RESPINGERE inainte sa le
+  ating; 3 au fost doborate acolo. Reparatiile distructive au test propriu care musca.
+- Ca noul callable `deleteGroupCascade` chiar exista pe live (`firebase functions:list`) — deploy-ul
+  raportase succes fara sa-l contina.
