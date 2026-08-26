@@ -2308,3 +2308,69 @@ aplicatiei, fara sa riste o pagina rupta pe un `script-src` pe care nu-l poate s
 **Verificat pe canal de preview, in browser, nu doar din anteturi** - `document.featurePolicy`:
 `camera: true`, `microphone: true`, `geolocation: false`, `getUserMedia: function`, zero violari CSP
 in consola. Abia apoi pe live. Canalul de preview a fost sters.
+
+## 2026-08-26 - Audit adversarial: stergerea unui grup nu mai distruge nimic
+
+**Model:** Claude Opus 5 · 13 agenti, 6 lentile, fiecare constatare trecuta printr-o pasa de
+respingere. 49 de revendicari, **46 au supravietuit**, 3 au fost doborate.
+
+Am reparat intai cele care distrug date sau lasa o usa deschisa.
+
+### Stergerea unui grup nu se putea termina niciodata
+
+`allow delete` pe evenimente e `resource.data.ownerId == request.auth.uid`. Ambele intrari
+(`LeaveGroupModal` si `GroupSettingsModal`) faceau o bucla pe CLIENT peste **toate** evenimentele
+grupului si le stergeau. Primul eveniment al altui membru arunca - dupa ce o parte din evenimentele
+proprietarului fusesera deja sterse, si inainte ca invitatiile sau documentul grupului sa fie
+atinse. Fluxul nu putea ajunge la capat, iar fiecare reincercare distrugea inca putin.
+`GroupSettingsModal` era mai rau: stergea tot, fara nicio lista de pastrat.
+
+Si ramura de "pastreaza" scria `groupId: null` pe evenimente care **nu-i apartineau** - regula de
+update pe membru permite asta - smulgand tacut evenimentul altcuiva din calendarul comun.
+
+Acum e un singur apel server, `deleteGroupCascade`. Sterge doar evenimentele NEBIFATE ale
+apelantului si **re-parenteaza** evenimentele celorlalti ca personale, in loc sa le stearga: sa
+pierzi grupul nu inseamna sa pierzi datele lor, iar proprietarul n-a avut niciodata dreptul astea.
+Sterge si chatul de sub grup (`messages`, `typing`), care altfel ramanea nereachabil si tot platit.
+
+### Un membru scos putea reintra singur in grup
+
+Regula de creare pe `group_invites` fixa doar `fromId == request.auth.uid`. `groupId`, `toId` si
+`status` erau la alegerea clientului, iar `acceptGroupInvite` nu verifica cine a invitat. Deci:
+scrii o invitatie catre tine insuti pentru grupul tau, esti scos din grup, o accepti, esti inapoi.
+
+Reparat in doua locuri, si **partea grea e pe server**: regula cere acum apartenenta la grup ca sa
+poti crea invitatia, dar ea se evalueaza la CREARE - exact trucul e sa creezi cat inca esti membru
+si sa redeemezi dupa. Deci `acceptGroupInvite` re-verifica, **la acceptare**, ca cel care a invitat
+e inca membru, si refuza din start invitatiile catre sine.
+
+### A treia oara acelasi bug de reguli-vs-interogari
+
+`EventDetailsModal.handleDelete` stergea parintele seriei si abia apoi rula o interogare filtrata
+doar pe `overrideOfParent` - camp pe care nicio ramura a regulii de citire nu-l mentioneaza, iar
+Firestore valideaza o interogare de tip LIST **fara sa citeasca documente**, deci o respinge din
+start. Jumatatea distructiva se termina, cea care repara nu poate, si singurul martor era
+`console.error`. `RecurringEventsPanel` avea deja fixul si post-mortemul scris in cod; nu fusese
+purtat aici, in **doua** ramuri.
+
+Reparat: override-urile intai (cat parintele inca le identifica), plus `ownerId == uid` care face
+interogarea legala, plus eroare vizibila si `reportError`.
+
+**Partea care tine:** `src/utils/eventQueryRules.test.ts` citeste campurile permise **din
+`firestore.rules`** (nu hardcodate) si refuza orice interogare pe `events` care nu filtreaza pe
+vreunul dintre ele. Verificat ca musca: am reintrodus bug-ul exact, testul l-a numit cu fisier si
+campuri, l-am scos, a trecut.
+
+### Si o eroare de proces a mea, prinsa de audit
+
+Commit-ul de i18n de mai devreme sustinea ca `LeaveGroupModal` e tradus. **Nu era.** Scriptul care
+trebuia sa aplice cele 6 inlocuiri crapase la jumatate cu `IndexError`, iar eu am re-rulat doar
+bucata care crapase - niciodata si restul. Typecheck-ul a trecut fiindca apelurile `t()` pur si
+simplu nu fusesera adaugate. Modalul cel mai distructiv din aplicatie a ramas in engleza, inclusiv
+randul care spune ce evenimente se sterg definitiv. Acum e tradus complet, cu inca 4 chei noi.
+
+Tot acolo: un `getDocs` esuat arata "nu esti in niciun eveniment din grupul asta" **si lasa butonul
+rosu activ**, cu o selectie goala care inseamna "sterge tot ce e al meu". Acum lista nereusita se
+spune ca atare si butonul refuza sa actioneze pana cand chiar s-a citit.
+
+`npx tsc -b` verde · **748 teste verzi** · build verde · functions typecheck verde.

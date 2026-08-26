@@ -94,9 +94,21 @@ service cloud.firestore {
     }
     match /group_invites/{inviteId} {
       allow read: if canAccessInvite();
-      // Sender must be the authenticated user (no forging invites "from" others).
+      // Sender must be the authenticated user (no forging invites "from" others), AND must
+      // actually be in the group they are inviting someone to. Without the second clause the
+      // groupId was the client's to pick: anyone could write a pending invite naming any group
+      // id, address it to themselves, and hand it to acceptGroupInvite.
+      //
+      // The `null` branch stays because personal (non-group) invites are a real case —
+      // InviteFamilyModal writes `groupId: groupId || null`.
+      //
+      // This is the cheaper half of the fix. It cannot stop a CURRENT member from writing a
+      // self-addressed invite and redeeming it after being removed, because it is evaluated at
+      // create time. acceptGroupInvite re-checks the sender's membership at accept time.
       allow create: if isSignedIn() &&
-        request.resource.data.fromId == request.auth.uid;
+        request.resource.data.fromId == request.auth.uid &&
+        (request.resource.data.groupId == null ||
+         isMemberOfGroup(request.resource.data.groupId));
       allow update, delete: if canAccessInvite();
     }
 

@@ -25,6 +25,20 @@ export async function transferAssetCopy(params: {
   await fn(params);
 }
 
+// Delete a group and everything hanging off it.
+//
+// This cannot be a client loop: `allow delete` on events is owner-only, so the first event
+// belonging to another member throws and leaves the group half-torn-down. The server deletes
+// only the CALLER's own unkept events and re-parents everyone else's to personal.
+export async function deleteGroupCascade(params: {
+  groupId: string;
+  keepEventIds?: string[];
+}): Promise<{ deleted: number; freed: number; invites: number; messages: number }> {
+  const fn = httpsCallable(getFunctions(app), "deleteGroupCascade");
+  const res = await fn(params);
+  return res.data as { deleted: number; freed: number; invites: number; messages: number };
+}
+
 // Accept or decline a friend request (must write both users' friend lists).
 export async function respondToFriendRequest(params: {
   requestId: string;

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { X, LogOut, AlertTriangle, CheckSquare, Square, Trash2 } from 'lucide-react';
 import { db, auth } from '../firebase';
-import { doc, updateDoc, deleteDoc, arrayRemove, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { doc, updateDoc, arrayRemove, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { deleteGroupCascade } from '../serverActions';
+import { reportError } from '../reportError';
 import { useModalBack } from '../hooks/useModalBack';
 import { format } from 'date-fns';
 import { t } from '../utils/i18n';
@@ -23,6 +25,10 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
   const [involvedEvents, setInvolvedEvents] = useState<any[]>([]);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(new Set());
   const [fetchingEvents, setFetchingEvents] = useState(false);
+  // Distinguishes "the list is empty" from "we could not read the list". Without it, a rejected
+  // read rendered "you are not part of any upcoming events" and the delete button below it stayed
+  // live — with an empty keep-set, which means "delete all of mine".
+  const [eventsLoaded, setEventsLoaded] = useState(false);
 
   useModalBack(isOpen, onClose);
 
@@ -39,6 +45,7 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
   const fetchInvolvedEvents = async () => {
     if (!auth.currentUser || !groupId) return;
     setFetchingEvents(true);
+    setEventsLoaded(false);
     try {
       const q = query(collection(db, 'events'), where('groupId', '==', groupId));
       const snapshot = await getDocs(q);
@@ -61,9 +68,10 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
       setInvolvedEvents(involved);
       // Auto-select all by default
       setSelectedEventIds(new Set(involved.map(e => e.id)));
+      setEventsLoaded(true);
     } catch (err) {
-      console.error(err);
-      setError('Failed to fetch group events.');
+      reportError(err instanceof Error ? err.message : String(err), { context: 'LeaveGroupModal.fetchInvolvedEvents' });
+      setError(t('leaveGroupEventsFailed', language));
     } finally {
       setFetchingEvents(false);
     }
@@ -86,34 +94,15 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
 
     try {
       if (isOwner) {
-        // DELETE GROUP FLOW
-        // 1. Fetch ALL events for the group to delete them (except kept ones)
-        const qEvents = query(collection(db, 'events'), where('groupId', '==', groupId));
-        const eventSnaps = await getDocs(qEvents);
-        
-        for (const evDoc of eventSnaps.docs) {
-          if (selectedEventIds.has(evDoc.id)) {
-            // Keep it: Remove groupId so it becomes personal
-            await updateDoc(doc(db, 'events', evDoc.id), {
-              groupId: null,
-              sharedWithFamily: false
-            });
-          } else {
-            // Delete it
-            await deleteDoc(doc(db, 'events', evDoc.id));
-          }
-        }
-
-        // 2. Delete pending group invites
-        const qInvites = query(collection(db, 'group_invites'), where('groupId', '==', groupId));
-        const inviteSnaps = await getDocs(qInvites);
-        for (const invDoc of inviteSnaps.docs) {
-          await deleteDoc(doc(db, 'group_invites', invDoc.id));
-        }
-
-        // 3. Delete the group document
-        await deleteDoc(doc(db, 'groups', groupId));
-
+        // The whole teardown is one server call now. It used to be a client loop that deleted
+        // every event in the group; `allow delete` on events is owner-only, so the first event
+        // belonging to another member threw — after some of the owner's own were already gone,
+        // and before the invites or the group document were touched. It could not complete, and
+        // every retry destroyed a little more.
+        //
+        // The server deletes only the caller's own unkept events and re-parents everyone else's
+        // to personal, so losing the group does not lose anybody else's data.
+        await deleteGroupCascade({ groupId, keepEventIds: Array.from(selectedEventIds) });
       } else {
         // LEAVE GROUP FLOW
         // 1. For kept events, create a personal copy
@@ -140,8 +129,10 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
       onSuccess();
       onClose();
     } catch (err) {
-      console.error(err);
-      setError(`Failed to ${isOwner ? 'delete' : 'leave'} group. Please try again.`);
+      reportError(err instanceof Error ? err.message : String(err), {
+        context: isOwner ? 'LeaveGroupModal.deleteGroup' : 'LeaveGroupModal.leaveGroup',
+      });
+      setError(isOwner ? t('deleteGroupFailed', language) : t('leaveGroupFailed', language));
     } finally {
       setLoading(false);
     }
@@ -166,8 +157,10 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
         <div className="p-5 overflow-y-auto flex-1 flex flex-col gap-4">
           <p className="text-sm text-zinc-600 dark:text-zinc-300">
             {isOwner 
-              ? `You are the owner of "${groupName}". Deleting this group will remove it for all members and delete its events.`
-              : `Are you sure you want to leave "${groupName}"?`
+              // The dictionary values carry their own quotation marks around {group} (ro „…",
+              // fr « … »), so nothing is added around them here.
+              ? t('leaveGroupOwnerBody', language).replace('{group}', groupName)
+              : t('leaveGroupBody', language).replace('{group}', groupName)
             }
           </p>
 
@@ -178,12 +171,12 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
           ) : involvedEvents.length > 0 ? (
             <div className="mt-2">
               <h4 className="text-sm font-semibold mb-2 text-zinc-800 dark:text-zinc-200">
-                Do you want to keep any of these events in your personal calendar?
+                {t('leaveGroupKeepQuestion', language)}
               </h4>
               <p className="text-xs text-zinc-500 mb-3">
-                {isOwner 
-                  ? "Selected events will be converted to personal events. Unselected ones will be permanently deleted."
-                  : "Selected events will be copied to your personal calendar. Unselected ones will remain in the group."}
+                {isOwner
+                  ? t('leaveGroupOwnerHint', language)
+                  : t('leaveGroupMemberHint', language)}
               </p>
               
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
@@ -214,7 +207,7 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
             </div>
           ) : (
             <p className="text-sm text-zinc-500 italic py-2">
-              You are not a part of any upcoming events in this group.
+              {eventsLoaded ? t('leaveGroupNoEvents', language) : t('leaveGroupListUnavailable', language)}
             </p>
           )}
 
@@ -235,7 +228,9 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
           </button>
           <button 
             onClick={handleAction}
-            disabled={loading}
+            // Refuses to act while the keep-list is unknown: an empty selection means
+            // "delete all of mine", which is not what an unread list should authorise.
+            disabled={loading || !eventsLoaded}
             className={`flex-1 py-2.5 rounded-xl font-medium text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${
               isOwner ? 'bg-red-500 hover:bg-red-600' : 'bg-amber-500 hover:bg-amber-600'
             }`}

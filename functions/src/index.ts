@@ -676,6 +676,82 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   return { id: overrideRef.id };
 });
 
+// ── Group teardown ──
+//
+// Deleting a group used to be a client loop over every event carrying that groupId. Two things
+// were wrong with it, and both were guaranteed rather than occasional:
+//
+//   * `allow delete` on events is `resource.data.ownerId == request.auth.uid`, so the FIRST
+//     foreign-owned event threw. Everything after it — the invites, the group document itself —
+//     never ran, while the owner's own events deleted on earlier iterations were already gone.
+//     The flow could not complete, and each retry destroyed a little more.
+//   * The "keep" branch wrote `groupId: null` onto events it did not own, which the member-update
+//     rule permits — quietly pulling another member's event out of the shared calendar.
+//
+// So it moves here, where the Admin SDK can see the whole group at once. Note what this does NOT
+// do: other members' events are RE-PARENTED to personal, never deleted. Losing the group should
+// not lose their data, and the owner was never entitled to delete it.
+export const deleteGroupCascade = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = request.auth?.uid;
+  if (!uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in.");
+  }
+  const { groupId, keepEventIds } = request.data || {};
+  if (!groupId || typeof groupId !== "string") {
+    throw new HttpsError("invalid-argument", "groupId is required.");
+  }
+  // The caller's selection applies only to the caller's OWN events. Ids of anything else are
+  // ignored rather than trusted — otherwise "keep" would be a way to reach into other people's.
+  const keep = new Set(
+    (Array.isArray(keepEventIds) ? keepEventIds : [])
+      .filter((x: unknown): x is string => typeof x === "string")
+      .slice(0, 2000),
+  );
+
+  const db = admin.firestore();
+  const groupRef = db.doc(`groups/${groupId}`);
+  const groupSnap = await groupRef.get();
+  if (!groupSnap.exists) {
+    throw new HttpsError("not-found", "Group not found.");
+  }
+  if ((groupSnap.data() || {}).ownerId !== uid) {
+    throw new HttpsError("permission-denied", "Only the group's owner can delete it.");
+  }
+
+  let deleted = 0;
+  let freed = 0;
+  // No cursor is needed: every document this loop touches stops matching `groupId == groupId`
+  // (it is either deleted or re-parented to null), so the same query drains itself. The cap is
+  // there so a write that silently fails cannot turn that into a spin.
+  for (let page = 0; page < 40; page++) {
+    const snap = await db.collection("events").where("groupId", "==", groupId).limit(300).get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    for (const d of snap.docs) {
+      const ev = d.data() || {};
+      if (ev.ownerId === uid && !keep.has(d.id)) {
+        batch.delete(d.ref);
+        deleted++;
+      } else {
+        batch.update(d.ref, { groupId: null, sharedWithFamily: false });
+        freed++;
+      }
+    }
+    await batch.commit();
+  }
+
+  const invites = await deleteQueryInBatches(
+    db.collection("group_invites").where("groupId", "==", groupId),
+  );
+  // The chat lives UNDER the group document, so deleting the parent would leave it unreachable
+  // and still billed for. Firestore does not cascade; this is the only place that can.
+  const messages = await deleteQueryInBatches(db.collection(`groups/${groupId}/messages`));
+  await deleteQueryInBatches(db.collection(`groups/${groupId}/typing`));
+  await groupRef.delete();
+
+  return { deleted, freed, invites, messages };
+});
+
 // ── Asset transfer "keep copy" ──
 // Creating an asset owned by ANOTHER user can't be a client write (create
 // requires ownerId == auth.uid). The caller must own the source asset and share
@@ -890,6 +966,27 @@ export const acceptGroupInvite = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
       if (!groupSnap.exists) {
         throw new HttpsError("not-found", "That group no longer exists.");
       }
+
+      // Who VOUCHED for this person, and are they still entitled to?
+      //
+      // The create rule on group_invites only pins `fromId == request.auth.uid` — the groupId,
+      // the toId and the status are all the client's to choose. So a member could write an
+      // invite addressed to themselves for their own group, and this function would honour it
+      // later with no idea it had never been issued by anyone but the person accepting it.
+      // A member removed from a family group could walk straight back in.
+      //
+      // Both checks below have to live here rather than in the rules: the rules see the invite
+      // only as it is CREATED, and the whole trick is to create it while still a member and
+      // redeem it after being removed. Membership is therefore re-tested now, at accept time.
+      const inviter = typeof inv.fromId === "string" ? inv.fromId : "";
+      if (!inviter || inviter === uid) {
+        throw new HttpsError("permission-denied", "An invitation has to come from someone else.");
+      }
+      const members = groupSnap.data()?.members;
+      if (!Array.isArray(members) || !members.includes(inviter)) {
+        throw new HttpsError("permission-denied", "Whoever sent this invitation is no longer in the group.");
+      }
+
       tx.update(groupRef, { members: admin.firestore.FieldValue.arrayUnion(uid) });
     }
     tx.update(inviteRef, { status: "accepted", toId: uid });

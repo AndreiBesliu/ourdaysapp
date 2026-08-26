@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon, Trash2, Edit2, GripVertical, Sparkles, Users, ThumbsUp, HelpCircle, ThumbsDown, MapPin, Bell } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, getDoc, arrayUnion, collection, query as fsQuery, where, getDocs } from 'firebase/firestore';
+import { reportError } from '../reportError';
 import { db, auth } from '../firebase';
 import Barcode from 'react-barcode';
 import QRCode from 'react-qr-code';
@@ -26,6 +27,8 @@ interface EventDetailsModalProps {
 export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}, groups = [], onEdit }: EventDetailsModalProps) {
   const { language } = useThemeStore();
   const [loading, setLoading] = useState(false);
+
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   // Keep local state for optimistic UI updates of checklist
   const [checklist, setChecklist] = useState<any[]>(event?.checklistItems || []);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
@@ -229,14 +232,24 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       setLoading(true);
       try {
         if (choice) {
-          // Delete parent + any override docs
-          await deleteDoc(doc(db, 'events', parentId));
-          // Also clean up standalone overrides
-          const overridesQuery = fsQuery(collection(db, 'events'), where('overrideOfParent', '==', parentId));
+          // Overrides FIRST, while the parent still exists to identify them — otherwise a failure
+          // here leaves the series deleted and its individually-edited occurrences stranded in the
+          // calendar forever, out of the Recurring panel and impossible to delete as a set.
+          //
+          // `ownerId == uid` is not a workaround, it is what makes the query legal: no branch of
+          // the events read rule mentions `overrideOfParent`, and Firestore validates a LIST query
+          // against the rules WITHOUT reading documents, so filtering on it alone is denied
+          // outright. `createEventOverride` keeps the PARENT's ownerId and this button only shows
+          // for a series you own, so the filter is both permitted and complete.
+          // Same fix, same reasoning as RecurringEventsPanel.handleDeleteSeries.
+          const overridesQuery = fsQuery(
+            collection(db, 'events'),
+            where('overrideOfParent', '==', parentId),
+            where('ownerId', '==', auth.currentUser!.uid),
+          );
           const overrideSnap = await getDocs(overridesQuery);
-          for (const d of overrideSnap.docs) {
-            await deleteDoc(doc(db, 'events', d.id));
-          }
+          await Promise.all(overrideSnap.docs.map((d) => deleteDoc(doc(db, 'events', d.id))));
+          await deleteDoc(doc(db, 'events', parentId));
         } else {
           // Delete just this occurrence — add exception to parent
           const overrideDate = event.recurrenceDate;
@@ -246,7 +259,10 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
         }
         onClose();
       } catch (e) {
-        console.error(e);
+        // Was console.error alone: a half-finished delete that looks finished is the worst of the
+        // three outcomes, so it says so and leaves the modal open.
+        setDeleteError(t('recurringDeleteFailed', language));
+        reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.deleteSeries' });
       } finally {
         setLoading(false);
       }
@@ -255,16 +271,19 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       if (!confirm('Delete this entire recurring series?')) return;
       setLoading(true);
       try {
-        await deleteDoc(doc(db, 'events', event.id));
-        // Clean up overrides
-        const overridesQuery = fsQuery(collection(db, 'events'), where('overrideOfParent', '==', event.id));
+        // Same ordering and the same `ownerId` clause as the branch above.
+        const overridesQuery = fsQuery(
+          collection(db, 'events'),
+          where('overrideOfParent', '==', event.id),
+          where('ownerId', '==', auth.currentUser!.uid),
+        );
         const overrideSnap = await getDocs(overridesQuery);
-        for (const d of overrideSnap.docs) {
-          await deleteDoc(doc(db, 'events', d.id));
-        }
+        await Promise.all(overrideSnap.docs.map((d) => deleteDoc(doc(db, 'events', d.id))));
+        await deleteDoc(doc(db, 'events', event.id));
         onClose();
       } catch (e) {
-        console.error(e);
+        setDeleteError(t('recurringDeleteFailed', language));
+        reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.deleteMasterSeries' });
       } finally {
         setLoading(false);
       }
@@ -408,6 +427,11 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
 
         {/* Content */}
         <div className="p-6 space-y-6 overflow-y-auto flex-1">
+          {deleteError && (
+            <p role="alert" className="text-sm text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 rounded-lg p-3">
+              {deleteError}
+            </p>
+          )}
           
           {/* Task Status */}
           {event.isTask && (

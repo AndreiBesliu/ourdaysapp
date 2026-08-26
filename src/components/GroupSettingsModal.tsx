@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { X, Settings2, Edit2, Check, Trash2, LogOut, UserMinus, UserPlus, AlertTriangle } from 'lucide-react';
 import { db, auth } from '../firebase';
-import { doc, updateDoc, arrayRemove, collection, query, where, getDocs, deleteDoc, addDoc } from 'firebase/firestore';
+import { doc, updateDoc, arrayRemove, collection, addDoc } from 'firebase/firestore';
+import { deleteGroupCascade } from '../serverActions';
+import { reportError } from '../reportError';
 import { liveDoc } from '../utils/liveQuery';
 import { useModalBack } from '../hooks/useModalBack';
 import { t } from '../utils/i18n';
@@ -83,7 +85,10 @@ export default function GroupSettingsModal({
       await updateDoc(doc(db, 'groups', groupId), { name: editedName.trim() });
       setIsEditingName(false);
     } catch (err) {
-      setError(t('actionFailed', language));
+      reportError(err instanceof Error ? err.message : String(err), {
+        context: isOwner ? 'GroupSettingsModal.deleteGroup' : 'GroupSettingsModal.leaveGroup',
+      });
+      setError(isOwner ? t('deleteGroupFailed', language) : t('leaveGroupFailed', language));
     } finally {
       setLoading(false);
     }
@@ -109,18 +114,14 @@ export default function GroupSettingsModal({
     setError('');
     try {
       if (isOwner) {
-        // Delete all group events and the group itself
-        const qEvents = query(collection(db, 'events'), where('groupId', '==', groupId));
-        const eventSnaps = await getDocs(qEvents);
-        for (const evDoc of eventSnaps.docs) {
-          await deleteDoc(doc(db, 'events', evDoc.id));
-        }
-        const qInvites = query(collection(db, 'group_invites'), where('groupId', '==', groupId));
-        const inviteSnaps = await getDocs(qInvites);
-        for (const invDoc of inviteSnaps.docs) {
-          await deleteDoc(doc(db, 'group_invites', invDoc.id));
-        }
-        await deleteDoc(doc(db, 'groups', groupId));
+        // One server call, for the same reason LeaveGroupModal now uses it: `allow delete` on
+        // events is owner-only, so a client loop over every event in the group threw on the first
+        // one belonging to another member — after destroying some of the owner's own.
+        //
+        // This entry point never offered a keep-list at all, so it passes none: the caller's own
+        // group events go, and every other member's is re-parented to personal rather than
+        // deleted. Deleting your group was never a licence to delete their calendar.
+        await deleteGroupCascade({ groupId });
       } else {
         // Leave group
         await updateDoc(doc(db, 'groups', groupId), {
