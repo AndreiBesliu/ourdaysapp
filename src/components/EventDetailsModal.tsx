@@ -371,7 +371,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                       </div>
                       
                       <div>
-                        <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Common Groups</p>
+                        <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">{t('commonGroups', language)}</p>
                         {commonGroups.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {commonGroups.map(g => (
@@ -381,7 +381,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                             ))}
                           </div>
                         ) : (
-                          <p className="text-xs text-zinc-500 italic">No common groups</p>
+                          <p className="text-xs text-zinc-500 italic">{t('noCommonGroups', language)}</p>
                         )}
                       </div>
                       

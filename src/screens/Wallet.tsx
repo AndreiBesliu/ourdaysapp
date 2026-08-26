@@ -624,7 +624,7 @@ export default function Wallet() {
                   ) : (
                     <label htmlFor="asset-upload" className="cursor-pointer flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors w-full h-full p-3">
                       <ImageIcon className="w-5 h-5" />
-                      <span className="text-xs font-medium">Upload Image</span>
+                      <span className="text-xs font-medium">{t('uploadImage', language)}</span>
                     </label>
                   )}
                 </div>
