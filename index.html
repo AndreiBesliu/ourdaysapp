@@ -13,11 +13,12 @@
           });
         });
       }
-      const version = 'v1.0.2';
-      if (localStorage.getItem('app_version') !== version) {
-        localStorage.setItem('app_version', version);
-        window.location.reload(true);
-      }
+      // The `app_version` gate that used to live here compared a HARDCODED literal that nobody
+      // ever bumped past 'v1.0.2', and it only ran when a fresh index.html was parsed — which is
+      // precisely the case that was never stale. Its job is now done properly in two places:
+      // `no-cache` on the entry document (firebase.json), so a reload really does fetch new code,
+      // and `src/utils/appVersion.ts`, which compares the running bundle hash against the served
+      // one and offers a reload instead of forcing it.
     </script>
     <title>Our Days ✨</title>
   </head>

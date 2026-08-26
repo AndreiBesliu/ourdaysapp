@@ -13,6 +13,7 @@ import Wallet from './screens/Wallet';
 import Settings from './screens/Settings';
 import Friends from './screens/Friends';
 import ErrorBoundary from './components/ErrorBoundary';
+import NewVersionNotice from './components/NewVersionNotice';
 import { installGlobalErrorHandlers } from './reportError';
 const Admin = lazy(() => import('./screens/Admin')); // owner-only, rarely used → lazy
 
@@ -227,6 +228,8 @@ function App() {
 
   return (
     <ErrorBoundary>
+    {/* Outside the router on purpose: a build going stale is not a property of any one route. */}
+    <NewVersionNotice />
     <BrowserRouter>
       <Routes>
         <Route 
