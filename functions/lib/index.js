@@ -504,7 +504,7 @@ exports.notifyUsers = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }
     if (!uid) {
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
     }
-    const { recipientIds, type, title, body } = request.data || {};
+    const { recipientIds, type, title, body, titleKey, bodyKey, param } = request.data || {};
     if (!Array.isArray(recipientIds) || recipientIds.length === 0 || !title) {
         throw new https_1.HttpsError("invalid-argument", "recipientIds and title are required.");
     }
@@ -531,15 +531,11 @@ exports.notifyUsers = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }
         if (!sharedMembers.has(rid))
             continue; // only notify users you share a group with
         const ref = db.collection("notifications").doc();
-        batch.set(ref, {
-            userId: rid,
-            createdBy: uid,
-            type: typeof type === "string" ? type : "info",
-            title: String(title).slice(0, 200),
-            body: typeof body === "string" ? body.slice(0, 500) : "",
-            read: false,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
+        batch.set(ref, Object.assign(Object.assign(Object.assign(Object.assign({ userId: rid, createdBy: uid, type: typeof type === "string" ? type : "info", 
+            // The rendered strings stay, as the fallback for documents the reader's build cannot
+            // translate — but they are the SENDER'S language, frozen at write time, which is why a
+            // Romanian account was reading "New Task Assigned" next to four Romanian ones.
+            title: String(title).slice(0, 200), body: typeof body === "string" ? body.slice(0, 500) : "" }, (typeof titleKey === "string" && titleKey ? { titleKey: titleKey.slice(0, 60) } : {})), (typeof bodyKey === "string" && bodyKey ? { bodyKey: bodyKey.slice(0, 60) } : {})), (typeof param === "string" && param ? { param: param.slice(0, 200) } : {})), { read: false, createdAt: admin.firestore.FieldValue.serverTimestamp() }));
         created++;
     }
     if (created > 0) {

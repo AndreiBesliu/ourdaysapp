@@ -114,9 +114,15 @@ export default function NotificationsDropdown() {
                     </div>
                     <div className="flex-1 min-w-0" onClick={() => !n.read && markAsRead(n.id)}>
                       <p className={`text-sm ${!n.read ? 'font-semibold text-zinc-900 dark:text-zinc-100' : 'text-zinc-700 dark:text-zinc-300'}`}>
-                        {n.title}
+                        {/* The KEY wins when the document has one: it renders in the reader's
+                            language. `n.title` is the sender's language, frozen at write time —
+                            kept only so notifications written before 2026-08-26 still say
+                            something. */}
+                        {n.titleKey ? t(n.titleKey, language) : n.title}
                       </p>
-                      <p className="text-xs text-zinc-500 line-clamp-2 mt-0.5">{n.body}</p>
+                      <p className="text-xs text-zinc-500 line-clamp-2 mt-0.5">
+                        {n.bodyKey ? `${t(n.bodyKey, language)}${n.param ?? ''}` : n.body}
+                      </p>
                     </div>
                     <button 
                       onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}

@@ -632,8 +632,13 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           await notifyUsers({
             recipientIds: otherAssignees,
             type: 'task',
+            // The rendered pair is the fallback; the KEYS are what the recipient renders, in
+            // their own language rather than in mine.
             title: t('newTaskAssigned', language),
             body: `${t('taskAssignedBody', language)}${title}`,
+            titleKey: 'newTaskAssigned',
+            bodyKey: 'taskAssignedBody',
+            param: title,
           });
         }
       }

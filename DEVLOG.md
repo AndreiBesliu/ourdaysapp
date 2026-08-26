@@ -2106,3 +2106,28 @@ Auditul a numărat **28 din 30 de ascultători** în forma asta. Am convertit de
 stricat; restul e o trecere separată, cu unealta deja la locul ei.
 
 `npx tsc -b` verde · 721 teste verzi · index livrat și confirmat pe live, apoi hosting.
+
+## 2026-08-26 — O notificare vorbea limba EXPEDITORULUI, pentru totdeauna
+
+**Model:** Claude Opus 5 · văzut în captura lui Andrei: patru notificări în română și una în engleză,
+în același clopoțel
+
+`AddEventModal` chema `notifyUsers({ title: t('newTaskAssigned', language) })` — traducea în limba
+CELUI CARE TRIMITE, iar `notifyUsers` stoca șirul rezultat ca atare. Deci limba unei notificări era
+înghețată la scriere și fiecare destinatar o citea în limba altcuiva.
+
+Reparat prin cheie: clientul trimite acum și `titleKey`/`bodyKey`/`param`, serverul le păstrează ca
+șiruri scurte opace, iar clopoțelul randează `t(cheie, limba MEA)`. Textul redat rămâne stocat ca
+rezervă, ca notificările scrise înainte de azi să spună în continuare ceva.
+
+**O diagnoză a mea, corectată:** crezusem că antetul „Notifications / Mark all read" e o gaură de
+traducere. Nu e — valorile românești există și sunt corecte (`Notificări`, `Marchează toate ca
+citite`), iar cele șase blocuri au exact 330 de chei fiecare, fără niciun gol. Verificat programatic.
+Explicația adevărată e chiar bugul de mai sus: aplicația lui e pe engleză, deci antetul e englezesc
+corect, iar româna pe care o vedea era textul înghețat al expeditorilor.
+
+Plus: `notifyUsers` din client înghițea eșecul cu `console.error`. Rămâne best-effort — o notificare
+picată nu are voie să rupă salvarea care a declanșat-o — dar „best effort" nu înseamnă „neobservat",
+deci acum trece prin `reportError`.
+
+`npx tsc -b` verde · 721 teste verzi · livrat.

@@ -571,7 +571,7 @@ export const notifyUsers = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async 
     throw new HttpsError("unauthenticated", "You must be signed in.");
   }
 
-  const { recipientIds, type, title, body } = request.data || {};
+  const { recipientIds, type, title, body, titleKey, bodyKey, param } = request.data || {};
   if (!Array.isArray(recipientIds) || recipientIds.length === 0 || !title) {
     throw new HttpsError("invalid-argument", "recipientIds and title are required.");
   }
@@ -606,8 +606,17 @@ export const notifyUsers = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async 
       userId: rid,
       createdBy: uid,
       type: typeof type === "string" ? type : "info",
+      // The rendered strings stay, as the fallback for documents the reader's build cannot
+      // translate — but they are the SENDER'S language, frozen at write time, which is why a
+      // Romanian account was reading "New Task Assigned" next to four Romanian ones.
       title: String(title).slice(0, 200),
       body: typeof body === "string" ? body.slice(0, 500) : "",
+      // The keys are what a reader actually renders, in their OWN language. Stored as short opaque
+      // strings: `t()` resolves them against a fixed table, so an unknown key falls back rather
+      // than injecting anything.
+      ...(typeof titleKey === "string" && titleKey ? { titleKey: titleKey.slice(0, 60) } : {}),
+      ...(typeof bodyKey === "string" && bodyKey ? { bodyKey: bodyKey.slice(0, 60) } : {}),
+      ...(typeof param === "string" && param ? { param: param.slice(0, 200) } : {}),
       read: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
