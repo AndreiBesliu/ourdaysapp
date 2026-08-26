@@ -389,12 +389,12 @@ export default function Wallet() {
               }}
             >
               <QrCode className="w-10 h-10 mb-2 text-emerald-500" />
-              <span className="text-xs font-medium text-emerald-600">Tap to Scan</span>
+              <span className="text-xs font-medium text-emerald-600">{t('walletTapToScan', language)}</span>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center text-zinc-400 group-hover:text-emerald-500 transition-colors">
               <WalletIcon className="w-8 h-8 mb-2 opacity-50 group-hover:opacity-100 transition-opacity" />
-              <span className="text-xs font-medium">No Image</span>
+              <span className="text-xs font-medium">{t('walletNoImage', language)}</span>
             </div>
           )}
         </div>
@@ -500,9 +500,9 @@ export default function Wallet() {
         {/* Categories Panel */}
         <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">Quick Filters</h2>
+            <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">{t('walletQuickFilters', language)}</h2>
             <button onClick={() => setIsManagingFilters(true)} className="text-xs text-emerald-500 hover:text-emerald-600 flex items-center gap-1 font-medium bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 rounded-md transition-colors">
-              <Settings2 className="w-3.5 h-3.5" /> Manage
+              <Settings2 className="w-3.5 h-3.5" /> {t('walletManage', language)}
             </button>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -531,10 +531,10 @@ export default function Wallet() {
         ) : activeFilters.length > 0 ? (
           <div>
             <div className="flex items-center justify-between mb-3 pl-1 border-l-4 border-emerald-500">
-              <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-200 pl-2">Matching Assets</h2>
+              <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-200 pl-2">{t('walletMatchingAssets', language)}</h2>
             </div>
             {filteredAssets.length === 0 ? (
-              <p className="text-zinc-500 italic">No assets match the selected filters.</p>
+              <p className="text-zinc-500 italic">{t('walletNoMatch', language)}</p>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {filteredAssets.map(asset => renderAssetCard(asset))}
@@ -574,7 +574,7 @@ export default function Wallet() {
               </div>
               
               <div className="space-y-2">
-                <label className="text-xs font-medium text-zinc-500 uppercase">Categories (Select one or more)</label>
+                <label className="text-xs font-medium text-zinc-500 uppercase">{t('walletCategoriesLabel', language)}</label>
                 <div className="flex flex-wrap gap-2">
                   {categories.map(cat => {
                     const isSelected = selectedCategories.includes(cat);
@@ -618,7 +618,7 @@ export default function Wallet() {
                         className="w-full h-full object-cover" 
                       />
                       <label htmlFor="asset-upload" className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
-                         <span className="text-xs font-medium">Change Image</span>
+                         <span className="text-xs font-medium">{t('walletChangeImage', language)}</span>
                       </label>
                     </>
                   ) : (
@@ -632,19 +632,19 @@ export default function Wallet() {
                 <div className="flex-1 flex flex-col gap-2">
                   <button type="button" onClick={openPastImages} className="flex-1 min-h-0 overflow-hidden flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed bg-zinc-50 dark:bg-zinc-800/30">
                     <Folder className="w-4 h-4" />
-                    <span className="text-[10px] font-medium leading-tight">Pick from Past<br/>Uploads</span>
+                    <span className="text-[10px] font-medium leading-tight">{t('walletPickFromPast', language)}</span>
                   </button>
                   <div className="flex-1 min-h-0 overflow-hidden p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed text-center flex flex-col justify-center items-center">
                     {barcodeValue ? (
                       <div className="text-center">
-                        <p className="text-[10px] text-emerald-500 font-bold mb-0.5">Scanned!</p>
+                        <p className="text-[10px] text-emerald-500 font-bold mb-0.5">{t('walletScanned', language)}</p>
                         <p className="text-[9px] text-zinc-500 truncate w-16 mx-auto" title={barcodeValue}>{barcodeValue}</p>
-                        <button type="button" onClick={() => { setBarcodeValue(''); setBarcodeFormat(''); }} className="text-[9px] text-red-500 hover:underline">Remove</button>
+                        <button type="button" onClick={() => { setBarcodeValue(''); setBarcodeFormat(''); }} className="text-[9px] text-red-500 hover:underline">{t('walletRemove', language)}</button>
                       </div>
                     ) : (
                       <button type="button" onClick={() => setIsScanning(true)} className="flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors w-full h-full">
                         <ScanLine className="w-4 h-4" />
-                        <span className="text-[10px] font-medium">Scan Code</span>
+                        <span className="text-[10px] font-medium">{t('walletScanCode', language)}</span>
                       </button>
                     )}
                   </div>
@@ -653,8 +653,8 @@ export default function Wallet() {
 
               <div className="flex items-center justify-between p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg">
                 <div>
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Share Asset</p>
-                  <p className="text-xs text-zinc-500">Group members can view this</p>
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{t('walletShareAsset', language)}</p>
+                  <p className="text-xs text-zinc-500">{t('walletShareHint', language)}</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" className="sr-only peer" checked={isShared} onChange={e => setIsShared(e.target.checked)} />
@@ -665,15 +665,15 @@ export default function Wallet() {
               {editingAsset && editingAsset.ownerId === auth.currentUser?.uid && sharedUsers.length > 0 && (
                 <div className="flex flex-col gap-3 p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
                   <div className="flex flex-col">
-                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Transfer Asset</p>
-                    <p className="text-xs text-zinc-500">Hand over ownership to someone else</p>
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{t('walletTransferAsset', language)}</p>
+                    <p className="text-xs text-zinc-500">{t('walletTransferHint', language)}</p>
                   </div>
                   <select
                     value={transferToUserId}
                     onChange={e => setTransferToUserId(e.target.value)}
                     className="w-full px-3 py-2 text-sm border rounded-lg bg-white dark:bg-zinc-800 dark:border-zinc-700 outline-none focus:border-emerald-500"
                   >
-                    <option value="">Keep Ownership</option>
+                    <option value="">{t('walletKeepOwnership', language)}</option>
                     {sharedUsers.map(u => (
                       <option key={u.id} value={u.id}>{u.name || u.email}</option>
                     ))}
@@ -686,14 +686,14 @@ export default function Wallet() {
                         onChange={e => setKeepCopy(e.target.checked)}
                         className="w-4 h-4 text-emerald-500 bg-zinc-100 border-zinc-300 rounded focus:ring-emerald-500 focus:ring-2 dark:bg-zinc-700 dark:border-zinc-600"
                       />
-                      <span className="text-xs text-zinc-700 dark:text-zinc-300">Keep a copy in my wallet</span>
+                      <span className="text-xs text-zinc-700 dark:text-zinc-300">{t('walletKeepCopy', language)}</span>
                     </label>
                   )}
                 </div>
               )}
 
               <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => { setIsAdding(false); setEditingAsset(null); }} className="flex-1 py-2 text-zinc-600 dark:text-zinc-400 font-medium bg-zinc-100 dark:bg-zinc-800 rounded-lg">Cancel</button>
+                <button type="button" onClick={() => { setIsAdding(false); setEditingAsset(null); }} className="flex-1 py-2 text-zinc-600 dark:text-zinc-400 font-medium bg-zinc-100 dark:bg-zinc-800 rounded-lg">{t('walletCancel', language)}</button>
                 <button type="submit" disabled={loading} className="flex-1 py-2 text-white font-medium bg-emerald-500 hover:bg-emerald-600 rounded-lg disabled:opacity-50">Save</button>
               </div>
             </form>
@@ -706,7 +706,7 @@ export default function Wallet() {
           <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[80vh]">
             <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
               <h3 className="font-bold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                <Settings2 className="w-5 h-5 text-emerald-500" /> Manage Filters
+                <Settings2 className="w-5 h-5 text-emerald-500" /> {t('walletManage', language)} Filters
               </h3>
               <button onClick={() => setIsManagingFilters(false)} className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
                 <X className="w-5 h-5" />
@@ -787,7 +787,7 @@ export default function Wallet() {
               {pastImages.length === 0 ? (
                 <div className="text-center py-10 text-zinc-500">
                   <ImageIcon className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                  <p>No past images found.</p>
+                  <p>{t('walletNoPastImages', language)}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">

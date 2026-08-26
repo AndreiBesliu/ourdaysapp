@@ -71,13 +71,49 @@ mine. **Nu costă nimic să-l deschizi** — nu cheamă niciun model.
       schimbă cum se simte PvP-ul, deci decizi tu.
 - [ ] **Calibrarea Warlord** rămâne amânată explicit de tine. Nu o ridic nesolicitat.
 
-## 6. Restanțe vechi, doar din consolă (dinainte de sesiunea asta)
+## 6. Ecranele din spatele autentificarii, dupa trecerea ascultatorilor (26.08)
+
+**De ce nu pot eu:** am convertit **toti** ascultatorii Firestore din aplicatie ca sa nu mai poata
+pica in tacere. Am pornit aplicatia in browser (fara erori de consola) si am typecheck + 724 teste
+verzi, dar tot ce e dupa login ramane punctul meu orb — exact ca adminul. Am atins CalendarHome,
+Wallet, Friends, Settings, chatul de grup, GamesHub, AddEvent si PvP, deci merita o plimbare.
+
+Toate astea trebuie sa arate **exact ca inainte** — schimbarea se vede doar cand ceva pica.
+
+- [ ] Calendarul se deschide, evenimentele apar, comutatorul de grup are grupurile tale.
+- [ ] **Nu** apare bannerul rosu de sus („Grupurile tale nu au putut fi incarcate...").
+- [ ] Portofelul: bunurile apar; daca n-ai niciunul, scrie „Niciun bun inca" (nu rosu).
+- [ ] Prieteni: lista si cererile apar normal.
+- [ ] Setari: numele, ziua de nastere si poza sunt acolo — **nu goale**. Daca sunt goale, NU salva,
+      spune-mi.
+- [ ] Chatul de grup: mesajele se incarca; bulinele „scrie acum" apar cand scrie cineva.
+- [ ] Arcade: jocurile de azi si clasamentul.
+- [ ] Warlord → PvP: bataliile tale apar.
+
+Daca vreunul arata un text rosu de eroare, **trimite-mi textul exact** — ala e chiar rostul
+schimbarii, si imi spune ce citire e refuzata.
+
+## 7. Restanțe vechi, doar din consolă (dinainte de sesiunea asta)
 
 Le las aici ca să nu se piardă; nu s-au mișcat.
 
 - [ ] App Check pe *enforce*.
 - [ ] Cotă pe cheia Gemini.
 - [ ] Alertă de buget în GCP.
+
+## 8. Limbile (26.08) — ai ce verifica repede
+
+**De ce nu pot eu:** partea de dinainte de login am verificat-o singur, pe viu, în română și în
+germană. Ce e după login rămâne punctul orb.
+
+- [ ] Setări → limba ta e tot **Română** (nu s-a resetat).
+- [ ] Schimbi limba în Setări și **rămâne** după o reîncărcare completă a paginii.
+- [ ] Ecranul de login (deconectat sau în fereastră privată) apare **în română**, nu în engleză.
+- [ ] Portofelul, prietenii, chatul, arcade-ul: nu mai vezi engleză amestecată.
+- [ ] Antetul rezumatului din chat („Ce s-a mai întâmplat?") apare în limba TA, nu mereu română.
+
+Ce rămâne **intenționat în engleză**: tot `/admin` (e consola ta) și interfața Warlord (decizia ta
+veche). Numele limbilor din Setări (English, Français, Deutsch...) rămân în limba lor — asta e ideea.
 
 ---
 
@@ -93,3 +129,5 @@ Măsurate, nu presupuse — le scriu ca să știi unde **nu** trebuie să te ui�
 - Migrarea unui save Warlord de forma veche: 1210 / 1200 / 999, niciun `NaN`, schema rescrisă.
 - `/wallet`: cheltuieli per grup, soldurile `+350 / −350` corecte, personalele excluse din solduri.
 - Fiecare deploy: chunk-ul de pe live comparat **byte cu byte** cu ce am construit local.
+- Login-ul în română și în germană, pe viu, cu diacritice corecte; cele șase dicționare au aceleași
+  chei, fără duplicate și fără blocuri scrise în ASCII (test, nu ochiul meu).

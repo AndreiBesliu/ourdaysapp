@@ -2,9 +2,12 @@ import React, { useState } from 'react';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendEmailVerification } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { CalendarDays, Mail, Lock, AlertCircle } from 'lucide-react';
+import { CalendarDays, Mail, Lock, AlertCircle } from 'lucide-react';
+import { t } from '../utils/i18n';
+import { useThemeStore } from '../store';
 
-export default function Login() {
+export default function Login() {
+  const { language } = useThemeStore();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,7 +45,7 @@ export default function Login() {
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      setError(t('authFailed', language));
     } finally {
       setLoading(false);
     }
@@ -72,7 +75,7 @@ export default function Login() {
         console.error("Failed to handle google user doc:", dbErr);
       }
     } catch (err: any) {
-      setError(err.message || 'Google Sign-In failed');
+      setError(t('googleSignInFailed', language));
     } finally {
       setLoading(false);
     }
@@ -84,7 +87,7 @@ export default function Login() {
         <div className="p-8 text-center bg-primary text-white">
           <CalendarDays className="w-16 h-16 mx-auto mb-4" />
           <h1 className="text-3xl font-bold">Our Days</h1>
-          <p className="text-primary/20 mt-2 text-white/90">Plan your group operations together</p>
+          <p className="text-primary/20 mt-2 text-white/90">{t('loginTagline', language)}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="p-8 space-y-6">
@@ -104,7 +107,7 @@ export default function Login() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none"
-                  placeholder="Your Name"
+                  placeholder={t('yourNamePlaceholder', language)}
                   required={!isLogin}
                 />
               </div>
@@ -112,7 +115,7 @@ export default function Login() {
           )}
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Email</label>
+            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('emailLabel', language)}</label>
             <div className="relative">
               <Mail className="w-5 h-5 absolute left-3 top-2.5 text-zinc-400" />
               <input 
@@ -127,7 +130,7 @@ export default function Login() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Password</label>
+            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('passwordLabel', language)}</label>
             <div className="relative">
               <Lock className="w-5 h-5 absolute left-3 top-2.5 text-zinc-400" />
               <input 
@@ -146,7 +149,7 @@ export default function Login() {
             disabled={loading}
             className="w-full bg-primary hover:bg-primary/90 text-white font-medium py-2.5 rounded-lg transition-colors disabled:opacity-70"
           >
-            {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
+            {loading ? t('processing', language) : (isLogin ? t('signIn', language) : t('createAccount', language))}
           </button>
 
           <div className="relative my-4">
@@ -154,7 +157,7 @@ export default function Login() {
               <span className="w-full border-t border-zinc-200 dark:border-zinc-800"></span>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white dark:bg-zinc-900 text-zinc-500">Or continue with</span>
+              <span className="px-2 bg-white dark:bg-zinc-900 text-zinc-500">{t('orContinueWith', language)}</span>
             </div>
           </div>
 
@@ -174,13 +177,13 @@ export default function Login() {
           </button>
 
           <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
-            {isLogin ? "Don't have an account? " : "Already have an account? "}
+            {isLogin ? t('noAccountYet', language) : t('haveAccount', language)}
             <button 
               type="button" 
               onClick={() => { setIsLogin(!isLogin); setError(''); }}
               className="text-primary hover:underline font-medium"
             >
-              {isLogin ? "Sign Up" : "Sign In"}
+              {isLogin ? t('signUp', language) : t('signIn', language)}
             </button>
           </p>
         </form>

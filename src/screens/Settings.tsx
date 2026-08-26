@@ -280,7 +280,7 @@ export default function Settings() {
             <div className="p-4 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800">
               <div>
                 <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('languageLabel', language)}</p>
-                <p className="text-sm text-zinc-500">Choose your preferred language</p>
+                <p className="text-sm text-zinc-500">{t('chooseLanguageHint', language)}</p>
               </div>
               <select 
                 value={language || 'en-US'}
@@ -338,7 +338,7 @@ export default function Settings() {
                 </div>
                 <div>
                   <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('darkMode', language)}</p>
-                  <p className="text-sm text-zinc-500">Toggle dark theme</p>
+                  <p className="text-sm text-zinc-500">{t('toggleDarkTheme', language)}</p>
                 </div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -360,7 +360,7 @@ export default function Settings() {
                 </div>
                 <div>
                   <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('accentColor', language)}</p>
-                  <p className="text-sm text-zinc-500">Choose your primary theme color</p>
+                  <p className="text-sm text-zinc-500">{t('choosePrimaryColor', language)}</p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-3 mt-2">
@@ -432,7 +432,7 @@ export default function Settings() {
                   <div className="flex items-center gap-2">
                     <input type="color" value={backgroundColor || (customThemeIsDark ? '#09090b' : '#ffffff')} onChange={(e) => handleAdvancedThemeUpdate({ backgroundColor: e.target.value })} className="w-8 h-8 rounded cursor-pointer border-0 p-0" />
                     {backgroundColor && (
-                      <button onClick={() => handleAdvancedThemeUpdate({ backgroundColor: null })} className="text-xs text-red-500 font-medium">Clear</button>
+                      <button onClick={() => handleAdvancedThemeUpdate({ backgroundColor: null })} className="text-xs text-red-500 font-medium">{t('clear', language)}</button>
                     )}
                   </div>
                 </div>
@@ -452,7 +452,7 @@ export default function Settings() {
                       ) : (
                         <>
                           <Camera className="w-5 h-5 text-zinc-400 mb-1" />
-                          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Upload Image</span>
+                          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{t('uploadImage', language)}</span>
                         </>
                       )}
                       <input type="file" accept="image/*" className="hidden" onChange={handleBgImageUpload} disabled={uploadingBg} />

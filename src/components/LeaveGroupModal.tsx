@@ -4,6 +4,8 @@ import { db, auth } from '../firebase';
 import { doc, updateDoc, deleteDoc, arrayRemove, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { useModalBack } from '../hooks/useModalBack';
 import { format } from 'date-fns';
+import { t } from '../utils/i18n';
+import { useThemeStore } from '../store';
 
 interface LeaveGroupModalProps {
   isOpen: boolean;
@@ -15,6 +17,7 @@ interface LeaveGroupModalProps {
 }
 
 export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, isOwner, onSuccess }: LeaveGroupModalProps) {
+  const { language } = useThemeStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [involvedEvents, setInvolvedEvents] = useState<any[]>([]);
@@ -240,9 +243,9 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
             {loading ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             ) : isOwner ? (
-              <>Delete Group</>
+              <>{t('deleteGroup', language)}</>
             ) : (
-              <>Leave Group</>
+              <>{t('leaveGroup', language)}</>
             )}
           </button>
         </div>

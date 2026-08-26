@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { X } from 'lucide-react';
+import { X } from 'lucide-react';
+import { t } from '../utils/i18n';
+import { useThemeStore } from '../store';
 
 interface BarcodeScannerProps {
   onScan: (result: string, format: string) => void;
   onClose: () => void;
 }
 
-export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
+export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
+  const { language } = useThemeStore();
   const [error, setError] = useState<string>('');
   const scannerRef = useRef<Html5Qrcode | null>(null);
 
@@ -77,7 +80,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col">
       <div className="p-4 flex justify-between items-center bg-black/50 absolute top-0 left-0 right-0 z-10">
-        <h3 className="text-white font-medium">Scan Barcode / QR</h3>
+        <h3 className="text-white font-medium">{t('scanBarcodeTitle', language)}</h3>
         <button onClick={onClose} className="p-2 text-white bg-white/20 rounded-full">
           <X className="w-6 h-6" />
         </button>

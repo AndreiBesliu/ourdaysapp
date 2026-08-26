@@ -2195,3 +2195,38 @@ cautat token-ul in `tailwind.config.js` si nu l-am gasit. Se rezolva de fapt —
 nu foloseste tokenuri `wl-*` si consecventa fisierului bate consecventa cu jocul.
 
 `npx tsc -b` verde · **724 teste verzi** · build verde · pornire in browser fara erori de consola.
+
+## 2026-08-26 — Aplicația vorbește șase limbi, nu cinci și jumătate
+
+**Model:** Claude Opus 5 · lentila de i18n din audit, continuarea trecerii ascultătorilor
+
+Regula casei spune că tot textul vizibil trece prin `t()` în 6 limbi, cu Warlord ca excepție
+declarată. Am numărat: **66 de texte englezești** rămase pe ecrane obișnuite (în afara adminului,
+care e consola ta și rămâne engleză ca interfața Warlord). Le-am dus la zero pe cele care contează
+și am adăugat **~110 chei noi**, în toate cele șase blocuri.
+
+Cel mai prost dintre ele mergea invers: antetul rezumatului din chat era **hardcodat în română**
+pentru toată lumea — „Ce s-a mai întâmplat? (AI Digest)" apărea și unui utilizator care ținea
+aplicația în germană.
+
+Trei componente n-aveau i18n deloc (`BarcodeScanner`, `CreateGroupModal`, `LeaveGroupModal`), plus
+`ErrorBoundary`, care fiind clasă nu poate chema hook-ul — citește limba direct din store, fiindcă
+oricum randează când arborele de sub el e rupt.
+
+**Descoperirea care schimbă ceva real:** limba trăia DOAR în documentul din Firestore, citit abia
+după autentificare. Deci ecranul de login era în engleză pentru toată lumea, permanent, iar la
+fiecare reîncărcare aplicația clipea englezește până răspundea Firestore. N-a fost niciodată o
+lipsă de traducere — șirurile existau. Acum se ține minte local (`ourdays.language`), Firestore
+rămâne sursa de adevăr, iar localStorage e doar ce se randează până răspunde. **Verificat pe viu:**
+login-ul apare în română și în germană, cu diacritice.
+
+**Două teste noi care țin toate astea:**
+- `i18n.test.ts` — cele șase blocuri au aceleași chei, nicio valoare goală, nicio limbă nu e o
+  copie a englezei. Plus două verificări **pe fișierul sursă**, fiindcă obiectul construit le
+  ascunde: **cheile duplicate** (literalul păstrează tăcut ultima definiție — am pățit-o azi, patru
+  nume existau deja cu diacritice, iar copiile mele ASCII ar fi câștigat) și **alfabetele cu
+  diacritice** („Sterge" nu e română, „loschen" nu e germană; ambele compilează și se afișează).
+  Verificat că mușcă: am scos o cheie din română, testul a numit-o exact.
+- Corectate **113 valori** pe care le scrisesem fără diacritice.
+
+`npx tsc -b` verde · **732 teste verzi** · build verde · verificat în browser pe trei limbi.

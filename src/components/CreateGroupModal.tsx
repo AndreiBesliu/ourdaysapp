@@ -2,14 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { X, Users, AlertCircle } from 'lucide-react';
 import { db, auth } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
-import { useModalBack } from '../hooks/useModalBack';
+import { useModalBack } from '../hooks/useModalBack';
+import { t } from '../utils/i18n';
+import { useThemeStore } from '../store';
 
 interface CreateGroupModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
+export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalProps) {
+  const { language } = useThemeStore();
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -66,7 +69,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
 
         <form onSubmit={handleCreate} className="p-6 space-y-4 overflow-y-auto flex-1">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Group Name</label>
+            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('groupNameLabel', language)}</label>
             <input 
               type="text" 
               value={name}

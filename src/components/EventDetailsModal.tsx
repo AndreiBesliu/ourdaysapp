@@ -414,7 +414,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
             <div className="flex flex-col gap-3 p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-700">
               <div className="flex justify-between items-start">
                 <div className="flex flex-col gap-1">
-                  <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Task Ownership & Status</p>
+                  <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">{t('taskOwnership', language)}</p>
                   {hasAssignee ? (
                     <div className="flex flex-wrap gap-1 mt-1">
                       {assigneeIds.map(id => (
@@ -429,7 +429,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-zinc-500 mt-1">This task is currently unclaimed.</p>
+                    <p className="text-sm text-zinc-500 mt-1">{t('taskUnclaimed', language)}</p>
                   )}
                 </div>
                 
@@ -440,7 +440,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                   className="text-xs bg-primary/10 text-primary rounded-md font-medium px-2 py-1.5 outline-none border-none cursor-pointer hover:bg-primary/20 transition-colors shrink-0"
                 >
                   <option value="unassigned" disabled>+ Assign Member</option>
-                  {!isAssignee && <option value={auth.currentUser?.uid}>Assign to Me</option>}
+                  {!isAssignee && <option value={auth.currentUser?.uid}>{t('taskAssignToMe', language)}</option>}
                   {Object.values(userMap)
                     .filter((u: any) => !assigneeIds.includes(u.id))
                     .filter((u: any) => event.groupId ? groups?.find(g => g.id === event.groupId)?.members?.includes(u.id) : u.id === auth.currentUser?.uid)
@@ -510,7 +510,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{event.location}</p>
-                    <p className="text-xs text-zinc-500 group-hover:text-blue-500 transition-colors">Tap to open map</p>
+                    <p className="text-xs text-zinc-500 group-hover:text-blue-500 transition-colors">{t('tapToOpenMap', language)}</p>
                   </div>
                 </a>
               )}
@@ -527,7 +527,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                        event.reminderMinutes === 1440 ? '1 day before' : 
                        `${event.reminderMinutes} minutes before`}
                     </p>
-                    <p className="text-xs text-zinc-500">Reminder set</p>
+                    <p className="text-xs text-zinc-500">{t('reminderSet', language)}</p>
                   </div>
                 </div>
               )}
@@ -608,7 +608,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                 </div>
               )}
               {yesUsers.length === 0 && maybeUsers.length === 0 && noUsers.length === 0 && (
-                <p className="text-xs text-zinc-400 dark:text-zinc-500 italic">No responses yet. Be the first!</p>
+                <p className="text-xs text-zinc-400 dark:text-zinc-500 italic">{t('noResponsesYet', language)}</p>
               )}
             </div>
           )}

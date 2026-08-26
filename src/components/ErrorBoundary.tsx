@@ -1,5 +1,7 @@
 import React from 'react';
 import { reportError } from '../reportError';
+import { t } from '../utils/i18n';
+import { useThemeStore } from '../store';
 
 interface State { hasError: boolean; reloadFailed: boolean }
 
@@ -41,20 +43,24 @@ export default class ErrorBoundary extends React.Component<{ children: React.Rea
 
   render() {
     if (this.state.hasError) {
+      // A class component cannot call the hook, and this one has to render while the tree below
+      // it is broken — so it reads the store directly rather than depending on a provider that
+      // may be part of what just crashed.
+      const language = useThemeStore.getState().language;
       return (
         <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center bg-zinc-50 dark:bg-zinc-950">
-          <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Something went wrong.</p>
+          <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{t('somethingWentWrong', language)}</p>
           {/* Reloading cannot fix a crash caused by PERSISTED state — it rehydrates the same
               thing and dies again. So once it has been tried and failed, this stops presenting it
               as the answer: a button that cannot do what it says is the one thing the house rules
               single out as never acceptable. */}
           <p className="text-sm text-zinc-500">
             {this.state.reloadFailed
-              ? 'Reloading did not help, so this is not a passing glitch. The error was logged.'
-              : 'The error was logged. Try reloading.'}
+              ? t('errorReloadFailed', language)
+              : t('errorLoggedTryReload', language)}
           </p>
           <button onClick={this.reload} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">
-            {this.state.reloadFailed ? 'Reload again' : 'Reload'}
+            {this.state.reloadFailed ? t('errorReloadAgain', language) : t('errorReload', language)}
           </button>
         </div>
       );

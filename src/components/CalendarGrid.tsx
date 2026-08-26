@@ -458,10 +458,10 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                               <div className="flex items-center gap-1">
                                 {(() => {
                                   const myRsvp = ev.rsvps?.[auth.currentUser?.uid || ''];
-                                  if (myRsvp === 'yes') return <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded"><ThumbsUp className="w-3 h-3" /> Going</span>;
-                                  if (myRsvp === 'maybe') return <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded"><HelpCircle className="w-3 h-3" /> Maybe</span>;
-                                  if (myRsvp === 'no') return <span className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-500/10 px-1.5 py-0.5 rounded"><ThumbsDown className="w-3 h-3" /> Not Going</span>;
-                                  return <span className="text-[10px] font-bold text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">Pending RSVP</span>;
+                                  if (myRsvp === 'yes') return <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded"><ThumbsUp className="w-3 h-3" /> {t('rsvpGoing', language)}</span>;
+                                  if (myRsvp === 'maybe') return <span className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded"><HelpCircle className="w-3 h-3" /> {t('rsvpMaybe', language)}</span>;
+                                  if (myRsvp === 'no') return <span className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-500/10 px-1.5 py-0.5 rounded"><ThumbsDown className="w-3 h-3" /> {t('rsvpNotGoing', language)}</span>;
+                                  return <span className="text-[10px] font-bold text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">{t('rsvpPending', language)}</span>;
                                 })()}
                               </div>
                             )}

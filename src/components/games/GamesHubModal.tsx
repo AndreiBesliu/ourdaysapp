@@ -546,7 +546,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                 // modal is too small for the tactical grid + the player's local army).
                 <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
                   <span className="text-4xl">⚔️</span>
-                  <p className="text-sm text-zinc-600 dark:text-zinc-300">This is a Warlord PvP battle — it opens in the Warlord arena.</p>
+                  <p className="text-sm text-zinc-600 dark:text-zinc-300">{t('warlordPvpNotice', language)}</p>
                   <button
                     onClick={() => { onClose(); navigate('/warlord'); }}
                     className="px-4 py-2 bg-black text-white dark:bg-white dark:text-black rounded-lg text-sm font-semibold"

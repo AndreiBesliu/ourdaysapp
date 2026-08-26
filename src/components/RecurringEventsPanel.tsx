@@ -107,8 +107,8 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
           {recurringEvents.length === 0 ? (
             <div className="text-center py-12">
               <Repeat className="w-10 h-10 text-zinc-300 dark:text-zinc-600 mx-auto mb-3" />
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">No recurring events yet.</p>
-              <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">Create one by selecting a repeat frequency when adding an event.</p>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">{t('noRecurringYet', language)}</p>
+              <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">{t('noRecurringHint', language)}</p>
             </div>
           ) : (
             frequencyOrder.map(freq => {
@@ -120,7 +120,7 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${FREQ_COLORS[freq] || 'bg-zinc-100 text-zinc-500'}`}>
                       {getFrequencyLabel(freq as any)}
                     </span>
-                    <span className="text-xs text-zinc-400">{items.length} series</span>
+                    <span className="text-xs text-zinc-400">{items.length} {t('seriesCount', language)}</span>
                   </div>
                   <div className="flex flex-col gap-2">
                     {items.map((ev: any) => {

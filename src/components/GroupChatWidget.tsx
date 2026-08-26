@@ -589,7 +589,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
               </button>
               <div className="flex items-center gap-2 mb-1">
                 <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                <span className="text-xs font-bold text-indigo-800 dark:text-indigo-300">Ce s-a mai întâmplat? (AI Digest)</span>
+                <span className="text-xs font-bold text-indigo-800 dark:text-indigo-300">{t('chatDigestTitle', language)}</span>
               </div>
               <p className="text-xs text-indigo-700 dark:text-indigo-200 whitespace-pre-wrap pr-4">{digestText}</p>
             </div>
@@ -911,7 +911,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
               <div className="flex items-center gap-2 overflow-hidden">
                 <Pencil className="w-4 h-4 text-primary shrink-0" />
                 <div className="flex flex-col overflow-hidden">
-                  <span className="text-[10px] font-bold text-primary">Editing message</span>
+                  <span className="text-[10px] font-bold text-primary">{t('editingMessage', language)}</span>
                   <span className="text-xs text-zinc-500 truncate">{editingMsg.text || 'Photo'}</span>
                 </div>
               </div>

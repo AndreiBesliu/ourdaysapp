@@ -726,7 +726,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                         </div>
                         
                         <div>
-                          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Common Groups</p>
+                          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">{t('commonGroups', language)}</p>
                           {commonGroups.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
                               {commonGroups.map(g => (
@@ -736,7 +736,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                               ))}
                             </div>
                           ) : (
-                            <p className="text-xs text-zinc-500 italic">No common groups</p>
+                            <p className="text-xs text-zinc-500 italic">{t('noCommonGroups', language)}</p>
                           )}
                         </div>
                         
@@ -878,7 +878,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 rounded-lg text-sm font-medium transition-colors hover:bg-indigo-100 dark:hover:bg-indigo-900/40 disabled:opacity-50 mt-2"
               >
                 {isGeneratingAI ? (
-                  <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div> Generating Magic Checklist...</>
+                  <><div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div> {t('generatingChecklist', language)}</>
                 ) : (
                   <><Sparkles className="w-4 h-4" /> {t('autoSuggestAI', language)}</>
                 )}
@@ -1034,7 +1034,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Link {suggestedAsset.name}?</p>
-                    <p className="text-xs text-emerald-600 dark:text-emerald-400">We noticed this matches a card in your Wallet.</p>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400">{t('matchesWalletCard', language)}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1378,8 +1378,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             {(imageFile || checklistItems.some(i => i.assetFile)) && (
               <div className="flex items-center justify-between p-3 border border-zinc-200 dark:border-zinc-700 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 animate-in fade-in slide-in-from-top-2 mt-3">
                 <div>
-                  <p className="text-sm font-medium text-emerald-900 dark:text-emerald-100">Save Uploads to Wallet</p>
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400">Add new photos from this event to Assets</p>
+                  <p className="text-sm font-medium text-emerald-900 dark:text-emerald-100">{t('saveUploadsToWallet', language)}</p>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400">{t('saveUploadsHint', language)}</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input 
@@ -1397,9 +1397,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           <div className="pt-2 shrink-0 flex items-center justify-between gap-4">
             {editEvent && (
               <div className="text-xs font-medium text-zinc-500 flex items-center gap-1.5 shrink-0">
-                {autoSaveStatus === 'saving' && <><div className="w-3.5 h-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin"></div> Saving...</>}
-                {autoSaveStatus === 'saved' && <><CheckCircle2 className="w-4 h-4 text-emerald-500" /> Saved</>}
-                {autoSaveStatus === 'error' && <span className="text-red-500">Error saving</span>}
+                {autoSaveStatus === 'saving' && <><div className="w-3.5 h-3.5 rounded-full border-2 border-primary border-t-transparent animate-spin"></div> {t('saving', language)}</>}
+                {autoSaveStatus === 'saved' && <><CheckCircle2 className="w-4 h-4 text-emerald-500" /> {t('saved', language)}</>}
+                {autoSaveStatus === 'error' && <span className="text-red-500">{t('errorSaving', language)}</span>}
               </div>
             )}
             <button
