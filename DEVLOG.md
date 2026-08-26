@@ -2131,3 +2131,24 @@ picată nu are voie să rupă salvarea care a declanșat-o — dar „best effor
 deci acum trece prin `reportError`.
 
 `npx tsc -b` verde · 721 teste verzi · livrat.
+
+## 2026-08-26 — Calendarul nu mai poate fi gol din greșeală
+
+**Model:** Claude Opus 5 · trecerea începută după auditul care a numărat 28 din 30 de ascultători
+fără callback de eroare
+
+Convertite cele cu impact real, în ordinea din audit:
+- **cele trei ascultători de evenimente** din `CalendarHome` (propriile, cele atribuite, cele la
+  care ești invitat) — miezul aplicației. O citire refuzată acolo randa un calendar fără
+  evenimente, identic cu o lună care chiar n-are niciunul, și nimic nu ajungea în `errorLogs`;
+- **invitațiile de grup** — o invitație pe care nu ți-a arătat-o nimeni nu se distinge de una care
+  n-a fost trimisă, iar nici cel care a invitat n-are cum să afle.
+
+Calendarul spune acum, deasupra grilei: „Calendarul nu a putut fi încărcat. E o eroare, nu o lună
+goală." În 6 limbi.
+
+Rămân **22 de ascultători** în forma veche (fără cei din submodulul Warlord). Sunt de convertit
+mecanic, cu `liveQuery` deja la locul lui — dar cei rămași citesc profiluri, jocuri și liste de
+prieteni, unde o listă goală e mai puțin costisitoare decât un calendar gol.
+
+`npx tsc -b` verde · 721 teste verzi · livrat.

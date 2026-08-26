@@ -3,6 +3,7 @@ import { isSameDay, format, startOfMonth, endOfMonth, addMonths, subMonths } fro
 import { auth, db, messaging } from '../firebase';
 import { getToken } from 'firebase/messaging';
 import { collection, query, onSnapshot, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
+import { liveQuery } from '../utils/liveQuery';
 import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu, ShieldCheck, Swords, ClipboardList } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -38,6 +39,8 @@ export default function CalendarHome() {
   const [eventToEdit, setEventToEdit] = useState<any | null>(null);
   const [initialTemplate, setInitialTemplate] = useState<any | null>(null);
   const [events, setEvents] = useState<any[]>([]);
+  // A calendar that could not be READ must not look like a calendar with nothing in it.
+  const [eventsLoadError, setEventsLoadError] = useState(false);
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [pendingFamilyInvites, setPendingFamilyInvites] = useState<any[]>([]);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -168,9 +171,11 @@ export default function CalendarHome() {
       where('toEmail', '==', auth.currentUser.email?.toLowerCase()),
       where('status', '==', 'pending')
     );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setPendingFamilyInvites(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    // Reported rather than swallowed: an invitation you were never shown is indistinguishable
+    // from one that was never sent, and the person who invited you has no way to tell either.
+    const unsubscribe = liveQuery<any>(q, 'CalendarHome.groupInvites',
+      (docs) => setPendingFamilyInvites(docs),
+      () => setPendingFamilyInvites([]));
     return () => unsubscribe();
   }, []);
 
@@ -261,32 +266,35 @@ export default function CalendarHome() {
     } else {
       mainQuery = query(collection(db, 'events'), where('groupId', '==', activeGroupId));
     }
-    unsubs.push(onSnapshot(mainQuery, (snapshot) => {
+    // All three listeners report. A denied read here used to render as a calendar with no events
+    // — the same shape as a calendar that genuinely has none — and nothing reached errorLogs,
+    // because the SDK neither throws nor rejects when no error handler is given.
+    unsubs.push(liveQuery<any>(mainQuery, 'CalendarHome.events.main', (docs) => {
+      setEventsLoadError(false);
       eventBuckets.main = {};
-      snapshot.docs.forEach(d => {
-        const ev: any = { id: d.id, ...d.data() };
+      docs.forEach(ev => {
         // For personal view, exclude group events from the owner query
         if (activeGroupId === 'personal' && (ev.groupId || ev.sharedWithFamily)) return;
-        eventBuckets.main[d.id] = ev;
+        eventBuckets.main[ev.id] = ev;
       });
       mergeAndSet();
-    }));
+    }, () => setEventsLoadError(true)));
 
     // ── Query 2: Events assigned to me ──
     const assignedQuery = query(collection(db, 'events'), where('assigneeIds', 'array-contains', uid));
-    unsubs.push(onSnapshot(assignedQuery, (snapshot) => {
+    unsubs.push(liveQuery<any>(assignedQuery, 'CalendarHome.events.assigned', (docs) => {
       eventBuckets.assigned = {};
-      snapshot.docs.forEach(d => { eventBuckets.assigned[d.id] = { id: d.id, ...d.data() }; });
+      docs.forEach(ev => { eventBuckets.assigned[ev.id] = ev; });
       mergeAndSet();
-    }));
+    }, () => setEventsLoadError(true)));
 
     // ── Query 3: Events where I'm invited ──
     const invitedQuery = query(collection(db, 'events'), where('inviteeId', '==', uid));
-    unsubs.push(onSnapshot(invitedQuery, (snapshot) => {
+    unsubs.push(liveQuery<any>(invitedQuery, 'CalendarHome.events.invited', (docs) => {
       eventBuckets.invited = {};
-      snapshot.docs.forEach(d => { eventBuckets.invited[d.id] = { id: d.id, ...d.data() }; });
+      docs.forEach(ev => { eventBuckets.invited[ev.id] = ev; });
       mergeAndSet();
-    }));
+    }, () => setEventsLoadError(true)));
 
     return () => unsubs.forEach(u => u());
   }, [activeGroupId]);
@@ -845,6 +853,13 @@ export default function CalendarHome() {
               {activeGames[0].status === 'waiting' ? t('join', language) : t('resume', language)}
             </button>
           </div>
+        )}
+
+        {/* An empty calendar and an unreadable one look identical, so the second one says so. */}
+        {eventsLoadError && (
+          <p role="alert" className="mb-3 px-3 py-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-sm text-rose-700 dark:text-rose-300">
+            {t('eventsLoadFailed', language)}
+          </p>
         )}
 
         {/* Calendar Area */}
