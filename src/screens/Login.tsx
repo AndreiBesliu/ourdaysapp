@@ -2,11 +2,25 @@ import React, { useState } from 'react';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendEmailVerification } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { CalendarDays, Mail, Lock, AlertCircle } from 'lucide-react';
+import { CalendarDays, Mail, Lock, AlertCircle } from 'lucide-react';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
+import { reportError } from '../reportError';
 
-export default function Login() {
+// Firebase's `auth/*` codes are stable and few; these four are the ones a person can act on.
+// Everything else falls back to one sentence keyed off which button they pressed, because
+// "that email is already registered" is useless advice to someone trying to sign IN.
+function authErrorKey(code: string | undefined, isLogin: boolean): string {
+  switch (code) {
+    case 'auth/email-already-in-use': return 'authEmailInUse';
+    case 'auth/weak-password': return 'authWeakPassword';
+    case 'auth/invalid-email': return 'authInvalidEmail';
+    case 'auth/too-many-requests': return 'authTooManyRequests';
+    default: return isLogin ? 'authFailed' : 'signUpFailed';
+  }
+}
+
+export default function Login() {
   const { language } = useThemeStore();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -45,7 +59,17 @@ export default function Login() {
         }
       }
     } catch (err: any) {
-      setError(t('authFailed', language));
+      // The generic string replaced `err.message`, which at least carried
+      // `auth/email-already-in-use` and `auth/weak-password` to the screen. Neither extreme is
+      // right: a raw Firebase string is not for a person to read, and one sentence for every
+      // failure is not either. The code is mapped where mapping helps, and the raw message is
+      // reported regardless — a caught rejection never reaches the global handlers, so without
+      // this nothing about a failed sign-in ever reaches errorLogs.
+      setError(t(authErrorKey(err?.code, isLogin), language));
+      reportError(err?.message || 'auth failed', {
+        context: 'Login.emailAuth',
+        stack: err?.code ? `code=${err.code}` : undefined,
+      });
     } finally {
       setLoading(false);
     }
@@ -76,6 +100,10 @@ export default function Login() {
       }
     } catch (err: any) {
       setError(t('googleSignInFailed', language));
+      reportError(err?.message || 'google sign-in failed', {
+        context: 'Login.googleAuth',
+        stack: err?.code ? `code=${err.code}` : undefined,
+      });
     } finally {
       setLoading(false);
     }

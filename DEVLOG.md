@@ -2374,3 +2374,40 @@ rosu activ**, cu o selectie goala care inseamna "sterge tot ce e al meu". Acum l
 spune ca atare si butonul refuza sa actioneze pana cand chiar s-a citit.
 
 `npx tsc -b` verde · **748 teste verzi** · build verde · functions typecheck verde.
+
+## 2026-08-26 - Cele trei regresii ale mele de azi, prinse de audit
+
+**Model:** Claude Opus 5
+
+Auditul a intors 46 de constatari; trei dintre ele erau **din munca mea de azi**. Le repar pe
+astea inainte sa merg mai departe pe lista.
+
+**1. Limba ramanea in spatele unei porti de tema.** Am adaugat dimineata `ourdays.language` in
+localStorage. Dar singurul loc din care limba din Firestore ajunge in store (`App.tsx:141`) statea
+in `if (data.primaryColor || data.isDarkMode !== undefined)` - o conditie pe care majoritatea
+conturilor n-o indeplinesc niciodata: **ambele cai de inregistrare scriu `theme: {...}` IMBRICAT**,
+iar alegerea limbii din Setari nu scrie niciunul din cele doua campuri de nivel superior. Rezultat:
+pe un dispozitiv partajat, contul urmator mostenea limba contului anterior. Acum se aplica
+neconditionat, inainte de poarta.
+
+**2. Login-ul inghitea eroarea.** Cand am tradus ecranul, am inlocuit `err.message` cu un singur
+`t('authFailed')`. Am schimbat o extrema cu alta: un sir Firebase brut nu e pentru un om, dar nici
+o singura propozitie pentru orice esec. Acum `auth/email-already-in-use`, `auth/weak-password`,
+`auth/invalid-email` si `auth/too-many-requests` au text propriu, restul cade pe un mesaj ales
+dupa butonul apasat (a-i spune "adresa are deja cont" cuiva care incearca sa INTRE e inutil), si
+**mesajul brut se raporteaza** - o respingere prinsa nu ajunge niciodata la handlerele globale,
+deci pana acum niciun esec de autentificare nu ajungea in `errorLogs`.
+
+**3. Un singur flag pentru patru ascultatori.** `requestsLoadError` era ridicat din patru locuri si
+randat intr-unul singur, deci era cod mort pentru trei dintre ele - iar un snapshot REUSIT al
+cererilor primite stergea un flag ridicat de o interogare pe alta colectie. Acum sunt trei flaguri,
+fiecare sters doar de propriul succes, fiecare randat langa lista lui, inclusiv sectiunea de cereri
+trimise, care pana acum disparea complet in tacere.
+
+`npx tsc -b` verde · **748 teste verzi**.
+
+*Observatie pe drum:* `functions/lib/` e **urmarit in git** (iesire compilata comisa in repo). Aia
+e o parte din motivul pentru care deploy-ul a livrat cod vechi: cine comite sursa fara sa
+reconstruiasca lasa `lib/` invechit in repo. Hook-ul `predeploy` adaugat mai devreme il reconstruieste
+inainte de fiecare deploy, deci gaura e inchisa; dar merita decis separat daca `lib/` are ce cauta
+sub git.

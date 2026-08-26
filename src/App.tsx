@@ -134,6 +134,14 @@ function App() {
           const userDocSnap = await getDoc(userDocRef);
           if (userDocSnap.exists()) {
             const data = userDocSnap.data();
+            // Unconditional, and BEFORE the theme gate. This is the only path from Firestore into
+            // the store, and it used to sit inside `if (data.primaryColor || data.isDarkMode !==
+            // undefined)` — a condition most accounts never satisfy, because both signup paths
+            // write `theme: { primaryColor, isDarkMode }` NESTED and choosing a language in
+            // Settings writes neither top-level field. Once the language is also remembered in
+            // localStorage, that gate turned a stale preference into one account inheriting the
+            // previous account's language on a shared device.
+            setAdvancedTheme({ language: data.language || 'en-US' });
             if (data.primaryColor || data.isDarkMode !== undefined) {
               setTheme(
                 data.primaryColor || '221.2 83.2% 53.3%',

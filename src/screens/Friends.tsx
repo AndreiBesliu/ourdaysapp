@@ -21,7 +21,14 @@ export default function Friends() {
   const [incomingById, setIncomingById] = useState<FriendRequest[]>([]);
   const [incomingByEmail, setIncomingByEmail] = useState<FriendRequest[]>([]);
   const [outgoing, setOutgoing] = useState<FriendRequest[]>([]);
-  const [requestsLoadError, setRequestsLoadError] = useState(false);
+  // One flag per listener. There used to be a single `requestsLoadError` raised by all four and
+  // rendered in one place, which made it dead code for three of them: a failed friend-list read
+  // showed nothing, a failed outgoing read showed nothing, and — worse — a SUCCESSFUL incoming
+  // snapshot cleared a flag raised by a different query on a different collection. A shared flag
+  // is not a shortcut, it is four bugs.
+  const [friendsLoadError, setFriendsLoadError] = useState(false);
+  const [incomingLoadError, setIncomingLoadError] = useState(false);
+  const [outgoingLoadError, setOutgoingLoadError] = useState(false);
   const [photoMap, setPhotoMap] = useState<Record<string, string>>({});
 
   const [email, setEmail] = useState('');
@@ -36,11 +43,12 @@ export default function Friends() {
     if (!auth.currentUser) return;
     const unsub = liveDoc<any>(doc(db, 'users', auth.currentUser.uid), 'Friends.myUserDoc',
       (data) => {
+        setFriendsLoadError(false);
         setFriends(Array.isArray(data?.friends) ? data.friends : []);
         setMyName(data?.name || auth.currentUser?.displayName || (myEmail.split('@')[0] || 'Me'));
       },
       // The friend list going blank is the same lie as everywhere else on this screen.
-      () => setRequestsLoadError(true));
+      () => setFriendsLoadError(true));
     return () => unsub();
   }, [myEmail]);
 
@@ -52,14 +60,14 @@ export default function Friends() {
     // A friend request you were never shown is indistinguishable from one nobody sent, and the
     // person waiting on your answer cannot tell either.
     const unsubId = liveQuery<any>(qId, 'Friends.incomingById',
-      (docs) => { setRequestsLoadError(false); setIncomingById(docs); },
-      () => setRequestsLoadError(true));
+      (docs) => { setIncomingLoadError(false); setIncomingById(docs); },
+      () => setIncomingLoadError(true));
     let unsubEmail = () => {};
     if (myEmail) {
       const qEmail = query(collection(db, 'friend_requests'), where('toEmail', '==', myEmail), where('status', '==', 'pending'));
       unsubEmail = liveQuery<any>(qEmail, 'Friends.incomingByEmail',
         (docs) => setIncomingByEmail(docs),
-        () => setRequestsLoadError(true));
+        () => setIncomingLoadError(true));
     }
     return () => { unsubId(); unsubEmail(); };
   }, [myEmail]);
@@ -69,8 +77,8 @@ export default function Friends() {
     if (!auth.currentUser) return;
     const qOut = query(collection(db, 'friend_requests'), where('fromId', '==', auth.currentUser.uid), where('status', '==', 'pending'));
     const unsub = liveQuery<any>(qOut, 'Friends.outgoing',
-      (docs) => setOutgoing(docs),
-      () => setRequestsLoadError(true));
+      (docs) => { setOutgoingLoadError(false); setOutgoing(docs); },
+      () => setOutgoingLoadError(true));
     return () => unsub();
   }, []);
 
@@ -217,7 +225,9 @@ export default function Friends() {
         {tab === 'friends' && (
           <div className="flex flex-col gap-2">
             {friends.length === 0 ? (
-              <p className="text-center text-sm text-zinc-500 py-10">{t('noFriendsYet', language)}</p>
+              <p className={`text-center text-sm py-10 ${friendsLoadError ? 'text-rose-500' : 'text-zinc-500'}`}>
+                {friendsLoadError ? t('friendsLoadFailed', language) : t('noFriendsYet', language)}
+              </p>
             ) : friends.map((f) => (
               <div key={f.uid} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex items-center justify-between">
                 <div className="flex items-center gap-3 min-w-0">
@@ -244,8 +254,8 @@ export default function Friends() {
               {incoming.length === 0 ? (
                 // "Nobody asked" and "we could not check" are the same picture otherwise, and the
                 // person waiting on an answer is the one who pays for the confusion.
-                <p className={`text-sm ${requestsLoadError ? 'text-rose-500' : 'text-zinc-500'}`}>
-                  {requestsLoadError ? t('requestsLoadFailed', language) : t('noRequestsYet', language)}
+                <p className={`text-sm ${incomingLoadError ? 'text-rose-500' : 'text-zinc-500'}`}>
+                  {incomingLoadError ? t('requestsLoadFailed', language) : t('noRequestsYet', language)}
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -273,6 +283,11 @@ export default function Friends() {
             </div>
 
             {/* Outgoing */}
+            {/* Rendered when the read FAILED as well as when there is something to show — an
+                invitation you sent must not disappear from your own screen without a word. */}
+            {outgoingLoadError && (
+              <p role="alert" className="text-sm text-rose-500">{t('outgoingLoadFailed', language)}</p>
+            )}
             {outgoing.length > 0 && (
               <div>
                 <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">{t('sentLabel', language)}</h3>
