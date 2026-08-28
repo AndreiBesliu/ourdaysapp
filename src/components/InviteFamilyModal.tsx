@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, UserPlus, Mail, AlertCircle, CheckCircle2, Share2, Check, Users } from 'lucide-react';
 import { db, auth } from '../firebase';
 import { collection, addDoc, doc } from 'firebase/firestore';
+import { reportError } from '../reportError';
 import { liveDoc } from '../utils/liveQuery';
 import { useModalBack } from '../hooks/useModalBack';
 import { useThemeStore } from '../store';
@@ -85,8 +86,11 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName,
       setSuccess(t('inviteSentMsg', language));
       setSelected(new Set());
     } catch (err) {
-      console.error('Invite friends error:', err);
-      setError(t('requestAlreadyPending', language));
+      // `requestAlreadyPending` was reported for EVERY failure — a denied write, an offline
+      // moment, a rules change — telling the user the invitation exists when it does not. There
+      // is no duplicate check anywhere in this file for it to be reporting.
+      reportError(err instanceof Error ? err.message : String(err), { context: 'InviteFamilyModal.createInvite' });
+      setError(t('inviteFailed', language));
     } finally {
       setLoading(false);
     }
@@ -105,8 +109,11 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName,
       setSuccess(t('inviteSentMsg', language));
       setEmail('');
     } catch (err) {
-      console.error('Invite error:', err);
-      setError(t('requestAlreadyPending', language));
+      // `requestAlreadyPending` was reported for EVERY failure — a denied write, an offline
+      // moment, a rules change — telling the user the invitation exists when it does not. There
+      // is no duplicate check anywhere in this file for it to be reporting.
+      reportError(err instanceof Error ? err.message : String(err), { context: 'InviteFamilyModal.createInvite' });
+      setError(t('inviteFailed', language));
     } finally {
       setLoading(false);
     }

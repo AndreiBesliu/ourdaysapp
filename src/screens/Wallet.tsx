@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db, storage } from '../firebase';
 import { collection, query, addDoc, updateDoc, deleteDoc, doc, getDoc, where } from 'firebase/firestore';
+import { reportError } from '../reportError';
 import { liveQuery, liveDoc } from '../utils/liveQuery';
 import { ref, uploadBytes, getDownloadURL, listAll } from 'firebase/storage';
 import { Wallet as WalletIcon, Plus, Image as ImageIcon, Trash2, Users, User, HeartPulse, Home, Car, DollarSign, Settings2, Folder, Edit2, Check, X, ScanLine, QrCode } from 'lucide-react';
@@ -19,6 +20,7 @@ const DEFAULT_CATEGORIES = ['Home & Living', 'Health & Medical', 'Vehicles', 'Fi
 export default function Wallet() {
   const [assets, setAssets] = useState<any[]>([]);
   const [assetsLoadError, setAssetsLoadError] = useState(false);
+  const [categoryError, setCategoryError] = useState(false);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [isAdding, setIsAdding] = useState(false);
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
@@ -299,18 +301,37 @@ export default function Wallet() {
     if (categories.includes(newName)) return alert("Category already exists");
 
     setLoading(true);
+    setCategoryError(false);
     try {
       const newCats = categories.map(c => c === oldName ? newName : c);
       await updateDoc(doc(db, 'users', auth.currentUser.uid), { walletCategories: newCats });
       
-      const assetsToUpdate = assets.filter(a => a.category === oldName && a.ownerId === auth.currentUser?.uid);
-      await Promise.all(assetsToUpdate.map(a => updateDoc(doc(db, 'assets', a.id), { category: newName })));
+      // Assets carry BOTH `categories[]` (what every read path uses — the filter and the
+      // grouping) and the legacy single `category`. The rename only patched the legacy field, so
+      // afterwards the chip showed the new name while the assets stayed grouped under the old one,
+      // which no longer existed in the list. Both are rewritten, and the selection has to look at
+      // both too or assets that only have the array are missed.
+      //
+      // The ownerId term stays: the assets rule permits updates by the owner only, so including a
+      // shared asset would turn this into a guaranteed partial failure.
+      const assetsToUpdate = assets.filter(
+        (a) => (a.categories?.includes(oldName) || a.category === oldName) && a.ownerId === auth.currentUser?.uid,
+      );
+      await Promise.all(assetsToUpdate.map((a) => updateDoc(doc(db, 'assets', a.id), {
+        categories: (a.categories || [a.category]).map((c: string) => (c === oldName ? newName : c)),
+        category: a.category === oldName ? newName : a.category,
+      })));
       
       if (activeFilters.includes(oldName)) {
         setActiveFilters(prev => prev.map(f => f === oldName ? newName : f));
       }
       setEditingFilter(null);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'Wallet.renameCategory' });
+      // Its own flag, not assetsLoadError: that one only renders when the list is EMPTY, so
+      // reusing it here would have shown nothing at all in the one case that matters.
+      setCategoryError(true);
+    }
     setLoading(false);
   };
 
@@ -505,6 +526,9 @@ export default function Wallet() {
               <Settings2 className="w-3.5 h-3.5" /> {t('walletManage', language)}
             </button>
           </div>
+          {categoryError && (
+            <p role="alert" className="mb-3 text-sm text-rose-700 dark:text-rose-300">{t('categoryRenameFailed', language)}</p>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {categories.map(cat => {
               const isActive = activeFilters.includes(cat);

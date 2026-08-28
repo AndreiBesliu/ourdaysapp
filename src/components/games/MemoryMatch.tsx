@@ -10,6 +10,7 @@ import {
   Sun, Moon, Cloud, Umbrella, Snowflake, Droplet, Wind, Rainbow,
 } from 'lucide-react';
 import { playTone } from '../../utils/sounds';
+import { reportError } from '../../reportError';
 import { triggerHaptic } from '../../utils/haptics';
 import { useThemeStore } from '../../store';
 import { t } from '../../utils/i18n';
@@ -87,10 +88,20 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
     
     // First card flip
     if (newFlipped.length === 1) {
-      await updateDoc(doc(db, 'games', game.id), {
-        'state.flippedIndices': newFlipped
-      });
-      setProcessing(false);
+      // try/finally, not a bare await: `processing` gates every click (the handler returns early
+      // on it) and is reset ONLY here and at the end of the flip timeout. A rejected write left it
+      // stuck true and froze the board with no way back except reopening the game.
+      try {
+        await updateDoc(doc(db, 'games', game.id), {
+          'state.flippedIndices': newFlipped
+        });
+      } catch (e) {
+        // Nothing to undo: the write that would have flipped the card never landed, so the
+        // server state the board renders from is still correct. Only the gate needs releasing.
+        reportError(e instanceof Error ? e.message : String(e), { context: 'MemoryMatch.flipFirst' });
+      } finally {
+        setProcessing(false);
+      }
       return;
     }
 
@@ -105,6 +116,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
     });
 
     setTimeout(async () => {
+      try {
       const newBoard = board.map((c: any) => ({ ...c }));
       let newScores = { ...scores };
       const currentPlayerKey = p1IsNext ? 'P1' : 'P2';
@@ -149,7 +161,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
         triggerHaptic('medium');
       }
 
-      await updateDoc(doc(db, 'games', game.id), {
+        await updateDoc(doc(db, 'games', game.id), {
         ...updates,
         'state.board': newBoard,
         'state.flippedIndices': [],
@@ -159,9 +171,22 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
         'state.moves': (game.state.moves || 0) + 1,
         status: newStatus,
         winner: winner
-      });
-
-      setProcessing(false);
+        });
+      } catch (e) {
+        // Different from the first flip: the temporary write that turned both cards face-up DID
+        // land, so the server now shows two flipped cards and `handleCardClick` refuses every
+        // further click on `flippedIndices.length >= 2`. Releasing the gate alone would leave the
+        // board looking playable and doing nothing, so the flip is cleared server-side too —
+        // best effort, since the same outage may still be in progress.
+        reportError(e instanceof Error ? e.message : String(e), { context: 'MemoryMatch.resolveTurn' });
+        try {
+          await updateDoc(doc(db, 'games', game.id), { 'state.flippedIndices': [] });
+        } catch {
+          // Already reported above; the turn is replayable once the connection returns.
+        }
+      } finally {
+        setProcessing(false);
+      }
     }, 1200);
   };
 

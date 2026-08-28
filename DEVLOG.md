@@ -2496,3 +2496,38 @@ mesajul de camera din `BarcodeScanner`, plus indiciul de sub scaner care n-avea 
 `src`-ul non-Warlord, deci un utilizator german de cititor de ecran auzea un cuvant romanesc.
 
 `npx tsc -b` verde · **766 teste verzi**.
+
+## 2026-08-26 - Sapte scrieri care esuau fara sa spuna nimanui
+
+**Model:** Claude Opus 5 · lentila de scrieri tacute a auditului
+
+- **Invitatiile.** ORICE esec la trimiterea unei invitatii raporta „Cererea e deja in asteptare" —
+  o scriere refuzata, o clipa offline, o schimbare de reguli, toate spuneau utilizatorului ca
+  invitatia exista deja. Nu exista nicio verificare de duplicat in fisier care sa justifice mesajul.
+- **Redenumirea unei categorii din portofel** peticea doar campul vechi `category`, dar toate caile
+  de CITIRE folosesc `categories[]` (si filtrul, si gruparea). Dupa redenumire eticheta arata numele
+  nou, iar bunurile ramaneau grupate sub cel vechi, care nu mai exista in lista. Acum se rescriu
+  amandoua, iar selectia se uita la amandoua.
+- **Raspunsul la o invitatie** (acceptare/refuz, si de eveniment si de grup) — trei handlere erau
+  `await` gol, fara `try`, deci o respingere devenea o respingere netratata si randul la care
+  tocmai raspunsesesi statea acolo ca si cum n-ai fi facut nimic. Iar la invitatia de grup singura
+  ramura care spunea ceva era „email neverificat" — orice alt esec era invizibil.
+- **Mesajul vocal.** Blob-ul e SINGURA copie: nu-l tine nimic altceva, iar microfonul e deja
+  eliberat. Un `console.error` acolo distrugea inregistrarea definitiv. Acum uploadul e extras
+  intr-o functie reapelabila, `audioChunksRef` **nu** se goleste decat la succes, si apare o bara
+  cu **Reincearca** / **Renunta** deasupra casetei de scris.
+- **Stergerea unei cheltuieli** era o promisiune plutitoare, neasteptata, neprinsa. Contează:
+  butonul se randeaza pe `paidBy === eu`, dar regula cere `ownerId === eu`, iar randurile vechi
+  s-au scris inainte sa existe `ownerId` — deci un refuz acolo e un rezultat REAL, nu ipotetic.
+- **Tokenul FCM** se scria intr-un callback care ruleaza mai tarziu, pe stiva lui, deci `try`-ul
+  din jurul lui `addListener` nu-l vedea niciodata. Un dispozitiv care nu mai primeste notificari
+  nu lasa nicio urma nicaieri.
+- **MemoryMatch** ramanea cu `processing` blocat pe `true` la o scriere respinsa, deci tabla ingheta.
+
+Doua lucruri pe care le-am gresit chiar in reparatia asta si le-am prins inainte de livrare:
+`reportError` fara import se rezolva **la `reportError`-ul global din DOM** (care ia un singur
+argument si nu raporteaza nicaieri la noi) — typecheck-ul il accepta ca alta functie. Si pusesem
+eroarea de redenumire pe `assetsLoadError`, care se randeaza **doar cand lista e goala** — adica
+exact in cazul care conteaza n-ar fi aratat nimic. Are acum flag propriu.
+
+`npx tsc -b` verde · **766 teste verzi** · build verde.

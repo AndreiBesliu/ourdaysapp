@@ -14,7 +14,7 @@ import Settings from './screens/Settings';
 import Friends from './screens/Friends';
 import ErrorBoundary from './components/ErrorBoundary';
 import NewVersionNotice from './components/NewVersionNotice';
-import { installGlobalErrorHandlers } from './reportError';
+import { installGlobalErrorHandlers, reportError } from './reportError';
 const Admin = lazy(() => import('./screens/Admin')); // owner-only, rarely used → lazy
 
 installGlobalErrorHandlers();
@@ -205,9 +205,17 @@ function App() {
                 // Store native FCM tokens in the `fcmTokens` array (matching the
                 // web path in CalendarHome.tsx and what the Cloud Functions read),
                 // so remote push reaches Android devices.
-                await updateDoc(doc(db, 'users', currentUser.uid), {
-                  fcmTokens: arrayUnion(token.value)
-                });
+                //
+                // The try/catch is not decoration: this callback runs later, on its own stack, so
+                // the enclosing try around addListener never sees it. Without this, a device that
+                // silently never receives a notification again leaves no trace anywhere.
+                try {
+                  await updateDoc(doc(db, 'users', currentUser.uid), {
+                    fcmTokens: arrayUnion(token.value)
+                  });
+                } catch (err) {
+                  reportError(err instanceof Error ? err.message : String(err), { context: 'fcm.token' });
+                }
               });
 
               PushNotifications.addListener('pushNotificationReceived', (notification) => {

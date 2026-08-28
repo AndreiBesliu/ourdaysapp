@@ -23,6 +23,7 @@ export default function ExpensesTab(
   // data model turns out to be, a refusal has to be visible where it happened.
   const [loadError, setLoadError] = useState(false);
   const [addError, setAddError] = useState(false);
+  const [deleteError, setDeleteError] = useState(false);
   const { language } = useThemeStore();
 
   useEffect(() => {
@@ -63,6 +64,20 @@ export default function ExpensesTab(
     }
     return () => unsubs.forEach(u => u());
   }, [myGroups.map(g => g.id).join(',')]);
+
+  // Was a bare `onClick={() => deleteDoc(...)}` — not awaited, not caught, driving no state.
+  // It is shaped like handleAdd above deliberately: the button renders on `paidBy === me` while
+  // the rule requires `ownerId === me`, and older rows were written before `ownerId` existed, so
+  // a refusal here is a REAL outcome and not a hypothetical one.
+  const handleDelete = async (expenseId: string) => {
+    setDeleteError(false);
+    try {
+      await deleteDoc(doc(db, 'expenses', expenseId));
+    } catch (err) {
+      setDeleteError(true);
+      reportError(err instanceof Error ? err.message : String(err), { context: 'ExpensesTab.deleteDoc' });
+    }
+  };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -187,6 +202,13 @@ export default function ExpensesTab(
       </form>
 
       {/* At the control that refused, not in a console nobody opens. */}
+      {deleteError && (
+        <p role="alert" className="flex items-start gap-2 text-sm text-rose-700 dark:text-rose-300">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{t('expenseDeleteFailed', language)}</span>
+        </p>
+      )}
+
       {addError && (
         <p role="alert" className="flex items-start gap-2 text-sm text-rose-700 dark:text-rose-300">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -225,7 +247,7 @@ export default function ExpensesTab(
               <div className="flex items-center gap-3">
                 <span className="font-bold text-zinc-900 dark:text-white">{exp.amount.toFixed(2)}</span>
                 {exp.paidBy === auth.currentUser?.uid && (
-                  <button onClick={() => deleteDoc(doc(db, 'expenses', exp.id))} className="text-red-400 hover:text-red-500 p-1.5 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors">
+                  <button onClick={() => handleDelete(exp.id)} className="text-red-400 hover:text-red-500 p-1.5 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors">
                     <Trash2 className="w-4 h-4"/>
                   </button>
                 )}

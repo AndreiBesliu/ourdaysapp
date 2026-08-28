@@ -3,6 +3,7 @@ import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck, Reply, P
 import { format, isSameDay, isToday, isYesterday } from 'date-fns';
 import { collection, query, orderBy, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { liveQuery } from '../utils/liveQuery';
+import { reportError } from '../reportError';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { playTone } from '../utils/sounds';
@@ -80,6 +81,9 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [chatLoadError, setChatLoadError] = useState(false);
+  // The recorded blob lives in a ref and nowhere else. Losing it is losing the message, so a
+  // failed upload has to be visible AND recoverable rather than just visible.
+  const [voiceSendFailed, setVoiceSendFailed] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -415,6 +419,49 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   };
 
   // --- Voice Messages ---
+  // Send whatever is in `audioChunksRef`. Extracted so the retry button can call it again:
+  // the blob is the ONLY copy of the recording — nothing else holds it and the microphone is
+  // already released — so a swallowed failure used to destroy the message outright.
+  const sendRecording = async () => {
+    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+    if (audioBlob.size === 0) return;
+
+    setUploading(true);
+    setVoiceSendFailed(false);
+    try {
+      const fileRef = ref(storage, `chat-audio/${groupId}/${Date.now()}.webm`);
+      await uploadBytes(fileRef, audioBlob);
+      const audioUrl = await getDownloadURL(fileRef);
+
+      await addDoc(collection(db, `groups/${groupId}/messages`), {
+        text: null,
+        imageUrl: null,
+        audioUrl,
+        senderId: auth.currentUser!.uid,
+        createdAt: serverTimestamp(),
+        seenBy: [auth.currentUser!.uid],
+        replyToId: null,
+        isDeleted: false,
+        isEdited: false
+      });
+
+      playTone('click');
+      triggerHaptic('light');
+      // Only now is the recording safe to forget.
+      audioChunksRef.current = [];
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'GroupChatWidget.voiceUpload' });
+      setVoiceSendFailed(true);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const discardRecording = () => {
+    audioChunksRef.current = [];
+    setVoiceSendFailed(false);
+  };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -432,35 +479,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
         stream.getTracks().forEach(t => t.stop());
         if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
         setRecordingTime(0);
-
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        if (audioBlob.size === 0) return;
-
-        setUploading(true);
-        try {
-          const fileRef = ref(storage, `chat-audio/${groupId}/${Date.now()}.webm`);
-          await uploadBytes(fileRef, audioBlob);
-          const audioUrl = await getDownloadURL(fileRef);
-
-          await addDoc(collection(db, `groups/${groupId}/messages`), {
-            text: null,
-            imageUrl: null,
-            audioUrl,
-            senderId: auth.currentUser!.uid,
-            createdAt: serverTimestamp(),
-            seenBy: [auth.currentUser!.uid],
-            replyToId: null,
-            isDeleted: false,
-            isEdited: false
-          });
-
-          playTone('click');
-          triggerHaptic('light');
-        } catch (e) {
-          console.error('Failed to upload voice message', e);
-        } finally {
-          setUploading(false);
-        }
+        await sendRecording();
       };
 
       mediaRecorder.start();
@@ -955,6 +974,18 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
               </button>
             </div>
           ) : (
+            <>
+            {voiceSendFailed && (
+              <div role="alert" className="px-3 py-2 border-t border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 flex items-center gap-2 shrink-0">
+                <span className="text-xs text-rose-700 dark:text-rose-300 flex-1">{t('voiceSendFailed', language)}</span>
+                <button type="button" onClick={sendRecording} disabled={uploading} className="text-xs font-medium text-rose-700 dark:text-rose-300 underline disabled:opacity-50">
+                  {t('retry', language)}
+                </button>
+                <button type="button" onClick={discardRecording} className="text-xs text-rose-500">
+                  {t('discard', language)}
+                </button>
+              </div>
+            )}
             <form onSubmit={handleSend} className="p-3 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex gap-2 items-center shrink-0">
               <input
                 ref={fileInputRef}
@@ -999,6 +1030,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                 </button>
               )}
             </form>
+            </>
           )}
         </div>
       )}

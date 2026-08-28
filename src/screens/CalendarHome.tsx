@@ -4,6 +4,7 @@ import { auth, db, messaging } from '../firebase';
 import { getToken } from 'firebase/messaging';
 import { collection, query, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
 import { liveQuery, liveDoc } from '../utils/liveQuery';
+import { reportError } from '../reportError';
 import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu, ShieldCheck, Swords, ClipboardList } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -30,6 +31,7 @@ export default function CalendarHome() {
   const [activeGroupId, setActiveGroupId] = useState<string | 'personal'>('personal');
   const [groups, setGroups] = useState<any[]>([]);
   const [groupsLoadError, setGroupsLoadError] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
   const [isLeaveGroupModalOpen, setIsLeaveGroupModalOpen] = useState(false);
   
@@ -363,14 +365,19 @@ export default function CalendarHome() {
     scheduleNotifications();
   }, [events]);
 
-  const handleAcceptInvite = async (eventId: string) => {
-    await updateDoc(doc(db, 'events', eventId), { inviteStatus: 'accepted' });
+  // Bare awaits before: a rejection became an unhandled rejection with nothing on screen, and
+  // the row you just answered simply sat there as though you had not.
+  const respondToEventInvite = async (eventId: string, inviteStatus: 'accepted' | 'declined') => {
+    try {
+      await updateDoc(doc(db, 'events', eventId), { inviteStatus });
+    } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'CalendarHome.eventInvite' });
+      setInviteError(t('inviteResponseFailed', language));
+    }
   };
 
-  const handleDeclineInvite = async (eventId: string) => {
-    // We could delete or just set status to declined
-    await updateDoc(doc(db, 'events', eventId), { inviteStatus: 'declined' });
-  };
+  const handleAcceptInvite = (eventId: string) => respondToEventInvite(eventId, 'accepted');
+  const handleDeclineInvite = (eventId: string) => respondToEventInvite(eventId, 'declined');
 
   const handleAcceptFamilyInvite = async (invite: any) => {
     if (!auth.currentUser) return;
@@ -380,16 +387,24 @@ export default function CalendarHome() {
     try {
       await acceptGroupInvite(invite.id);
     } catch (err) {
-      console.error('Failed to accept invite', err);
-      // Most likely cause for an email-addressed invite: unverified email.
-      if (!auth.currentUser.emailVerified) {
-        alert(t('verifyEmailDesc', language));
-      }
+      reportError(err instanceof Error ? err.message : String(err), { context: 'CalendarHome.acceptGroupInvite' });
+      // The unverified-email hint is the LIKELIEST cause for an email-addressed invite, not the
+      // only one. It used to be the only branch, so every other failure was invisible.
+      setInviteError(
+        !auth.currentUser.emailVerified
+          ? t('verifyEmailDesc', language)
+          : t('inviteResponseFailed', language),
+      );
     }
   };
 
   const handleDeclineFamilyInvite = async (inviteId: string) => {
-    await updateDoc(doc(db, 'group_invites', inviteId), { status: 'declined' });
+    try {
+      await updateDoc(doc(db, 'group_invites', inviteId), { status: 'declined' });
+    } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'CalendarHome.declineGroupInvite' });
+      setInviteError(t('inviteResponseFailed', language));
+    }
   };
 
   const handleDismissBirthdayPrompt = async () => {
@@ -447,6 +462,11 @@ export default function CalendarHome() {
 
   return (
     <div className="min-h-screen bg-transparent flex flex-col relative pt-[60px]">
+      {inviteError && (
+        <p role="alert" className="mx-4 mb-2 rounded-xl bg-rose-50 dark:bg-rose-500/10 px-4 py-2 text-sm text-rose-700 dark:text-rose-300">
+          {inviteError}
+        </p>
+      )}
       {groupsLoadError && (
         <p role="alert" className="mx-4 mb-2 rounded-xl bg-rose-50 dark:bg-rose-500/10 px-4 py-2 text-sm text-rose-700 dark:text-rose-300">
           {t('groupsLoadFailed', language)}
