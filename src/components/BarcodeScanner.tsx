@@ -64,7 +64,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         );
       } catch (err: any) {
         console.error("Scanner Error:", err);
-        setError("Could not start camera. Please ensure you have granted camera permissions.");
+        setError(t('scannerCameraFailed', language));
       }
     };
 
@@ -94,7 +94,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
         </div>
       )}
       <div className="absolute bottom-10 left-0 right-0 text-center text-white/70 text-sm px-4">
-        Position the barcode or QR code within the frame to scan automatically.
+        {t('scannerHint', language)}
       </div>
     </div>
   );

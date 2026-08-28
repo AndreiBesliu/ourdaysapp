@@ -2454,3 +2454,45 @@ tacut poza sau emoji-ul), responsabilii limitati la cei pe care ii avea deja par
 `arrayUnion` pe lista de exceptii a parintelui.
 
 `npx tsc -b` verde · **759 teste verzi** · build verde · functions build verde.
+
+## 2026-08-26 - Traduceri GRESITE, nu lipsa - clasa pe care niciun test de paritate n-o vede
+
+**Model:** Claude Opus 5 · lentila de i18n a auditului
+
+Testul de paritate de azi-dimineata verifica: aceleasi chei in toate blocurile, nicio valoare goala,
+niciun bloc copiat din engleza, fiecare limba isi foloseste diacriticele. Toate trecute. Si totusi:
+
+**Remi in romana avea „terta" si „suita" INVERSATE.** `meldTypeSet: "Suită"`, `meldTypeRun: "Terță"` -
+in Remi romanesc o *terță* sunt 3-4 carti de aceeasi valoare, iar o succesiune e o *chintă*. Singurul
+bloc din sase care le inversa. Jocul eticheta fiecare combinatie exact pe dos, fluent. Corectat pe
+toate cele 9 chei ale grupului (inclusiv mesajele de eroare, care spuneau „Suitele trebuie sa aiba
+culori distincte" - adica fix regula celeilalte combinatii).
+
+**Franceza numea portofelul „Atouts"** - in franceza „atout" e un avantaj sau culoarea de atu la
+carti, niciodata un bun pe care il pastrezi. Si e eticheta din bara laterala. Acelasi bloc numea
+functionalitatea „bien"/„portefeuille" mai jos. Aliniat pe „Portefeuille"/„élément".
+
+**Germana scria `AUSTEHENDE AUFGABEN`** cu un singur s (`ausstehend`), pe dala de pe ecranul principal,
+cu majuscule. Acelasi bloc o scrie corect de sase ori in alta parte.
+
+**Romana spunea „Îi citesc grupurile…"** - persoana a treia. „Iti citesc grupurile" e forma corecta;
+ce scria acolo inseamna „ii citesc grupurile LUI". Fluent, despre altcineva.
+
+**Si o insula de ASCII:** tot grupul de chei pentru cheltuieli in ro/fr/es/it era scris fara
+diacritice - `incarcate`, `fara`, `asa ca`, `reparatie`, `etre`, `depenses`, `securite`,
+`correccion`, `non e stata`. Testul de dimineata numara LINII accentuate pe bloc si cere peste 15,
+deci opt chei stalcite intr-un bloc de patru sute corecte nu-l puteau face sa pice **prin
+constructie**.
+
+`src/utils/i18nSpelling.test.ts` inchide fix gaura aia, dar nu prin „valoare lunga fara diacritice" -
+ala ar fi zgomot pur (italiana si spaniola corecte au o gramada de propozitii fara niciun accent).
+Verifica **forme de cuvant care nu sunt cuvinte**: `fara`, `etre`, `piu`, `correccion` n-au alta
+ortografie. Verificat ca musca: am re-stalcit un cuvant, testul l-a numit cu cheia si cu ortografia
+corecta.
+
+Plus trei componente ale caror traduceri EXISTAU dar nu fusesera legate niciodata (`CreateGroupModal`,
+mesajul de camera din `BarcodeScanner`, plus indiciul de sub scaner care n-avea cheie deloc), si
+`aria-label="Înapoi"` hardcodat in romana in `PeriodLog` - singurul aria-label literal ramas in tot
+`src`-ul non-Warlord, deci un utilizator german de cititor de ecran auzea un cuvant romanesc.
+
+`npx tsc -b` verde · **766 teste verzi**.

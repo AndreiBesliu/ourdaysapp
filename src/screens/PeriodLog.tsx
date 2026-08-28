@@ -108,7 +108,7 @@ export default function PeriodLog() {
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
       <header className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
-        <button onClick={() => navigate('/')} aria-label="Înapoi" className="p-1">
+        <button onClick={() => navigate('/')} aria-label={t('back', language)} className="p-1">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <CalendarDays className="w-5 h-5 text-primary" />
