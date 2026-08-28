@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon, Trash2, Edit2, GripVertical, Sparkles, Users, ThumbsUp, HelpCircle, ThumbsDown, MapPin, Bell } from 'lucide-react';
 import { doc, updateDoc, deleteDoc, getDoc, arrayUnion, collection, query as fsQuery, where, getDocs } from 'firebase/firestore';
 import { reportError } from '../reportError';
+import { planEventWrite } from '../utils/eventWriteTarget';
+import { createEventOverride } from '../serverActions';
 import { db, auth } from '../firebase';
 import Barcode from 'react-barcode';
 import QRCode from 'react-qr-code';
@@ -105,12 +107,40 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   // Anyone involved can change task status, or edit description
   const canEdit = isOwner || isInvitee || isAssignee;
 
+  // Where a change to THIS event actually goes.
+  //
+  // For an occurrence of a repeating series the id we were rendered from is synthetic
+  // (`${parentId}_${date}`) and no document answers to it, so every write below used to fail in
+  // silence. The first write materialises the occurrence into a real override — the same thing
+  // editing it in AddEventModal already does — and the rest of the session goes there.
+  // See src/utils/eventWriteTarget.ts for why neither the synthetic id nor the parent will do.
+  //
+  // The promise is held in a ref, not awaited twice: two quick taps must not create two overrides.
+  const materialising = useRef<Promise<string> | null>(null);
+  const resolveWriteTarget = async (): Promise<string> => {
+    const plan = planEventWrite(event as any);
+    if (plan.kind === 'direct') return plan.id;
+    const pending = materialising.current ?? createEventOverride({
+      parentId: plan.parentId,
+      overrideDate: plan.overrideDate,
+      data: plan.data,
+    }).catch((err) => {
+      // Clear the ref on failure. Caching a REJECTED promise would make one bad network moment
+      // permanent for the life of the modal: every later tap would reject instantly, without ever
+      // trying again, and look exactly like the dead button this whole change exists to fix.
+      materialising.current = null;
+      throw err;
+    });
+    materialising.current = pending;
+    return pending;
+  };
+
   const handleToggleTask = async () => {
     if (!canEdit) return;
     setLoading(true);
     const newStatus = event.taskStatus === 'completed' ? 'started' : 'completed';
     try {
-      await updateDoc(doc(db, 'events', event.id), { taskStatus: newStatus });
+      await updateDoc(doc(db, 'events', await resolveWriteTarget()), { taskStatus: newStatus });
       event.taskStatus = newStatus; // optimistic update
       if (newStatus === 'completed') {
         Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {});
@@ -118,7 +148,10 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
         Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
       }
     } catch (e) {
-      console.error(e);
+      // Was console.error alone. Every one of these used to fail silently on a repeating
+      // occurrence, so silence is exactly what must not happen here any more.
+      setDeleteError(t('eventUpdateFailed', language));
+      reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.update' });
     } finally {
       setLoading(false);
     }
@@ -129,11 +162,14 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     setLoading(true);
     const updatedIds = Array.from(new Set([...assigneeIds, newId]));
     try {
-      await updateDoc(doc(db, 'events', event.id), { assigneeIds: updatedIds, assigneeId: updatedIds[0] || null });
+      await updateDoc(doc(db, 'events', await resolveWriteTarget()), { assigneeIds: updatedIds, assigneeId: updatedIds[0] || null });
       event.assigneeIds = updatedIds;
       event.assigneeId = updatedIds[0] || null;
     } catch (e) {
-      console.error(e);
+      // Was console.error alone. Every one of these used to fail silently on a repeating
+      // occurrence, so silence is exactly what must not happen here any more.
+      setDeleteError(t('eventUpdateFailed', language));
+      reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.update' });
     } finally {
       setLoading(false);
     }
@@ -143,11 +179,14 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     setLoading(true);
     const updatedIds = assigneeIds.filter(id => id !== removeId);
     try {
-      await updateDoc(doc(db, 'events', event.id), { assigneeIds: updatedIds, assigneeId: updatedIds[0] || null });
+      await updateDoc(doc(db, 'events', await resolveWriteTarget()), { assigneeIds: updatedIds, assigneeId: updatedIds[0] || null });
       event.assigneeIds = updatedIds;
       event.assigneeId = updatedIds[0] || null;
     } catch (e) {
-      console.error(e);
+      // Was console.error alone. Every one of these used to fail silently on a repeating
+      // occurrence, so silence is exactly what must not happen here any more.
+      setDeleteError(t('eventUpdateFailed', language));
+      reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.update' });
     } finally {
       setLoading(false);
     }
@@ -160,7 +199,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     );
     setChecklist(newChecklist);
     try {
-      await updateDoc(doc(db, 'events', event.id), { checklistItems: newChecklist });
+      await updateDoc(doc(db, 'events', await resolveWriteTarget()), { checklistItems: newChecklist });
     } catch (e) {
       console.error(e);
       setChecklist(event.checklistItems || []);
@@ -175,7 +214,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     setChecklist(newItems);
     Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
     try {
-      await updateDoc(doc(db, 'events', event.id), { checklistItems: newItems });
+      await updateDoc(doc(db, 'events', await resolveWriteTarget()), { checklistItems: newItems });
     } catch (e) {
       console.error(e);
       setChecklist(event.checklistItems || []);
@@ -195,7 +234,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     Haptics.impact({ style: isNowCompleted ? ImpactStyle.Medium : ImpactStyle.Light }).catch(() => {});
 
     try {
-      await updateDoc(doc(db, 'events', event.id), { checklistItems: newChecklist });
+      await updateDoc(doc(db, 'events', await resolveWriteTarget()), { checklistItems: newChecklist });
     } catch (e) {
       console.error("Failed to update checklist item:", e);
       // Revert on failure
@@ -207,10 +246,13 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     if (!canEdit) return;
     setLoading(true);
     try {
-      await updateDoc(doc(db, 'events', event.id), { taskStatus: 'started' });
+      await updateDoc(doc(db, 'events', await resolveWriteTarget()), { taskStatus: 'started' });
       event.taskStatus = 'started'; // optimistic update
     } catch (e) {
-      console.error(e);
+      // Was console.error alone. Every one of these used to fail silently on a repeating
+      // occurrence, so silence is exactly what must not happen here any more.
+      setDeleteError(t('eventUpdateFailed', language));
+      reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.update' });
     } finally {
       setLoading(false);
     }

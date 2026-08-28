@@ -7,13 +7,17 @@ import { app } from "./firebase";
 // write via the Admin SDK. These throw on failure (callers handle it).
 
 // Single-occurrence override of a recurring event (keeps the original owner).
+// Returns the new document's id. Callers that only wanted the side effect can ignore it, but
+// EventDetailsModal needs it: after materialising an occurrence it has to send the rest of that
+// interaction to the override rather than to the synthetic key it was rendered from.
 export async function createEventOverride(params: {
   parentId: string;
   overrideDate: string;
   data: Record<string, unknown>;
-}): Promise<void> {
+}): Promise<string> {
   const fn = httpsCallable(getFunctions(app), "createEventOverride");
-  await fn(params);
+  const res = await fn(params);
+  return (res.data as { id: string }).id;
 }
 
 // Duplicate an owned asset to a recipient who shares a group with you.

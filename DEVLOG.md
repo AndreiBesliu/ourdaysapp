@@ -2411,3 +2411,46 @@ e o parte din motivul pentru care deploy-ul a livrat cod vechi: cine comite surs
 reconstruiasca lasa `lib/` invechit in repo. Hook-ul `predeploy` adaugat mai devreme il reconstruieste
 inainte de fiecare deploy, deci gaura e inchisa; dar merita decis separat daca `lib/` are ce cauta
 sub git.
+
+## 2026-08-26 - Butoanele de pe evenimentele care se repeta chiar fac ceva acum
+
+**Model:** Claude Opus 5
+
+Ultima constatare HIGH din audit. O serie care se repeta e UN document; ocurentele de pe calendar
+sunt inventate in memorie de `expandRecurringEvents`, cu cheia sintetica `${parentId}_${data}`.
+`EventDetailsModal` scria in `event.id` — adica intr-un document care n-a existat niciodata. Sapte
+handlere: bifarea sarcinii, pornirea ei, adaugarea si scoaterea responsabililor, textul din checklist,
+reordonarea, bifarea unui element. Toate refuzate, niciun snapshot local, `console.error` singurul
+martor. **Un buton mort pe o clasa intreaga de evenimente**, tacut.
+
+Reparatia evidenta ar fi fost al doilea bug deghizat: trimiterea catre `parentEventId` ar fi aplicat
+bifa de marti asta **fiecarei** marti din serie. Verificatorul a semnalat exact asta, si avea dreptate.
+
+Ce am facut e ce face deja `AddEventModal` cand editezi o singura ocurenta: prima scriere
+**materializeaza** ocurenta intr-un override real (prin callable-ul `createEventOverride`, care
+adauga si data in exceptiile parintelui), iar restul sesiunii scrie acolo. Decizia sta intr-o functie
+pura, `src/utils/eventWriteTarget.ts`, cu 11 teste care fixeaza **ambele** esecuri opuse: nici cheia
+sintetica, nici parintele.
+
+Un bug pe care era sa-l introduc chiar eu: memorasem promisiunea de materializare intr-un ref, iar
+o promisiune **respinsa** ar fi ramas acolo pentru toata viata modalului — o singura clipa de retea
+proasta ar fi devenit permanenta, si ar fi aratat exact ca butonul mort pe care il reparam. Acum se
+sterge la esec.
+
+### Si gaura din `createEventOverride`, care devenea mai calda tocmai fiindca o foloseam mai mult
+
+Callable-ul facea `...data` — orice trimitea clientul, intr-un document pe care serverul il stampila
+apoi cu `ownerId`-ul PARINTELUI. Prin gaura aia treceau trei lucruri:
+- `assigneeIds` / `inviteeId` — regula de creare refuza sa numesti oameni din afara grupului tau, dar
+  **Admin SDK nu evalueaza regulile**, deci callable-ul era un ocol catre orice uid;
+- `ai_assistant` in `assigneeIds` — declansatorul de creare cheltuia cota si bugetul zilnic al
+  **proprietarului documentului**, deci un membru al grupului putea goli alocatia altcuiva, atribuita
+  ei in ledger;
+- orice altceva, pe un document care nu era al lui.
+
+Acum: **lista alba** de campuri (verificata fata de ce trimite chiar `AddEventModal`, ca sa nu pierd
+tacut poza sau emoji-ul), responsabilii limitati la cei pe care ii avea deja parintele plus apelantul,
+`ai_assistant` scos mereu, si `overrideDate` validat cu `isRealDay()` — mergea nevalidat direct in
+`arrayUnion` pe lista de exceptii a parintelui.
+
+`npx tsc -b` verde · **759 teste verzi** · build verde · functions build verde.

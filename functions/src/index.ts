@@ -9,7 +9,7 @@ import { sanitizeDeploy, createPvpBattle } from "./warlordCombat/combat/pvp";
 import type { BattleState, Command } from "./warlordCombat/combat/types";
 import { deriveScope } from "./aiScope";
 import { fetchAssets, fetchChat, fetchEvents, fetchExpenses } from "./aiSources";
-import { dayRangePeriod, monthPeriod, periodDays } from "./period";
+import { dayRangePeriod, monthPeriod, periodDays, isRealDay } from "./period";
 import { charsPerToken, estimateUsdFor, usageOf, withLedger } from "./aiLedger";
 
 admin.initializeApp();
@@ -634,6 +634,32 @@ export const notifyUsers = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async 
 // so it's created here: validates the caller may edit the parent, writes the
 // override with the parent's ownerId/groupId (server-authoritative), and adds
 // the exception date to the parent.
+// The only fields a client may put on a single-occurrence override.
+//
+// This used to be `...data` — whatever the caller sent, spread into a document the server then
+// stamps with the PARENT's ownerId. Three separate things came through that hole:
+//
+//   * `assigneeIds` / `inviteeId`. The events create rule refuses to name people who are not in
+//     your group, but the Admin SDK does not evaluate rules at all, so this callable was a way
+//     around it against any uid (and uids are public via the warlordPlayers roster).
+//   * `ai_assistant` in `assigneeIds`. The onCreate trigger fires on that value and spends the
+//     DOCUMENT OWNER's daily AI quota and budget — so a group member could drain another
+//     member's allowance, attributed to her in the ledger.
+//   * Anything else at all, on a document owned by someone else.
+//
+// A list is used rather than a denylist because the next field added to events would otherwise
+// be admitted by default.
+// Checked against what AddEventModal actually sends and what events actually carry — a field
+// missing from here is dropped in silence, which on an override means editing one occurrence
+// quietly loses its picture or its emoji.
+const OVERRIDE_FIELDS = [
+  "title", "description", "date",
+  "checklistItems", "isTask", "taskStatus",
+  "categoryId", "color", "emoji", "imageUrl",
+  "location", "reminderMinutes", "assetId",
+  "rsvpEnabled", "visibleTo",
+] as const;
+
 export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) {
@@ -642,6 +668,12 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   const { parentId, overrideDate, data } = request.data || {};
   if (!parentId || !overrideDate || !data || typeof data !== "object") {
     throw new HttpsError("invalid-argument", "parentId, overrideDate and data are required.");
+  }
+  // `overrideDate` goes into arrayUnion on the parent's exception list unchecked otherwise, so
+  // any string at all could be written there — including one that never matches a real day and
+  // therefore silently excepts nothing.
+  if (typeof overrideDate !== "string" || !isRealDay(overrideDate)) {
+    throw new HttpsError("invalid-argument", "overrideDate must be a real yyyy-MM-dd day.");
   }
 
   const db = admin.firestore();
@@ -660,12 +692,41 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
     throw new HttpsError("permission-denied", "You can't edit this event.");
   }
 
+  // Copy only what is on the list, and only when it is actually present.
+  const safe: Record<string, unknown> = {};
+  for (const key of OVERRIDE_FIELDS) {
+    const v = (data as Record<string, unknown>)[key];
+    // Firestore rejects `undefined` outright and would fail the whole batch over one absent field.
+    if (v !== undefined) safe[key] = v;
+  }
+
+  // Assignees are allowed through, but only the ones the PARENT already had, plus the caller.
+  // That is exactly what materialising an occurrence needs and nothing more: adding somebody new
+  // is a separate act that has to face the rules. `ai_assistant` is dropped in every case — an
+  // override inherits the parent's checklist, so re-triggering generation would spend the owner's
+  // budget for nothing, on somebody else's say-so.
+  const parentAssignees: string[] = Array.isArray(p.assigneeIds)
+    ? p.assigneeIds.filter((x: unknown): x is string => typeof x === "string")
+    : [];
+  const allowed = new Set([...parentAssignees, uid]);
+  const requested: string[] = Array.isArray((data as Record<string, unknown>).assigneeIds)
+    ? ((data as Record<string, unknown>).assigneeIds as unknown[])
+        .filter((x): x is string => typeof x === "string")
+    : [];
+  const assigneeIds = requested.filter((id) => allowed.has(id) && id !== "ai_assistant");
+  safe.assigneeIds = assigneeIds;
+  safe.assigneeId = assigneeIds[0] ?? null;
+
   const overrideRef = db.collection("events").doc();
   const batch = db.batch();
   batch.set(overrideRef, {
-    ...data,
+    ...safe,
     ownerId: p.ownerId, // server-authoritative (keep original owner)
     groupId: p.groupId ?? null, // keep within the parent's group
+    // Legacy and inert, but carried from the PARENT rather than from the caller: it is not the
+    // client's to state on a document it does not own.
+    sharedWithFamily: p.sharedWithFamily ?? false,
+    updatedAt: new Date().toISOString(),
     overrideOfParent: parentId,
     createdAt: new Date().toISOString(),
   });

@@ -175,7 +175,25 @@ document", nu „e owner-ul aplicației" — e adevărat pentru orice user despr
   `adminAudit` + `restoreFromAudit` din Presto (singurul rollback funcțional).
 
 ## Capcane cunoscute
-- **Prerender/service worker:** `index.html` înregistrează `sw.js` dar nu cheamă niciodată `registration.update()`, iar gate-ul de versiune rulează doar la parsarea unui index.html PROASPĂT. Un tab deschis de ore rulează cod dinaintea deploy-ului. Workaround: hard-reload. (Item în roadmap.)
+- **Cod vechi într-un tab deschis — jumătate reparat 26.08.** Erau DOUĂ cauze, nu una.
+  (1) *Antetele*: `firebase.json` cerea `no-cache` pe `**/*.html`, dar Hosting potrivește pe CALEA
+  CERERII, iar nicio rută reală nu se termină în `.html` — deci `/`, `/log`, `/wallet` veneau cu
+  `max-age=3600` și reîncărcarea îți dădea codul vechi o oră. **Reparat**; vezi
+  `reference_firebase_hosting_headers` pentru cele două capcane (potrivirea pe cale + câștigă
+  ULTIMA regulă). (2) *Tabul deschis*: niciun antet nu-l ajută, fiindcă nimic nu re-descarcă nimic.
+  Acum `src/utils/appVersion.ts` compară hash-ul bundle-ului care rulează cu cel servit și
+  `NewVersionNotice` oferă reîncărcarea — **niciodată automat**, un reload în timpul unui mesaj îl
+  aruncă. Poarta `app_version` din `index.html` a fost retrasă: compara un literal pe care nu-l
+  urca nimeni.
+- **`functions/` e TypeScript** (`src/` → `lib/`), singurul proiect dintre cele patru care e așa.
+  `tsc --noEmit` **NU** e build. Există acum un hook `predeploy` în `firebase.json`; dacă atingi
+  un callable, verifică oricum în log-ul de deploy că apare `creating`/`updating` funcția ta și
+  în `npx firebase functions:list --project live`. Ordinea când clientul depinde de un callable
+  nou: **functions → rules → hosting**.
+- **O interogare LIST se validează față de reguli FĂRĂ să citească documente** — deci filtrele
+  trebuie să GARANTEZE regula. `where('overrideOfParent','==',id)` singur e refuzat în bloc, și
+  arată ca o listă goală. S-a livrat de trei ori pe `events`; `src/utils/eventQueryRules.test.ts`
+  citește câmpurile permise DIN `firestore.rules` și refuză orice interogare care nu le atinge.
 - **`groups/${null}` e o cale Firestore VALIDĂ** — o citire de membru neghidată se rezolvă la un document inexistent și refuză tot. Orice `groupId` se verifică `typeof x === 'string' && x`.
 - **Ceasul zilei din Warlord** e ancorat de `lastTickAt` DIN SAVE, nu de o cheie locală; vezi `src/warlord/logic/tick.ts`.
 - **Matematica economiei** are o singură sursă: `simulateEconomyDay` din `src/warlord/logic/economy.ts`. UI-ul NU reimplementează formule — s-a livrat de trei ori bug-ul ăsta (numere afișate pe care jocul nu le plătea).
