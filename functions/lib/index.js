@@ -881,6 +881,15 @@ exports.respondToFriendRequest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_
             userId: senderUid,
             createdBy: uid,
             type: "friend",
+            // titleKey/bodyKey are what the reader's client translates; title/body stay only as the
+            // fallback for rows written before keys existed. Without them this row rendered in the
+            // ACCEPTER's English no matter what language the reader had chosen.
+            //
+            // The renderer concatenates as `${t(bodyKey)}${param}`, so the name goes on the END —
+            // a body phrased "{name} accepted…" cannot be expressed through it.
+            titleKey: "friendRequestAccepted",
+            bodyKey: "friendRequestAcceptedBody",
+            param: accepterName,
             title: "Friend request accepted",
             body: `${accepterName} accepted your friend request.`,
             read: false,
