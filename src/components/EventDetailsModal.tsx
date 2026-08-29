@@ -48,7 +48,10 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
             setLinkedAsset({ id: docSnap.id, ...docSnap.data() });
           }
         } catch (e) {
-          console.error('Failed to fetch linked asset', e);
+          // Guaranteed, not hypothetical: assets are owner-only to read, while the EVENT carrying
+          // the assetId is group-readable — so for every member but the linker this is denied
+          // every time. Widening that read is a deferred decision; being quiet about it was not.
+          reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.linkedAsset' });
         }
       };
       fetchAsset();
@@ -67,7 +70,9 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
               if (docSnap.exists()) {
                 newMap[item.assetId] = { id: docSnap.id, ...docSnap.data() };
               }
-            } catch(e) {}
+            } catch (e) {
+              reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.checklistAssets' });
+            }
           }
         }
         setLinkedChecklistAssets(newMap);

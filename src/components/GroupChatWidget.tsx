@@ -636,7 +636,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                 type="text"
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentSearchIndex(0); }}
-                placeholder="Search messages..."
+                placeholder={t('searchMessages', language)}
                 autoFocus
                 className="flex-1 bg-transparent text-sm outline-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
                 onKeyDown={(e) => {
@@ -1019,7 +1019,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                 type="text"
                 value={newMessage}
                 onChange={handleTyping}
-                placeholder="Type a message..."
+                placeholder={t('typeAMessage', language)}
                 className="flex-1 px-3 py-2 bg-zinc-100 dark:bg-zinc-800 border-none rounded-full text-sm outline-none focus:ring-2 focus:ring-primary/50"
               />
               {newMessage.trim() || imageFile ? (

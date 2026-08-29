@@ -128,7 +128,7 @@ export default function Login() {
 
           {!isLogin && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Name</label>
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('nameLabel', language)}</label>
               <div className="relative">
                 <input 
                   type="text" 

@@ -131,8 +131,15 @@ function App() {
           const userDocRef = doc(db, 'users', currentUser.uid);
           
           // Fetch existing user data to apply preferences
-          const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists()) {
+          // Its own try/catch: this sat in one big try with the lastLogin write and the profiles
+          // mirror, so a rejected preference read cancelled both — and `setUser` runs regardless,
+          // leaving a fully signed-in app on default colours with nothing said. The theme lives
+          // only in memory (the store persists just the language), so it really is lost.
+          const userDocSnap = await getDoc(userDocRef).catch((err) => {
+            reportError(err instanceof Error ? err.message : String(err), { context: 'App.authBootstrap.userDoc' });
+            return null;
+          });
+          if (userDocSnap?.exists()) {
             const data = userDocSnap.data();
             // Unconditional, and BEFORE the theme gate. This is the only path from Firestore into
             // the store, and it used to sit inside `if (data.primaryColor || data.isDarkMode !==
@@ -168,7 +175,7 @@ function App() {
             email: currentUser.email,
             lastLogin: new Date().toISOString(),
           };
-          if (!userDocSnap.data()?.name && currentUser.displayName) {
+          if (!userDocSnap?.data()?.name && currentUser.displayName) {
             profileUpdate.name = currentUser.displayName;
           }
           await setDoc(userDocRef, profileUpdate, { merge: true });
@@ -176,7 +183,7 @@ function App() {
           // Mirror non-sensitive fields to the public `profiles` collection so
           // other group members can render this user's name/photo/birthday
           // without reading the (owner-only) user doc. Self-populates on login.
-          const src: any = { ...(userDocSnap.data() || {}), ...profileUpdate };
+          const src: any = { ...(userDocSnap?.data() || {}), ...profileUpdate };
           await setDoc(doc(db, 'profiles', currentUser.uid), {
             name: src.name || currentUser.displayName || currentUser.email?.split('@')[0] || 'User',
             photoURL: src.photoURL || null,
@@ -185,7 +192,7 @@ function App() {
           
           // If the document was just created, it won't have familyMembers, 
           // but we can initialize it if it's completely missing
-          if (!userDocSnap.exists() || !userDocSnap.data()?.familyMembers) {
+          if (!userDocSnap?.exists() || !userDocSnap.data()?.familyMembers) {
             await updateDoc(userDocRef, { familyMembers: [] }).catch(() => {});
           }
         } catch (error) {

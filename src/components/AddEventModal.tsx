@@ -112,6 +112,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   
   // Wallet Assets
   const [assets, setAssets] = useState<any[]>([]);
+  const [assetsLoadError, setAssetsLoadError] = useState(false);
   const [showAssetPicker, setShowAssetPicker] = useState<'main' | string | null>(null); // 'main' or checklistItem id
   const [selectedAssetUrl, setSelectedAssetUrl] = useState<string | null>(null);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -156,8 +157,11 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     const uid = auth.currentUser.uid;
     const assetsQuery = query(collection(db, 'assets'), where('ownerId', '==', uid));
     const unsubAssets = liveQuery<any>(assetsQuery, 'AddEventModal.assets',
-      (docs) => setAssets(docs),
-      () => setAssets([]));
+      (docs) => { setAssetsLoadError(false); setAssets(docs); },
+      // Deliberately does NOT clear `assets`: emptying the list on failure turned a denied read
+      // into "you own nothing", and threw away a picker that was already populated when a late
+      // failure arrived. Same query and same collection as the Wallet screen, which says so.
+      () => setAssetsLoadError(true));
 
     return () => unsubAssets();
   }, [isOpen]);
@@ -254,6 +258,12 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   useEffect(() => {
     if (isOpen && editEvent) {
       if (!title.trim() || !eventDate) return;
+      // An occurrence of a repeating series has a synthetic id and no document behind it, so this
+      // wrote into nothing on every debounce tick — and it ignores `editScope` entirely, which is
+      // the reason NOT to simply route it through createEventOverride: on a debounce that would
+      // mint an override per typing pause and litter the parent's exception list. Saving is left
+      // to handleSubmit, which already asks whether you mean this one or all of them.
+      if (editEvent.isRecurringInstance) return;
       
       setAutoSaveStatus('saving');
       const timeoutId = setTimeout(async () => {
@@ -1433,7 +1443,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input 
                   type="text" 
-                  placeholder="Search assets..." 
+                  placeholder={t('searchAssets', language)}
                   value={assetSearchQuery}
                   onChange={(e) => setAssetSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 bg-zinc-100 dark:bg-zinc-800 border-none rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none text-zinc-900 dark:text-zinc-100 placeholder-zinc-500"
@@ -1448,7 +1458,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   return (
                     <div className="text-center py-10 text-zinc-500">
                       <Wallet className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                      <p>{assetSearchQuery ? 'No matching assets found.' : 'No assets found in your Wallet.'}</p>
+                      <p>{assetsLoadError ? t('assetsLoadFailed', language) : assetSearchQuery ? t('walletNoMatch', language) : t('walletNoAssets', language)}</p>
                     </div>
                   );
                 }

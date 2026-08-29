@@ -2612,3 +2612,43 @@ declarate.
 Verificat prin re-scanare: **zero** `alert(`/`confirm(` cu sir literal in afara celor doua exceptii.
 
 `npx tsc -b` verde · **766 teste verzi** · build verde · functions build verde.
+
+## 2026-08-26 - Coada auditului: ultimele siruri, doua flaguri partajate, trei citiri tacute
+
+**Model:** Claude Opus 5
+
+**Regresia mea de dimineata, prinsa de audit:** in sweep-ul de i18n am inlocuit „Manage Filters" cu
+`{t('walletManage')} Filters` — cheia e verbul singur, deci titlul se randa **„Gestionează Filters"**.
+Inainte era consecvent englezesc; l-am facut amestecat. Are acum cheie pentru fraza intreaga.
+
+**Zero siruri englezeti** raman in afara celor doua exceptii declarate (`Admin.tsx` si ecranele
+Warlord). Ultimele: „View", „Name", „Save", si placeholderele de cautare din portofel, chat si
+selectorul de bunuri. Numele limbilor din Setari raman in limba lor, cum trebuie.
+
+**`GamesHubModal` avea un flag pentru doi ascultatori** — randat doar in starea goala a
+clasamentului, deci o citire esuata a jocurilor de AZI nu arata nimic, iar succesul unuia stergea
+esecul celuilalt. Acelasi tipar pe care l-am reparat la `Friends`; l-am scapat aici. Doua flaguri
+acum, fiecare langa lista lui.
+
+**Selectorul de bunuri din AddEventModal** raspundea la o citire refuzata punand lista pe `[]` —
+adica „nu ai niciun bun", si arunca un selector deja populat daca esecul venea tarziu. Acum lasa
+lista in pace si spune ce s-a intamplat. (Ecranul Wallet primise deja tratamentul asta in acelasi
+commit; modalul fusese sarit.)
+
+**Autosalvarea din AddEventModal** scria in `editEvent.id` fara sa verifice daca e o ocurenta a unei
+serii — deci la fiecare tick de debounce scria intr-un document inexistent. Nu o rutez prin
+`createEventOverride`: pe un debounce ar crea cate un override **la fiecare pauza de tastare** si ar
+umple lista de exceptii a parintelui. Autosalvarea se opreste pur si simplu; salvarea ramane la
+`handleSubmit`, care oricum intreaba „doar asta sau toate".
+
+**Cardurile de portofel legate de un eveniment partajat** sunt refuzate GARANTAT pentru orice membru
+in afara proprietarului (bunurile se citesc doar de proprietar, dar evenimentul care poarta
+`assetId` se citeste de tot grupul) — si `catch(e) {}` inghitea refuzul. Largirea citirii e o decizie
+amanata; tacerea nu era o decizie. Acum raporteaza.
+
+**Citirea preferintelor la login** statea in acelasi `try` cu scrierea `lastLogin` si cu oglinda
+`profiles`, deci o citire respinsa le anula pe amandoua — iar `setUser` rula oricum, lasand o
+aplicatie complet logata pe culori implicite, fara sa spuna nimic. Tema traieste **doar in memorie**
+(store-ul persista numai limba), deci chiar se pierdea.
+
+`npx tsc -b` verde · **766 teste verzi** · build verde.

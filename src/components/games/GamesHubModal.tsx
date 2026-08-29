@@ -297,7 +297,11 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
   const [playingGameId, setPlayingGameId] = useState<string | null>(null);
   const [view, setView] = useState<'arcade' | 'leaderboard'>('arcade');
   const [leaderboard, setLeaderboard] = useState<{uid: string, wins: number, points?: number}[]>([]);
-  const [gamesLoadError, setGamesLoadError] = useState(false);
+  // One flag per listener. Shared, it was rendered only in the leaderboard's empty state, so a
+  // failed read of TODAY's games showed nothing at all — and either listener's success cleared a
+  // failure raised by the other.
+  const [activeGamesError, setActiveGamesError] = useState(false);
+  const [leaderboardError, setLeaderboardError] = useState(false);
   const [showRulesFor, setShowRulesFor] = useState<string | null>(null);
   const [confirmingEndId, setConfirmingEndId] = useState<string | null>(null);
   const [showThemePicker, setShowThemePicker] = useState(false);
@@ -329,8 +333,8 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
     );
 
     const unsubscribe = liveQuery<any>(q, 'GamesHubModal.activeGames',
-      (games) => { setGamesLoadError(false); setActiveGames(games.sort((a: any, b: any) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0))); },
-      () => setGamesLoadError(true));
+      (games) => { setActiveGamesError(false); setActiveGames(games.sort((a: any, b: any) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0))); },
+      () => setActiveGamesError(true));
 
     return () => unsubscribe();
   }, [isOpen, groupId, selectedDate]);
@@ -342,7 +346,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
     const q = query(collection(db, 'games'), where('groupId', '==', groupId), where('status', '==', 'finished'));
     
     const unsubscribe = liveQuery<any>(q, 'GamesHubModal.leaderboard', (games) => {
-      setGamesLoadError(false);
+      setLeaderboardError(false);
       const statsMap: Record<string, { wins: number; points: number }> = {};
       
       games.forEach(g => {
@@ -371,7 +375,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
         .sort((a, b) => b.wins - a.wins);
 
       setLeaderboard(sortedLeaderboard);
-    }, () => setGamesLoadError(true));
+    }, () => setLeaderboardError(true));
 
     return () => unsubscribe();
   }, [isOpen, groupId, view]);
@@ -553,7 +557,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                   >
                     Open in Warlord ⚔
                   </button>
-                  <button onClick={() => setPlayingGameId(null)} className="text-xs text-zinc-500 underline">Back</button>
+                  <button onClick={() => setPlayingGameId(null)} className="text-xs text-zinc-500 underline">{t('back', language)}</button>
                 </div>
               )}
             </div>
@@ -644,6 +648,9 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                   </div>
 
                   {/* Active/Past Games */}
+                  {activeGamesError && (
+                    <p role="alert" className="text-sm text-rose-600 dark:text-rose-400 mb-4">{t('gamesLoadFailed', language)}</p>
+                  )}
                   {activeGames.length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">
@@ -718,10 +725,10 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
 
                   {leaderboard.length === 0 ? (
                     <div className="text-center py-12 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800">
-                      <p className={gamesLoadError ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-500'}>
-                        {gamesLoadError ? t('gamesLoadFailed', language) : t('noGamesCompleted', language)}
+                      <p className={leaderboardError ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-500'}>
+                        {leaderboardError ? t('gamesLoadFailed', language) : t('noGamesCompleted', language)}
                       </p>
-                      {!gamesLoadError && <p className="text-zinc-400 text-sm mt-1">{t('startPlayingGetOnBoard', language)}</p>}
+                      {!leaderboardError && <p className="text-zinc-400 text-sm mt-1">{t('startPlayingGetOnBoard', language)}</p>}
                     </div>
                   ) : (
                     <div className="flex flex-col gap-3">

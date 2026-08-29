@@ -414,7 +414,7 @@ export default function Wallet() {
             <>
               <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover transition-all group-hover/img:scale-105" />
               <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-colors flex items-center justify-center">
-                <span className="opacity-0 group-hover/img:opacity-100 text-white font-medium text-sm drop-shadow-md">View</span>
+                <span className="opacity-0 group-hover/img:opacity-100 text-white font-medium text-sm drop-shadow-md">{t('walletView', language)}</span>
               </div>
             </>
           ) : asset.barcodeValue ? (
@@ -609,7 +609,7 @@ export default function Wallet() {
             
             <form onSubmit={handleUpload} className="space-y-4">
               <div>
-                <label className="text-xs font-medium text-zinc-500 uppercase">Name</label>
+                <label className="text-xs font-medium text-zinc-500 uppercase">{t('nameLabel', language)}</label>
                 <input required value={name} onChange={e => setName(e.target.value)} type="text" placeholder="e.g. Kroger Card" className="w-full mt-1 px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 outline-none" />
               </div>
               
@@ -734,7 +734,7 @@ export default function Wallet() {
 
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => { setIsAdding(false); setEditingAsset(null); }} className="flex-1 py-2 text-zinc-600 dark:text-zinc-400 font-medium bg-zinc-100 dark:bg-zinc-800 rounded-lg">{t('walletCancel', language)}</button>
-                <button type="submit" disabled={loading} className="flex-1 py-2 text-white font-medium bg-emerald-500 hover:bg-emerald-600 rounded-lg disabled:opacity-50">Save</button>
+                <button type="submit" disabled={loading} className="flex-1 py-2 text-white font-medium bg-emerald-500 hover:bg-emerald-600 rounded-lg disabled:opacity-50">{t('save', language)}</button>
               </div>
             </form>
           </div>
@@ -746,7 +746,10 @@ export default function Wallet() {
           <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[80vh]">
             <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
               <h3 className="font-bold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                <Settings2 className="w-5 h-5 text-emerald-500" /> {t('walletManage', language)} Filters
+                {/* One key for the whole phrase. Splitting it rendered "Gestionează Filters" —
+                    a regression from this morning's sweep, where the bare verb was reused inside
+                    an English sentence. */}
+                <Settings2 className="w-5 h-5 text-emerald-500" /> {t('walletManageFilters', language)}
               </h3>
               <button onClick={() => setIsManagingFilters(false)} className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
                 <X className="w-5 h-5" />
@@ -798,7 +801,7 @@ export default function Wallet() {
                 value={newFilterValue} 
                 onChange={e => setNewFilterValue(e.target.value)} 
                 type="text" 
-                placeholder="New category name" 
+                placeholder={t('newCategoryPlaceholder', language)}
                 className="flex-1 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-zinc-800 dark:border-zinc-700 outline-none focus:border-emerald-500" 
               />
               <button type="submit" disabled={loading} className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-medium hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center gap-1">
