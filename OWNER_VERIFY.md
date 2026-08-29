@@ -165,6 +165,30 @@ ale tale erau deja sterse. Acum e un apel server.
       existenta — trebuie sa scrie "Adresa asta are deja cont", nu un mesaj generic.
 - [ ] **Prieteni**: lista si cererile arata normal; nimic rosu.
 
+## 12. Restul auditului (26.08) — ce s-a schimbat in comportament
+
+**De ce nu pot eu:** tot ce e dupa login.
+
+**O schimbare pe care e bine s-o stii inainte s-o intalnesti:** „da un bun altcuiva" (Portofel →
+editezi un bun → Transfera) trecea printr-o scriere directa de pe client. Acum trece prin server,
+care cere ca **tu si destinatarul sa fiti in acelasi grup** — verificarea pe care aplicatia o facea
+deja pe ramura „pastreaza o copie" si o sarea pe cealalta. Daca incerci sa transferi catre cineva
+cu care NU imparti un grup, va fi refuzat acum, unde inainte mergea.
+
+- [ ] Transferi un bun catre un membru din grupul tau: functioneaza, iar bunul dispare de la tine
+      si apare la el.
+- [ ] **Evenimente care se repeta:** deschizi o ocurenta si bifezi sarcina / adaugi un responsabil
+      / bifezi un element din lista. Pana azi **nu se intampla nimic** (tacut). Acum trebuie sa
+      functioneze — si ocurenta aia devine „desprinsa" din serie, ca atunci cand o editezi.
+- [ ] Butoanele de stergere a unei serii (din eveniment si din panoul Recurente) duc treaba la
+      capat, fara sa lase ocurente orfane.
+- [ ] Rezumatul AI din chat: daca au fost peste 50 de mesaje in 48h, apare o linie mica sub el care
+      spune ca acopera doar cele mai recente.
+- [ ] `/log`: daca apare avertismentul „sunt listate doar primele 200 de intrari", spune-mi.
+- [ ] Ferestrele de confirmare (sterge eveniment, sterge bun, sterge mesaj, sterge categorie) sunt
+      **in romana**. Erau toate in engleza.
+- [ ] Arcade: jocurile de azi si clasamentul; nimic rosu.
+
 ---
 
 ## Ce am verificat eu, ca să nu le mai faci
@@ -190,3 +214,6 @@ Măsurate, nu presupuse — le scriu ca să știi unde **nu** trebuie să te ui�
   ating; 3 au fost doborate acolo. Reparatiile distructive au test propriu care musca.
 - Ca noul callable `deleteGroupCascade` chiar exista pe live (`firebase functions:list`) — deploy-ul
   raportase succes fara sa-l contina.
+- Zero siruri englezesti ramase in afara adminului si a ecranelor Warlord (re-scanat), si zero
+  `alert(`/`confirm(` cu text literal acolo.
+- Toate cele 16 commit-uri de azi verzi in CI; fiecare deploy verificat pe live.
