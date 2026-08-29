@@ -872,10 +872,14 @@ export const transferAssetCopy = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
   if (!uid) {
     throw new HttpsError("unauthenticated", "You must be signed in.");
   }
-  const { assetId, recipientId } = request.data || {};
+  const { assetId, recipientId, mode } = request.data || {};
   if (!assetId || !recipientId) {
     throw new HttpsError("invalid-argument", "assetId and recipientId are required.");
   }
+  // "copy" leaves the original with the sender; "move" hands it over entirely. Both go through
+  // the same ownership and shared-group checks below — the move used to be a plain client write
+  // that skipped them, because the rule only looked at the ownerId the document ALREADY had.
+  const move = mode === "move";
   if (recipientId === uid) {
     throw new HttpsError("invalid-argument", "Cannot transfer to yourself.");
   }
@@ -897,13 +901,20 @@ export const transferAssetCopy = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
   const { ownerId, createdAt, ...rest } = a;
   void ownerId; void createdAt;
   const copyRef = db.collection("assets").doc();
-  await copyRef.set({
+  const batch = db.batch();
+  batch.set(copyRef, {
     ...rest,
     ownerId: recipientId,
     createdAt: new Date().toISOString(),
     transferredFrom: uid,
   });
-  return { id: copyRef.id };
+  // A move is the copy plus removing the source, in ONE batch — a half-done transfer would either
+  // duplicate the asset or lose it. The recipient also gets `transferredFrom`, which the old
+  // client-side ownerId flip never wrote, so a wallet entry that appeared out of nowhere had
+  // nothing on it saying where it came from.
+  if (move) batch.delete(assetSnap.ref);
+  await batch.commit();
+  return { id: copyRef.id, moved: move };
 });
 
 // ── Friends: respond to a friend request ──

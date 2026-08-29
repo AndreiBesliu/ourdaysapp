@@ -315,7 +315,22 @@ service cloud.firestore {
     match /assets/{assetId} {
       allow read: if isSignedIn() && resource.data.ownerId == request.auth.uid;
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      // An update may not CHANGE the owner.
+      //
+      // This checked only the ownerId the document already had, so a signed-in user could flip it
+      // to anybody — and uids are enumerable (the warlordPlayers roster is readable by any signed-in
+      // account, keyed by uid). Create an asset with a name and image URL of your choosing, flip
+      // the owner, and it appears in that person's wallet listener and renders as an <img src>.
+      //
+      // Handing an asset over is a real feature and still works: it goes through the
+      // `transferAssetCopy` callable, which requires that you and the recipient share a group —
+      // the check the app already applied on the keep-a-copy branch and skipped on the other one.
+      // Rules cannot express "shares a group with me" (isMemberOfGroup needs a known groupId),
+      // which is exactly why that check lives on the server.
+      allow update: if isSignedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId;
     }
 
     // ── AI cost ledger, spend rollups, and budget counters ──

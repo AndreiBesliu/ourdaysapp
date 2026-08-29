@@ -268,9 +268,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
 
     if (isRecurringInstance && parentId) {
       // Ask scope: delete this one or all
-      const choice = window.confirm(
-        'Delete ALL events in this recurring series?\n\nPress OK to delete all, or Cancel to delete only this occurrence.'
-      );
+      const choice = window.confirm(t('deleteSeriesScope', language));
       setLoading(true);
       try {
         if (choice) {
@@ -310,7 +308,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       }
     } else if (hasRecurrenceRule) {
       // This is the master event itself
-      if (!confirm('Delete this entire recurring series?')) return;
+      if (!confirm(t('deleteSeriesConfirm', language))) return;
       setLoading(true);
       try {
         // Same ordering and the same `ownerId` clause as the branch above.
@@ -331,7 +329,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       }
     } else {
       // Normal non-recurring delete
-      if (!confirm('Are you sure you want to delete this event?')) return;
+      if (!confirm(t('deleteEventConfirm', language))) return;
       setLoading(true);
       try {
         await deleteDoc(doc(db, 'events', event.id));

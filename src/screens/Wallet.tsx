@@ -134,7 +134,7 @@ export default function Wallet() {
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth.currentUser || !name.trim() || selectedCategories.length === 0) {
-      alert('Please provide a name and select at least one category.');
+      alert(t('assetNeedsNameAndCategory', language));
       return;
     }
     setLoading(true);
@@ -170,8 +170,12 @@ export default function Wallet() {
             await updateDoc(doc(db, 'assets', editingAsset.id), assetData);
             await transferAssetCopy({ assetId: editingAsset.id, recipientId: transferToUserId });
           } else {
-            // Transfer completely
-            await updateDoc(doc(db, 'assets', editingAsset.id), { ...assetData, ownerId: transferToUserId });
+            // Hand it over entirely. This used to be a client `updateDoc` that set `ownerId` to
+            // the recipient — which the rule allowed, because it only checked the owner the
+            // document already had. Same callable as the keep-a-copy branch now, so both go
+            // through the shared-group check the app always meant to apply.
+            await updateDoc(doc(db, 'assets', editingAsset.id), assetData);
+            await transferAssetCopy({ assetId: editingAsset.id, recipientId: transferToUserId, mode: 'move' });
           }
         } else {
           await updateDoc(doc(db, 'assets', editingAsset.id), assetData);
@@ -195,15 +199,15 @@ export default function Wallet() {
       setIsShared(false);
     } catch (err: any) {
       console.error(err);
-      alert(`Failed to save asset: ${err.message || 'Unknown error'}`);
+      alert(t('assetSaveFailed', language));
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (id: string, isOwner: boolean) => {
-    if (!isOwner) return alert("You can only delete your own assets.");
-    if (!confirm('Delete this asset? If it is used in an event, it will still exist there.')) return;
+    if (!isOwner) return alert(t('assetDeleteOwnOnly', language));
+    if (!confirm(t('assetDeleteConfirm', language))) return;
     try {
       await deleteDoc(doc(db, 'assets', id));
     } catch (err) {
@@ -250,7 +254,7 @@ export default function Wallet() {
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newFilterValue.trim() || !auth.currentUser) return;
-    if (categories.includes(newFilterValue.trim())) return alert("Category already exists");
+    if (categories.includes(newFilterValue.trim())) return alert(t('categoryExists', language));
     
     setLoading(true);
     try {
@@ -310,7 +314,7 @@ export default function Wallet() {
       return;
     }
     const newName = editFilterValue.trim();
-    if (categories.includes(newName)) return alert("Category already exists");
+    if (categories.includes(newName)) return alert(t('categoryExists', language));
 
     setLoading(true);
     setCategoryError(false);
@@ -349,7 +353,7 @@ export default function Wallet() {
 
   const handleRemoveCategory = async (catName: string) => {
     if (!auth.currentUser) return;
-    if (!confirm(`Delete category "${catName}"?\nAssets inside will be marked as "Uncategorized".`)) return;
+    if (!confirm(t('categoryDeleteConfirm', language).replace('{name}', catName))) return;
     
     setLoading(true);
     try {

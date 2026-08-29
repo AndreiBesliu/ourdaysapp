@@ -24,6 +24,8 @@ export async function createEventOverride(params: {
 export async function transferAssetCopy(params: {
   assetId: string;
   recipientId: string;
+  /** "copy" keeps the original with you; "move" hands it over and deletes yours. */
+  mode?: 'copy' | 'move';
 }): Promise<void> {
   const fn = httpsCallable(getFunctions(app), "transferAssetCopy");
   await fn(params);

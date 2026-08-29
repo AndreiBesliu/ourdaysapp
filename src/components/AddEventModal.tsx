@@ -185,7 +185,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       if (draftJSON) {
         try {
           const parsed = JSON.parse(draftJSON);
-          if (window.confirm("You have an unsaved draft for a new event. Do you want to restore it?")) {
+          if (window.confirm(t('draftRestorePrompt', language))) {
             setTitle(parsed.title || '');
             if (parsed.eventDate) setEventDate(parsed.eventDate);
             setDescription(parsed.description || '');
@@ -413,14 +413,14 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
   const handleGenerateChecklist = async () => {
     if (!title.trim()) {
-      alert("Please enter an Event Title first so the AI knows what to suggest.");
+      alert(t('titleFirstForAi', language));
       return;
     }
     setIsGeneratingAI(true);
     try {
       const suggestions = await generateChecklistForTask(title, description);
       if (suggestions.length === 0) {
-        alert("The AI couldn't generate a checklist for this title.");
+        alert(t('aiNoChecklist', language));
         return;
       }
       
@@ -477,7 +477,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setChecklistItems(prev => [...prev, ...newItems]);
       Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {});
     } catch (error: any) {
-      alert(error.message || "Failed to generate checklist.");
+      alert(t('checklistFailed', language));
     } finally {
       setIsGeneratingAI(false);
     }
@@ -660,7 +660,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       onClose();
     } catch (error) {
       console.error("Error adding event: ", error);
-      alert("Failed to add event");
+      alert(t('eventAddFailed', language));
     } finally {
       setLoading(false);
     }

@@ -310,7 +310,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   };
 
   const handleDelete = async (msgId: string) => {
-    if (confirm("Are you sure you want to delete this message?")) {
+    if (confirm(t('deleteMessageConfirm', language))) {
       await updateDoc(doc(db, `groups/${groupId}/messages`, msgId), {
         isDeleted: true,
         text: null,
@@ -499,7 +499,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
       }, 1000);
     } catch (e) {
       console.error('Microphone access denied', e);
-      alert('Microphone access is required for voice messages.');
+      alert(t('microphoneNeeded', language));
     }
   };
 

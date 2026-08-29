@@ -107,7 +107,7 @@ export default function Settings() {
       setPhotoURL(url);
     } catch (error) {
       console.error("Failed to upload profile picture:", error);
-      alert('Failed to upload image.');
+      alert(t('imageUploadFailed', language));
     } finally {
       setUploadingImage(false);
     }
@@ -167,7 +167,7 @@ export default function Settings() {
       await handleAdvancedThemeUpdate({ backgroundImage: url });
     } catch (error) {
       console.error("Failed to upload background:", error);
-      alert('Failed to upload image.');
+      alert(t('imageUploadFailed', language));
     } finally {
       setUploadingBg(false);
     }

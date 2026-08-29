@@ -2575,3 +2575,40 @@ grupurilor fusese deja setata, deci ecranul parea sanatos in timp ce disparea fi
 nume si fiecare zi de nastere. Acum fiecare citire e pazita separat si harta se publica in `finally`.
 
 `npx tsc -b` verde · **766 teste verzi** · build verde · functions build verde.
+
+## 2026-08-26 - Un bun din portofel putea fi impins in portofelul altcuiva
+
+**Model:** Claude Opus 5
+
+Regula de update pe `assets` verifica `resource.data.ownerId == request.auth.uid` — proprietarul pe
+care documentul il avea DEJA — si nu constrangea deloc `request.resource.data.ownerId`. Deci
+oricine autentificat putea sa-l schimbe in orice uid. Iar uid-urile **se pot enumera**: rosterul
+`warlordPlayers` se citeste de orice cont autentificat si are uid-ul drept id de document.
+
+Atacul complet: creezi un bun al tau cu numele si `imageUrl` alese de tine (o scriere directa nu e
+limitata la ce iese din `getDownloadURL`), muti `ownerId`, si ajunge in ascultatorul de portofel al
+victimei si se randeaza ca nume + `<img src>`. Nu e expunere de date — atacatorul pierde accesul in
+clipa in care schimba proprietarul — dar e continut nesolicitat si un URL de imagine controlat de
+el, care ii afla IP-ul si user agent-ul victimei cand se deschide.
+
+Ce face reparatia interesanta: **politica aplicatiei era deja mai stricta decat regula ei.** Ramura
+„pastreaza o copie" trecea prin `transferAssetCopy`, care cere `usersShareGroup`. Doar ramura
+„da-l de tot" facea un `updateDoc` direct si o ocolea. Acum ambele trec prin acelasi callable (cu
+`mode: 'move'`, care scrie copia si sterge sursa **intr-un singur batch**), iar regula fixeaza
+`request.resource.data.ownerId == resource.data.ownerId`.
+
+Regulile Firestore **nu pot** exprima „imparte un grup cu mine" (`isMemberOfGroup` are nevoie de un
+groupId cunoscut) — exact de-aia verificarea aia traieste pe server, si de-aia regula se limiteaza
+sa interzica schimbarea proprietarului.
+
+## 2026-08-26 - Toate ferestrele alert()/confirm() vorbesc acum sase limbi
+
+17 chei noi. Erau ~18 siruri englezesti in cinci fisiere care altfel trec totul prin `t()` —
+inclusiv o intrebare da/nu despre **ciorna nesalvata a utilizatorului** si trei confirmari de
+stergere. Doua locuri o faceau deja corect (`GroupSettingsModal`, `RecurringEventsPanel`), ceea ce
+arata ca erau scapari, nu o decizie. `Admin.tsx` si ecranele Warlord raman englezesti, ca exceptii
+declarate.
+
+Verificat prin re-scanare: **zero** `alert(`/`confirm(` cu sir literal in afara celor doua exceptii.
+
+`npx tsc -b` verde · **766 teste verzi** · build verde · functions build verde.
