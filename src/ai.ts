@@ -44,15 +44,20 @@ export async function suggestEventCategoryAI(title: string, description: string 
   }
 }
 
-export async function generateGroupDigestAI(groupId: string): Promise<string> {
+/**
+ * `truncated` means the 48-hour window held more than fifty messages, so the digest covers only
+ * part of it. The server reads the NEWEST fifty (it used to read the oldest, while the prompt
+ * asked about what happened recently), but "the newest fifty of a busy day" is still not the day.
+ */
+export async function generateGroupDigestAI(groupId: string): Promise<{ digest: string; truncated: boolean }> {
   const functions = getFunctions(app);
   const generateGroupDigest = httpsCallable(functions, 'generateGroupDigest');
   const language = useThemeStore.getState().language || 'en-US';
-  
+
   try {
     const result = await generateGroupDigest({ groupId, language });
-    const data = result.data as { digest: string };
-    return data.digest || 'No recent activity.';
+    const data = result.data as { digest?: string; truncated?: boolean };
+    return { digest: data.digest || '', truncated: data.truncated === true };
   } catch (error: any) {
     console.error("AI Group Digest Error", error);
     throw new Error(aiErrorMessage(error));

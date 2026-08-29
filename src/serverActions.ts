@@ -180,12 +180,22 @@ export interface ScopePreview {
   events: {
     count: number;
     complete: boolean;
+    /**
+     * The PREVIEW was capped, which is a different thing from `complete`.
+     *
+     * `complete` says whether the Firestore read was cut. The server then slices the result to
+     * 200 rows for the wire, and that second truncation used to contribute to nothing at all — so
+     * a caller could be handed 200 rows next to `count: 900` and `complete: true`, and the screen,
+     * which builds its day list purely from `preview`, simply did not show the rest.
+     */
+    previewTruncated?: boolean;
     preview: {
       day: string; title: string; isTask: boolean;
       scopeLabel: string; outOfScope: boolean; virtual: boolean;
     }[];
+    unavailable?: string;
   };
-  chat: { count: number; complete: boolean };
+  chat: { count: number; complete: boolean; unavailable?: string };
   assets: { count: number; complete: boolean };
   // Declared to match what the server actually sends. It used to say `unavailable?` alone —
   // a field the server no longer emits on the happy path — while omitting `complete` and
@@ -194,6 +204,7 @@ export interface ScopePreview {
   expenses: {
     count: number;
     complete: boolean;
+    previewTruncated?: boolean;
     preview: { day: string; amount: number; description: string; scopeLabel: string }[];
     /** Present only when the source could not be served at all — a CODE, translated by the client. */
     unavailable?: string;

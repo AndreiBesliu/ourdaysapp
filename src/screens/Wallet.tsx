@@ -83,17 +83,29 @@ export default function Wallet() {
       const memberIds = new Set<string>();
       fetchedGroups.forEach((g: any) => g.members?.forEach((id: string) => memberIds.add(id)));
       
+      // Same shape and same reason as the member map in CalendarHome: this runs inside
+      // liveQuery's async callback, which nothing awaits. One rejection used to discard every
+      // profile already read — and on this screen that turns the expenses balance sheet into a
+      // column of "Someone", with the transfer-recipient picker gone, while the balances
+      // themselves still compute and look fine.
       const fetchedUsers: any[] = [];
-      for (const id of Array.from(memberIds)) {
-        if (id === auth.currentUser?.uid) continue;
-        // Read other members from the public `profiles` collection (not the
-        // soon-to-be owner-only `users` collection).
-        const profileDoc = await getDoc(doc(db, 'profiles', id));
-        if (profileDoc.exists()) {
-          fetchedUsers.push({ id, ...profileDoc.data() });
+      try {
+        for (const id of Array.from(memberIds)) {
+          if (id === auth.currentUser?.uid) continue;
+          try {
+            // Read other members from the public `profiles` collection (not the
+            // soon-to-be owner-only `users` collection).
+            const profileDoc = await getDoc(doc(db, 'profiles', id));
+            if (profileDoc.exists()) {
+              fetchedUsers.push({ id, ...profileDoc.data() });
+            }
+          } catch (err) {
+            reportError(err instanceof Error ? err.message : String(err), { context: 'Wallet.memberProfile' });
+          }
         }
+      } finally {
+        setSharedUsers(fetchedUsers);
       }
-      setSharedUsers(fetchedUsers);
     }, () => { setMyGroups([]); setSharedUsers([]); });
 
     return () => {

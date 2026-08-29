@@ -123,20 +123,35 @@ export default function CalendarHome() {
       const memberIds = new Set<string>([auth.currentUser!.uid, ...legacyFamily]);
       fetchedGroups.forEach((g: any) => g.members?.forEach((id: string) => memberIds.add(id)));
       
-      for (const id of Array.from(memberIds)) {
-        if (id === auth.currentUser!.uid) {
-          // Own doc: read the full (owner-only) user doc — needed for birthday,
-          // photoURL, hideBirthdayPrompt, etc.
-          const userDoc = await getDoc(doc(db, 'users', id));
-          if (userDoc.exists()) map[id] = { id, ...userDoc.data() };
-        } else {
-          // Other members: read the public profile (name/photoURL/birthday) so
-          // we don't depend on the (soon owner-only) users collection.
-          const profileDoc = await getDoc(doc(db, 'profiles', id));
-          if (profileDoc.exists()) map[id] = { id, ...profileDoc.data() };
+      // Each read is guarded on its own, and the map is published in a `finally`.
+      //
+      // This loop runs inside liveQuery's async callback, which nothing awaits — so before, one
+      // rejected getDoc escaped as an unhandled rejection, `setUserMap` never ran, and everything
+      // already read (including the caller's own entry, seeded above) was discarded. The groups
+      // state had already been set by then, so the screen looked healthy while every avatar, every
+      // member name and every birthday vanished.
+      try {
+        for (const id of Array.from(memberIds)) {
+          try {
+            if (id === auth.currentUser!.uid) {
+              // Own doc: read the full (owner-only) user doc — needed for birthday,
+              // photoURL, hideBirthdayPrompt, etc.
+              const userDoc = await getDoc(doc(db, 'users', id));
+              if (userDoc.exists()) map[id] = { id, ...userDoc.data() };
+            } else {
+              // Other members: read the public profile (name/photoURL/birthday) so
+              // we don't depend on the (soon owner-only) users collection.
+              const profileDoc = await getDoc(doc(db, 'profiles', id));
+              if (profileDoc.exists()) map[id] = { id, ...profileDoc.data() };
+            }
+          } catch (err) {
+            // One member we could not read costs that member's avatar, not the whole screen.
+            reportError(err instanceof Error ? err.message : String(err), { context: 'CalendarHome.memberProfile' });
+          }
         }
+      } finally {
+        setUserMap(map);
       }
-      setUserMap(map);
     },
     // Your groups failing to load is the loudest possible failure on this screen: every shared
     // calendar, every member avatar and the group switcher all go quiet at once, and the app

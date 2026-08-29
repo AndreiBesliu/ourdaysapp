@@ -100,9 +100,16 @@ export default function PeriodLog() {
         .replace('{total}', String(data.scope.totalGroups)));
     }
     if (!data.events.complete) caveats.push(t('logEventsPartial', language));
+    if (data.events.unavailable) caveats.push(t('logEventsUnavailable', language));
     if (!data.expenses.complete) caveats.push(t('logExpensesPartial', language));
     if (data.expenses.unavailable) caveats.push(t('logExpensesUnavailable', language));
     if (!data.chat.complete) caveats.push(t('logChatPartial', language));
+    if (data.chat.unavailable) caveats.push(t('logChatUnavailable', language));
+    // The days below are built from `preview`, not from `count`, so a capped preview means whole
+    // days are missing from the list while the summary line above still counts them.
+    if (data.events.previewTruncated || data.expenses.previewTruncated) {
+      caveats.push(t('logPreviewTruncated', language));
+    }
   }
 
   return (

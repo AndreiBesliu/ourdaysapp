@@ -2531,3 +2531,47 @@ eroarea de redenumire pe `assetsLoadError`, care se randeaza **doar cand lista e
 exact in cazul care conteaza n-ar fi aratat nimic. Are acum flag propriu.
 
 `npx tsc -b` verde · **766 teste verzi** · build verde.
+
+## 2026-08-26 - Serverul spunea „complet" cand nu era, si rezuma capatul gresit al zilei
+
+**Model:** Claude Opus 5 · lentila de functions a auditului
+
+**Rezumatul de grup citea cele mai VECHI 50 de mesaje.** `orderBy('createdAt','asc').limit(50)` pe
+o fereastra de 48 de ore — deci intr-un grup cu peste 50 de mesaje supravietuiau primele, in timp ce
+promptul cerea modelului sa evidentieze *ce s-a intamplat recent*. O zi aglomerata producea rezumatul
+zilei dinainte. Acum e `desc`, inversat inapoi, si intoarce `truncated` ca cititorul sa stie cand
+fereastra a fost taiata.
+
+Tot acolo: numele expeditorilor se citeau din `users`, care e **owner-only** — Admin SDK-ul ignora
+regulile, deci raspunsul continea date la care apelantul n-are cale de acces, iar fallback-ul
+`email.split('@')[0]` scurgea adresa. Acum din `profiles`, fara fallback pe email, si **intr-o
+singura trecere** in loc de 50 de citiri secventiale in bucla.
+
+**`aiPreviewScope` taia previzualizarea la 200 de randuri si raporta `complete: true`.** `complete`
+reflecta doar daca CITIREA din Firestore a fost taiata; felierea de dupa nu contribuia la nimic. Deci
+un apelant primea 200 de randuri langa `count: 900` si `complete: true`, iar ecranul `/log` isi
+construieste lista de zile **exclusiv din preview** — zilele lipsa pur si simplu nu erau acolo, fara
+niciun avertisment posibil. Acum intoarce `previewTruncated` si `/log` il afiseaza intre celelalte
+avertismente.
+
+**`fetchEvents` si `fetchChat` inghiteau esecurile** cu `.catch(() => null)` — motivul aruncat, iar
+o citire refuzata nedistinctibila de o perioada linistita. `fetchExpenses` fusese deja intarita in
+august si intoarce `unavailable: "read-failed"`; fratii ei ramasesera pe forma veche. **Fix
+asimetria aia e exact cum au stat cheltuielile refuzate trei luni.** Acum toate trei logheaza motivul
+si raporteaza indisponibilitatea, iar `aiPreviewScope` le trece pe toate trei prin `logServerError`.
+
+**`autoSuggestChecklist` platea apelul si apoi nu facea nimic** daca modelul intorcea JSON valid
+care nu era un array (`{"items":[...]}` trece de `JSON.parse`, deci catch-ul nu se atingea, iar
+`if (Array.isArray)` n-avea `else`). Randul de ledger se inchisese cu `ok: true`, holdul se
+decontase, si unul din cele 50 de apeluri zilnice ale proprietarului fusese consumat. Mai rau,
+evenimentul ramanea cu `ai_assistant` in responsabili, iar `onDocumentCreated` nu poate porni a doua
+oara pentru acelasi document — deci nu exista nicio cale de reincercare. Acum se logheaza, si
+`clearAiAssignee` ruleaza pe **fiecare** cale terminala.
+
+**Si doua bucle de profiluri** (CalendarHome si Wallet) care aruncau harta INTREAGA la o singura
+citire respinsa: ruleaza in callback-ul async al lui `liveQuery`, pe care nu-l asteapta nimeni, deci
+respingerea scapa ca unhandled rejection si `setUserMap`/`setSharedUsers` nu mai rula deloc. Starea
+grupurilor fusese deja setata, deci ecranul parea sanatos in timp ce disparea fiecare avatar, fiecare
+nume si fiecare zi de nastere. Acum fiecare citire e pazita separat si harta se publica in `finally`.
+
+`npx tsc -b` verde · **766 teste verzi** · build verde · functions build verde.

@@ -121,6 +121,24 @@ async function usersShareGroup(a: string, b: string): Promise<boolean> {
 
 
 
+// Stop an event advertising AI work that will never run.
+//
+// `onDocumentCreated` fires once per document, so if the trigger ends without clearing this the
+// event keeps `ai_assistant` in its assignees forever and there is no retry path short of creating
+// a new event. Best effort by design: it runs on failure paths, where another write may also fail.
+async function clearAiAssignee(
+  snapshot: { ref: FirebaseFirestore.DocumentReference },
+  data: FirebaseFirestore.DocumentData,
+): Promise<void> {
+  try {
+    const ids: string[] = Array.isArray(data?.assigneeIds) ? data.assigneeIds : [];
+    if (!ids.includes("ai_assistant")) return;
+    await snapshot.ref.update({ assigneeIds: ids.filter((id) => id !== "ai_assistant") });
+  } catch (err) {
+    console.error("could not clear ai_assistant", (err as any)?.message || err);
+  }
+}
+
 export const autoSuggestChecklist = onDocumentCreated({
   document: "events/{eventId}"
 }, async (event) => {
@@ -201,10 +219,20 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
         assigneeIds: newAssignees
       });
       console.log(`Successfully generated checklist for: ${title}`);
+    } else {
+      // `JSON.parse` succeeds for `{"items":[...]}`, so the catch below never sees this — the
+      // function simply fell off the end. The call was already PAID FOR: the ledger row closed
+      // ok, the hold settled, and one of the owner's fifty daily calls was spent. Meanwhile the
+      // event kept advertising `ai_assistant`, and onDocumentCreated cannot fire twice for the
+      // same document, so there was no retry short of creating a new event.
+      void logServerError("model returned a non-array checklist", "ai:generateChecklist", { uid: ownerId });
+      await clearAiAssignee(snapshot, data);
     }
   } catch (error) {
     console.error("AI Generation Error", error);
     void logServerError((error as any)?.message || "AI generation error", "ai:generateChecklist", { stack: (error as any)?.stack });
+    // Every terminal path has to stop the event advertising work that can never run.
+    await clearAiAssignee(snapshot, data);
   }
 });
 
@@ -436,23 +464,42 @@ export const generateGroupDigest = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
     const pastDate = new Date();
     pastDate.setDate(pastDate.getDate() - 2);
     
+    // DESC, then reversed. It was `asc` with `limit(50)`, so once a group passed fifty messages
+    // in the window the survivors were the OLDEST ones — while the prompt below still asked the
+    // model to highlight what happened recently. A busy day produced a digest of the day before.
     const messagesSnapshot = await db.collection(`groups/${groupId}/messages`)
       .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(pastDate))
-      .orderBy('createdAt', 'asc')
+      .orderBy('createdAt', 'desc')
       .limit(50)
       .get();
-      
+    const messageDocs = messagesSnapshot.docs.slice().reverse();
+    const digestTruncated = messagesSnapshot.size >= 50;
+
+    // Names come from `profiles`, not `users`. The Admin SDK ignores the rules, and `users` is
+    // owner-only — so reading a name from there put data into the answer that the caller has no
+    // path to see anywhere else, and the old `email.split('@')[0]` fallback leaked an address.
+    //
+    // Resolved in ONE pass rather than a `get()` per message inside the loop: fifty sequential
+    // round trips is fifty times the latency for a value that repeats.
+    const senderIds = Array.from(new Set(
+      messageDocs.map((d) => d.data().senderId).filter((x): x is string => typeof x === "string"),
+    ));
+    const senderNames = new Map<string, string>();
+    await Promise.all(chunk(senderIds, 30).map(async (ids) => {
+      const snaps = await Promise.all(ids.map((id) => db.doc(`profiles/${id}`).get().catch(() => null)));
+      snaps.forEach((snap, i) => {
+        const name = snap && snap.exists ? snap.data()?.name : null;
+        senderNames.set(ids[i], typeof name === "string" && name ? name : "Someone");
+      });
+    }));
+
     let chatHistory = "Recent Chat Messages:\n";
-    if (messagesSnapshot.empty) {
+    if (messageDocs.length === 0) {
       chatHistory += "(No recent messages)\n";
     } else {
-      for (const docSnap of messagesSnapshot.docs) {
+      for (const docSnap of messageDocs) {
         const d = docSnap.data();
-        let senderName = "Someone";
-        if (d.senderId) {
-          const userDoc = await db.collection('users').doc(d.senderId).get();
-          senderName = userDoc.data()?.name || userDoc.data()?.email?.split('@')[0] || "Someone";
-        }
+        const senderName = (d.senderId && senderNames.get(d.senderId)) || "Someone";
         chatHistory += `- ${senderName}: ${d.text || (d.imageUrl ? '[Image]' : '[Audio]')}\n`;
       }
     }
@@ -502,7 +549,9 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
     );
     const text = result.response.text().trim();
     
-    return { digest: text };
+    // The caller is told when the window was cut, so a partial digest can say so instead of
+    // reading as the whole story.
+    return { digest: text, truncated: digestTruncated };
   } catch (error: any) {
     console.error("AI Group Digest Error", error);
     void logServerError((error as any)?.message || "AI digest error", "ai:groupDigest", { stack: (error as any)?.stack });
@@ -2203,10 +2252,14 @@ export const aiPreviewScope = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
       fetchExpenses(scope, period, Math.floor(AI_DOC_BUDGET / 4)),
     ]);
 
-    if (expenses.unavailable) {
-      // The fetcher stays free of side effects and reports the condition as data; logging is the
-      // caller's job. A missing composite index looks exactly like a quiet month otherwise.
-      void logServerError(`expenses ${expenses.unavailable}`, "ai:previewScope", { uid });
+    // All three, not just expenses. The fetchers stay free of side effects and report the
+    // condition as data; logging is the caller's job. A missing composite index looks exactly
+    // like a quiet month otherwise — which is how a denied collection went unnoticed for three
+    // months, and there was no reason for events and chat to be exempt from the lesson.
+    for (const [what, src] of [["expenses", expenses], ["events", events], ["chat", chat]] as const) {
+      if (src.unavailable) {
+        void logServerError(`${what} ${src.unavailable}`, "ai:previewScope", { uid });
+      }
     }
 
     return {
@@ -2219,18 +2272,29 @@ export const aiPreviewScope = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
       events: {
         count: events.items.length,
         complete: events.complete,
+        // `complete` reflects only whether the Firestore READ was cut. The slice below is a
+        // second, later truncation that contributed nothing to it, so a caller was handed 200 of
+        // 900 rows next to `count: 900` and `complete: true`. The screen builds its day list
+        // purely from `preview`, so the missing days simply were not there.
+        previewTruncated: events.items.length > 200,
         // Titles, so this can be compared against the calendar by eye. Nothing else from the
         // document: no description, no location, no checklist, no assignees.
+        ...(events.unavailable ? { unavailable: events.unavailable } : {}),
         preview: events.items.slice(0, 200).map((e) => ({
           day: e.day, title: e.title, isTask: e.isTask,
           scopeLabel: e.scopeLabel, outOfScope: e.outOfScope, virtual: e.virtual,
         })),
       },
-      chat: { count: chat.items.length, complete: chat.complete },
+      chat: {
+        count: chat.items.length,
+        complete: chat.complete,
+        ...(chat.unavailable ? { unavailable: chat.unavailable } : {}),
+      },
       assets: { count: assets.items.length, complete: assets.complete },
       expenses: {
         count: expenses.items.length,
         complete: expenses.complete,
+        previewTruncated: expenses.items.length > 200,
         // Carried through, so "could not read" never arrives looking like "nothing to read".
         ...(expenses.unavailable ? { unavailable: expenses.unavailable } : {}),
         // The same shape as the events preview, and `description` is not an inconsistency with

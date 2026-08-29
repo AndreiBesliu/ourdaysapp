@@ -117,6 +117,8 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   // AI Digest
   const [isGeneratingDigest, setIsGeneratingDigest] = useState(false);
   const [digestText, setDigestText] = useState<string | null>(null);
+  const [digestTruncated, setDigestTruncated] = useState(false);
+  const [digestError, setDigestError] = useState(false);
 
   const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -531,12 +533,16 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
 
   const handleGenerateDigest = async () => {
     setIsGeneratingDigest(true);
+    setDigestError(false);
     try {
-      const digest = await generateGroupDigestAI(groupId);
-      setDigestText(digest);
+      const { digest, truncated } = await generateGroupDigestAI(groupId);
+      setDigestText(digest || t('digestNothing', language));
+      setDigestTruncated(truncated);
     } catch (e) {
-      console.error(e);
-      alert("Failed to generate digest.");
+      // Was a raw English alert() on a screen that otherwise goes through t(), and one that said
+      // nothing about WHY — including when the failure is simply the daily AI budget.
+      reportError(e instanceof Error ? e.message : String(e), { context: 'GroupChatWidget.digest' });
+      setDigestError(true);
     } finally {
       setIsGeneratingDigest(false);
     }
@@ -598,6 +604,11 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
           </div>
 
           {/* AI Digest Bar */}
+          {digestError && (
+            <div role="alert" className="mx-3 mt-2 rounded-lg bg-rose-50 dark:bg-rose-500/10 px-3 py-2">
+              <p className="text-xs text-rose-700 dark:text-rose-300">{t('digestFailed', language)}</p>
+            </div>
+          )}
           {digestText && (
             <div className="shrink-0 bg-indigo-50 dark:bg-indigo-500/10 border-b border-indigo-200 dark:border-indigo-500/20 p-3 relative shadow-inner z-10">
               <button 
@@ -611,6 +622,9 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                 <span className="text-xs font-bold text-indigo-800 dark:text-indigo-300">{t('chatDigestTitle', language)}</span>
               </div>
               <p className="text-xs text-indigo-700 dark:text-indigo-200 whitespace-pre-wrap pr-4">{digestText}</p>
+              {digestTruncated && (
+                <p className="text-[10px] text-indigo-500 dark:text-indigo-400 mt-1 pr-4">{t('digestTruncated', language)}</p>
+              )}
             </div>
           )}
 

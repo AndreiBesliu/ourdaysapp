@@ -74,7 +74,12 @@ async function fetchEvents(scope, period, budget) {
     for (const g of scope.groupIds) {
         queries.push(col.where("groupId", "==", g).where("date", ">=", longFrom).where("date", "<=", period.to).limit(perQuery));
     }
-    const snaps = await Promise.all(queries.map((q) => q.get().catch(() => null)));
+    // The reason is logged rather than dropped. `.catch(() => null)` alone made a denied read and
+    // an empty calendar the same value, with nothing anywhere saying which it was.
+    const snaps = await Promise.all(queries.map((q) => q.get().catch((err) => {
+        console.error("fetchEvents query failed", (err === null || err === void 0 ? void 0 : err.message) || err);
+        return null;
+    })));
     // Seeded from the scope, like the other fan-out fetchers. The over-claim is SMALLER here than
     // in chat — the ownerId/assignee/invitee branches still catch events inside a dropped group when
     // the caller owns or is named on them, so only passive-member group events go missing — but a
@@ -114,6 +119,11 @@ async function fetchEvents(scope, period, budget) {
             virtual: occ.virtual,
         };
     });
+    // Every query dying is not "no events" — it is a broken read, and the caller must be able to
+    // tell the difference. Same contract as fetchExpenses.
+    if (snaps.length > 0 && snaps.every((x) => x === null)) {
+        return { items: [], complete: false, unavailable: "read-failed" };
+    }
     return { items, complete };
 }
 /**
@@ -137,7 +147,10 @@ async function fetchChat(scope, period, budget) {
         .limit(perGroup)
         .get()
         .then((s) => ({ g, s }))
-        .catch(() => null)));
+        .catch((err) => {
+        console.error("fetchChat query failed", g, (err === null || err === void 0 ? void 0 : err.message) || err);
+        return null;
+    })));
     let complete = !scope.truncated; // see fetchExpenses: a capped fan-out is an incomplete read
     const items = [];
     for (const entry of snaps) {
@@ -162,6 +175,9 @@ async function fetchChat(scope, period, budget) {
                 text: typeof d.text === "string" ? d.text : "",
             });
         }
+    }
+    if (snaps.length > 0 && snaps.every((x) => x === null)) {
+        return { items: [], complete: false, unavailable: "read-failed" };
     }
     return { items, complete };
 }
