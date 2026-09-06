@@ -236,6 +236,37 @@ Erau 32, si nu ascunse: butoanele de pe fisa de eveniment si etichetele din chat
 Ramane in engleza, intentionat: `Admin` in bara de sus (acelasi cuvant in toate cele sase limbi),
 tot `/admin`, si interfata Warlord.
 
+## 15. Auditul 2 (06.09) — patru reparatii, si trei lucruri care sunt ALE TALE
+
+**De ce nu pot eu:** tot ce urmeaza e in spatele autentificarii sau pe telefon.
+
+### De verificat (reparate azi)
+
+- [ ] **Locatia si mementoul unui eveniment.** Pana azi se pierdeau LA SALVARE — le scriai, apasai
+      Salveaza, si dispareau. Adauga un eveniment cu locatie si cu un memento; redeschide-l:
+      locatia trebuie sa fie acolo, iar notificarea sa porneasca la timp.
+      *(Pe telefon mementoul tot nu porneste — vezi mai jos, e alta cauza.)*
+- [ ] **Deconectare → alt cont pe acelasi dispozitiv.** Tema, POZA de fundal, sunetul si haptica
+      trebuie sa reporneasca de la valorile implicite. **Limba ramane** — e intentionat, ca ecranul
+      de login sa fie in limba ta.
+- [ ] **Scanerul de coduri de bare:** deschide-l si inchide-l repede, cat inca porneste camera.
+      Ledul camerei trebuie sa se stinga. Inainte ramanea aprins pana reincarcai pagina.
+- [ ] **Stergerea unui cont din admin** (pe un cont de TEST): raportul trebuie sa numere acum si
+      `expenses` si `notifications`. Inainte cheltuielile ramaneau, iar soldurile grupului aratau
+      gresit pentru toti ceilalti, permanent.
+
+### Decizii care sunt ale tale
+
+- [ ] **PvP-ul nu e autoritar pe CONSECINTE.** Serverul stabileste cine a castigat, dar armata e
+      scrisa doar de browserul celui care pierde. Deci: o infrangere nu costa nimic daca nu deschizi
+      ecranul de rezultat · aceiasi soldati pot fi mizati in mai multe batalii simultan · pe al
+      doilea dispozitiv pierderile se aplica de doua ori. **Reparatia evidenta scurge informatie**
+      (i-ar arata adversarului cate unitati ai angajat inainte sa se angajeze el), deci vreau sa
+      alegi tu forma inainte s-o construiesc.
+- [ ] **Android: mementourile nu pornesc deloc pe telefon.** `@capacitor/local-notifications` nu e
+      in build. Cere `npx cap sync android` + reconstruire + un telefon pe care sa verifici.
+- [ ] **Android 15 (targetSdk 35):** edge-to-edge e pornit si nimic nu rezerva barele de sus/jos.
+
 ---
 
 ## Ce am verificat eu, ca să nu le mai faci
@@ -270,3 +301,5 @@ Măsurate, nu presupuse — le scriu ca să știi unde **nu** trebuie să te ui�
 - Ca nu mai exista NICIUN sir englezesc literal in ecranele obisnuite — dar de data asta cu un test
   in suita (`i18nCoverage.test.ts`), nu cu un grep de-o data, fiindca exact aia m-a facut sa afirm
   gresit pe 26.08.
+- Al doilea audit: 13 agenti, 6 lentile, 52 de constatari trecute prin respingere. Cele patru fara
+  ambiguitate sunt reparate si au garzi care musca; restul de 48 sunt in DEVLOG, ordonate.
