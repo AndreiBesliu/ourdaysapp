@@ -215,6 +215,27 @@ Ca sa ajungi la sectiune: **Setari → oprești modul intunecat global**, apoi a
 Daca ceva arata altfel decat inainte pe tema TA, spune-mi ce combinatie ai — aia ar fi o regresie,
 si testul care ar fi trebuit s-o prinda e `themeContrast.test.ts` → „a coherent theme is left alone".
 
+## 14. Inca 32 de siruri englezesti, traduse (06.09) — toate in spatele autentificarii
+
+**De ce nu pot eu:** fisa de eveniment, chatul si portofelul cer cont.
+
+Afirmasem pe 26.08 ca nu mai e engleza nicaieri. **Era gresit** — scanerul meu se uita pe o
+singura linie, iar forma obisnuita aici se intinde pe trei (iconita, cuvintele, tagul de inchidere).
+Erau 32, si nu ascunse: butoanele de pe fisa de eveniment si etichetele din chat.
+
+- [ ] **Fisa unui eveniment** (deschide un eveniment): `Începe sarcina`, `Finalizează`, `Termină`,
+      `Finalizat`, `În desfășurare`, `Notițe`, `Listă de făcut`, `Șterge evenimentul`,
+      `Confirmare — vii?` cu `Particip` / `Poate`.
+- [ ] **La editarea unui eveniment care se repeta:** `Doar evenimentul ăsta` / `Toate evenimentele
+      din serie`.
+- [ ] **Chat:** titlul `Chat de grup · <nume>`, `Mesajul a fost șters`, `Fixat`, `Răspunzi lui`.
+- [ ] **Portofel:** tabul `Portofel`, `Alege o încărcare anterioară`, si textul de sub codul de
+      bare („Arată codul la scaner...").
+- [ ] **Arcade:** butonul `Deschide în Warlord`.
+
+Ramane in engleza, intentionat: `Admin` in bara de sus (acelasi cuvant in toate cele sase limbi),
+tot `/admin`, si interfata Warlord.
+
 ---
 
 ## Ce am verificat eu, ca să nu le mai faci
@@ -246,3 +267,6 @@ Măsurate, nu presupuse — le scriu ca să știi unde **nu** trebuie să te ui�
 - Tema implicita, in browser: clasa `dark` aplicata, card zinc-900, eticheta zinc-300, contrast 11,99.
 - Matricea de teme: 100 de combinatii (5 fundaluri x 10 trepte de strat x 2 pozitii de comutator) —
   in fiecare, culoarea de text aleasa e cea MAI BUNA dintre cele doua, niciodata cea mai proasta.
+- Ca nu mai exista NICIUN sir englezesc literal in ecranele obisnuite — dar de data asta cu un test
+  in suita (`i18nCoverage.test.ts`), nu cu un grep de-o data, fiindca exact aia m-a facut sa afirm
+  gresit pe 26.08.
