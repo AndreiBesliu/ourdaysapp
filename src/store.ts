@@ -42,23 +42,39 @@ interface ThemeState {
   hapticsEnabled: boolean;
   setTheme: (color: string, isDark: boolean) => void;
   setAdvancedTheme: (theme: Partial<ThemeState>) => void;
+  /** Drop the signed-out account's appearance so it cannot follow the next one in. */
+  resetTheme: () => void;
 }
 
-export const useThemeStore = create<ThemeState>((set) => ({
+/**
+ * The look every account starts from.
+ *
+ * Named rather than inlined so `resetTheme` restores exactly the same thing the app booted with —
+ * a second literal would drift from this one the first time somebody changed a default.
+ */
+const DEFAULT_THEME = {
   primaryColor: '221.2 83.2% 53.3%',
   isDarkMode: true,
   customThemeIsDark: true,
   backgroundImage: null,
   backgroundColor: null,
-  backgroundStyle: 'stretch',
+  backgroundStyle: 'stretch' as const,
   backgroundOverlay: 50,
   overlayColor: null,
-  language: rememberedLanguage(),
   soundEnabled: true,
   hapticsEnabled: true,
+};
+
+export const useThemeStore = create<ThemeState>((set) => ({
+  ...DEFAULT_THEME,
+  language: rememberedLanguage(),
   setTheme: (color, isDark) => set({ primaryColor: color, isDarkMode: isDark }),
   setAdvancedTheme: (theme) => {
     remember(theme.language);
     set((state) => ({ ...state, ...theme }));
   },
+  // The LANGUAGE deliberately survives. It is the one preference that belongs to the device and
+  // the person reading the login screen, not to the session — resetting it would drop whoever is
+  // about to sign in back to English on the way there.
+  resetTheme: () => set({ ...DEFAULT_THEME }),
 }));

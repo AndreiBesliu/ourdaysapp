@@ -1536,6 +1536,15 @@ exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
         const games = await deleteQueryInBatches(db.collection("games").where("createdBy", "==", uid));
         const frFrom = await deleteQueryInBatches(db.collection("friend_requests").where("fromId", "==", uid));
         const frTo = await deleteQueryInBatches(db.collection("friend_requests").where("toId", "==", uid));
+        // Expenses were NOT deleted here, and that corrupts every group the person was in. The rows
+        // survive, the surviving members can still read them (the rule grants any member the group
+        // ledger), the balance still SUMS the departed person's spending — but the divisor shrank when
+        // they were removed from the group's member list twenty lines above. So everyone left is
+        // quietly told they owe more than they do, for good.
+        const expenses = await deleteQueryInBatches(db.collection("expenses").where("ownerId", "==", uid));
+        // Notifications addressed to a deleted account are unreachable by anyone: the rules key them to
+        // the recipient's own uid, so nothing but this can ever remove them.
+        const notifications = await deleteQueryInBatches(db.collection("notifications").where("userId", "==", uid));
         // Delete the user's uploaded Storage files.
         const storageDeleted = await deleteStoragePrefixes([
             `assets/${uid}/`, `events/${uid}/`, `checklists/${uid}/`,
@@ -1565,7 +1574,7 @@ exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
         catch ( /* already gone */_c) { /* already gone */ }
         return {
             ok: true, deleted: true, authDeleted, storageDeleted,
-            counts: { groups: groupsSnap.size, events, assets, games, friendRequests: frFrom + frTo, friendsUnlinked: myFriends.length },
+            counts: { groups: groupsSnap.size, events, assets, games, expenses, notifications, friendRequests: frFrom + frTo, friendsUnlinked: myFriends.length },
             note: "Group chat messages authored by the user are retained as group history.",
         };
     }

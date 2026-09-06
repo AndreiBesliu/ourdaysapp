@@ -592,7 +592,17 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         assigneeId: assigneeIds[0] || null,
         assetId: removeMainImage ? null : (selectedAssetId || (editEvent ? editEvent.assetId : null)),
         updatedAt: new Date().toISOString(),
-        rsvpEnabled: rsvpEnabled
+        rsvpEnabled: rsvpEnabled,
+        // These two were collected by the form, written by the AUTOSAVE payload, and accepted by the
+        // server's override whitelist — and then dropped here, on the path that actually creates the
+        // event. So a location you typed never appeared, and a reminder you set never fired: both
+        // readers (EventDetailsModal and the notification scheduler) gate on exactly these fields.
+        //
+        // One object serves create, non-recurring edit, scope='all' and the override, so adding them
+        // here fixes all four. Both are always defined ('' and null), so there is no undefined for
+        // Firestore to reject.
+        location: location,
+        reminderMinutes: reminderMinutes
       };
 
       if (editEvent) {

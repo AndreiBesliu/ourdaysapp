@@ -26,7 +26,7 @@ import { shouldUseLightText } from './utils/themeContrast';
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const { setTheme, setAdvancedTheme, isDarkMode, customThemeIsDark, primaryColor, backgroundImage, backgroundColor, backgroundStyle, backgroundOverlay, overlayColor } = useThemeStore();
+  const { setTheme, setAdvancedTheme, resetTheme, isDarkMode, customThemeIsDark, primaryColor, backgroundImage, backgroundColor, backgroundStyle, backgroundOverlay, overlayColor } = useThemeStore();
 
   // The `dark` class flips every `dark:` text colour in the app, so it has to be decided by the
   // colour the text actually LANDS on — not by a toggle with no relationship to it.
@@ -249,6 +249,10 @@ function App() {
           }
         }
       } else {
+        // The store is module-scope and signing out is an SPA navigate, not a reload, so without
+        // this the previous account's colours, background PHOTO, sound and haptics are still on
+        // screen for whoever signs in next on this device.
+        resetTheme();
         setUser(null);
       }
       setLoading(false);

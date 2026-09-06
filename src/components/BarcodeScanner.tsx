@@ -3,6 +3,7 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { X } from 'lucide-react';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
+import { reportError } from '../reportError';
 
 interface BarcodeScannerProps {
   onScan: (result: string, format: string) => void;
@@ -13,6 +14,9 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
   const { language } = useThemeStore();
   const [error, setError] = useState<string>('');
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  // Always the latest callback, without making the camera effect depend on its identity.
+  const onScanRef = useRef(onScan);
+  onScanRef.current = onScan;
 
   useEffect(() => {
     scannerRef.current = new Html5Qrcode("reader", {
@@ -38,6 +42,10 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
       ]
     });
 
+    // Set by the cleanup below. `start()` can resolve AFTER the component is gone — the camera
+    // permission prompt alone can take seconds — and by then nothing else will ever stop it.
+    let cancelled = false;
+
     const startScanning = async () => {
       try {
         await scannerRef.current?.start(
@@ -50,10 +58,10 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
             // Success
             if (scannerRef.current) {
               scannerRef.current.stop().then(() => {
-                onScan(decodedText, decodedResult.result.format?.formatName || 'UNKNOWN');
-              }).catch(err => {
-                console.error("Failed to stop scanner", err);
-                onScan(decodedText, decodedResult.result.format?.formatName || 'UNKNOWN');
+                onScanRef.current(decodedText, decodedResult.result.format?.formatName || 'UNKNOWN');
+              }).catch(() => {
+                // The scan itself succeeded; failing to release the camera must not swallow it.
+                onScanRef.current(decodedText, decodedResult.result.format?.formatName || 'UNKNOWN');
               });
             }
           },
@@ -62,8 +70,12 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
             // Ignore for UX
           }
         );
+        // Torn down while the camera was warming up: stop the stream we just opened. Without this
+        // the guard in the cleanup had already run and found `isScanning` still false.
+        if (cancelled) await scannerRef.current?.stop().catch(() => {});
       } catch (err: any) {
-        console.error("Scanner Error:", err);
+        if (cancelled) return; // an aborted start is not an error to show anybody
+        reportError(err instanceof Error ? err.message : String(err), { context: 'BarcodeScanner.start' });
         setError(t('scannerCameraFailed', language));
       }
     };
@@ -71,11 +83,16 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
     startScanning();
 
     return () => {
-      if (scannerRef.current?.isScanning) {
-        scannerRef.current.stop().catch(console.error);
-      }
+      cancelled = true;
+      // Unconditional. `isScanning` is only true once getUserMedia has resolved, so gating on it
+      // was exactly backwards: the one case that needed stopping was the one it skipped. Calling
+      // stop() on an instance that never started rejects harmlessly, and that is caught.
+      scannerRef.current?.stop().catch(() => {});
     };
-  }, [onScan]);
+    // `onScan` is an inline arrow at every call site, so a new identity on every parent render.
+    // Keying the effect on it restarted the camera each time the parent re-rendered; the callback
+    // is read through a ref instead so this effect runs once per mount.
+  }, []);
 
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col">

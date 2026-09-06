@@ -2754,3 +2754,70 @@ forma pe mai multe linii, si ca nu se plange de un text deja tradus. Verificat c
 reintrodus `To-Do List` in forma exacta care scapase, iar testul l-a numit cu fisier, linie si text.
 
 `npx tsc -b` verde · **783 teste verzi** (4 noi) · build verde.
+
+## 2026-09-06 - Auditul 2: 52 de constatari, si primele patru reparate
+
+**Model:** Claude Opus 5 · „porneste auditul" · 13 agenti, 6 lentile necoperite de pasa din august
+(performanta/cost, curse de ciclu de viata, cresterea datelor, autoritatea PvP, accesibilitate/telefon,
+panoul de admin). **52 au supravietuit respingerii, 1 doborata** — 10 grave, 17 medii, 25 mici.
+
+De notat onest: rata de respingere e mult mai mica decat data trecuta (1 din 53, fata de 3 din 49).
+Verificatorii **au** lucrat — au coborat severitati, au corectat reparatii propuse, iar unul a prins
+o reparatie care ar fi livrat o **pierdere vizibila de date** (un filtru de data pe interogarea
+calendarului ar fi sters din ecran fiecare eveniment recurent, fiindca parintele seriei sta in afara
+ferestrei randate). Dar diferenta de rata o notez, nu o explic.
+
+### Cele patru reparate acum — cele fara ambiguitate
+
+**1. `location` si `reminderMinutes` se pierdeau la salvare.** Formularul le culege, autosalvarea le
+scrie, lista alba de pe server le accepta — iar `handleSubmit` pur si simplu nu le punea in obiect.
+Deci locatia scrisa nu aparea niciodata si mementoul setat nu pornea niciodata: **ambii cititori**
+(fisa evenimentului si planificatorul de notificari) se uita exact la campurile alea. Un singur
+obiect serveste crearea, editarea, `scope='all'` si override-ul, deci o linie repara toate patru.
+
+*Garda:* `eventPayload.test.ts` extrage AMBELE literale `baseEventData` prin potrivire de acolade si
+cere ca tot ce scrie autosalvarea sa scrie si butonul de salvare (cu `date` pe lista de exceptii, cu
+motivul scris). Nu fixez cele doua nume de campuri — fixez **invariantul**: doua literale care trebuie
+sa fie de acord, fara nimic care sa le tina de acord. Verificat ca musca: le-am scos din nou si testul
+le-a numit pe amandoua.
+
+**2. Stergerea unui cont din admin nu stergea `expenses`.** Randurile supravietuiau, membrii ramasi
+le puteau in continuare citi (regula da oricarui membru registrul grupului), suma inca includea
+cheltuiala celui plecat — dar impartitorul scazuse cand fusese scos din `members`. Deci toti cei
+ramasi erau anuntati tacut ca datoreaza mai mult decat datoreaza, **definitiv**. Adaugat si
+`notifications`, pe care altfel nu le mai putea sterge nimeni (regulile le leaga de uid-ul
+destinatarului). Ambele apar acum in `counts`.
+
+**3. Tema contului anterior supravietuia deconectarii.** Store-ul e un `create()` de modul, iar
+deconectarea e `signOut` + navigare SPA, fara reload — deci modulul isi pastra valorile. Reparasem
+pe 26.08 **doar limba**; fundalul, POZA de fundal, stratul, comutatorul de suprafete inchise, sunetul
+si haptica stateau in continuare in spatele aceleiasi porti. Acum exista `resetTheme()`, chemat cand
+`onAuthStateChanged` raporteaza `null`. **Limba ramane intentionat** — apartine dispozitivului si
+celui care citeste ecranul de login, nu sesiunii; asimetria aia e testata explicit, fiindca altfel
+arata ca o scapare.
+
+**4. Scanerul de coduri de bare pierdea fluxul camerei.** Curatenia era conditionata de
+`isScanning`, pe care html5-qrcode il pune pe `true` abia DUPA ce `getUserMedia` se rezolva — adica
+exact cazul care avea nevoie de oprire era singurul sarit. Inchizi foaia cat camera porneste si
+fluxul ramane viu cat traieste pagina, cu ledul aprins pe telefon. Plus: efectul avea `[onScan]` in
+dependinte, iar parintele trimite o sageata inline la fiecare randare, deci camera repornea la
+fiecare randare a parintelui. Acum: steag de anulare + oprire neconditionata + callback prin ref.
+
+`npx tsc -b` verde · **790 teste verzi** (7 noi) · build verde · functions build verde.
+
+### Ce NU am reparat, si de ce
+
+**Gruparea PvP (3 constatari grave) cere o decizie, nu o implementare.** Serverul stabileste cine a
+castigat, dar armata e scrisa **doar de browserul celui care pierde**: `warlordDomains` e atins de o
+singura linie in tot `functions/` (o stergere, la stergerea contului). Deci o infrangere nu costa
+nimic daca nu deschizi ecranul de rezultat; unitatile nu sunt blocate cat asteapta provocarea, deci
+aceiasi soldati pot fi mizati in mai multe batalii; iar marcajul „deja aplicat" e in `localStorage`
+in timp ce armata e sincronizata in cloud, deci pe al doilea dispozitiv pierderile se aplica de doua
+ori. Verificatorul a semnalat ca reparatia evidenta **scurge informatie**: `stakedUnitIds` pe
+documentul public al jocului i-ar spune adversarului cate unitati ai angajat inainte sa se angajeze
+el — exact semnalul pe care desfasurarea ascunsa exista ca sa-l previna.
+
+**Android:** `@capacitor/local-notifications` nu e in build, deci mementourile nu pornesc niciodata
+pe telefon — si esecul e un `console.error` gol, deci nu ajunge in `errorLogs`. Plus `targetSdk 35`
+porneste edge-to-edge fara sa rezerve barele de sistem. Cere `npx cap sync android` + reconstruire +
+un telefon, deci trece la owner.
