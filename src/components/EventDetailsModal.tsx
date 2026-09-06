@@ -450,7 +450,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                       </div>
                       
                       <button type="button" onClick={() => setShowOwnerProfile(false)} className="mt-4 w-full py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 rounded-lg text-xs font-medium transition-colors">
-                        Close
+                        {t('closeAction', language)}
                       </button>
                     </div>
                   )}
@@ -527,19 +527,19 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                       disabled={loading || !canEdit}
                       className="flex-1 py-2 px-4 bg-emerald-500 text-white rounded-lg flex items-center justify-center gap-2 font-medium shadow-sm"
                     >
-                      <CheckCircle className="w-5 h-5" /> Completed
+                      <CheckCircle className="w-5 h-5" /> {t('statusCompleted', language)}
                     </button>
                   ) : event.taskStatus === 'started' ? (
                     <>
                       <div className="flex-1 py-2 px-4 bg-amber-500/20 text-amber-700 dark:text-amber-400 rounded-lg flex items-center justify-center font-medium border border-amber-500/30">
-                        In Progress
+                        {t('statusInProgress', language)}
                       </div>
                       <button 
                         onClick={handleToggleTask}
                         disabled={loading || !canEdit}
                         className="flex-1 py-2 px-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg flex items-center justify-center gap-2 font-medium transition-colors shadow-sm"
                       >
-                        <CheckCircle className="w-5 h-5" /> Finish
+                        <CheckCircle className="w-5 h-5" /> {t('finishTask', language)}
                       </button>
                     </>
                   ) : (
@@ -549,14 +549,14 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                         disabled={loading || !canEdit}
                         className="flex-1 py-2 px-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg flex items-center justify-center font-medium transition-colors shadow-sm"
                       >
-                        Start Task
+                        {t('startTaskAction', language)}
                       </button>
                       <button 
                         onClick={handleToggleTask}
                         disabled={loading || !canEdit}
                         className="flex-1 py-2 px-4 bg-zinc-200 dark:bg-zinc-700 hover:bg-emerald-500 hover:text-white text-zinc-700 dark:text-zinc-300 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors group shadow-sm"
                       >
-                        <CheckCircle className="w-5 h-5 text-zinc-400 group-hover:text-white" /> Complete
+                        <CheckCircle className="w-5 h-5 text-zinc-400 group-hover:text-white" /> {t('completeTask', language)}
                       </button>
                     </>
                   )}
@@ -607,7 +607,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           {rsvpEnabled && (
             <div className="p-4 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-700">
               <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3 flex items-center gap-1.5">
-                <Users className="w-4 h-4" /> RSVP — Are you going?
+                <Users className="w-4 h-4" /> {t('rsvpQuestion', language)}
               </p>
               
               {/* RSVP Buttons */}
@@ -620,7 +620,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                       : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20'
                   }`}
                 >
-                  <ThumbsUp className="w-4 h-4" /> Yes
+                  <ThumbsUp className="w-4 h-4" /> {t('rsvpGoing', language)}
                 </button>
                 <button
                   onClick={() => handleRsvp('maybe')}
@@ -630,7 +630,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                       : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-500/20'
                   }`}
                 >
-                  <HelpCircle className="w-4 h-4" /> Maybe
+                  <HelpCircle className="w-4 h-4" /> {t('rsvpMaybe', language)}
                 </button>
                 <button
                   onClick={() => handleRsvp('no')}
@@ -686,7 +686,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           {event.description && (
             <div>
               <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-1.5">
-                <FileText className="w-4 h-4" /> Notes
+                <FileText className="w-4 h-4" /> {t('notesLabel', language)}
               </p>
               <div className="p-3 bg-zinc-50 dark:bg-zinc-800/30 rounded-lg text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap">
                 {event.description}
@@ -698,7 +698,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           {checklist.length > 0 && (
             <div>
               <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-1.5">
-                <CheckCircle className="w-4 h-4" /> To-Do List
+                <CheckCircle className="w-4 h-4" /> {t('todoListLabel', language)}
               </p>
               <DragDropContext onDragEnd={handleDragEnd}>
                 <Droppable droppableId="event-checklist">
@@ -799,7 +799,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           {checklist.length === 0 && event.assigneeIds?.includes('ai_assistant') && (
             <div>
               <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-primary" /> Magic Checklist Generating...
+                <Sparkles className="w-4 h-4 text-primary" /> {t('generatingChecklist', language)}
               </p>
               <div className="space-y-2 animate-pulse">
                 {[1, 2, 3].map(i => (
@@ -816,7 +816,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           {linkedAsset && linkedAsset.barcodeValue && (
             <div>
               <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-1.5">
-                <Wallet className="w-4 h-4" /> Linked Asset Code
+                <Wallet className="w-4 h-4" /> {t('linkedAssetCode', language)}
               </p>
               <div className="bg-white p-4 rounded-xl flex flex-col items-center justify-center w-full min-h-[150px] border border-zinc-200 dark:border-zinc-700">
                 <p className="font-semibold text-zinc-900 mb-4 text-center">{linkedAsset.name}</p>
@@ -843,7 +843,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           {event.imageUrl && (
             <div>
               <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-1.5">
-                <ImageIcon className="w-4 h-4" /> Attached Asset
+                <ImageIcon className="w-4 h-4" /> {t('attachedAsset', language)}
               </p>
               <div className="rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullScreenImage(event.imageUrl)}>
                 <img src={event.imageUrl} alt="Event attachment" className="w-full h-auto max-h-48 object-contain" />
@@ -861,7 +861,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
               disabled={loading}
               className="flex items-center gap-1.5 text-sm font-medium text-red-500 hover:text-red-600 transition-colors"
             >
-              <Trash2 className="w-4 h-4" /> Delete Event
+              <Trash2 className="w-4 h-4" /> {t('deleteEventAction', language)}
             </button>
           </div>
         )}

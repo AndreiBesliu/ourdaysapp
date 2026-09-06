@@ -555,7 +555,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
           {/* Header */}
           <div className="p-3 bg-primary flex items-center justify-between shrink-0">
             <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-sm">Group Chat · {groupName}</h3>
+              <h3 className="font-bold text-sm">{t('groupChatTitle', language)} · {groupName}</h3>
               {/* Member avatars */}
               <div className="flex items-center gap-1 mt-1">
                 {groupMembers.map(memberId => {
@@ -769,7 +769,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                       {msg.isDeleted ? (
                         <div className="px-3 py-2 text-zinc-500/80 italic flex items-center gap-1.5 text-xs">
                           <Ban className="w-3.5 h-3.5" />
-                          This message was deleted
+                          {t('messageDeleted', language)}
                         </div>
                       ) : (
                         <>
@@ -803,7 +803,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                           </div>
                           {msg.isPinned && (
                             <div className={`px-2 py-0.5 flex items-center gap-1 text-[10px] ${isMe ? 'text-white/60' : 'text-amber-500'}`}>
-                              <Pin className="w-2.5 h-2.5 rotate-45" /> Pinned
+                              <Pin className="w-2.5 h-2.5 rotate-45" /> {t('pinnedLabel', language)}
                             </div>
                           )}
                         </>
@@ -928,7 +928,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
               <div className="flex items-center gap-2 overflow-hidden">
                 <Reply className="w-4 h-4 text-primary shrink-0" />
                 <div className="flex flex-col overflow-hidden">
-                  <span className="text-[10px] font-bold text-primary">Replying to {replyingTo.senderId === auth.currentUser?.uid ? 'You' : (userMap[replyingTo.senderId]?.name || userMap[replyingTo.senderId]?.email?.split('@')[0] || 'Unknown')}</span>
+                  <span className="text-[10px] font-bold text-primary">{t('replyingToLabel', language)} {replyingTo.senderId === auth.currentUser?.uid ? 'You' : (userMap[replyingTo.senderId]?.name || userMap[replyingTo.senderId]?.email?.split('@')[0] || 'Unknown')}</span>
                   <span className="text-xs text-zinc-500 truncate">{replyingTo.text || 'Photo'}</span>
                 </div>
               </div>

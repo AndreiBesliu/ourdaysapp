@@ -555,7 +555,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                     onClick={() => { onClose(); navigate('/warlord'); }}
                     className="px-4 py-2 bg-black text-white dark:bg-white dark:text-black rounded-lg text-sm font-semibold"
                   >
-                    Open in Warlord ⚔
+                    {t('openInWarlord', language)} ⚔
                   </button>
                   <button onClick={() => setPlayingGameId(null)} className="text-xs text-zinc-500 underline">{t('back', language)}</button>
                 </div>

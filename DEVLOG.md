@@ -2709,3 +2709,48 @@ inline se calculeaza corect. Seamana cu propagarea fundalului `body` catre canva
 si oricum e dinaintea schimbarii mele. **Nu-l declar bug fiindca nu l-am dovedit.**
 
 `npx tsc -b` verde · **779 teste verzi** (13 noi) · build verde.
+
+## 2026-09-06 - „Zero siruri englezesti" era FALS. Erau 32, intr-un unghi mort al propriului scaner
+
+**Model:** Claude Opus 5
+
+Pe 26.08 am maturat aplicatia de text englezesc, am re-scanat, n-am gasit nimic si am scris in
+mesajul de commit **„zero English strings remain outside the two declared exemptions"**. Era gresit.
+
+Scanerul potrivea `>Text<` pe **o singura linie**. Forma cea mai frecventa din codul asta se intinde
+pe trei:
+
+```
+<p className="...">
+  <Wallet className="w-4 h-4" /> Linked Asset Code
+</p>
+```
+
+**Treizeci si doua de siruri** stateau exact acolo. Si nu obscure: `Start Task`, `Complete`,
+`To-Do List`, `Delete Event`, `RSVP — Are you going?`, `This message was deleted`, `Pinned`,
+`Replying to`, `This event only`, `All events in series`. Adica butoanele de pe fisa de eveniment si
+etichetele din chat — lucruri pe care un utilizator roman le vede la fiecare deschidere.
+
+**De ce le-am gasit acum:** ma uitam la cu totul altceva (o scanare de contrast pe perechile
+`dark:` lipsa) si mi-a sarit in ochi `Linked Asset Code` in marginea unei bucati de markup pe care
+o citeam din alt motiv. Scanarea de contrast, apropo, **n-a gasit nimic real**: 30 de candidati,
+toti falsi — 27 aveau perechea pe `dark:hover:text-` (regexul meu cauta `dark:text-`), iar ultimii
+3 stau pe un panou `bg-white` fortat deliberat, fiindca acolo se randeaza coduri de bare si QR, care
+au nevoie de alb ca sa fie scanabile. **Am verificat fiecare inainte sa raportez ceva** — un scaner
+care da esecuri false trimite la reparat lucruri nestricate.
+
+**Reparat:** 22 de chei noi in 6 limbi, plus refolosirea celor care existau deja (`addEvent`,
+`pickFromAssets`, `cancel`, `rsvpGoing`, `rsvpMaybe`, `assetsTitle`, `generatingChecklist`) — testul
+de paritate interzice cheile duplicate, deci refolosirea nu e doar eleganta, e obligatorie.
+
+Ramane **un singur** literal: `Admin`, in bara din CalendarHome. E acelasi cuvant in toate cele sase
+limbi si e intrarea catre consola care oricum e exceptata. E in lista alba a testului, cu motivul
+scris langa el.
+
+**Partea care tine — si care e adevarata lectie:** `src/utils/i18nCoverage.test.ts`. Un grep de-o
+data e o afirmatie despre ziua in care l-ai rulat; aceeasi scanare, cu bug-ul de linie nou reparat,
+pusa in suita, e o afirmatie re-verificata la fiecare commit. Are si doua teste despre SINE: ca vede
+forma pe mai multe linii, si ca nu se plange de un text deja tradus. Verificat ca musca: am
+reintrodus `To-Do List` in forma exacta care scapase, iar testul l-a numit cu fisier, linie si text.
+
+`npx tsc -b` verde · **783 teste verzi** (4 noi) · build verde.

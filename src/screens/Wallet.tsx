@@ -517,7 +517,7 @@ export default function Wallet() {
             onClick={() => setActiveTab('assets')}
             className={`pb-3 text-sm font-bold transition-colors ${activeTab === 'assets' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'}`}
           >
-            Assets
+            {t('assetsTitle', language)}
           </button>
           <button 
             onClick={() => setActiveTab('expenses')}
@@ -805,7 +805,7 @@ export default function Wallet() {
                 className="flex-1 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-zinc-800 dark:border-zinc-700 outline-none focus:border-emerald-500" 
               />
               <button type="submit" disabled={loading} className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-medium hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center gap-1">
-                <Plus className="w-4 h-4" /> Add
+                <Plus className="w-4 h-4" /> {t('addAction', language)}
               </button>
             </form>
           </div>
@@ -819,7 +819,7 @@ export default function Wallet() {
             <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50">
               <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                 <Folder className="w-5 h-5 text-emerald-500" />
-                Select Past Upload
+                {t('selectPastUpload', language)}
               </h3>
               <button onClick={() => setShowPastImages(false)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors">
                 <X className="w-4 h-4" />
@@ -897,7 +897,7 @@ export default function Wallet() {
             </div>
             
             <p className="mt-6 text-sm text-zinc-500 text-center">
-              Present this code to the scanner. Turn up your screen brightness if necessary.
+              {t('presentCodeHint', language)}
             </p>
           </div>
         </div>

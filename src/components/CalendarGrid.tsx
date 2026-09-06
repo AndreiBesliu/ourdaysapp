@@ -479,7 +479,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                     }}
                     className="mt-2 w-full py-2.5 border-2 border-dashed border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-800 hover:border-zinc-300 dark:hover:text-zinc-200 dark:hover:border-zinc-600 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
                   >
-                    <Plus className="w-4 h-4" /> Add Event
+                    <Plus className="w-4 h-4" /> {t('addEvent', language)}
                   </button>
                 </>
               )}

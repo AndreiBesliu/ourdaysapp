@@ -751,7 +751,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                         </div>
                         
                         <button type="button" onClick={() => setShowOwnerProfile(false)} className="mt-4 w-full py-1.5 bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 rounded-lg text-xs font-medium transition-colors">
-                          Close
+                          {t('closeAction', language)}
                         </button>
                       </div>
                     )}
@@ -876,7 +876,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 onClick={handleAddChecklistItem}
                 className="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium transition-colors"
               >
-                Add
+                {t('addAction', language)}
               </button>
             </div>
 
@@ -1259,7 +1259,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                         : 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                     }`}
                   >
-                    This event only
+                    {t('thisEventOnly', language)}
                   </button>
                   <button
                     type="button"
@@ -1270,7 +1270,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                         : 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                     }`}
                   >
-                    All events in series
+                    {t('allEventsInSeries', language)}
                   </button>
                 </div>
               </div>
@@ -1431,7 +1431,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50">
               <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                 <Wallet className="w-5 h-5 text-emerald-500" />
-                Select from Assets
+                {t('pickFromAssets', language)}
               </h3>
               <button onClick={() => setShowAssetPicker(null)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors">
                 <X className="w-4 h-4" />

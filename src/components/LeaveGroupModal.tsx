@@ -224,7 +224,7 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
             onClick={onClose}
             className="flex-1 py-2.5 rounded-xl font-medium text-zinc-600 dark:text-zinc-300 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 transition-colors"
           >
-            Cancel
+            {t('cancel', language)}
           </button>
           <button 
             onClick={handleAction}
