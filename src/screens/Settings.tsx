@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Moon, Sun, Palette, LogOut, Settings as SettingsIcon, Camera, Home, Image as ImageIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { t } from '../utils/i18n';
+import { shouldUseLightText, isUnreadableBackground, effectiveTextContrast } from '../utils/themeContrast';
 import { useThemeStore } from '../store';
 import { auth, db, storage } from '../firebase';
 import { signOut, updateProfile } from 'firebase/auth';
@@ -52,6 +53,17 @@ function hexToHSL(hex: string): string {
 export default function Settings() {
   const navigate = useNavigate();
   const { primaryColor, isDarkMode, customThemeIsDark, backgroundColor, overlayColor, soundEnabled, hapticsEnabled, setTheme, backgroundImage, backgroundOverlay, language, setAdvancedTheme } = useThemeStore();
+
+  // Only rendered when the derivation DISAGREES with the toggle, or when neither text colour can
+  // reach AA on this background — a note that appears always would stop being read.
+  const themeNote = (() => {
+    if (isDarkMode) return null; // the global switch paints its own background; nothing to explain
+    const input = { isDarkMode, customThemeIsDark, backgroundColor, overlayColor, backgroundOverlay, backgroundImage };
+    const light = shouldUseLightText(input);
+    const unreadable = isUnreadableBackground(input);
+    if (!unreadable && light === customThemeIsDark) return null;
+    return { light, unreadable, ratio: effectiveTextContrast(input).toFixed(1) };
+  })();
   const [photoURL, setPhotoURL] = useState<string | null>(null);
   const [birthday, setBirthday] = useState<string>('');
   const [name, setName] = useState<string>(auth.currentUser?.displayName || '');
@@ -422,6 +434,19 @@ export default function Settings() {
                     <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/30 dark:peer-focus:ring-primary/50 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-600 peer-checked:bg-primary"></div>
                   </label>
                 </div>
+
+                {/* The toggle above sets a PREFERENCE; the background decides what can actually be
+                    read on it. When the two disagree the app follows the background — otherwise
+                    "dark theme + my own light background" renders light text on a light page. Saying
+                    so here is the difference between a control that is overridden and one that looks
+                    broken. */}
+                {themeNote && (
+                  <p className={`text-xs -mt-3 ${themeNote.unreadable ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-500'}`}>
+                    {themeNote.unreadable
+                      ? t('themeBackgroundUnreadable', language).replace('{ratio}', themeNote.ratio)
+                      : t(themeNote.light ? 'themeForcedLightText' : 'themeForcedDarkText', language)}
+                  </p>
+                )}
 
                 {/* Solid Background Color */}
                 <div className="flex items-center justify-between">

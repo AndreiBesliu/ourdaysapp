@@ -189,6 +189,32 @@ cu care NU imparti un grup, va fi refuzat acum, unde inainte mergea.
       **in romana**. Erau toate in engleza.
 - [ ] Arcade: jocurile de azi si clasamentul; nimic rosu.
 
+## 13. Tema personalizata (06.09) — cere ochi pe ecran, e in spatele autentificarii
+
+**De ce nu pot eu:** Setari cere cont. Am verificat in browser doar ecranul de login (tema implicita,
+neschimbata: card `rgb(24,24,27)`, eticheta `rgb(212,212,216)`, contrast 11,99).
+
+Pana azi, clasa care intoarce culoarea textului era decisa de un COMUTATOR, iar fundalul de un
+selector liber de culoare — fara nicio legatura intre ele. „Modul intunecat pornit + fundalul meu
+deschis" dadea text deschis pe pagina deschisa: **1,01–1,46 la strat mic (invizibil)**, si tot doar
+3,62 la stratul implicit de 50%. Acum decide fundalul, nu comutatorul.
+
+Ca sa ajungi la sectiune: **Setari → oprești modul intunecat global**, apoi apare „Tema avansata".
+
+- [ ] Tema ta actuala arata **exact ca inainte**. Asta e verificarea cea mai importanta — reparatia
+      n-are voie sa schimbe o tema deja coerenta.
+- [ ] Pornesti „Elemente UI intunecate" si alegi un fundal **alb**: textul trebuie sa devina
+      **inchis** (lizibil), si apare o linie care spune de ce: „Fundalul tau e deschis, deci textul
+      e afisat inchis".
+- [ ] Invers: comutatorul pe deschis + fundal **negru** → text deschis, cu nota corespunzatoare.
+- [ ] Alegi un **gri mediu** (ex. #7f7f7f) cu stratul pe 0: apare avertismentul rosu cu raportul
+      masurat, fiindca acolo chiar nicio culoare de text nu trece — nu e o scapare, e limita reala.
+- [ ] Sliderul de strat, de la 0 la 100: nimic nu devine ilizibil pe drum.
+- [ ] Textele noi sunt **in romana**.
+
+Daca ceva arata altfel decat inainte pe tema TA, spune-mi ce combinatie ai — aia ar fi o regresie,
+si testul care ar fi trebuit s-o prinda e `themeContrast.test.ts` → „a coherent theme is left alone".
+
 ---
 
 ## Ce am verificat eu, ca să nu le mai faci
@@ -217,3 +243,6 @@ Măsurate, nu presupuse — le scriu ca să știi unde **nu** trebuie să te ui�
 - Zero siruri englezesti ramase in afara adminului si a ecranelor Warlord (re-scanat), si zero
   `alert(`/`confirm(` cu text literal acolo.
 - Toate cele 16 commit-uri de azi verzi in CI; fiecare deploy verificat pe live.
+- Tema implicita, in browser: clasa `dark` aplicata, card zinc-900, eticheta zinc-300, contrast 11,99.
+- Matricea de teme: 100 de combinatii (5 fundaluri x 10 trepte de strat x 2 pozitii de comutator) —
+  in fiecare, culoarea de text aleasa e cea MAI BUNA dintre cele doua, niciodata cea mai proasta.

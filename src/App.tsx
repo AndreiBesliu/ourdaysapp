@@ -21,19 +21,34 @@ installGlobalErrorHandlers();
 const Warlord = lazy(() => import('./screens/Warlord')); // large embedded game → lazy chunk
 const PeriodLog = lazy(() => import('./screens/PeriodLog'));
 import { useThemeStore } from './store';
+import { shouldUseLightText } from './utils/themeContrast';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const { setTheme, setAdvancedTheme, isDarkMode, customThemeIsDark, primaryColor, backgroundImage, backgroundColor, backgroundStyle, backgroundOverlay, overlayColor } = useThemeStore();
 
+  // The `dark` class flips every `dark:` text colour in the app, so it has to be decided by the
+  // colour the text actually LANDS on — not by a toggle with no relationship to it.
+  //
+  // It used to be `isDarkMode || customThemeIsDark`, while the background came from a free colour
+  // picker plus an overlay. "Dark theme on, and my own light background" — the two controls sit
+  // next to each other in Settings — put light text on a light page: 1.01–1.46 at a low overlay,
+  // i.e. invisible, and still only 3.62 at the default 50%. See src/utils/themeContrast.ts.
+  //
+  // For a coherent theme this returns exactly what the toggle said, so nothing anyone has set up
+  // changes; it only overrides the combinations that contradict themselves.
   useEffect(() => {
-    if (isDarkMode || customThemeIsDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [isDarkMode, customThemeIsDark]);
+    const wantsLightText = shouldUseLightText({
+      isDarkMode,
+      customThemeIsDark,
+      backgroundColor,
+      overlayColor,
+      backgroundOverlay,
+      backgroundImage,
+    });
+    document.documentElement.classList.toggle('dark', wantsLightText);
+  }, [isDarkMode, customThemeIsDark, backgroundColor, overlayColor, backgroundOverlay, backgroundImage]);
 
   useEffect(() => {
     document.documentElement.style.setProperty('--primary', primaryColor);

@@ -2652,3 +2652,60 @@ aplicatie complet logata pe culori implicite, fara sa spuna nimic. Tema traieste
 (store-ul persista numai limba), deci chiar se pierdea.
 
 `npx tsc -b` verde · **766 teste verzi** · build verde.
+
+## 2026-09-06 - Tema personalizata putea face aplicatia ilizibila, si nimic n-o observa
+
+**Model:** Claude Opus 5 · „vreau sa lucrezi doar la ourdaysapp"
+
+Clasa `dark` de pe `<html>` intoarce culoarea FIECARUI text din aplicatie. Era decisa de
+`isDarkMode || customThemeIsDark` — un **comutator**. Fundalul sub text e decis de altceva:
+un selector liber de culoare (`backgroundColor`), optional o imagine, si mereu un strat
+(`overlayColor` la `backgroundOverlay`%, implicit 50). **Nimic nu le lega**, iar cele doua controale
+stau unul langa altul in Setari.
+
+Masurat cu tokenii reali ai aplicatiei (zinc-100 cand `dark` e pornit, zinc-900 cand e oprit):
+
+```
+strat    comutator dark PORNIT + fundal alb     comutator OPRIT + fundal negru
+ 0-20%   1.01 - 1.46   invizibil                1.01 - 1.46   invizibil
+   50%   3.62          sub AA                   4.46          sub AA
+  100%   19.11         bine                     17.72         bine
+```
+
+**De ce n-a sarit nimanui in ochi:** stratul implicit e NEGRU cand comutatorul e pe intuneric si ALB
+cand e pe lumina — deci la 50% **mascheaza pe jumatate greseala**. Sliderul merge insa pana la 0,
+unde nu mai mascheaza nimic. Si un imperecheat CORECT plus o culoare de strat aleasa ajunge singur
+la 3.40, fara nicio nepotrivire.
+
+**Reparatia muta decizia de pe comutator pe lucrul pe care textul chiar aterizeaza** — exact tehnica
+pe care `App.tsx` o foloseste deja cu 12 randuri mai sus ca sa aleaga `--primary-foreground`; pur si
+simplu nu fusese aplicata si fundalului paginii. `src/utils/themeContrast.ts` e pur si fara DOM,
+deci suita poate parcurge toata matricea fara browser si fara cont.
+
+**Proprietatea care conteaza, si care e testata explicit:** pentru o tema COERENTA derivarea intoarce
+exact ce spunea comutatorul, deci nimic din ce si-a configurat cineva nu se schimba. Suprascrie doar
+combinatiile care se contrazic singure. Daca testele alea ar cadea, „reparatia" ar fi un bug mai mare
+decat cel inlocuit.
+
+**Comutatorul nu devine inert in tacere.** Cand derivarea nu e de acord cu el, Setarile spun de ce
+(„Fundalul tau e deschis, deci textul e afisat inchis"), iar cand NICIO culoare de text nu atinge AA
+pe fundalul ales — un gri mediu, de exemplu — o spune cu raportul masurat, fiindca acolo comutatorul
+chiar nu poate ajuta.
+
+**Cat de accesibil e defectul, onest:** tema personalizata e activa doar cu modul intunecat global
+OPRIT (sectiunea e `pointer-events-none` altfel). Deci cere trei pasi deliberati, nu e calea
+implicita. Dar cei trei pasi sunt exact ce face cineva care vrea „intuneric, cu fundalul meu".
+
+**Verificat in browser, nu doar in teste:** aplicatia porneste, clasa `dark` e aplicata, cardul de
+login e `rgb(24,24,27)` cu eticheta `rgb(212,212,216)` = **11.99:1**. Deci tema implicita e
+neschimbata.
+
+**Ce n-am putut verifica singur:** ecranul Setari cere autentificare, deci nota noua si comutarea pe
+o tema chiar nepotrivita raman in `OWNER_VERIFY.md`.
+
+*Nelamurit, notat ca sa nu se piarda:* pe `document.body`, stilul inline e `rgb(9,9,11)` iar
+`getComputedStyle` raporteaza stabil `rgb(255,255,255)`, desi un `div` sonda cu aceeasi valoare
+inline se calculeaza corect. Seamana cu propagarea fundalului `body` catre canvas, nu cu un defect —
+si oricum e dinaintea schimbarii mele. **Nu-l declar bug fiindca nu l-am dovedit.**
+
+`npx tsc -b` verde · **779 teste verzi** (13 noi) · build verde.
