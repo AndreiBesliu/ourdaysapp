@@ -13,6 +13,7 @@ import { dayRangePeriod, monthPeriod, periodDays, isRealDay } from "./period";
 import { charsPerToken, estimateUsdFor, usageOf, withLedger } from "./aiLedger";
 import { readFriendship } from "./friendship";
 import { notify } from "./notify";
+import { groupErrors } from "./errorGrouping";
 
 // Invite links live in their own module — index.ts is already long, and these four are a
 // self-contained feature. Re-exported here because Firebase deploys what index exports.
@@ -1552,28 +1553,40 @@ export const logClientError = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
   return { ok: true };
 });
 
+/** How many error rows the health check reads in order to group them. */
+const ERROR_SCAN_LIMIT = 500;
+
 // Health / observability: recent errors + AI & notification usage.
 export const adminGetHealth = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   await assertAdmin(request);
   const db = admin.firestore();
   const today = new Date().toISOString().slice(0, 10);
   const [errSnap, errCount, aiSnap, notifSnap] = await Promise.all([
-    db.collection("errorLogs").orderBy("createdAt", "desc").limit(50).get(),
+    // Deeper than the list shows. Fifty rows is enough to READ, but not enough to group: the
+    // point of grouping is to say how often something happens, and a count taken from a window
+    // narrower than the log is a count of the window.
+    db.collection("errorLogs").orderBy("createdAt", "desc").limit(ERROR_SCAN_LIMIT).get(),
     db.collection("errorLogs").count().get().then((s) => s.data().count).catch(() => 0),
     db.collection("ai_usage").limit(3000).get(),
     db.collection("notif_usage").limit(3000).get(),
   ]);
-  const errors = errSnap.docs.map((d) => {
+  const scanned = errSnap.docs.map((d) => {
     const e = d.data();
     return { id: d.id, ...e, createdAt: e.createdAt?.toDate?.()?.toISOString?.() || null };
   });
+  // Eighty logged errors is rarely eighty problems. The list answers "what happened last"; the
+  // groups answer "what is wrong", which is the question somebody opening this screen actually has.
+  const errorGroups = groupErrors(scanned as any);
+  const errors = scanned.slice(0, 50);
   let aiToday = 0; const aiTop: { uid: string; count: number }[] = [];
   aiSnap.forEach((d) => { const u = d.data(); if (u.date === today && u.count) { aiToday += u.count; aiTop.push({ uid: d.id, count: u.count }); } });
   aiTop.sort((a, b) => b.count - a.count);
   let notifToday = 0;
   notifSnap.forEach((d) => { const u = d.data(); if (u.date === today) notifToday += u.count || 0; });
   return {
-    errors, errorTotal: errCount,
+    errors, errorGroups, errorTotal: errCount,
+    // Says plainly whether the counts above cover the whole log or only its newest slice.
+    errorsScanned: scanned.length, errorScanLimit: ERROR_SCAN_LIMIT,
     truncated: aiSnap.size >= 3000 || notifSnap.size >= 3000,
     ai: { today: aiToday, dailyLimitPerUser: AI_DAILY_LIMIT, activeUsers: aiTop.length, top: aiTop.slice(0, 10) },
     notifications: { today: notifToday, dailyLimitPerUser: NOTIF_DAILY_LIMIT },

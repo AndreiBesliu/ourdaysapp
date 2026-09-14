@@ -3563,3 +3563,50 @@ a scos la iveala si ca vitest ridica orice `*.test.js` care nu e sub un director
 `node_modules` — artefact al reproducerii mele, nu al CI-ului.)
 
 `npx tsc -b` verde · **975 de teste** (de la 972) · build verde · build functions verde.
+## 2026-09-14 - Optzeci de erori nu sunt optzeci de probleme
+
+**Model:** Claude Opus 5 · „in admin sunt tot felul de erori mai vechi, ai cum sa le verifici tu?"
+
+Andrei a aratat 80 de erori in Admin -> Health si m-a rugat sa ma uit la ele. Nu le pot citi de
+aici: adminul e in spatele autentificarii, iar citirea depozitului de acreditari al CLI-ului a fost
+**blocata** — corect, nu e ceva ce trebuie sa fac ca sa raspund la o intrebare.
+
+Ce am putut citi: **log-ul serverului**. Cele 34 de intrari de eroare de acolo sunt toate dintr-un
+**singur build anulat pe 28.08**, zero erori de rulare. Deci cele ~80 sunt integral erori de client,
+in `errorLogs`.
+
+### De ce lista bruta nu raspunde la intrebare
+
+Ecranul arata cele mai recente 50 de randuri, cronologic. 80 de erori inregistrate sunt rareori 80
+de probleme — de obicei sunt patru sau cinci, fiecare intamplata de multe ori, **intercalate in
+timp**, asa ca doua aparitii ale aceleiasi nu stau niciodata una langa alta. Derulând lista, exact
+ce conteaza nu se vede: care se intampla cel mai des, si daca mai e vie sau s-a oprit acum doua
+saptamani.
+
+### Singurul lucru pe care gruparea trebuie sa-l nimereasca
+
+Doua aparitii ale aceluiasi bug difera prin detalii — un uid, un hash de build, un numar de linie,
+un URL. Deci cheia trebuie sa le ignore. Dar **daca ignora prea mult, doua bug-uri DIFERITE se
+contopesc**, ceea ce e mai rau decat lipsa gruparii: o problema se ascunde in spatele unui numar
+care pare explicat.
+
+Asa ca normalizarea e conservatoare: scoate ce e sigur incidental (URL-uri, siruri hex lungi,
+numere, nume de fisiere cu hash de build) si **nu atinge formularea**. Hash-ul de build conteaza in
+mod special — fara el, aceeasi problema ar da un grup nou la fiecare livrare.
+
+Jumatate din cele 17 teste exista ca sa dovedeasca faptul ca lucrurile raman **separate**:
+`(reading 'time')` si `(reading 'title')` sunt doua probleme; acelasi mesaj venit dintr-un
+ErrorBoundary si dintr-un `unhandledrejection` sunt doua situatii.
+
+### Detalii care schimba ce citesti
+
+- **Numarul de aparitii si numarul de oameni sunt separate.** Un om care loveste ceva de 40 de ori
+  si 40 de oameni care lovesc o data sunt probleme diferite, iar un singur numar nu le desparte.
+- **Stiva pastrata e cea mai NOUA.** Una veche arata cod care poate nu mai exista si te trimite sa
+  citesti fisierul gresit.
+- **Se citesc 500 de randuri, nu 50.** Un numar luat dintr-o fereastra mai ingusta decat log-ul e
+  numarul ferestrei; si daca se atinge plafonul, ecranul o **spune**.
+- Modulul e pur (`functions/src/errorGrouping.ts`), deci garda de puritate scrisa azi il acopera
+  automat.
+
+`npx tsc -b` verde · **992 de teste** (de la 975) · build verde · functions verde · livrat pe live.

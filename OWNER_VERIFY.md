@@ -442,3 +442,19 @@ nevoie de mai mult, se ridica — dar costa o cautare mai larga la fiecare rular
       se **mute** in grila si sa arate zona lui sub titlu. Pune-l inapoi dupa.
 - [ ] **O zi goala** scrie „Nimic programat”, nu o grila goala fara explicatie.
 - [ ] **Pe telefon**, grila nu trebuie sa produca derulare pe orizontala.
+---
+
+## 22. Erorile grupate in admin (14.09)
+
+Nu pot vedea adminul (e in spatele autentificarii), deci **datele sunt la tine**.
+
+- [ ] **Admin -> Health**: deasupra listei vechi apare o sectiune **„Distinct problems"**, cu un
+      numar in stanga fiecarui rand.
+- [ ] **Cele ~80 de erori trebuie sa se stranga in cateva randuri**, nu sa ramana ~80. Daca vezi tot
+      o lista lunga, gruparea e prea stricta si vreau sa stiu.
+- [ ] **Uita-te daca doua randuri par a fi ACEEASI problema.** Daca da, s-au despartit gresit —
+      spune-mi textul lor.
+- [ ] **Citeste-mi primele 3-5 randuri**: numarul, mesajul, eticheta de context si intervalul de
+      date. Cu alea pot spune ce e fiecare si ce se repara.
+- [ ] Randul **„Counts cover the newest 500 of N"** apare doar daca log-ul e mai mare de 500. Daca
+      apare, spune-mi.

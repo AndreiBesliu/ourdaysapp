@@ -503,6 +503,52 @@ export default function Admin() {
               <Stat label="Notifs today" value={health?.notifications?.today} />
             </div>
 
+            {/* Distinct problems, most frequent first.
+                Eighty logged errors is rarely eighty problems: it is usually four or five, each
+                having happened many times, interleaved by time so no two occurrences of the same
+                one sit next to each other. The raw list below still answers "what happened last";
+                this answers "what is wrong". Grouping lives in functions/src/errorGrouping.ts and
+                is tested there. */}
+            <Section icon={<Activity className="w-4 h-4 text-amber-500" />} title="Distinct problems">
+              {(!health?.errorGroups || health.errorGroups.length === 0) ? (
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 text-center text-sm text-emerald-500 flex items-center justify-center gap-2"><CheckCircle2 className="w-4 h-4" /> Nothing to group.</div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {health.errorGroups.map((g: any) => (
+                    <div key={g.key} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
+                      <div className="flex items-start gap-3">
+                        <span className="shrink-0 min-w-[28px] h-6 px-1.5 rounded-md bg-red-500/10 text-red-500 text-xs font-bold flex items-center justify-center tabular-nums">
+                          {g.count}
+                        </span>
+                        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 break-words flex-1">{g.sample}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] text-zinc-500 pl-[40px]">
+                        {g.context && <span className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded">{g.context}</span>}
+                        {/* One person hitting something forty times and forty people hitting it
+                            once are different problems; a single count cannot tell them apart. */}
+                        <span>{g.users} {g.users === 1 ? 'person' : 'people'}</span>
+                        <span>· {fmtDate(g.firstSeen)} → {fmtDate(g.lastSeen)}</span>
+                        {g.urls?.length > 0 && <span>· {g.urls.join(', ')}</span>}
+                      </div>
+                      {g.sampleStack && (
+                        <details className="mt-2 pl-[40px]">
+                          <summary className="text-[11px] text-zinc-400 cursor-pointer select-none">Newest stack</summary>
+                          <pre className="mt-1 text-[10px] text-zinc-400 whitespace-pre-wrap break-words max-h-40 overflow-y-auto bg-zinc-50 dark:bg-zinc-800/50 rounded p-2">{g.sampleStack}</pre>
+                        </details>
+                      )}
+                    </div>
+                  ))}
+                  {/* Without this line the counts above could be a count of the window rather than
+                      of the log, and there would be no way to tell from the screen. */}
+                  {health.errorsScanned >= health.errorScanLimit && (
+                    <p className="text-[11px] text-zinc-400 px-1">
+                      Counts cover the newest {health.errorScanLimit} of {health.errorTotal} logged errors.
+                    </p>
+                  )}
+                </div>
+              )}
+            </Section>
+
             <Section icon={<AlertTriangle className="w-4 h-4 text-red-500" />} title="Recent errors">
               {(!health?.errors || health.errors.length === 0) ? (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 text-center text-sm text-emerald-500 flex items-center justify-center gap-2"><CheckCircle2 className="w-4 h-4" /> No errors logged.</div>
