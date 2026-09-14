@@ -579,3 +579,21 @@ Andrei alege DOAR CITIRE (14.09), deci rolul de mai jos nu e negociabil in pasii
 - [ ] Butonul **dispare** cand nu mai e nimic de aplicat. Nu e un bug.
 - [ ] Daca scrie vreodata **„N refused: the recorded fix did not hold"**, spune-mi imediat —
       inseamna ca o reparatie de-a mea a picat si sistemul a refuzat s-o marcheze rezolvata.
+---
+
+## 30. Push-ul n-a functionat NICIODATA (14.09) — ai un pas de facut
+
+**Constatat din date:** `fcmTokens` lipseste de pe toate cele 8 conturi. Cheia VAPID din cod avea
+44 de caractere in loc de 87, deci inregistrarea era respinsa de fiecare browser, de fiecare data.
+Toate notificarile push trimise vreodata au sarit fiecare destinatar.
+
+- [ ] **Firebase Console → Project settings → Cloud Messaging → Web configuration →
+      Web Push certificates.** Daca nu exista o pereche de chei, apasa **Generate key pair**.
+      Copiaza **cheia publica** (87 de caractere).
+- [ ] Pune-o in `.env`, pe randul pregatit:
+      `VITE_FIREBASE_VAPID_KEY=<cheia>`
+- [ ] Spune-mi, si reconstruiesc + livrez.
+- [ ] **Dupa aia, reconecteaza-te o data** si confirm din date ca `users/{uid}.fcmTokens` are in
+      sfarsit un token. Abia atunci pune-ti un memento peste 10 minute si asteapta sa sune telefonul.
+- [ ] **Pana atunci:** clopotelul din aplicatie functioneaza si a functionat mereu. Doar push-ul pe
+      telefon lipsea.

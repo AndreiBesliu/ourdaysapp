@@ -3947,3 +3947,56 @@ commit-ul de cod plecase — asa ca intrarile astea vin intr-un commit separat. 
 o incalcasem: scriptul se scrie in FISIER, nu se conducteaza ca heredoc.
 
 `npx tsc -b` verde · 1056 de teste · poarta verde · build verde · functions verde · livrat pe live.
+## 2026-09-14 - Nicio notificare push n-a fost livrabila vreodata
+
+**Model:** Claude Opus 5 · audit de defecte tacute, pornit de la un census al datelor vii
+
+### Constatarea
+
+**`users/{uid}.fcmTokens` nu a fost scris niciodata, pe niciunul dintre cele 8 conturi.** Nu gol —
+**absent**. (Curatarea de tokenuri moarte foloseste `arrayRemove`, care ar lasa `[]`, deci absenta
+dovedeste ca nu s-a scris nicicand.)
+
+Cauza, masurata: `CalendarHome.tsx` cerea un token cu o cheie VAPID scrisa in cod, de **44 de
+caractere → 33 de octeti**. Un `applicationServerKey` de Web Push trebuie sa fie un punct P-256
+necomprimat: **65 de octeti, 87 de caractere**. Deci `pushManager.subscribe()` respinge **fiecare
+browser, de fiecare data**; `getToken` respinge; `updateDoc`-ul care stocheaza tokenul nu ruleaza
+niciodata. SDK-ul Firebase nu valideaza — trece octetii direct la browser.
+
+Iar `catch`-ul scria in `console.error`, nu in `reportError`. **De-aia patru luni de esecuri n-au
+lasat niciun rand in `errorLogs`.**
+
+### De ce n-a observat nimeni, si de ce nimic din ce aveam nu putea sa prinda
+
+Trece de typecheck — e un sir. Nu strica niciun test. Iar browserul **tot** afiseaza „Permiteti
+notificarile?", omul apasa Permite, si setarile site-ului spun de-atunci „Notificari: permise".
+**Toate semnalele la care se uita cineva spuneau ca merge.** Singura dovada era un camp absent din
+baza de date — de-asta a fost nevoie de un census al datelor vii ca sa iasa la iveala.
+
+### Corectie la ce am raportat azi
+
+Am spus mai devreme „mementourile pornesc — dovedit". **Jumatate adevarat, si partea gresita conteaza.**
+Randul din `reminder_log` e real, cele doua randuri `reminder` din clopotel sunt reale — **canalul de
+clopotel functioneaza**. Dar `notify` a impins catre **zero dispozitive**, fiindca niciun cont n-avea
+token. Telefonul n-a sunat niciodata. Antetul lui `reminders.ts` spune ca tot rostul rescrierii era
+ca un memento „ajunge la telefon prin FCM"; pana azi, nu ajungea.
+
+### Reparat acum
+
+Cheia se citeste din `VITE_FIREBASE_VAPID_KEY` si se **valideaza inainte de folosire** —
+`src/utils/webPush.ts`, pur, 8 teste, primul fiind exact sirul care s-a livrat. Daca lipseste sau e
+gresita, inregistrarea se **sare** si se raporteaza in `errorLogs` cu motivul in cuvinte: „the VAPID
+key decodes to 33 bytes; a Web Push application server key must be 65". Nu un boolean — **propozitia
+e diferenta dintre cineva care repara in doua minute si cineva care redescopera peste patru luni.**
+
+Permisiunea se cere **dupa** ce cheia e buna: a intreba intai ar arde singura sansa de a cere.
+
+*Testul meu a prins o slabiciune in propria implementare: 87 de caractere arbitrare treceau
+verificarea de lungime. Se verifica acum si octetul de marcaj `0x04`.*
+
+**Ce ramane la Andrei:** cheia reala din Firebase Console → Project settings → Cloud Messaging →
+Web Push certificates, pusa in `.env`. Pana atunci push-ul e oprit **si spune de ce**, in loc sa
+esueze tacut.
+
+`npx tsc -b` verde · **1064 de teste** (de la 1056) · poarta verde · build verde · livrat pe live,
+cheia moarta confirmata disparuta din bundle.

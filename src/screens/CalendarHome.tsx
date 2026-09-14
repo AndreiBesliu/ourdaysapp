@@ -5,6 +5,7 @@ import { getToken } from 'firebase/messaging';
 import { collection, query, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
 import { liveQuery, liveDoc } from '../utils/liveQuery';
 import { reportError } from '../reportError';
+import { vapidKeyProblem } from '../utils/webPush';
 import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu, ShieldCheck, Swords, ClipboardList, MessageCircle } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import CalendarGrid from '../components/CalendarGrid';
@@ -228,11 +229,30 @@ export default function CalendarHome() {
     if (!auth.currentUser || !messaging) return;
 
     const requestPermission = async () => {
+      // This registration had been failing on every browser, for every account, since May. The key
+      // below used to be a hard-coded 44-character string where a Web Push application server key
+      // must be 87 — so `subscribe()` rejected every time, the `updateDoc` never ran, and
+      // `users/{uid}.fcmTokens` was never written on a single one of the eight accounts. Every push
+      // the app has ever tried to send skipped every recipient for want of a token, including the
+      // reminders whose entire purpose is to reach a phone.
+      //
+      // Nothing said so. The catch wrote to the console rather than the error log, and the browser
+      // still showed the permission prompt, so even the user's own feedback said it had worked.
+      const problem = vapidKeyProblem(import.meta.env.VITE_FIREBASE_VAPID_KEY);
+      if (problem) {
+        // Reported, never merely logged: a configuration fault that reaches only the console is a
+        // fault nobody learns about, which is exactly how this survived four months.
+        reportError(`Web push is not configured: ${problem}`, { context: 'fcm.token.web' });
+        return;
+      }
+
       try {
+        // Asked AFTER the key is known good. Prompting first would burn the single chance to ask
+        // somebody for notification permission on a registration that cannot succeed anyway.
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
-          const token = await getToken(messaging!, { 
-            vapidKey: 'BIsH5f-u0rS2wZ3jL-yqF9qS-nFf_vB1a_zZ_8j-xZ_8'
+          const token = await getToken(messaging!, {
+            vapidKey: String(import.meta.env.VITE_FIREBASE_VAPID_KEY).trim(),
           });
           if (token) {
             await updateDoc(doc(db, 'users', auth.currentUser!.uid), {
@@ -241,7 +261,7 @@ export default function CalendarHome() {
           }
         }
       } catch (err) {
-        console.error('An error occurred while retrieving token. ', err);
+        reportError(err instanceof Error ? err.message : String(err), { context: 'fcm.token.web' });
       }
     };
 
