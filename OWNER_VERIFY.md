@@ -534,3 +534,18 @@ Andrei alege DOAR CITIRE (14.09), deci rolul de mai jos nu e negociabil in pasii
 
 - [ ] Dupa ce e gata: confirma ca `npm run errors` imi arata grupurile, si ca stergerea cheii chiar
       opreste accesul.
+---
+
+## 27. Butonul „Resolved" (14.09, revizuit)
+
+- [ ] **Admin -> Health.** Sub fiecare grup scrie acum DE CE e sau nu butonul acolo:
+      „Fixed in `<commit>` — ce era stricat" plus „Check for yourself: ..." — sau
+      „Nobody has recorded a fix for this yet".
+- [ ] **Butonul „Resolved" apare doar unde exista o afirmatie care tine.** Daca-l vezi lipsind,
+      NU e un bug: inseamna ca nimeni n-a scris ca a reparat lucrul ala.
+- [ ] **Citeste „Check for yourself" si verifica tu.** Astea sunt scrise ca sa le poti proba fara
+      sa citesti cod. Daca vreuna nu se confirma, spune-mi — afirmatia e gresita.
+- [ ] **Grupul React #310 va reaparea ca `new`**, nu ca `seen`. E asteptat: i s-a schimbat amprenta
+      (acum pastreaza `#310`, ca sa nu se confunde cu #185), deci starea veche nu-l mai gaseste.
+- [ ] Daca vreun grup arata cu rosu „Claimed fixed in `<commit>`, but it has happened since",
+      **spune-mi imediat** — inseamna ca o reparatie de-a mea n-a functionat.

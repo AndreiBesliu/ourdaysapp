@@ -656,7 +656,12 @@ export default function Admin() {
                             Mark seen
                           </button>
                         )}
-                        {g.status !== 'resolved' && (
+                        {/* Offered ONLY where somebody has written down a fix AND nothing has
+                            happened since it shipped. Before this, the button sat on every group
+                            and asked whoever opened the screen to certify something they had no
+                            way of knowing — the fix lives in a commit, and the commit is not on
+                            this page. The claims are in functions/src/errorFixes.ts. */}
+                        {g.status !== 'resolved' && g.fixVerdict === 'holding' && (
                           <button
                             onClick={() => setErrorStatus([g.key], 'resolved')}
                             disabled={errorBusy !== null}
@@ -681,6 +686,32 @@ export default function Admin() {
                         )}
                         {g.status === 'regressed' && (
                           <span className="text-[11px] text-red-500">came back after being resolved</span>
+                        )}
+                      </div>
+                      {/* Why the button is, or is not, there. Saying nothing would make an
+                          absent button look like a bug in the panel. */}
+                      <div className="mt-1.5 pl-[40px] text-[11px] leading-relaxed">
+                        {g.fixVerdict === 'unclaimed' && (
+                          <p className="text-zinc-400">
+                            Nobody has recorded a fix for this yet, so there is nothing to mark resolved.
+                          </p>
+                        )}
+                        {g.fixVerdict === 'failed' && g.fix && (
+                          <p className="text-red-500">
+                            Claimed {g.fix.kind === 'fixed' ? `fixed in ${g.fix.commit}` : 'not a defect'}, but it has
+                            happened since. The claim is wrong — do not mark this resolved.
+                          </p>
+                        )}
+                        {g.fixVerdict === 'holding' && g.fix && (
+                          <>
+                            <p className="text-zinc-500 dark:text-zinc-400">
+                              <span className="font-medium text-zinc-700 dark:text-zinc-300">
+                                {g.fix.kind === 'fixed' ? `Fixed in ${g.fix.commit}` : 'Judged not a defect'}
+                              </span>
+                              {' — '}{g.fix.what}
+                            </p>
+                            <p className="text-zinc-400 mt-0.5">Check for yourself: {g.fix.verify}</p>
+                          </>
                         )}
                       </div>
                     </div>

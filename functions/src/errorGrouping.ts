@@ -73,7 +73,13 @@ export function fingerprint(message: unknown, context?: unknown): string {
   s = s.replace(/\b[A-Za-z0-9_-]{20,}\b/g, "<id>");
 
   // Line and column numbers, sizes, counts.
-  s = s.replace(/\d+/g, "<n>");
+  //
+  // A number introduced by "#" is kept, because there it is an IDENTITY rather than a position:
+  // React's "#310" and "#185" are two unrelated faults, and this app has had both. Stripping the
+  // digit collapsed them into one group — the merge failure that is invisible, since the second
+  // fault then hides behind a count that looks explained, and a claim to have fixed one would
+  // silently cover the other.
+  s = s.replace(/(#)?\d+/g, (match, hash) => (hash ? match : "<n>"));
 
   s = s.replace(/\s+/g, " ").trim().toLowerCase().slice(0, 200);
 

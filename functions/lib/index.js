@@ -26,6 +26,7 @@ const aiLedger_1 = require("./aiLedger");
 const friendship_1 = require("./friendship");
 const notify_1 = require("./notify");
 const errorGrouping_1 = require("./errorGrouping");
+const errorFixes_1 = require("./errorFixes");
 const errorState_1 = require("./errorState");
 const aiProviderError_1 = require("./aiProviderError");
 // Invite links live in their own module — index.ts is already long, and these four are a
@@ -1554,7 +1555,15 @@ exports.adminGetHealth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
     // That is precisely the case the watermark exists to catch, so the cap silently removed the
     // feature from the only situation that needed it. `errorDigest.ts` had it right, which is how it
     // was clear this was an error rather than a decision.
-    const errorGroups = (0, errorState_1.joinState)(grouped, await readErrorStates(db, grouped.map((g) => g.key)));
+    //
+    // Each group also carries whether anybody has CLAIMED to have fixed it, and whether that claim
+    // still stands. The panel offers "Resolved" only where one does — otherwise it was asking the
+    // person looking at the screen to certify something only the person who wrote the fix could know.
+    const errorGroups = (0, errorState_1.joinState)(grouped, await readErrorStates(db, grouped.map((g) => g.key)))
+        .map((g) => {
+        const fix = (0, errorFixes_1.fixFor)(g.key);
+        return Object.assign(Object.assign({}, g), { fix: fix ? { kind: fix.kind, commit: fix.commit || null, since: fix.since, what: fix.what, verify: fix.verify } : null, fixVerdict: (0, errorFixes_1.fixVerdict)(fix, g.lastSeen) });
+    });
     // Regressed first, then new, then merely known, then done — and within each, the frequent ones.
     errorGroups.sort((a, b) => errorState_1.STATUS_RANK[a.status] - errorState_1.STATUS_RANK[b.status] || b.count - a.count);
     const errorCounts = { new: 0, seen: 0, resolved: 0, regressed: 0 };

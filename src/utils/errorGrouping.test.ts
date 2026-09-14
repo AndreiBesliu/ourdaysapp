@@ -54,6 +54,23 @@ describe('what must NOT be merged — the invisible failure', () => {
     expect(fingerprint('quota exceeded')).not.toBe(fingerprint('quota exhausted'));
   });
 
+  it('two React errors with different numbers are two problems', () => {
+    // Digits are normalised away as line numbers and sizes — but a number after "#" is an IDENTITY.
+    // #310 (hook order) and #185 (the Zustand snapshot loop this app has actually had) collapsed
+    // into one group, so the second would have hidden behind the first's count, and a claim to have
+    // fixed one would silently have covered the other.
+    const react = (n: number) => fingerprint(
+      `Minified React error #${n}; visit https://react.dev/errors/${n} for the full message.`,
+      'ErrorBoundary');
+    expect(react(310)).not.toBe(react(185));
+    expect(react(310)).toBe(react(310));
+  });
+
+  it('but ordinary numbers are still normalised', () => {
+    expect(fingerprint('failed at line 214')).toBe(fingerprint('failed at line 87'));
+    expect(fingerprint('read 4096 bytes')).toBe(fingerprint('read 17 bytes'));
+  });
+
   it('two different failures that both mention a URL stay apart', () => {
     expect(fingerprint('Failed to fetch https://a/x.js'))
       .not.toBe(fingerprint('Network request failed https://a/x.js'));

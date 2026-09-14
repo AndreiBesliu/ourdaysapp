@@ -3822,3 +3822,54 @@ care il ruleaza serverul. Doua implementari ale unei decizii diverg, iar cea car
 la care te uiti.
 
 Cheia **nu e inca creata** — e pasul lui Andrei, notat in OWNER_VERIFY §26.
+## 2026-09-14 - Butonul „Resolved" intreba omul gresit
+
+**Model:** Claude Opus 5 · „nu stiu care au fost efectiv rezolvate... creezi o lista pe care sa o
+verifice sistemul"
+
+Andrei a numit o problema pe care o crease livrarea de dinainte: panoul punea un buton „Resolved" pe
+FIECARE grup, si-i cerea celui care deschide ecranul sa certifice ceva ce n-avea de unde sti.
+**Reparatia traieste intr-un commit, iar commit-ul nu e pe ecran.** Clicul era o ghicitura, iar o
+ghicitura inregistrata ca fapt e mai rea decat lipsa inregistrarii.
+
+### Afirmatia se muta acolo unde e cunoasterea
+
+`functions/src/errorFixes.ts` tine lista: amprenta, commit-ul, **ce** era stricat si **cum vede
+altcineva singur**. Panoul arata butonul DOAR pentru grupurile care au o asemenea afirmatie, si
+arata afirmatia langa el — ca sa fie un clic informat, nu unul plin de speranta.
+
+**Si afirmatia se verifica, nu se crede.** Fiecare intrare are `since`: momentul dupa care o aparitie
+o infirma. Daca eroarea s-a intamplat DUPA ce reparatia a plecat, reparatia n-a mers — butonul se
+retrage si esecul se scrie cu rosu. `since` e ora COMMIT-ului, nu a deploy-ului, deci verificarea e
+putin prea stricta: o aparitie in intervalul ala se citeste ca esec. Greseste spre „n-a mers", si
+intre cele doua directii aia e singura sigura.
+
+Doua feluri de afirmatie: `fixed` (s-a schimbat cod, uite commit-ul) si `not-a-defect` (s-a
+investigat, n-are ce se schimba). A doua tot e o afirmatie, tot poarta rationament, si tot se infirma
+la fel.
+
+### Un defect gasit proiectand asta, si care era precoditie
+
+**React #310 si #185 cadeau in ACELASI grup.** Normalizez toate cifrele, deci `#310` devenea `#<n>`.
+Aplicatia asta a avut deja un #185 (bucla de snapshot Zustand). Deci „am reparat #310" ar fi acoperit
+tacut si #185 — exact contopirea invizibila pe care testele o urmareau si n-o prinsesera aici.
+Un numar dupa `#` e o IDENTITATE, nu o pozitie; acum se pastreaza. Numerele de linie raman
+normalizate.
+
+### Doua greseli ale mele, prinse de masuratoare
+
+1. **Cititorul tiparea `undefined people`** — `groupErrors` numeste campul `users`. In digest il
+   mapasem corect, in cititor nu. Prins la prima rulare pe date reale; nicio fixtura n-ar fi
+   contrazis, fiindca campul lipseste, nu e gresit.
+2. **Prima afirmatie despre cota nu se potrivea cu nimic.** `fingerprint()` taie mesajul la 200 de
+   caractere; eu scrisesem propozitia intreaga, deci afirmatia era cu 17 caractere mai lunga decat
+   orice poate produce grupatorul. **O afirmatie care nu se potriveste cu nimic arata exact ca o
+   functionalitate care merge.** Prins verificand fiecare grup viu fata de lista lui; acum sunt doua
+   teste — unul pe lungime, doua round-trip prin grupatorul real.
+
+Amprenta grupului React s-a schimbat (pastreaza `#310`), deci documentul lui de stare e orfan si
+grupul revine ca `new`. Cu patru grupuri, costul e zero; dupa ce panoul acumuleaza istorie, n-ar mai
+fi fost.
+
+`npx tsc -b` verde · **1056 de teste** (de la 1036) · poarta verde · build verde · functions verde ·
+livrat pe live.

@@ -14,6 +14,7 @@ import { charsPerToken, estimateUsdFor, usageOf, withLedger } from "./aiLedger";
 import { readFriendship } from "./friendship";
 import { notify } from "./notify";
 import { groupErrors } from "./errorGrouping";
+import { fixFor, fixVerdict } from "./errorFixes";
 import {
   ERROR_STATUSES, STATUS_RANK, groupDocId, isErrorStatus, joinState,
 } from "./errorState";
@@ -1651,7 +1652,19 @@ export const adminGetHealth = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
   // That is precisely the case the watermark exists to catch, so the cap silently removed the
   // feature from the only situation that needed it. `errorDigest.ts` had it right, which is how it
   // was clear this was an error rather than a decision.
-  const errorGroups = joinState(grouped, await readErrorStates(db, grouped.map((g) => g.key)));
+  //
+  // Each group also carries whether anybody has CLAIMED to have fixed it, and whether that claim
+  // still stands. The panel offers "Resolved" only where one does — otherwise it was asking the
+  // person looking at the screen to certify something only the person who wrote the fix could know.
+  const errorGroups = joinState(grouped, await readErrorStates(db, grouped.map((g) => g.key)))
+    .map((g) => {
+      const fix = fixFor(g.key);
+      return {
+        ...g,
+        fix: fix ? { kind: fix.kind, commit: fix.commit || null, since: fix.since, what: fix.what, verify: fix.verify } : null,
+        fixVerdict: fixVerdict(fix, g.lastSeen),
+      };
+    });
 
   // Regressed first, then new, then merely known, then done — and within each, the frequent ones.
   errorGroups.sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.count - a.count);
