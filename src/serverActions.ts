@@ -274,9 +274,12 @@ export interface InviteLinkRow {
   revoked: boolean;
 }
 
-/** Mint a link. Server clamps `maxUses` and `days` to its own ceilings. */
+/**
+  * Mint a link. Good for ONE registration — that is the server's constant, not a parameter, so
+  * there is deliberately nothing here to raise it with.
+  */
 export async function createGroupInviteLink(params: {
-  groupId?: string | null; maxUses?: number; days?: number;
+  groupId?: string | null; days?: number;
 }): Promise<{ code: string; maxUses: number; days: number; groupName: string | null }> {
   const fn = httpsCallable(getFunctions(app), "createGroupInviteLink");
   return (await fn(params)).data as any;
@@ -289,7 +292,8 @@ export async function createGroupInviteLink(params: {
  * before asking you to create an account. It returns only what a poster would carry.
  */
 export async function peekGroupInviteLink(code: string): Promise<{
-  valid: boolean; reason: string | null; groupName: string | null; invitedBy: string | null;
+  valid: boolean; reason: string | null; alreadyJoined: boolean;
+  groupName: string | null; invitedBy: string | null;
 }> {
   const fn = httpsCallable(getFunctions(app), "peekGroupInviteLink");
   return (await fn({ code })).data as any;

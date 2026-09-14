@@ -363,6 +363,8 @@ Măsurate, nu presupuse — le scriu ca să știi unde **nu** trebuie să te ui�
 - [ ] **In toate cele sase limbi** — ecranul de invitatie si sectiunea din modal.
 
 ### Ce trebuie sa stii, nu sa verifici
-- [ ] **Un link e la purtator: cine il are, intra.** Daca cineva il da mai departe in alt grup de
-      WhatsApp, acei oameni pot intra pana expira sau pana il retragi. Implicit: **5 folosiri, 7
-      zile**. Spune-mi daca vrei alte valori, sau un comutator „o singura folosire".
+- [x] **DECIS 14.09: un link e bun pentru O SINGURA inregistrare**, si expira in 7 zile.
+      Ramane la purtator — cine il are, intra — dar ce se poate da mai departe e un singur loc,
+      consumat de primul care ajunge, nu o usa deschisa catre tot grupul de WhatsApp.
+      *Consecinta practica:* pentru trei persoane faci trei linkuri. Butonul „Creeaza alt link"
+      e chiar sub canalele de trimitere.

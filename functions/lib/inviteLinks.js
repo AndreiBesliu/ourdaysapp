@@ -16,7 +16,9 @@
 // So the bearer risk is bounded rather than ignored:
 //   * the code is 128 bits of CSPRNG, so it cannot be guessed or enumerated;
 //   * every link EXPIRES, and the maximum lifetime is capped here, not by the client;
-//   * every link has a USE COUNT, also capped here;
+//   * a link is good for exactly ONE registration (owner's decision, 14 Sep) — so a link that
+//     gets forwarded past its intended recipient is spent by whoever arrives first, rather than
+//     admitting everyone it reaches;
 //   * the creator can revoke it at any time;
 //   * redemption re-checks that the creator is STILL a member of the group — the same
 //     accept-time check `acceptGroupInvite` learned, and for the same reason: a link created
@@ -31,17 +33,25 @@
 // transaction. Asked for explicitly, and it is right: the person who let you in is the one person
 // in the group you certainly know.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = exports.LINK_DEFAULT_DAYS = exports.LINK_DEFAULT_USES = exports.LINK_MAX_DAYS_CAP = exports.LINK_MAX_USES_CAP = void 0;
+exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = exports.LINK_USES = exports.LINK_DEFAULT_DAYS = exports.LINK_MAX_DAYS_CAP = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 const friendship_1 = require("./friendship");
+const inviteLinkState_1 = require("./inviteLinkState");
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 /** Ceilings live HERE, not in the caller's payload. A client-chosen limit is not a limit. */
-exports.LINK_MAX_USES_CAP = 25;
 exports.LINK_MAX_DAYS_CAP = 30;
-exports.LINK_DEFAULT_USES = 5;
 exports.LINK_DEFAULT_DAYS = 7;
+/**
+ * One registration per link. Owner's decision, and a constant rather than a default: a `maxUses`
+ * a caller could raise would be exactly the knob the decision says should not exist.
+ *
+ * The field is still written on the document, and the checks still read it, so an older link
+ * minted with a larger allowance keeps behaving the way it was issued instead of being silently
+ * cut short — the safe direction for a credential somebody has already sent to somebody else.
+ */
+exports.LINK_USES = 1;
 /** Links one account may mint per day. Bounds both spam and the size of the collection. */
 const LINK_DAILY_LIMIT = Number(process.env.INVITE_LINK_DAILY_LIMIT || 20);
 const cap = (s, n = 80) => String(s || "").slice(0, n);
@@ -66,7 +76,7 @@ exports.createGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
-    const { groupId, maxUses, days } = request.data || {};
+    const { groupId, days } = request.data || {};
     const db = admin.firestore();
     let groupName = null;
     if (groupId != null) {
@@ -93,7 +103,6 @@ exports.createGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
     if (recent.data().count >= LINK_DAILY_LIMIT) {
         throw new https_1.HttpsError("resource-exhausted", "Too many invite links created today.");
     }
-    const uses = clampInt(maxUses, exports.LINK_DEFAULT_USES, 1, exports.LINK_MAX_USES_CAP);
     const life = clampInt(days, exports.LINK_DEFAULT_DAYS, 1, exports.LINK_MAX_DAYS_CAP);
     const code = newCode();
     const profile = await db.doc(`profiles/${uid}`).get();
@@ -104,12 +113,12 @@ exports.createGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
         createdByName: cap(((_d = profile.data()) === null || _d === void 0 ? void 0 : _d.name) || (((_f = (_e = request.auth) === null || _e === void 0 ? void 0 : _e.token) === null || _f === void 0 ? void 0 : _f.email) || "").split("@")[0] || "A friend"),
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + life * 24 * 60 * 60 * 1000),
-        maxUses: uses,
+        maxUses: exports.LINK_USES,
         uses: 0,
         redeemedBy: [],
         revoked: false,
     });
-    return { code, maxUses: uses, days: life, groupName };
+    return { code, maxUses: exports.LINK_USES, days: life, groupName };
 });
 /**
  * What a link is for, WITHOUT redeeming it.
@@ -129,12 +138,17 @@ exports.peekGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
     if (!snap.exists)
         return { valid: false, reason: "not-found" };
     const d = snap.data() || {};
-    const expired = ((_b = (_a = d.expiresAt) === null || _a === void 0 ? void 0 : _a.toMillis) === null || _b === void 0 ? void 0 : _b.call(_a)) ? d.expiresAt.toMillis() < Date.now() : false;
-    const spent = (d.uses || 0) >= (d.maxUses || 0);
-    const reason = d.revoked ? "revoked" : expired ? "expired" : spent ? "spent" : null;
+    // The SAME verdict `redeem` will reach, from the same function, so the two cannot tell a person
+    // different stories about one link. `request.auth` is optional here: this callable serves
+    // visitors with no account, which is the whole reason the join screen can name who invited them
+    // before asking anyone to sign up.
+    const verdict = (0, inviteLinkState_1.linkVerdict)(d, (_b = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid) !== null && _b !== void 0 ? _b : null, Date.now());
+    const alreadyJoined = verdict === 'already';
+    const admits = verdict === 'ok' || alreadyJoined;
     return {
-        valid: reason === null,
-        reason,
+        valid: admits,
+        reason: admits ? null : verdict,
+        alreadyJoined,
         groupName: d.groupName || null,
         invitedBy: d.createdByName || null,
     };
@@ -152,28 +166,29 @@ exports.redeemGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
     const db = admin.firestore();
     const linkRef = db.doc(`invite_links/${code}`);
     return db.runTransaction(async (tx) => {
-        var _a, _b, _c;
+        var _a;
         // ── READ PHASE ────────────────────────────────────────────────────────────
         const snap = await tx.get(linkRef);
         if (!snap.exists)
             throw new https_1.HttpsError("not-found", "This invitation link is not valid.");
         const d = snap.data() || {};
-        if (d.revoked === true)
-            throw new https_1.HttpsError("failed-precondition", "This invitation was withdrawn.");
-        const expiresAt = (_b = (_a = d.expiresAt) === null || _a === void 0 ? void 0 : _a.toMillis) === null || _b === void 0 ? void 0 : _b.call(_a);
-        if (typeof expiresAt === "number" && expiresAt < Date.now()) {
-            throw new https_1.HttpsError("failed-precondition", "This invitation has expired.");
-        }
-        if ((d.uses || 0) >= (d.maxUses || 0)) {
-            throw new https_1.HttpsError("resource-exhausted", "This invitation has already been used up.");
-        }
-        const inviter = typeof d.createdBy === "string" ? d.createdBy : "";
-        if (!inviter)
+        // ONE verdict, the same one `peek` reached, so the two can never tell a person different
+        // stories about the same link. They already did once: both asked "is it spent?" before
+        // "have YOU used it?", and the person who had just joined was told their own redemption had
+        // used the invitation up.
+        const verdict = (0, inviteLinkState_1.linkVerdict)(d, uid, Date.now());
+        if (verdict === "malformed")
             throw new https_1.HttpsError("failed-precondition", "This invitation is malformed.");
-        if (inviter === uid) {
+        if (verdict === "own")
             throw new https_1.HttpsError("failed-precondition", "This is your own invitation link.");
-        }
-        const already = Array.isArray(d.redeemedBy) && d.redeemedBy.includes(uid);
+        if (verdict === "revoked")
+            throw new https_1.HttpsError("failed-precondition", "This invitation was withdrawn.");
+        if (verdict === "expired")
+            throw new https_1.HttpsError("failed-precondition", "This invitation has expired.");
+        if (verdict === "spent")
+            throw new https_1.HttpsError("resource-exhausted", "This invitation has already been used up.");
+        const already = verdict === "already";
+        const inviter = d.createdBy;
         let groupRef = null;
         let joinsGroup = false;
         if (typeof d.groupId === "string" && d.groupId) {
@@ -181,7 +196,7 @@ exports.redeemGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
             const groupSnap = await tx.get(groupRef);
             if (!groupSnap.exists)
                 throw new https_1.HttpsError("not-found", "That group no longer exists.");
-            const members = (_c = groupSnap.data()) === null || _c === void 0 ? void 0 : _c.members;
+            const members = (_a = groupSnap.data()) === null || _a === void 0 ? void 0 : _a.members;
             if (!Array.isArray(members))
                 throw new https_1.HttpsError("failed-precondition", "That group is malformed.");
             // The creator must STILL be entitled to let people in. A link minted while a member and

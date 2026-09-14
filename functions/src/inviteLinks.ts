@@ -15,7 +15,9 @@
 // So the bearer risk is bounded rather than ignored:
 //   * the code is 128 bits of CSPRNG, so it cannot be guessed or enumerated;
 //   * every link EXPIRES, and the maximum lifetime is capped here, not by the client;
-//   * every link has a USE COUNT, also capped here;
+//   * a link is good for exactly ONE registration (owner's decision, 14 Sep) — so a link that
+//     gets forwarded past its intended recipient is spent by whoever arrives first, rather than
+//     admitting everyone it reaches;
 //   * the creator can revoke it at any time;
 //   * redemption re-checks that the creator is STILL a member of the group — the same
 //     accept-time check `acceptGroupInvite` learned, and for the same reason: a link created
@@ -34,14 +36,22 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 import { readFriendship } from "./friendship";
+import { linkVerdict } from "./inviteLinkState";
 
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 
 /** Ceilings live HERE, not in the caller's payload. A client-chosen limit is not a limit. */
-export const LINK_MAX_USES_CAP = 25;
 export const LINK_MAX_DAYS_CAP = 30;
-export const LINK_DEFAULT_USES = 5;
 export const LINK_DEFAULT_DAYS = 7;
+/**
+ * One registration per link. Owner's decision, and a constant rather than a default: a `maxUses`
+ * a caller could raise would be exactly the knob the decision says should not exist.
+ *
+ * The field is still written on the document, and the checks still read it, so an older link
+ * minted with a larger allowance keeps behaving the way it was issued instead of being silently
+ * cut short — the safe direction for a credential somebody has already sent to somebody else.
+ */
+export const LINK_USES = 1;
 /** Links one account may mint per day. Bounds both spam and the size of the collection. */
 const LINK_DAILY_LIMIT = Number(process.env.INVITE_LINK_DAILY_LIMIT || 20);
 
@@ -67,7 +77,7 @@ export const createGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
 
-  const { groupId, maxUses, days } = request.data || {};
+  const { groupId, days } = request.data || {};
   const db = admin.firestore();
 
   let groupName: string | null = null;
@@ -96,7 +106,6 @@ export const createGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK
     throw new HttpsError("resource-exhausted", "Too many invite links created today.");
   }
 
-  const uses = clampInt(maxUses, LINK_DEFAULT_USES, 1, LINK_MAX_USES_CAP);
   const life = clampInt(days, LINK_DEFAULT_DAYS, 1, LINK_MAX_DAYS_CAP);
   const code = newCode();
 
@@ -108,13 +117,13 @@ export const createGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK
     createdByName: cap(profile.data()?.name || (request.auth?.token?.email || "").split("@")[0] || "A friend"),
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + life * 24 * 60 * 60 * 1000),
-    maxUses: uses,
+    maxUses: LINK_USES,
     uses: 0,
     redeemedBy: [],
     revoked: false,
   });
 
-  return { code, maxUses: uses, days: life, groupName };
+  return { code, maxUses: LINK_USES, days: life, groupName };
 });
 
 /**
@@ -134,13 +143,19 @@ export const peekGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   if (!snap.exists) return { valid: false, reason: "not-found" };
 
   const d = snap.data() || {};
-  const expired = d.expiresAt?.toMillis?.() ? d.expiresAt.toMillis() < Date.now() : false;
-  const spent = (d.uses || 0) >= (d.maxUses || 0);
-  const reason = d.revoked ? "revoked" : expired ? "expired" : spent ? "spent" : null;
+
+  // The SAME verdict `redeem` will reach, from the same function, so the two cannot tell a person
+  // different stories about one link. `request.auth` is optional here: this callable serves
+  // visitors with no account, which is the whole reason the join screen can name who invited them
+  // before asking anyone to sign up.
+  const verdict = linkVerdict(d, request.auth?.uid ?? null, Date.now());
+  const alreadyJoined = verdict === 'already';
+  const admits = verdict === 'ok' || alreadyJoined;
 
   return {
-    valid: reason === null,
-    reason,
+    valid: admits,
+    reason: admits ? null : verdict,
+    alreadyJoined,
     groupName: d.groupName || null,
     invitedBy: d.createdByName || null,
   };
@@ -165,22 +180,19 @@ export const redeemGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK
     if (!snap.exists) throw new HttpsError("not-found", "This invitation link is not valid.");
     const d = snap.data() || {};
 
-    if (d.revoked === true) throw new HttpsError("failed-precondition", "This invitation was withdrawn.");
-    const expiresAt = d.expiresAt?.toMillis?.();
-    if (typeof expiresAt === "number" && expiresAt < Date.now()) {
-      throw new HttpsError("failed-precondition", "This invitation has expired.");
-    }
-    if ((d.uses || 0) >= (d.maxUses || 0)) {
-      throw new HttpsError("resource-exhausted", "This invitation has already been used up.");
-    }
+    // ONE verdict, the same one `peek` reached, so the two can never tell a person different
+    // stories about the same link. They already did once: both asked "is it spent?" before
+    // "have YOU used it?", and the person who had just joined was told their own redemption had
+    // used the invitation up.
+    const verdict = linkVerdict(d, uid, Date.now());
+    if (verdict === "malformed") throw new HttpsError("failed-precondition", "This invitation is malformed.");
+    if (verdict === "own") throw new HttpsError("failed-precondition", "This is your own invitation link.");
+    if (verdict === "revoked") throw new HttpsError("failed-precondition", "This invitation was withdrawn.");
+    if (verdict === "expired") throw new HttpsError("failed-precondition", "This invitation has expired.");
+    if (verdict === "spent") throw new HttpsError("resource-exhausted", "This invitation has already been used up.");
 
-    const inviter = typeof d.createdBy === "string" ? d.createdBy : "";
-    if (!inviter) throw new HttpsError("failed-precondition", "This invitation is malformed.");
-    if (inviter === uid) {
-      throw new HttpsError("failed-precondition", "This is your own invitation link.");
-    }
-
-    const already = Array.isArray(d.redeemedBy) && d.redeemedBy.includes(uid);
+    const already = verdict === "already";
+    const inviter = d.createdBy as string;
 
     let groupRef: admin.firestore.DocumentReference | null = null;
     let joinsGroup = false;

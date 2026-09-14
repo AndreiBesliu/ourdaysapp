@@ -298,6 +298,15 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName,
                   </div>
                 </div>
 
+                <button
+                  type="button"
+                  onClick={handleCreateLink}
+                  disabled={linkBusy}
+                  className="text-xs text-primary font-medium hover:underline self-start disabled:opacity-50"
+                >
+                  {linkBusy ? t('inviteLinkCreating', language) : t('inviteLinkAnother', language)}
+                </button>
+
                 {showQr && (
                   <div className="flex justify-center p-4 bg-white rounded-lg">
                     {/* White ground on purpose, in both themes: a QR code inverted for dark mode
@@ -316,7 +325,7 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName,
                     <div className="flex-1 min-w-0">
                       <p className="font-mono text-zinc-500 truncate">{row.code.slice(0, 10)}…</p>
                       <p className="text-zinc-500">
-                        {t('inviteLinkUsesLabel', language).replace('{used}', String(row.uses)).replace('{max}', String(row.maxUses))}
+                        {row.uses >= row.maxUses ? t('inviteLinkSpent', language) : t('inviteLinkUnused', language)}
                         {row.expiresAt ? ` · ${t('inviteLinkExpiresLabel', language).replace('{date}', new Date(row.expiresAt).toLocaleDateString(language))}` : ''}
                       </p>
                     </div>

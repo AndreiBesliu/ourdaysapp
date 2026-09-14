@@ -3063,8 +3063,9 @@ folosi — ceea ce cumpara exact ce s-a cerut (orice canal, catre cineva fara co
 garantia ca doar persoana vizata il foloseste.
 
 Deci riscul e **marginit, nu ignorat**: cod de 128 de biti din CSPRNG (nu se ghiceste si nu se
-enumera) · fiecare link **expira**, iar durata maxima e plafonata pe server · fiecare are un
-**numar de folosiri**, la fel plafonat · creatorul il poate **retrage** · la folosire se
+enumera) · fiecare link **expira**, iar durata maxima e plafonata pe server · fiecare e bun pentru **o singura
+inregistrare** (decizie owner, 14.09) — deci un link dat mai departe e consumat de primul care
+ajunge, nu admite pe toata lumea la care ajunge · creatorul il poate **retrage** · la folosire se
 **reverifica** faptul ca cel care l-a creat e INCA membru al grupului (aceeasi verificare pe care
 `acceptGroupInvite` a invatat-o, si din acelasi motiv: altfel un link creat cat erai membru si
 folosit dupa ce ai fost scos e o usa din dos permanenta) · iar documentele stau intr-o colectie pe
@@ -3116,3 +3117,38 @@ reguli** (de la 88) · build verde.
 ### Ce nu e livrat inca
 Nimic din asta nu e pe live: cere deploy in ordinea **functions → indecsi → reguli → hosting**,
 fiindca clientul depinde de callable-uri care inca nu exista acolo.
+## 2026-09-14 - Un link, o inregistrare — si defectul pe care doar cifra 1 l-a scos la iveala
+
+**Model:** Claude Opus 5 · „link-ul este valabil pentru o singura inregistrare”
+
+Decizie owner, aplicata ca **CONSTANTA pe server**, nu ca implicit: un `maxUses` pe care apelantul
+il poate ridica ar fi exact butonul pe care decizia spune ca n-ar trebui sa existe. Campul ramane pe
+document si verificarile il citesc in continuare, deci un link mai vechi emis cu o alocare mai mare
+**se comporta cum a fost emis** in loc sa fie taiat tacut — directia sigura pentru o credentiala pe
+care cineva a trimis-o deja altcuiva.
+
+### Defectul care era invizibil la 5 folosiri
+
+Cu limita 1, verificarea „s-a epuizat” venea **inaintea** verificarii „ai folosit-o deja TU”. Deci
+cine tocmai intrase si redeschidea propriul link — lucru absolut obisnuit, linkurile stau in
+conversatii — era anuntat ca invitatia e epuizata, **de propria lui folosire**. La 5 folosiri
+cazul statea ascuns in joc.
+
+Si era in **DOUA** locuri: `peek` si `redeem` decideau fiecare pe cont propriu, si ajungeau la
+raspunsuri diferite. Peek e cel chemat PRIMUL de ecranul de intrare, deci omul nici n-ar fi ajuns
+la raspunsul mai bland al lui redeem.
+
+### Reparatia nu e ordinea, e sursa unica
+
+`functions/src/inviteLinkState.ts`: **o** functie pura, `linkVerdict(doc, caller, now)`, chemata
+de amandoua. Doua implementari ale unei singure decizii, fara nimic care sa le tina de acord —
+aceeasi forma ca cele doua literale `baseEventData` si ca tema cu doua surse de adevar, si acelasi
+tratament: calculeaz-o o data.
+
+**17 teste**, si ordinea e chiar ce fixeaza. **Dovedit ca musca:** mutata verificarea „already” la
+final (unde o aveau ambele callable-uri), 2 din 17 pica; fisier restaurat si verificat prin hash.
+
+Bonus prins de aceeasi mutare: `already` bate acum si `revoked` si `expired` — cine e deja
+inauntru n-are de ce sa fie anuntat despre problemele unui link de care nu mai are nevoie.
+
+`npx tsc -b` verde · functions build verde · **860 de teste** (de la 843) · 92 de reguli · build verde.

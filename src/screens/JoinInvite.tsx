@@ -74,6 +74,13 @@ export default function JoinInvite() {
         if (cancelled) return;
         setInvitedBy(info.invitedBy);
         setGroupName(info.groupName);
+        if (info.alreadyJoined) {
+          // A link is good for one registration, so the person who used it IS the use. Reopening
+          // their own link out of a chat thread is ordinary, and must not be answered with an
+          // error about the invitation being spent.
+          setPhase('done');
+          return;
+        }
         if (!info.valid) {
           setPhase('error');
           setProblem(t(
