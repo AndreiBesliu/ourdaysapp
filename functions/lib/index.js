@@ -11,7 +11,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
+exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -35,6 +35,9 @@ Object.defineProperty(exports, "peekGroupInviteLink", { enumerable: true, get: f
 Object.defineProperty(exports, "redeemGroupInviteLink", { enumerable: true, get: function () { return inviteLinks_1.redeemGroupInviteLink; } });
 Object.defineProperty(exports, "revokeGroupInviteLink", { enumerable: true, get: function () { return inviteLinks_1.revokeGroupInviteLink; } });
 Object.defineProperty(exports, "listMyInviteLinks", { enumerable: true, get: function () { return inviteLinks_1.listMyInviteLinks; } });
+var directChat_1 = require("./directChat");
+Object.defineProperty(exports, "openDirectChat", { enumerable: true, get: function () { return directChat_1.openDirectChat; } });
+Object.defineProperty(exports, "onDirectMessageCreated", { enumerable: true, get: function () { return directChat_1.onDirectMessageCreated; } });
 admin.initializeApp();
 // App Check enforcement is toggled via env so it can be switched on AFTER the
 // reCAPTCHA key is registered and verified in monitor mode in the Firebase
@@ -257,6 +260,16 @@ exports.onMessageCreated = (0, firestore_1.onDocumentCreated)("groups/{groupId}/
             return;
         const senderDoc = await admin.firestore().doc(`users/${senderId}`).get();
         const senderName = ((_a = senderDoc.data()) === null || _a === void 0 ? void 0 : _a.name) || ((_c = (_b = senderDoc.data()) === null || _b === void 0 ? void 0 : _b.email) === null || _c === void 0 ? void 0 : _c.split('@')[0]) || "Someone";
+        // The conversation list sorts groups and direct chats together, so a group needs the same
+        // preview a chat keeps. Server-written for the same reason: a client-writable preview is a
+        // way to put words into somebody else's list.
+        await admin.firestore().doc(`groups/${groupId}`).set({
+            lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastMessageText: typeof msgData.text === "string" && msgData.text
+                ? msgData.text.slice(0, 140)
+                : msgData.imageUrl ? "\u{1F4F7}" : msgData.audioUrl ? "\u{1F3A4}" : "",
+            lastMessageBy: senderId,
+        }, { merge: true });
         // The message TEXT is passed as `bodyText`, never as a key: it is the sender's own words,
         // and translating them would be worse than leaving them alone. Only the wrapper around it —
         // "New message from …" — is rendered in the reader's language.

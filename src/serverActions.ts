@@ -320,3 +320,10 @@ export async function listMyInviteLinks(groupId?: string | null): Promise<Invite
   const res = (await fn({ groupId: groupId ?? null })).data as { links: InviteLinkRow[] };
   return res.links || [];
 }
+// ── Direct chats ──────────────────────────────────────────────────────────────
+// Clients cannot create one: `chats` denies create outright, because the question that decides
+// it — are these two friends, or in a group together — cannot be asked in a Firestore rule.
+export async function openDirectChat(otherUid: string): Promise<{ chatId: string; created: boolean }> {
+  const fn = httpsCallable(getFunctions(app), "openDirectChat");
+  return (await fn({ otherUid })).data as { chatId: string; created: boolean };
+}

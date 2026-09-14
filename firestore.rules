@@ -113,6 +113,48 @@ service cloud.firestore {
     }
 
     // ── Events ──
+    // ── Direct chats ──
+    // A one-to-one conversation. Its own collection rather than a two-person `groups` document:
+    // thirteen places list groups by membership, and a private chat leaking into any of them
+    // would show up as a calendar group, a wallet sharing target or a PvP opponent — silently,
+    // and in a different screen each time.
+    //
+    // The message subcollection is deliberately the SAME shape as a group's, so the chat UI reads
+    // either path and nothing else has to know which.
+    match /chats/{chatId} {
+      function inChat() {
+        return isSignedIn() &&
+          exists(/databases/$(database)/documents/chats/$(chatId)) &&
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+      }
+
+      allow read: if isSignedIn() && request.auth.uid in resource.data.members;
+      // Created ONLY by `openDirectChat`. The question it answers — are these two friends, or in
+      // a group together — cannot be asked here: `isMemberOfGroup` needs a known group id, and
+      // friendship lives as an array of objects on a document only its owner may read. A client
+      // create would therefore be a chat with somebody who never agreed to it.
+      allow create: if false;
+      // The preview fields are written by the message trigger, on the Admin SDK. Nothing a client
+      // needs — and a writable `lastMessageText` is a way to put words in the other person's list.
+      allow update, delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if inChat();
+        // Sender pinned to the caller, exactly as in a group: the read rule grants the whole
+        // conversation, so an unpinned author field is impersonation.
+        allow create: if inChat() && request.resource.data.senderId == request.auth.uid;
+        allow update: if inChat() &&
+          (request.auth.uid == resource.data.senderId ||
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy', 'reactions', 'isPinned']));
+        allow delete: if false; // soft-delete only, like a group's
+      }
+
+      match /typing/{userId} {
+        allow read: if inChat();
+        allow write: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+
     // ── Invite links ──
     // Bearer invitations, readable by NOBODY from a client.
     //

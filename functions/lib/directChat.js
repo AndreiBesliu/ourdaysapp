@@ -1,0 +1,150 @@
+"use strict";
+// functions/src/directChat.ts
+// One-to-one conversations.
+//
+// ── Why a separate collection and not a two-person group ──────────────────────────────
+//
+// The tempting shortcut is to make a direct chat a `groups` document with two members: every
+// message path, rule, notification, typing indicator, search and pin then works unchanged.
+//
+// It was rejected on a count. Thirteen places list groups by membership — five in the client
+// (the calendar switcher, the wallet, the group creator, the PvP roster) and eight on the server
+// — and every one of them would need a filter for a kind of group it has never heard of. Forget
+// one and a private two-person chat shows up as a calendar group, a wallet sharing target, or a
+// PvP opponent. Each failure silent, each in a different screen.
+//
+// A separate collection cannot leak into any of them. The price is this file and one rules block;
+// the message subcollection is deliberately the SAME shape, so the chat UI reads either path and
+// nothing else has to know which.
+//
+// ── Why opening one is a callable ─────────────────────────────────────────────────────
+//
+// The rule for "may I talk to this person" is "we are friends, or we share a group", and Firestore
+// rules can express neither. `isMemberOfGroup` needs a known group id — which is exactly why the
+// assets rule says the shared-group check has to live on the server — and friendship is an array
+// of OBJECTS on a document only its owner may read.
+//
+// So clients cannot create a chat at all. They ask for one.
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.onDirectMessageCreated = exports.openDirectChat = void 0;
+exports.directChatId = directChatId;
+const https_1 = require("firebase-functions/v2/https");
+const firestore_1 = require("firebase-functions/v2/firestore");
+const admin = require("firebase-admin");
+const notify_1 = require("./notify");
+const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
+/**
+ * The document id for a pair, derived rather than random.
+ *
+ * Sorted and joined, so both people compute the same one and "do we already have a chat" is a
+ * single document read instead of a query. A random id would need an index, a query, and a race
+ * where two people opening the chat at the same second create two of them.
+ */
+function directChatId(a, b) {
+    return [a, b].sort().join("__");
+}
+/** Do these two share any group? The check the rules cannot make. */
+async function shareAGroup(db, a, b) {
+    const snap = await db.collection("groups").where("members", "array-contains", a).get();
+    return snap.docs.some((d) => {
+        var _a;
+        const members = (_a = d.data()) === null || _a === void 0 ? void 0 : _a.members;
+        return Array.isArray(members) && members.includes(b);
+    });
+}
+/** Is `b` on `a`'s friend list? `friends` holds objects, hence the shape check. */
+async function areFriends(db, a, b) {
+    var _a;
+    const snap = await db.doc(`users/${a}`).get();
+    const friends = (_a = snap.data()) === null || _a === void 0 ? void 0 : _a.friends;
+    return Array.isArray(friends) && friends.some((f) => f && f.uid === b);
+}
+exports.openDirectChat = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    var _a;
+    const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
+    if (!uid)
+        throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
+    const { otherUid } = request.data || {};
+    if (typeof otherUid !== "string" || !otherUid) {
+        throw new https_1.HttpsError("invalid-argument", "otherUid is required.");
+    }
+    if (otherUid === uid) {
+        throw new https_1.HttpsError("failed-precondition", "You cannot start a chat with yourself.");
+    }
+    const db = admin.firestore();
+    const id = directChatId(uid, otherUid);
+    const ref = db.doc(`chats/${id}`);
+    // Already there: nothing to authorise again. Re-checking would mean a chat could go dead
+    // because somebody left a group, silently hiding a conversation that already has history in it.
+    const existing = await ref.get();
+    if (existing.exists) {
+        return { chatId: id, created: false };
+    }
+    const [friends, sharedGroup] = await Promise.all([
+        areFriends(db, uid, otherUid),
+        shareAGroup(db, uid, otherUid),
+    ]);
+    if (!friends && !sharedGroup) {
+        throw new https_1.HttpsError("permission-denied", "You can only message friends and people in your groups.");
+    }
+    // The other person must exist. Otherwise a typo'd uid creates a chat with nobody in it that
+    // still appears in one person's list forever.
+    const other = await db.doc(`profiles/${otherUid}`).get();
+    if (!other.exists) {
+        throw new https_1.HttpsError("not-found", "That person could not be found.");
+    }
+    await ref.set({
+        members: [uid, otherUid].sort(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: uid,
+        // Written by the message trigger from here on; seeded empty so the list has something to
+        // sort by before anybody has said anything.
+        lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastMessageText: "",
+        lastMessageBy: null,
+    });
+    return { chatId: id, created: true };
+});
+/**
+ * A direct message arrived: tell the other person, and keep the list preview current.
+ *
+ * The same `notify` every other announcement goes through, so a direct message leaves a bell row
+ * AND a push, in the reader's language — which is more than group chat managed until today.
+ *
+ * The message TEXT rides as `bodyText`: it is the sender's own words and must not be translated.
+ */
+exports.onDirectMessageCreated = (0, firestore_1.onDocumentCreated)("chats/{chatId}/messages/{messageId}", async (event) => {
+    var _a, _b, _c;
+    const msg = (_a = event.data) === null || _a === void 0 ? void 0 : _a.data();
+    const chatId = event.params.chatId;
+    if (!msg || !chatId)
+        return;
+    const senderId = typeof msg.senderId === "string" ? msg.senderId : "";
+    if (!senderId)
+        return;
+    try {
+        const db = admin.firestore();
+        const chatSnap = await db.doc(`chats/${chatId}`).get();
+        const members = Array.isArray((_b = chatSnap.data()) === null || _b === void 0 ? void 0 : _b.members) ? chatSnap.data().members : [];
+        if (members.length === 0)
+            return;
+        const preview = typeof msg.text === "string" && msg.text
+            ? msg.text.slice(0, 140)
+            : msg.imageUrl ? "\u{1F4F7}" : msg.audioUrl ? "\u{1F3A4}" : "";
+        // Written by the server, never by a client: a writable preview is a way to put words into
+        // somebody else's conversation list.
+        await db.doc(`chats/${chatId}`).set({
+            lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastMessageText: preview,
+            lastMessageBy: senderId,
+        }, { merge: true });
+        const senderName = ((_c = (await db.doc(`profiles/${senderId}`).get()).data()) === null || _c === void 0 ? void 0 : _c.name) || "Someone";
+        await (0, notify_1.notify)(Object.assign(Object.assign({ userIds: members.filter((m) => m !== senderId), createdBy: senderId, type: "chat", titleKey: "notifNewMessage", titleParam: senderName }, (typeof msg.text === "string" && msg.text
+            ? { bodyText: msg.text }
+            : { bodyKey: msg.imageUrl ? "notifSentImage" : "notifSentMessage" })), { data: { route: "/chat", chatId } }));
+    }
+    catch (err) {
+        console.error("onDirectMessageCreated: could not deliver", err);
+    }
+});
+//# sourceMappingURL=directChat.js.map

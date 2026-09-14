@@ -22,6 +22,7 @@ export {
   createGroupInviteLink, peekGroupInviteLink, redeemGroupInviteLink,
   revokeGroupInviteLink, listMyInviteLinks,
 } from "./inviteLinks";
+export { openDirectChat, onDirectMessageCreated } from "./directChat";
 
 admin.initializeApp();
 
@@ -268,6 +269,17 @@ export const onMessageCreated = onDocumentCreated("groups/{groupId}/messages/{me
 
     const senderDoc = await admin.firestore().doc(`users/${senderId}`).get();
     const senderName = senderDoc.data()?.name || senderDoc.data()?.email?.split('@')[0] || "Someone";
+
+    // The conversation list sorts groups and direct chats together, so a group needs the same
+    // preview a chat keeps. Server-written for the same reason: a client-writable preview is a
+    // way to put words into somebody else's list.
+    await admin.firestore().doc(`groups/${groupId}`).set({
+      lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastMessageText: typeof msgData.text === "string" && msgData.text
+        ? msgData.text.slice(0, 140)
+        : msgData.imageUrl ? "\u{1F4F7}" : msgData.audioUrl ? "\u{1F3A4}" : "",
+      lastMessageBy: senderId,
+    }, { merge: true });
 
     // The message TEXT is passed as `bodyText`, never as a key: it is the sender's own words,
     // and translating them would be worse than leaving them alone. Only the wrapper around it —
