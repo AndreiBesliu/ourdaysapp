@@ -3152,3 +3152,62 @@ Bonus prins de aceeasi mutare: `already` bate acum si `revoked` si `expired` —
 inauntru n-are de ce sa fie anuntat despre problemele unui link de care nu mai are nevoie.
 
 `npx tsc -b` verde · functions build verde · **860 de teste** (de la 843) · 92 de reguli · build verde.
+## 2026-09-14 - Notificarile: doua canale care nu erau de acord ce merita spus
+
+**Model:** Claude Opus 5 · „o sa vreau sa facem si notificari pe device" → ales „intai temelia"
+
+### Ce am masurat inainte sa scriu ceva
+
+**Mementourile de eveniment nu pornesc pentru nimeni.** Pe Android,
+`capacitor-local-notifications` **nu e in `capacitor.build.gradle`** (sunt doar haptics si push),
+deci pluginul nativ lipseste. Pe web exista implementare, dar programeaza cu `setTimeout`: porneste
+doar daca **lasi tabul deschis** pana in momentul respectiv. Un memento pentru maine dimineata nu se
+declanseaza niciodata, pe nicio platforma. OWNER_VERIFY spunea doar „pe Android"; e mai rau.
+
+**Doua canale independente, care nu erau de acord ce merita spus:**
+- colectia `notifications` (clopotelul) — patru scriitori, **corect tradusa**, fiindca tine chei
+  iar clientul CITITORULUI le randeaza;
+- push-ul FCM — patru trimitatori **diferiti**, niciunul nu scria rand in clopotel, toti in
+  **engleza hardcodata**, pentru toata lumea, intr-o aplicatie cu sase limbi.
+
+Deci un mesaj de chat da push si nu lasa urma in clopotel; o cerere de prietenie acceptata lasa rand
+si nu da push; invitatia pe care tocmai o construisem la fel. Daca aflai sau nu depindea de care din
+doua cai fara legatura fusese cablata.
+
+**Nimic nu curata `fcmTokens`.** `sendEachForMulticast` raporteaza esecul per token si fiecare
+trimitere arunca raportul. Lista doar creste — fiecare browser nou, fiecare reinstalare — si fiecare
+trimitere cheltuie apeluri pe adrese care nu pot ajunge nicaieri.
+
+### Temelia
+
+`functions/src/notify.ts` — **o** cale: scrie randul din clopotel SI trimite push-ul, dintr-o
+singura descriere a evenimentului, **in limba fiecarui destinatar** (`users/{uid}.language` era deja
+scris; nimeni nu-l citea la trimitere). Curata tokenurile moarte, si **doar** pe cele trei coduri
+care chiar inseamna „adresa nu mai exista" — un plafon sau un timeout nu au voie sa coste pe cineva
+tokenul, altfel un minut prost la Google dezaboneaza toata familia.
+
+Chemat **dupa** tranzactie, niciodata inauntru: cineva a intrat deja in grup, iar un esec la anuntat
+n-are voie sa dea inapoi intrarea.
+
+### Al doilea dictionar, si ce-l tine cinstit
+
+Push-ul e desenat de sistemul de operare din ce a trimis serverul, deci limba se alege inainte de
+trimitere — iar `src/utils/i18n.ts` are ~3000 de linii si importa localele date-fns, deci nu intra
+in bundle-ul de functions pentru sase siruri scurte. Asa ca exista un tabel mic separat,
+`notifyStrings.ts`.
+
+Doua tabele care descriu acelasi lucru e chiar forma care diverge. **Testul care le tine de acord a
+prins divergenta din PRIMA rulare:** inventasem traduceri pentru `taskAssignedBody` in loc sa le
+copiez pe cele existente, si a numit toate trei limbile gresite. Valorile sunt acum luate
+programatic din fisierul aplicatiei, nu scrise a doua oara de mana.
+
+### Ce trece deja prin ea
+Cererea de prietenie acceptata si invitatia prin link — amandoua scriau rand si **niciun push**.
+Acum scriu si trimit, traduse. Clopotelul stie si `titleParam`, ca un nume sa poata sta in titlu.
+
+### Ce NU trece inca
+Cele patru trimiteri vechi de push — mesaj de chat, joc nou, provocare Warlord, tura ta — sunt tot in
+engleza hardcodata si tot nu lasa rand in clopotel. Si o cerere de prietenie **primita** inca nu
+notifica nimic, nici macar in clopotel.
+
+`npx tsc -b` verde · functions build verde · **873 de teste** (de la 860) · build verde.

@@ -39,6 +39,7 @@ const admin = require("firebase-admin");
 const crypto = require("crypto");
 const friendship_1 = require("./friendship");
 const inviteLinkState_1 = require("./inviteLinkState");
+const notify_1 = require("./notify");
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 /** Ceilings live HERE, not in the caller's payload. A client-chosen limit is not a limit. */
 exports.LINK_MAX_DAYS_CAP = 30;
@@ -165,7 +166,7 @@ exports.redeemGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
     }
     const db = admin.firestore();
     const linkRef = db.doc(`invite_links/${code}`);
-    return db.runTransaction(async (tx) => {
+    const outcome = await db.runTransaction(async (tx) => {
         var _a;
         // ── READ PHASE ────────────────────────────────────────────────────────────
         const snap = await tx.get(linkRef);
@@ -220,31 +221,37 @@ exports.redeemGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
                 redeemedBy: admin.firestore.FieldValue.arrayUnion(uid),
             });
         }
-        if (!already) {
-            const notifRef = db.collection("notifications").doc();
-            tx.set(notifRef, {
-                userId: inviter,
-                createdBy: uid,
-                type: "friend",
-                // The reader's client translates the keys; the literals are only a fallback for rows
-                // written before keys existed. The renderer appends `param` at the END.
-                titleKey: "inviteLinkUsed",
-                bodyKey: "inviteLinkUsedBody",
-                param: friendship.bName,
-                title: "Invitation accepted",
-                body: `${friendship.bName} joined through your invitation.`,
-                read: false,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-        }
         return {
             status: already ? "already" : "accepted",
             groupId: d.groupId || null,
             groupName: d.groupName || null,
             invitedBy: friendship.aName,
             joinedGroup: joinsGroup,
+            inviter,
+            joinerName: friendship.bName,
         };
     });
+    // AFTER the transaction, never inside it. Somebody has joined a group; a failure to announce
+    // that must not undo it. `notify` writes the bell row and sends the push from one description,
+    // in the inviter's own language — the push used to be missing here entirely.
+    if (outcome.status === "accepted") {
+        await (0, notify_1.notify)({
+            userIds: [outcome.inviter],
+            createdBy: uid,
+            type: "friend",
+            titleKey: "inviteLinkUsed",
+            bodyKey: "inviteLinkUsedBody",
+            param: outcome.joinerName,
+            data: { route: "/friends" },
+        });
+    }
+    return {
+        status: outcome.status,
+        groupId: outcome.groupId,
+        groupName: outcome.groupName,
+        invitedBy: outcome.invitedBy,
+        joinedGroup: outcome.joinedGroup,
+    };
 });
 /** Withdraw a link. Only its creator, and never destructive — redemptions already made stand. */
 exports.revokeGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {

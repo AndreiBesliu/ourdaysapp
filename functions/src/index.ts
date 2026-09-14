@@ -12,6 +12,7 @@ import { fetchAssets, fetchChat, fetchEvents, fetchExpenses } from "./aiSources"
 import { dayRangePeriod, monthPeriod, periodDays, isRealDay } from "./period";
 import { charsPerToken, estimateUsdFor, usageOf, withLedger } from "./aiLedger";
 import { readFriendship } from "./friendship";
+import { notify } from "./notify";
 
 // Invite links live in their own module — index.ts is already long, and these four are a
 // self-contained feature. Re-exported here because Firebase deploys what index exports.
@@ -950,11 +951,12 @@ export const respondToFriendRequest = onCall({ enforceAppCheck: ENFORCE_APP_CHEC
   const db = admin.firestore();
   const reqRef = db.doc(`friend_requests/${requestId}`);
 
-  // One transaction: re-check status, read both users, and write atomically.
+  // One transaction: re-check status, read both users, and write atomically. The notification
+  // is sent AFTER it commits — a failure to announce a friendship must not undo the friendship.
   // A request addressed by email can only be accepted by a caller whose email is
   // VERIFIED (prevents claiming a request sent to an address you don't own).
   // Requests addressed by uid (toId) are always safe (uid can't be spoofed).
-  return db.runTransaction(async (tx) => {
+  const outcome = await db.runTransaction(async (tx) => {
     const snap = await tx.get(reqRef);
     if (!snap.exists) {
       throw new HttpsError("not-found", "Friend request not found.");
@@ -1003,29 +1005,24 @@ export const respondToFriendRequest = onCall({ enforceAppCheck: ENFORCE_APP_CHEC
     tx.set(accepterRef, { friends: accepterFriends }, { merge: true });
     tx.update(reqRef, { status: "accepted", toId: uid });
 
-    // Notify the sender (Admin SDK write bypasses the notifications create rule).
-    const notifRef = db.collection("notifications").doc();
-    tx.set(notifRef, {
-      userId: senderUid,
+    return { status: "accepted", senderUid, accepterName };
+  });
+
+  if (outcome.status === "accepted" && outcome.senderUid) {
+    // Used to write the bell row and send NO push at all, so whether the sender found out
+    // depended on them opening the app.
+    await notify({
+      userIds: [outcome.senderUid],
       createdBy: uid,
       type: "friend",
-      // titleKey/bodyKey are what the reader's client translates; title/body stay only as the
-      // fallback for rows written before keys existed. Without them this row rendered in the
-      // ACCEPTER's English no matter what language the reader had chosen.
-      //
-      // The renderer concatenates as `${t(bodyKey)}${param}`, so the name goes on the END —
-      // a body phrased "{name} accepted…" cannot be expressed through it.
       titleKey: "friendRequestAccepted",
       bodyKey: "friendRequestAcceptedBody",
-      param: accepterName,
-      title: "Friend request accepted",
-      body: `${accepterName} accepted your friend request.`,
-      read: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      param: outcome.accepterName,
+      data: { route: "/friends" },
     });
+  }
 
-    return { status: "accepted" };
-  });
+  return { status: outcome.status };
 });
 
 // ── Friends: remove a friend (mutual) ──
