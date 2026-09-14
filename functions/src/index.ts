@@ -1375,7 +1375,10 @@ export const adminGetStats = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asyn
     if (e.isTask) { tasks++; if (e.taskStatus === "completed") completedTasks++; }
     if (e.recurrenceRule) recurring++;
     if (e.reminderMinutes !== null && e.reminderMinutes !== undefined) withReminder++;
-    if (e.sharedWithFamily) sharedFam++;
+    // Counts group membership, which is what sharing an event has MEANT since the wallet fix.
+    // `sharedWithFamily` is now written as a constant false on every new event, so this tile
+    // read 0 while half the calendar genuinely sat in a shared group.
+    if (e.groupId) sharedFam++;
     if (e.rsvpEnabled) withRsvp++;
     inc(evByCategory, e.categoryId || "other");
   });
@@ -1394,7 +1397,10 @@ export const adminGetStats = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asyn
   const aByCategory: Record<string, number> = {}; let assetsShared = 0;
   assetsSnap.forEach((d) => {
     const a = d.data();
-    if (a.sharedWithFamily) assetsShared++;
+    // The field the rules and queries actually consult. `sharedWithFamily` on an asset is a
+    // derived echo of the legacy flag that never granted anybody access, so this tile claimed
+    // sixteen shared assets while the wallet itself labelled those same sixteen "Never shared".
+    if (typeof a.sharedGroupId === "string" && a.sharedGroupId) assetsShared++;
     inc(aByCategory, a.category || "Uncategorized");
   });
 

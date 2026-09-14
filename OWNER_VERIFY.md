@@ -626,3 +626,20 @@ Toate notificarile push trimise vreodata au sarit fiecare destinatar.
       serie". Toata seria trebuie sa se mute cu doua zile — inclusiv aparitiile vechi — nu sa
       inceapa de la ziua editata.
 - [ ] Daca vezi aparitii care dispar in oricare din cele doua cazuri, **spune-mi imediat**.
+---
+
+## 33. Ultimele trei, si o intrebare (14.09)
+
+- [ ] **Memory Match:** castiga o partida. Trebuie sa scrie **„Ai castigat"**, nu numele celuilalt.
+      Pana azi castigatorul vedea mereu numele adversarului.
+- [ ] **Admin → Overview:** cifra **„Shared"** de la evenimente trebuie sa fie acum ~11, nu 0.
+      **„Assets shared"** trebuie sa fie **0**, nu 16 — fiindca chiar nu e niciun bun partajat.
+- [ ] **Panoul de evenimente recurente**, pe alta limba decat engleza: numarul de exceptii trebuie
+      tradus.
+
+### Intrebare pentru tine, nu pot decide eu
+
+- [ ] **Opt jocuri din arcade sunt abandonate in mijlocul lor si nu pot fi inchise niciodata** —
+      butonul „Termina jocul" apare doar intre runde. Vrei sa fie disponibil si **in timpul**
+      jocului? Atentie la ce inseamna: poti incheia unilateral un joc in care celalalt e la mutare.
+      Alternativa: sa expire singure dupa N zile.

@@ -147,7 +147,10 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
                             </div>
                             {ev.recurrenceExceptions && ev.recurrenceExceptions.length > 0 && (
                               <p className="text-xs text-amber-500 mt-1">
-                                {ev.recurrenceExceptions.length} exception{ev.recurrenceExceptions.length > 1 ? 's' : ''}
+                                {/* Was hard-coded English, with an -s the other five languages
+                                    do not use. Follows the `seriesCount` convention: a plural
+                                    noun after the number, which every language here accepts. */}
+                                {ev.recurrenceExceptions.length} {t('exceptionsCount', language)}
                               </p>
                             )}
                           </div>

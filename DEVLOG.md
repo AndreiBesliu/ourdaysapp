@@ -4102,3 +4102,48 @@ aparitie pe 31 iulie, care e in afara ferestrei de expansiune — deci aserttia 
 intoarsa, nu pe expansiune.*
 
 `npx tsc -b` verde · **1080 de teste** (de la 1072) · poarta verde · build verde · livrat pe live.
+## 2026-09-14 - Ultimele trei din audit, si una care nu era defect
+
+**Model:** Claude Opus 5 · „Continua"
+
+### Castigatorul de la Memory Match nu afla niciodata ca a castigat
+
+`userMap[game.winner]?.uid === auth.currentUser?.uid` — dar intrarile din `userMap` se construiesc ca
+`{ id, ...data }`. **Nu exista nicio proprietate `uid` pe ele**, deci testul era mereu fals si
+persoana care castiga vedea intotdeauna numele celuilalt. Cheia din `userMap` **este** uid-ul, deci
+cautarea era si inutila: se compara direct.
+
+Celelalte trei jocuri scapa doar fiindca nu incearca verificarea asta — afiseaza doar numele.
+
+### Doua cifre din admin raportau partajarea invers
+
+`Shared` numara `e.sharedWithFamily` pe evenimente — camp scris acum ca `false` constant — deci arata
+**0** in timp ce 11 din 22 de evenimente sunt intr-un grup si chiar sunt citite de membrii lui.
+`Assets shared` numara acelasi camp pe bunuri, unde e un ecou derivat al steagului vechi care n-a dat
+nimanui acces niciodata — deci arata **16**, exact bunurile pe care aplicatia insasi le eticheteaza
+„N-a fost partajat". Un panou care exista ca sa spuna ce se intampla, gresit in ambele sensuri.
+
+Acum numara ce citesc de fapt cititorii: `groupId` la evenimente, `sharedGroupId` la bunuri.
+
+### Un sir englezesc intr-o aplicatie cu sase limbi
+
+`{n} exception{n > 1 ? 's' : ''}` in panoul de recurente. Urmeaza acum conventia lui `seriesCount` —
+numar plus substantiv la plural — care functioneaza in toate cele sase fara reguli de acord.
+
+### Si una care NU era defect: clasamentul din arcade
+
+Auditul sustinea ca se numara gresit. Datele spun altceva, si merita scris fiindca ma corecteaza:
+**9 jocuri `waiting`, 8 `playing`, 1 `finished`**, iar `winner` gol pe toate 18. Calea de castig
+**scrie** corect `winner` — verificat la sursa. Clasamentul e gol pentru motivul cel mai banal cu
+putinta: **niciun joc n-a fost castigat vreodata.** Noua nici n-au inceput, opt sunt abandonate in
+joc, unul s-a terminat remiza.
+
+Ramane un gol real, dar e o decizie de design, nu o reparatie: „Termina jocul" apare **doar** intre
+runde, deci cele opt sesiuni abandonate nu pot fi inchise niciodata. A-l face disponibil in timpul
+jocului inseamna insa ca poti incheia unilateral un joc in care celalalt e la mutare — un abandon
+impus. Nu iau singur decizia asta; e in OWNER_VERIFY.
+
+`npx tsc -b` verde · 1080 de teste · poarta verde · build verde · functions verde · livrat pe live.
+
+*A treia oara azi cand o copie de margine mi-a raportat ca livrarea n-a prins. Verificarea unui
+fisier proaspat livrat cere reincercare, nu o singura citire — parametrul anti-cache nu ajunge.*

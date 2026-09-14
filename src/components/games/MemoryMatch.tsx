@@ -348,7 +348,11 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
             </div>
             <h3 className="text-2xl font-black text-zinc-900 dark:text-white mb-2">
               {game.winner ? (
-                userMap[game.winner]?.uid === auth.currentUser?.uid ? t('youWon', language) : `${userMap[game.winner]?.name?.split(' ')[0]} ${t('wonSuffix', language)}`
+                /* Compared against the KEY, which is the uid. It used to read `.uid` off the
+                   userMap entry, and those are built as `{ id, ...data }` — there is no `uid`
+                   property on them, so the test was always false and the person who won was
+                   always shown somebody else's name. No lookup is needed at all. */
+                game.winner === auth.currentUser?.uid ? t('youWon', language) : `${userMap[game.winner]?.name?.split(' ')[0]} ${t('wonSuffix', language)}`
               ) : t('itsADraw', language)}
             </h3>
             <div className="flex items-center gap-4 text-sm text-zinc-500 dark:text-zinc-400 mb-1">
