@@ -3368,3 +3368,53 @@ doua valori din clipboard. Trei lucruri care nu-s evidente:
 
 ### Ce urmeaza
 Ecranul: doua panouri pe desktop, fullscreen cu panou de conversatii pe telefon.
+## 2026-09-14 - Tabul de chat: lista in stanga, conversatia in dreapta
+
+**Model:** Claude Opus 5 · „un tab in plus, dedicat pentru chat, ceva similar cu whatsapp” +
+„si cele din grup si cele personale”
+
+Ruta `/chat`, cu iconita in bara de sus intre jurnal si portofel.
+
+### O singura stare, doua asezari
+
+Desktopul arata ambele panouri. Telefonul arata exact unul — lista pana alegi ceva, conversatia
+dupa, cu o sageata inapoi care sterge selectia. **Aceeasi stare in ambele cazuri**; difera doar ce
+panou are voie pe ecran la o latime, prin `hidden` / `md:flex`.
+
+Doi arbori diferiti ar fi insemnat doua seturi de ascultatori, doua pozitii de derulare si o
+conversatie care uita unde era cand intorci telefonul.
+
+### Costul colectiei separate, platit o data
+
+Un chat de grup sta la `groups/{id}/messages`, unul privat la `chats/{id}/messages` — colectii
+separate dinadins, fiindca treisprezece locuri listeaza grupuri dupa membri. Ecranul vrea **o**
+lista sortata, deci `conversations.ts` e locul unde se imbina cele doua. Tot ce e mai jos vede o
+singura forma.
+
+**Trei capcane fixate in teste:**
+
+- **Marca de timp vine in trei forme.** Un `Timestamp` cu `toMillis`, un numar simplu de la o
+  scriere optimista locala, si `null` cat timp un `serverTimestamp()` e in zbor. `NaN` in
+  comparator ar amesteca toata lista pentru o secunda.
+- **Cheia de lista contine si FELUL.** Id-urile sunt unice per colectie, nu intre ele: un grup si
+  un chat pot avea acelasi id, iar o cheie React doar cu id-ul ar contopi cele doua randuri.
+- **Departajare stabila la conversatiile nefolosite.** Fara ea, doua randuri cu marca 0 isi schimba
+  locul la fiecare randare si lista palpaie.
+
+### Cine poate fi ales pentru o conversatie noua
+
+**Exact multimea pe care serverul o accepta** — prietenii plus oamenii din grupurile tale, minus tu,
+minus cine are deja conversatie cu tine. Un control care ofera o alegere si apoi esueaza la apasare
+e mai rau decat unul care n-o ofera. Cand nu e nimeni de ales, scrie ce lipseste, nu o cutie goala.
+
+### Panoul se remonteaza la fiecare schimbare
+
+`key={conversationKey(active)}` e intentionat: panoul tine o lista de mesaje, o ciorna, o pozitie
+de derulare si un marcaj de citit. Oricare dintre ele carat peste o schimbare ar arata starea unei
+conversatii inauntrul alteia.
+
+`npx tsc -b` verde · **928 de teste** (de la 907) · build verde.
+
+### Ce ramane
+Widgetul flotant de pe calendar ramane — e util in context. Extragerea propriu-zisa a panoului din
+componenta de 1066 de linii ramane si ea, acum ca ecranul e construit peste ea.

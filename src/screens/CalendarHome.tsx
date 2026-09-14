@@ -5,7 +5,7 @@ import { getToken } from 'firebase/messaging';
 import { collection, query, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
 import { liveQuery, liveDoc } from '../utils/liveQuery';
 import { reportError } from '../reportError';
-import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu, ShieldCheck, Swords, ClipboardList } from 'lucide-react';
+import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu, ShieldCheck, Swords, ClipboardList, MessageCircle } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import CalendarGrid from '../components/CalendarGrid';
@@ -522,6 +522,14 @@ export default function CalendarHome() {
             title={t('logTitle', language)}
           >
             <ClipboardList className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => navigate('/chat')}
+            title={t('chatTab', language)}
+            aria-label={t('chatTab', language)}
+            className="p-2 text-zinc-500 hover:text-primary transition-colors"
+          >
+            <MessageCircle className="w-5 h-5" />
           </button>
           <button 
             onClick={() => navigate('/wallet')}

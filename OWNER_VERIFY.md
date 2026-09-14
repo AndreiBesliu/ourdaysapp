@@ -389,3 +389,25 @@ Măsurate, nu presupuse — le scriu ca să știi unde **nu** trebuie să te ui�
 
 **Nota:** mementourile **inca nu pornesc**. Asta e felia urmatoare; pâna atunci ora e doar afisata
 si stocata corect.
+---
+
+## 19. Tabul de chat (14.09)
+
+**De ce nu pot eu:** tot ecranul e in spatele autentificarii, iar jumatate din el cere **doua
+conturi**.
+
+- [ ] **Iconita de chat** apare in bara de sus, intre jurnal si portofel. Deschide `/chat`.
+- [ ] **Pe desktop:** lista de conversatii in stanga, conversatia in dreapta. Grupurile tale
+      trebuie sa fie deja acolo.
+- [ ] **Pe telefon:** vezi doar lista; alegi o conversatie si devine ecran intreg; sageata inapoi
+      din antetul conversatiei te intoarce la lista.
+- [ ] **Conversatie noua** → lista trebuie sa contina prietenii tai **si** oamenii din grupurile
+      tale, si **sa nu** contina pe cineva cu care ai deja o conversatie. Alege pe cineva: se
+      deschide direct conversatia.
+- [ ] **Scrie-i ceva de pe al doilea cont.** Trebuie sa primesti **si** notificare pe telefon,
+      **si** rand in clopotel — in limba ta, nu a expeditorului.
+- [ ] **Previzualizarea din lista** arata ultimul mesaj, cu `Tu:` in fata cand e al tau.
+- [ ] **Lipeste un screenshot** (Ctrl+V) in casuta de mesaj, si intr-un grup si intr-o conversatie
+      privata. Trebuie sa apara ca imagine atasata, nu ca text.
+- [ ] **Rezumatul AI (sclipiciul)** apare doar la grupuri, nu la conversatiile in doi.
+- [ ] **In toate cele sase limbi.**

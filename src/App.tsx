@@ -13,6 +13,7 @@ import Wallet from './screens/Wallet';
 import Settings from './screens/Settings';
 import Friends from './screens/Friends';
 import JoinInvite, { peekPendingInvite } from './screens/JoinInvite';
+import Chat from './screens/Chat';
 import ErrorBoundary from './components/ErrorBoundary';
 import NewVersionNotice from './components/NewVersionNotice';
 import { installGlobalErrorHandlers, reportError } from './reportError';
@@ -318,6 +319,10 @@ function App() {
         <Route
           path="/friends"
           element={user ? <Friends /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/chat"
+          element={user ? <Chat /> : <Navigate to="/login" />}
         />
         <Route
           path="/admin"
