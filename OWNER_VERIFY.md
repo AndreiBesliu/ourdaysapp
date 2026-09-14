@@ -549,3 +549,23 @@ Andrei alege DOAR CITIRE (14.09), deci rolul de mai jos nu e negociabil in pasii
       (acum pastreaza `#310`, ca sa nu se confunde cu #185), deci starea veche nu-l mai gaseste.
 - [ ] Daca vreun grup arata cu rosu „Claimed fixed in `<commit>`, but it has happened since",
       **spune-mi imediat** — inseamna ca o reparatie de-a mea n-a functionat.
+---
+
+## 28. Ce am verificat EU din date (14.09) — nu mai e nevoie sa le faci tu
+
+- [x] **§20 Mementourile pornesc.** `reminder_log`: un rand azi 14:02 UTC, zero duplicate. Clopotelul
+      are doua randuri `reminder`. Ramane sa confirmi doar **limba** si ca suna **la timp** pe telefon.
+- [x] **§17 Un link de invitatie nu poate fi folosit de doua ori.** 1 creat, 1 revendicat, 0 peste.
+- [x] **§20 Dedublarea tine.** Zero perechi (eveniment, zi) duplicate.
+- [x] **§16 Cele 16 bunuri cu bulina chihlimbarie sunt reale** — au `sharedWithFamily` si niciun grup,
+      adica exact bunurile pe care nu le-a vazut nimeni niciodata. Nu e regresie.
+
+### Ce a iesit la iveala si trebuie sa faci tu
+
+- [ ] **Deconecteaza-te si reconecteaza-te o data.** Asta scrie fusul tau orar in cont (pana acum nu
+      exista pentru niciun user). Spune-mi cand ai facut-o si confirm din date ca s-a scris.
+      **De ce conteaza:** fara el, mementoul unui eveniment de zi intreaga suna la 12:00 in loc de
+      09:00.
+- [ ] **§16 Partajeaza un bun cu un grup.** Zero bunuri sunt partajate cu adevarat acum, deci toata
+      jumatatea aia a portofelului n-a fost inca probata pe date reale.
+- [ ] **§19 Porneste o conversatie privata.** Zero exista, deci calea aia n-a fost exercitata deloc.

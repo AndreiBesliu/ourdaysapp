@@ -24,7 +24,7 @@ const Warlord = lazy(() => import('./screens/Warlord')); // large embedded game 
 const PeriodLog = lazy(() => import('./screens/PeriodLog'));
 import { useThemeStore } from './store';
 import { shouldUseLightText } from './utils/themeContrast';
-import { localZone } from './utils/eventTime';
+import { isValidZone, localZone } from './utils/eventTime';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -192,12 +192,32 @@ function App() {
           // Save user to DB if not exists. Backfill `name` from the Firebase
           // Auth displayName when the Firestore doc has none, so member lists
           // and birthday titles show the real name instead of the email prefix.
-          const profileUpdate: { email: string | null; lastLogin: string; name?: string } = {
+          const profileUpdate: {
+            email: string | null; lastLogin: string; name?: string; timezone?: string;
+          } = {
             email: currentUser.email,
             lastLogin: new Date().toISOString(),
           };
           if (!userDocSnap?.data()?.name && currentUser.displayName) {
             profileUpdate.name = currentUser.displayName;
+          }
+          // Backfill the zone ONCE, when the account has none.
+          //
+          // The store has always had one — line ~184 falls back to the device's zone — but it never
+          // reached Firestore unless somebody opened Settings and changed the picker, and nobody
+          // had. That left `sendDueReminders` with a dead middle link in its chain: event zone →
+          // OWNER's zone → "UTC". So a reminder on any event without its own zone, including every
+          // all-day one, resolved at 09:00 UTC — three hours late in Bucharest, silently, on the
+          // reminder that fires before you leave the house.
+          //
+          // Only when absent: an explicit choice in Settings is a statement about where you are,
+          // and overwriting it from the browser on every login would make that picker decorative.
+          if (!userDocSnap?.data()?.timezone) {
+            // Validated with the SAME predicate the server uses — eventTime.ts is kept
+            // byte-identical on both sides, and a test refuses divergence — so a zone stored here
+            // cannot be one `sendDueReminders` will reject and quietly replace with UTC.
+            const detected = localZone();
+            if (isValidZone(detected)) profileUpdate.timezone = detected;
           }
           await setDoc(userDocRef, profileUpdate, { merge: true });
 

@@ -3873,3 +3873,47 @@ fi fost.
 
 `npx tsc -b` verde · **1056 de teste** (de la 1036) · poarta verde · build verde · functions verde ·
 livrat pe live.
+## 2026-09-14 - Ce spun datele despre ce am livrat azi
+
+**Model:** Claude Opus 5 · „Next"
+
+Cheia de citire schimba ce pot verifica singur. `OWNER_VERIFY` are 139 de casute nebifate, si o
+parte din ele sunt intrebari despre DATE. Le-am raspuns.
+
+### Mementourile PORNESC — dovedit, nu presupus
+
+`reminder_log` are un rand scris azi la 14:02 UTC, o zi de ocurenta, **zero duplicate**. Iar in
+`notifications` sunt **doua randuri de tip `reminder`**. Deci `sendDueReminders` a rulat, a prins
+dedublarea si a scris in clopotel. E prima dovada concreta pentru functia despre care scrie in
+propriul ei antet ca „n-a functionat niciodata pe nicio platforma".
+
+### Link-urile de invitatie: regula de o singura folosinta TINE
+
+1 link creat, 1 revendicat, **0 revendicate de mai multe ori**.
+
+### Un defect viu, gasit tot din date
+
+**0 din 8 useri aveau un fus orar in Firestore.** Iar `remindersCore` cade pe lantul:
+zona evenimentului → zona PROPRIETARULUI → `"UTC"`. Cu veriga din mijloc goala pentru toata lumea,
+un memento pe orice eveniment fara zona proprie — inclusiv **fiecare eveniment de zi intreaga** — se
+rezolva la 09:00 **UTC**, adica 12:00 in Bucuresti. Trei ore mai tarziu, tacut, exact la mementoul
+care ar trebui sa sune inainte sa pleci de acasa.
+
+**Am caracterizat gresit cauza prima data** si o notez: am spus „nimic nu scrie
+`users/{uid}.timezone}`". Fals — `handleAdvancedThemeUpdate` din Setari scrie, prin `updateDoc` cu
+obiectul primit. Grep-ul meu a ratat-o fiindca scrierea e generica, nu literala. Afirmatia corecta e
+mai ingusta: **se scrie doar daca schimbi explicit selectorul**, si n-o facuse nimeni.
+
+Reparatia: la autentificare, daca documentul n-are zona, se scrie cea detectata. **Doar cand
+lipseste** — o alegere explicita din Setari e o afirmatie despre unde esti, iar suprascrierea ei din
+browser la fiecare login ar face selectorul decorativ. Validata cu `isValidZone`, adica exact
+predicatul serverului (`eventTime.ts` e byte-identic pe ambele parti si un test refuza divergenta),
+deci nu se poate stoca o zona pe care serverul o respinge si o inlocuieste cu UTC.
+
+### Restul, ca stare masurata
+
+22 de evenimente, din care 2 cu ora si 2 cu zona proprie · 18 bunuri in portofel, **0 partajate cu un
+grup** si **16 vechi cu `sharedWithFamily` fara grup** (exact cazul pentru care exista bulina
+chihlimbarie) · 0 conversatii private · 11 randuri in clopotel · 3 randuri in `aiLedger`.
+
+`npx tsc -b` verde · 1056 de teste · poarta verde · build verde · livrat pe live.
