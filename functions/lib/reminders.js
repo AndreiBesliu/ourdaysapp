@@ -30,12 +30,14 @@
 //    two runs to agree about anything.
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendDueReminders = void 0;
-exports.dueIn = dueIn;
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const recurrenceServer_1 = require("./recurrenceServer");
-const eventTime_1 = require("./eventTime");
 const notify_1 = require("./notify");
+const remindersCore_1 = require("./remindersCore");
+/** Delete dedupe rows older than this. They are only needed while their window is still in reach. */
+const LOG_TTL_DAYS = 45;
+const dayString = (ms) => new Date(ms).toISOString().slice(0, 10);
 /**
  * How far ahead to look for events. A reminder may be set days in advance; beyond this it is not
  * delivered, and that is a stated bound rather than an accident — an unbounded lookahead means
@@ -44,73 +46,6 @@ const notify_1 = require("./notify");
 const MAX_LEAD_DAYS = 31;
 /** How wide a net each run casts behind itself. Generous on purpose; the dedupe makes overlap free. */
 const WINDOW_MS = 15 * 60 * 1000;
-/**
- * When an ALL-DAY event is treated as starting.
- *
- * Every event in this app was all-day until the clock shipped, so refusing to remind for them
- * would silently drop every reminder anybody has ever set. Nine in the morning is the convention
- * every calendar uses, and it is resolved in the OWNER's zone so one occurrence has one instant —
- * a per-recipient instant would need a per-recipient dedupe key.
- */
-const ALL_DAY_HOUR = "09:00";
-/** Delete dedupe rows older than this. They are only needed while their window is still in reach. */
-const LOG_TTL_DAYS = 45;
-const dayString = (ms) => new Date(ms).toISOString().slice(0, 10);
-/**
- * Which reminders fall inside (from, to].
- *
- * Exported and pure so the window arithmetic can be exercised without a database — the part most
- * likely to be off by one is the boundary, and a boundary bug here is a reminder that never fires
- * or fires twice.
- */
-function dueIn(occurrences, ownerZones, from, to) {
-    var _a;
-    const out = [];
-    for (const occ of occurrences) {
-        const ev = occ.source;
-        const minutes = typeof ev.reminderMinutes === "number" && Number.isFinite(ev.reminderMinutes)
-            ? ev.reminderMinutes
-            : null;
-        if (minutes === null || minutes < 0)
-            continue;
-        const ownerId = typeof ev.ownerId === "string" ? ev.ownerId : "";
-        // The event's own zone when it has one; otherwise the owner's, so that one occurrence has one
-        // instant for everybody rather than a different one per reader.
-        const zone = (0, eventTime_1.isValidZone)(ev.timezone)
-            ? ev.timezone
-            : ((0, eventTime_1.isValidZone)(ownerZones[ownerId]) ? ownerZones[ownerId] : "UTC");
-        const hasClock = typeof ev.time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(ev.time);
-        const clock = hasClock ? ev.time : ALL_DAY_HOUR;
-        // The occurrence's own day, not the series start — that is the whole point of expanding.
-        const start = (0, eventTime_1.startInstant)({ date: `${occ.day}T00:00:00.000Z`, time: clock, timezone: zone }, zone);
-        if (start === null)
-            continue;
-        const at = start - minutes * 60000;
-        // Half-open on purpose: `from` was covered by the previous run, `to` by this one. A closed
-        // interval on both ends double-counts the boundary every single run.
-        if (!(at > from && at <= to))
-            continue;
-        const assignees = Array.isArray(ev.assigneeIds)
-            ? ev.assigneeIds.filter((x) => typeof x === "string" && !!x)
-            : [];
-        const single = typeof ev.assigneeId === "string" && ev.assigneeId ? [ev.assigneeId] : [];
-        const recipients = [...new Set([ownerId, ...assignees, ...single])].filter(Boolean);
-        if (recipients.length === 0)
-            continue;
-        out.push({
-            // Per OCCURRENCE, not per event: a weekly series has to remind every week.
-            key: `${ev.id}__${occ.day}`,
-            eventId: ev.id,
-            day: occ.day,
-            title: (typeof ev.title === "string" ? ev.title : "").slice(0, 120),
-            at,
-            zone,
-            recipients,
-            clock: ((_a = (0, eventTime_1.displayTime)({ date: `${occ.day}T00:00:00.000Z`, time: clock, timezone: zone }, zone)) === null || _a === void 0 ? void 0 : _a.text) || clock,
-        });
-    }
-    return out;
-}
 exports.sendDueReminders = (0, scheduler_1.onSchedule)({ schedule: "every 5 minutes", timeZone: "UTC", retryCount: 0 }, async () => {
     const db = admin.firestore();
     const now = Date.now();
@@ -147,7 +82,7 @@ exports.sendDueReminders = (0, scheduler_1.onSchedule)({ schedule: "every 5 minu
         const snaps = await db.getAll(...ownerIds.slice(0, 400).map((u) => db.doc(`users/${u}`)));
         snaps.forEach((s, i) => { var _a; ownerZones[ownerIds[i]] = (_a = s.data()) === null || _a === void 0 ? void 0 : _a.timezone; });
     }
-    const due = dueIn(occurrences, ownerZones, from, now);
+    const due = (0, remindersCore_1.dueIn)(occurrences, ownerZones, from, now);
     if (due.length === 0)
         return;
     // ── send, at most once each ─────────────────────────────────────────────

@@ -7,7 +7,7 @@
 // produces an error anywhere.
 
 import { describe, it, expect } from 'vitest';
-import { dueIn } from '../../functions/src/reminders';
+import { dueIn } from '../../functions/src/remindersCore';
 
 const BUC = 'Europe/Bucharest';
 const OWNER = 'uid-owner';

@@ -3518,3 +3518,48 @@ celelalte 21 verzi.
   singur fisier.
 
 `npx tsc -b` verde · **972 de teste** (de la 950) · build verde.
+## 2026-09-14 - CI rosu pe doua commit-uri: testul care trecea doar pe masina mea
+
+**Model:** Claude Opus 5 · continuare dupa livrarea feliilor 2 si 3
+
+Am raportat mementourile si ziua pe ore ca livrate si verificate. Erau verzi local si rosii in CI,
+pe **doua** commit-uri (`587d3b6` si `4e77491`) — a doua fiind doar mostenitoarea primei. O singura
+cauza.
+
+`src/utils/reminders.test.ts` importa `functions/src/reminders.ts`, care declara functia programata
+si deci importa `firebase-functions/v2/scheduler`. Pachetul ala traieste in `functions/node_modules`.
+**CI ruleaza `npm ci` doar in radacina** si nu instaleaza niciodata arborele din `functions/`. Pe
+masina mea sunt instalati amandoi, deci testul se incarca. Aranjamentul cel mai prost cu putinta:
+masina care spune „da" e singura care nu poate vedea problema.
+
+Alte trei teste importa deja din `functions/src/` si sunt in regula — `fanOut`, `inviteLinkState`,
+`notifyStrings` n-au **niciun** import. `reminders.ts` era primul fisier care tinea si o decizie
+pura, si o functie Cloud.
+
+### Reparatia
+
+Aritmetica a iesit in `functions/src/remindersCore.ts`, fara niciun import de pachet. `reminders.ts`
+pastreaza doar programarea si o importa. Comportamentul nu se schimba cu nimic — aceleasi 19 teste,
+aceleasi rezultate.
+
+### Ce tine reparatia pe loc
+
+`src/utils/functionsPurity.test.ts` parcurge graful de importuri RELATIVE pornind de la fiecare test
+care intinde mana in `functions/src/`, si pica daca gaseste un import de pachet oriunde in el. Prinde
+si cazul indirect: un modul pur care incepe sa importe alt modul care nu e.
+
+**Dovedit prin mutatie, ambele sensuri:** pus `firebase-admin` in `remindersCore.ts` → pica; intors
+testul inapoi pe `reminders.ts` → pica. Restaurare verificata pe hash, nu prin `git checkout`
+(arborele avea lucru necomis).
+
+Prima versiune a garzii cauta **sirul** `firebase-functions` in fisier si pica pe propriul comentariu
+care explica de ce nu trebuie importat. O garda care citeste proza raporteaza despre proza; acum se
+uita la importuri.
+
+### Condiția CI, reprodusa local
+
+Am ascuns `functions/node_modules` si am rulat suita: **toate cele 975 de teste trec**. (Redenumirea
+a scos la iveala si ca vitest ridica orice `*.test.js` care nu e sub un director numit exact
+`node_modules` — artefact al reproducerii mele, nu al CI-ului.)
+
+`npx tsc -b` verde · **975 de teste** (de la 972) · build verde · build functions verde.
