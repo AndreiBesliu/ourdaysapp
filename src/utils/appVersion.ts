@@ -86,3 +86,26 @@ export async function checkForNewVersion(
     return 'unknown';
   }
 }
+/**
+ * Is this "my tab is older than the server", rather than a defect?
+ *
+ * A tab left open across a deploy asks for a lazy chunk by its hashed name, and that file is no
+ * longer there. Three engines word it three ways. It is the one crash in this app that a reload
+ * fixes every time — and the only one where the generic "Something went wrong" is actively
+ * misleading, because nothing went wrong: the app moved on without this tab.
+ *
+ * Matched on the full wording, never on a bare "Failed to fetch". That shorter string is also every
+ * ordinary network failure, and answering those with "there's a new version, reload" would be a
+ * confident lie to somebody who is simply offline.
+ */
+const STALE_CHUNK = [
+  'failed to fetch dynamically imported module', // Chrome, Edge
+  'error loading dynamically imported module',   // Firefox
+  'importing a module script failed',            // Safari
+  'unable to preload css for',                   // Vite's preload helper
+];
+
+export function isStaleChunkError(message: unknown): boolean {
+  const s = typeof message === 'string' ? message.toLowerCase() : '';
+  return s !== '' && STALE_CHUNK.some((m) => s.includes(m));
+}

@@ -2,8 +2,9 @@ import React from 'react';
 import { reportError } from '../reportError';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
+import { isStaleChunkError } from '../utils/appVersion';
 
-interface State { hasError: boolean; reloadFailed: boolean }
+interface State { hasError: boolean; reloadFailed: boolean; staleChunk: boolean }
 
 /** Set before a reload, so a second crash can tell the user that reloading did not help. */
 const TRIED_KEY = 'app_boundary_reloaded';
@@ -11,9 +12,12 @@ const TRIED_KEY = 'app_boundary_reloaded';
 // Catches render-time crashes anywhere in the tree, reports them, and shows a
 // recovery screen instead of a white page.
 export default class ErrorBoundary extends React.Component<{ children: React.ReactNode }, State> {
-  state: State = { hasError: false, reloadFailed: false };
+  state: State = { hasError: false, reloadFailed: false, staleChunk: false };
 
-  static getDerivedStateFromError(): Partial<State> { return { hasError: true }; }
+  static getDerivedStateFromError(error: Error): Partial<State> {
+    // The error used to be dropped on the floor here, which is why every crash looked alike.
+    return { hasError: true, staleChunk: isStaleChunkError(error?.message) };
+  }
 
   componentDidMount() { this.clearMarkIfHealthy(); }
   componentDidUpdate() { this.clearMarkIfHealthy(); }
@@ -37,7 +41,7 @@ export default class ErrorBoundary extends React.Component<{ children: React.Rea
     try { this.setState({ reloadFailed: sessionStorage.getItem(TRIED_KEY) === '1' }); } catch { /* private mode */ }
     reportError(error?.message || 'Render error', {
       stack: `${error?.stack || ''}\n${info?.componentStack || ''}`.slice(0, 4000),
-      context: 'ErrorBoundary',
+      context: isStaleChunkError(error?.message) ? 'StaleChunk' : 'ErrorBoundary',
     });
   }
 
@@ -47,6 +51,23 @@ export default class ErrorBoundary extends React.Component<{ children: React.Rea
       // it is broken — so it reads the store directly rather than depending on a provider that
       // may be part of what just crashed.
       const language = useThemeStore.getState().language;
+
+      // Nothing is broken: this tab is just older than the server. Saying "Something went
+      // wrong" here blames the app for a deploy, and sends the person looking for a fault
+      // that does not exist. It stays an OFFER, never an automatic reload — this app is
+      // partly a chat, and a reload taken out of somebody’s hands throws away what they
+      // were typing.
+      if (this.state.staleChunk) {
+        return (
+          <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center bg-zinc-50 dark:bg-zinc-950">
+            <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{t('newVersionAvailable', language)}</p>
+            <button onClick={this.reload} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium">
+              {t('newVersionReload', language)}
+            </button>
+          </div>
+        );
+      }
+
       return (
         <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center bg-zinc-50 dark:bg-zinc-950">
           <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100">{t('somethingWentWrong', language)}</p>

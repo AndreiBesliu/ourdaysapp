@@ -3664,3 +3664,78 @@ restaurare verificata pe hash.
 
 `npx tsc -b` verde · 992 de teste · poarta verde · build verde · **livrat pe live**
 (`index-BgcUKQFo.js`, confirmat servit).
+## 2026-09-14 - Restul jurnalului de erori: cota, si tabul ramas in urma
+
+**Model:** Claude Opus 5 · continuare la „ai cum sa le verifici tu?"
+
+Dupa reparatia hook-ului au ramas trei grupuri din patru. Doua se repara, unul nu era bug.
+
+### 74 din ~95 de randuri erau Google spunand „nu azi"
+
+**Cine scria.** Nu clientul: `src/ai.ts` prinde si face `return null`, fara sa raporteze nimic.
+Era `logServerError` din `functions/src/index.ts:661`. „0 oameni" in panou **nu** insemna ca n-a
+patit-o nimeni — insemna ca **scriitorul nu nota cine**. Sistematic: toate cele sase apeluri din
+`catch` treceau doar `stack`, in timp ce cele doua deliberate treceau `uid`.
+
+**De ce nu e o eroare de aplicatie.** Niciun input gresit, nicio stare corupta, nicio linie de
+reparat. E o **conditie de operare**, reapare prin constructie, si va depasi mereu la numar orice
+bug adevarat. Panoul sorteaza dupa numar — deci randul ala nu inregistra o problema, **le ascundea
+pe celelalte**. Tot ce e real in aplicatie statea sub el.
+
+Nu se pierde: `withLedger` scrie deja un rand pe apel, cu `uid`, functie, model si cost — strict mai
+mult decat randul din `errorLogs`.
+
+**Golul care facea ledgerul orb.** `aiLedger.ts` citea `err.code`, apoi `err.name`. SDK-ul Gemini nu
+seteaza niciunul — seteaza **`status`**. Deci ORICE esec HTTP al lui (429, 400, 503) se inregistra
+ca acelasi sir, `"GoogleGenerativeAIFetchError"`. Ledgerul nu putea raspunde la singura intrebare
+pentru care exista.
+
+**Ce vedea omul: nimic.** Chip-ul de sugestie pur si simplu nu aparea, deci concluzia era „n-a
+gasit nimic". **Exact de asta s-au strans 74 in douasprezece zile fara sa observe nimeni.** Acum,
+pe caile unde omul A CERUT ceva, serverul arunca codul stabil pe care clientul il traduce deja:
+„Aplicatia a atins limita de AI pe ziua de azi." (`aiBudgetGlobal`, exista in toate cele 6 limbi).
+La `suggestAsset` clientul ramane tacut intentionat — nimeni n-a cerut sugestia aia, iar o alerta
+la fiecare parasire de camp ar fi mai rea decat tacerea.
+
+Predicatul e ingust dinadins (`functions/src/aiProviderError.ts`): 503 „supraincarcat" si 400
+„cerere gresita" **trebuie** sa ramana vizibile. Jumatate din cele 14 teste sunt despre ce NU are
+voie sa inghita.
+
+### Tabul ramas in urma nu mai e acuzat ca aplicatie stricata
+
+`ErrorBoundary.getDerivedStateFromError()` **arunca obiectul de eroare** (nu avea parametru), deci
+nimic de mai jos nu putea deosebi tipurile de crash. Un tab deschis peste un deploy cere un chunk
+al carui hash nu mai exista — singurul crash din aplicatie pe care o reincarcare il repara de
+fiecare data — si primea „Ceva n-a mers", care da vina pe aplicatie pentru o livrare.
+
+Acum primeste „E disponibila o versiune noua" + buton. **Oferta, niciodata automat** — aplicatia e
+si un chat, iar o reincarcare luata din mana omului arunca ce scria.
+
+Potrivirea e pe formularea intreaga, **niciodata pe „Failed to fetch"** simplu: ala e si orice
+cerere esuata offline, iar sa-i raspunzi cu „exista o versiune noua" ar fi o minciuna spusa cu
+incredere cuiva care n-are semnal.
+
+Si capata **context propriu** (`StaleChunk`), ca un eveniment asteptat dupa fiecare livrare sa nu
+mai concureze la varful panoului cu bug-uri adevarate.
+
+### `t is not a function` pe /warlord: nu era bug
+
+Patru aparitii, 2-13 aug, dintr-un build coerent vechi. Chunk-urile din stiva nu mai exista.
+Numele minificat `t` supravietuieste normalizarii, deci acelasi bug din alt build ar fi format alt
+grup — patru aparitii intr-unul singur, pe 12 zile, e semnatura unui SINGUR build, adica a unui tab
+lasat deschis. Nimic n-a mai reprodus-o intr-o luna. **Reparatia lui e chiar ecranul de mai sus.**
+
+*Gasit in treacat, neatins (e in submodul):* `TraditionPanel.tsx:342` —
+`navigator.clipboard?.writeText(c).then(...)`. `?.` apara proprietatea, nu lantul: fara clipboard
+(context nesigur, WebView vechi) expresia da `undefined` si `.then` arunca. Trecut in OWNER_VERIFY.
+
+### Despre audit, onest
+
+Am rulat sase cautari paralele plus verificare adversariala pentru **alte** hook-uri sub un
+`return`. N-au gasit nimic, iar singura candidata (`PvpPanel`) a fost respinsa de toti cei patru
+verificatori — sustinerea inversa ordinea din sursa. Dar **scriptul meu de workflow avea un bug**
+(`parallel([promisiuni])` in loc de functii), deci lista goala a venit partial din eroarea aia, nu
+doar din vot. **Autoritatea o da ESLint:** 1 incalcare `rules-of-hooks` in 222 de fisiere, acum 0.
+
+`npx tsc -b` verde · **1010 teste** (de la 992) · poarta verde · build verde · functions verde ·
+livrat pe live (`index-kk51C5S1.js`, confirmat byte-identic cu ce s-a construit).

@@ -14,6 +14,7 @@ import { charsPerToken, estimateUsdFor, usageOf, withLedger } from "./aiLedger";
 import { readFriendship } from "./friendship";
 import { notify } from "./notify";
 import { groupErrors } from "./errorGrouping";
+import { AI_QUOTA_CODE, isProviderQuotaError } from "./aiProviderError";
 
 // Invite links live in their own module — index.ts is already long, and these four are a
 // self-contained feature. Re-exported here because Firebase deploys what index exports.
@@ -244,7 +245,11 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
     }
   } catch (error) {
     console.error("AI Generation Error", error);
-    void logServerError((error as any)?.message || "AI generation error", "ai:generateChecklist", { stack: (error as any)?.stack });
+    // Nobody is waiting on this one — it is a trigger — so there is nothing to tell. It still
+    // stays out of the error log when the provider merely rationed us, for the same reason.
+    if (!isProviderQuotaError(error)) {
+      void logServerError((error as any)?.message || "AI generation error", "ai:generateChecklist", { stack: (error as any)?.stack, uid: ownerId });
+    }
     // Every terminal path has to stop the event advertising work that can never run.
     await clearAiAssignee(snapshot, data);
   }
@@ -442,7 +447,13 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
     return { suggestions: [] };
   } catch (error: any) {
     console.error("AI Generation Error", error);
-    void logServerError((error as any)?.message || "AI generation error", "ai:generateChecklist", { stack: (error as any)?.stack });
+    // The provider rationing us is not a defect: no bad input, no bad state, nothing to fix.
+    // `withLedger` already writes a row per call with the uid, the feature and the code, so the
+    // fact is kept — and keeping it OUT of errorLogs is the point. Seventy-four of the ~95 rows
+    // in the health panel were this one thing, and the panel sorts by count, so every real bug
+    // in the app sat underneath it.
+    if (isProviderQuotaError(error)) throw new HttpsError('resource-exhausted', AI_QUOTA_CODE);
+    void logServerError((error as any)?.message || "AI generation error", "ai:generateChecklist", { stack: (error as any)?.stack, uid: callerUid });
     throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
   }
 });
@@ -483,7 +494,13 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
     return { categoryId: matchedCategory };
   } catch (error: any) {
     console.error("AI Category Suggestion Error", error);
-    void logServerError((error as any)?.message || "AI category error", "ai:suggestCategory", { stack: (error as any)?.stack });
+    // The provider rationing us is not a defect: no bad input, no bad state, nothing to fix.
+    // `withLedger` already writes a row per call with the uid, the feature and the code, so the
+    // fact is kept — and keeping it OUT of errorLogs is the point. Seventy-four of the ~95 rows
+    // in the health panel were this one thing, and the panel sorts by count, so every real bug
+    // in the app sat underneath it.
+    if (isProviderQuotaError(error)) throw new HttpsError('resource-exhausted', AI_QUOTA_CODE);
+    void logServerError((error as any)?.message || "AI category error", "ai:suggestCategory", { stack: (error as any)?.stack, uid: callerUid });
     throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
   }
 });
@@ -608,7 +625,13 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
     return { digest: text, truncated: digestTruncated };
   } catch (error: any) {
     console.error("AI Group Digest Error", error);
-    void logServerError((error as any)?.message || "AI digest error", "ai:groupDigest", { stack: (error as any)?.stack });
+    // The provider rationing us is not a defect: no bad input, no bad state, nothing to fix.
+    // `withLedger` already writes a row per call with the uid, the feature and the code, so the
+    // fact is kept — and keeping it OUT of errorLogs is the point. Seventy-four of the ~95 rows
+    // in the health panel were this one thing, and the panel sorts by count, so every real bug
+    // in the app sat underneath it.
+    if (isProviderQuotaError(error)) throw new HttpsError('resource-exhausted', AI_QUOTA_CODE);
+    void logServerError((error as any)?.message || "AI digest error", "ai:groupDigest", { stack: (error as any)?.stack, uid: callerUid });
     throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
   }
 });
@@ -658,7 +681,13 @@ Do not include any other text or markdown formatting.`;
     return { assetId: matchedAsset ? matchedAsset.id : null };
   } catch (error: any) {
     console.error("AI Asset Suggestion Error", error);
-    void logServerError((error as any)?.message || "AI asset error", "ai:suggestAsset", { stack: (error as any)?.stack });
+    // The provider rationing us is not a defect: no bad input, no bad state, nothing to fix.
+    // `withLedger` already writes a row per call with the uid, the feature and the code, so the
+    // fact is kept — and keeping it OUT of errorLogs is the point. Seventy-four of the ~95 rows
+    // in the health panel were this one thing, and the panel sorts by count, so every real bug
+    // in the app sat underneath it.
+    if (isProviderQuotaError(error)) throw new HttpsError('resource-exhausted', AI_QUOTA_CODE);
+    void logServerError((error as any)?.message || "AI asset error", "ai:suggestAsset", { stack: (error as any)?.stack, uid: callerUid });
     throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
   }
 });

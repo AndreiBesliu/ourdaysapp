@@ -470,3 +470,23 @@ Nu pot vedea adminul (e in spatele autentificarii), deci **datele sunt la tine**
       Butonul care foloseste ref-ul mutat trece prin calea aia.
 - [ ] **Admin -> Health**: grupul „Minified React error #310" **nu trebuie sa mai creasca** de acum.
       Numarul vechi ramane — sunt aparitii deja inregistrate.
+---
+
+## 24. Erorile ramase (14.09)
+
+- [ ] **Limita de AI.** Cand se atinge cota zilnica Gemini, la „Genereaza checklist" trebuie sa apara
+      **„Aplicatia a atins limita de AI pe ziua de azi"**, nu „Checklist-ul nu a putut fi generat".
+      Sugestia automata de card ramane tacuta intentionat.
+- [ ] **Admin -> Health:** grupul `[GoogleGenerativeAI Error] ... 429` **nu mai trebuie sa creasca**.
+      Cel vechi ramane — sunt randuri deja scrise.
+- [ ] **Intrebare pentru tine, nu pot decide eu:** `checkForAssetSuggestionsAI` se declanseaza la
+      iesirea din campul titlu, la FIECARE element de checklist adaugat, si la iesirea din fiecare
+      camp de element — fara amanare, fara dedupe. O lista de 6 lucruri = 7+ apeluri Gemini, iar
+      cota gratuita e **20 pe zi pe tot proiectul**. Doua liste consuma ziua. Vrei sa le rarim
+      (amanare + fara re-cerere pe acelasi text), sau treci proiectul pe facturare?
+- [ ] **Tab vechi:** greu de provocat intentionat. Data viitoare cand tii un tab deschis peste o
+      livrare si intri pe /admin, ar trebui sa vezi **„E disponibila o versiune noua" + buton**, nu
+      „Ceva n-a mers".
+- [ ] **Warlord, neatins (e submodul):** `TraditionPanel.tsx:342`, butonul „copiaza codul" —
+      `navigator.clipboard?.writeText(c).then(...)`. Pe un WebView fara clipboard arunca. Spune-mi
+      daca vrei sa-l reparam in repo-ul jocului.

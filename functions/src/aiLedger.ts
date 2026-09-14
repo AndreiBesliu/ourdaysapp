@@ -34,6 +34,7 @@
 // about — and it would sit in a collection whose whole point is that operators read it.
 
 import * as admin from "firebase-admin";
+import { providerErrorCode } from "./aiProviderError";
 import { HttpsError } from "firebase-functions/v2/https";
 
 /** USD per MILLION tokens. Kept in code so a row can be priced the moment it is written. */
@@ -251,7 +252,9 @@ export async function withLedger<T>(
     await settleBudget(hold, cost);
     return result;
   } catch (err: any) {
-    const code = typeof err?.code === "string" ? err.code : err?.name || "error";
+    // Was `err.code ?? err.name`, which the Gemini SDK sets neither of — so every HTTP failure
+    // it ever raised landed here as the one string "GoogleGenerativeAIFetchError".
+    const code = providerErrorCode(err);
     await closeLedgerRow(handle, { ok: false, errorCode: String(code).slice(0, 60) }).catch(() => undefined);
     // Nothing measurable was spent, but the hold must not outlive the call.
     await settleBudget(hold, 0).catch(() => undefined);

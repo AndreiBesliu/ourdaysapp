@@ -6,7 +6,7 @@
 // happy path.
 
 import { describe, it, expect } from 'vitest';
-import { entryFromHtml, runningEntry, checkForNewVersion } from './appVersion';
+import { entryFromHtml, runningEntry, checkForNewVersion, isStaleChunkError } from './appVersion';
 
 const BUILT_HTML = `<!doctype html>
 <html lang="en">
@@ -111,5 +111,32 @@ describe('the comparison, and everything it refuses to claim', () => {
     }) as unknown as typeof fetch;
     await checkForNewVersion(spy, RUNNING);
     expect(seen?.cache).toBe('no-store');
+  });
+});
+describe('a tab that is older than the server', () => {
+  it('recognises the wording of all three engines', () => {
+    expect(isStaleChunkError('Failed to fetch dynamically imported module: https://x/assets/Admin-A1M6gDLC.js')).toBe(true);
+    expect(isStaleChunkError('error loading dynamically imported module')).toBe(true);
+    expect(isStaleChunkError('Importing a module script failed.')).toBe(true);
+    expect(isStaleChunkError('Unable to preload CSS for /assets/Admin.css')).toBe(true);
+  });
+
+  it('does NOT claim a plain network failure is a new version', () => {
+    // "Failed to fetch" on its own is every offline request there is. Answering those with
+    // "there's a new version, reload" is a confident lie to somebody with no signal.
+    expect(isStaleChunkError('Failed to fetch')).toBe(false);
+    expect(isStaleChunkError('TypeError: NetworkError when attempting to fetch resource.')).toBe(false);
+    expect(isStaleChunkError('Load failed')).toBe(false);
+  });
+
+  it('leaves an ordinary crash alone', () => {
+    expect(isStaleChunkError("Cannot read properties of null (reading 'title')")).toBe(false);
+    expect(isStaleChunkError('Minified React error #310')).toBe(false);
+  });
+
+  it('survives the things a catch block really receives', () => {
+    for (const junk of [undefined, null, '', 0, {}, []]) {
+      expect(isStaleChunkError(junk as unknown)).toBe(false);
+    }
   });
 });

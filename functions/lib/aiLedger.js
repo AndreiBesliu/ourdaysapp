@@ -45,6 +45,7 @@ exports.closeLedgerRow = closeLedgerRow;
 exports.withLedger = withLedger;
 exports.estimateUsdFor = estimateUsdFor;
 const admin = require("firebase-admin");
+const aiProviderError_1 = require("./aiProviderError");
 const https_1 = require("firebase-functions/v2/https");
 /** USD per MILLION tokens. Kept in code so a row can be priced the moment it is written. */
 exports.MODEL_PRICING = {
@@ -209,7 +210,9 @@ async function withLedger(entry, estimateUsd, run, usageFrom, chars) {
         return result;
     }
     catch (err) {
-        const code = typeof (err === null || err === void 0 ? void 0 : err.code) === "string" ? err.code : (err === null || err === void 0 ? void 0 : err.name) || "error";
+        // Was `err.code ?? err.name`, which the Gemini SDK sets neither of — so every HTTP failure
+        // it ever raised landed here as the one string "GoogleGenerativeAIFetchError".
+        const code = (0, aiProviderError_1.providerErrorCode)(err);
         await closeLedgerRow(handle, { ok: false, errorCode: String(code).slice(0, 60) }).catch(() => undefined);
         // Nothing measurable was spent, but the hold must not outlive the call.
         await settleBudget(hold, 0).catch(() => undefined);
