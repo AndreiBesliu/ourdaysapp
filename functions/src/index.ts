@@ -23,6 +23,7 @@ export {
   revokeGroupInviteLink, listMyInviteLinks,
 } from "./inviteLinks";
 export { openDirectChat, onDirectMessageCreated } from "./directChat";
+export { sendDueReminders } from "./reminders";
 
 admin.initializeApp();
 

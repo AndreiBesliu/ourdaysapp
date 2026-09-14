@@ -113,6 +113,18 @@ service cloud.firestore {
     }
 
     // ── Events ──
+    // ── Reminder dedupe log ──
+    // One row per (event, occurrence day), created by the scheduled function with `create` so that
+    // a second run fails rather than sending a second reminder. Nothing a client may see or touch:
+    // a writable row here would let somebody suppress somebody else's reminder, and a readable one
+    // would leak which events exist.
+    //
+    // Denied EXPLICITLY rather than by the absence of a rule — an absence reads as an oversight,
+    // and the day somebody adds a catch-all it would open with it.
+    match /reminder_log/{entryId} {
+      allow read, write: if false;
+    }
+
     // ── Direct chats ──
     // A one-to-one conversation. Its own collection rather than a two-person `groups` document:
     // thirteen places list groups by membership, and a private chat leaking into any of them

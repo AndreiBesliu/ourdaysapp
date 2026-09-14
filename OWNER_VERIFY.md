@@ -411,3 +411,21 @@ conturi**.
       privata. Trebuie sa apara ca imagine atasata, nu ca text.
 - [ ] **Rezumatul AI (sclipiciul)** apare doar la grupuri, nu la conversatiile in doi.
 - [ ] **In toate cele sase limbi.**
+---
+
+## 20. Mementourile (14.09) — acum pornesc
+
+**De ce nu pot eu:** cere sa astepti trecerea unui moment real, pe contul tau.
+
+- [ ] **Pune un eveniment peste ~10 minute, cu ora si cu memento la 5 minute.** Trebuie sa
+      primesti notificare pe telefon **si** rand in clopotel, la timp, **in limba ta**.
+- [ ] **Un eveniment de zi intreaga cu memento** — se trateaza ca si cum ar incepe la **09:00** in
+      fusul tau. Spune-mi daca vrei alta ora; e o constanta, se schimba usor.
+- [ ] **Un eveniment recurent** trebuie sa aminteasca la FIECARE ocurenta, nu o singura data.
+- [ ] **Nu trebuie sa primesti acelasi memento de doua ori.** Daca se intampla, spune-mi —
+      inseamna ca dedublarea n-a prins, si vreau sa stiu.
+- [ ] **Nu mai exista memento local pe telefon.** Am sters codul care incerca; n-a functionat
+      niciodata. Daca vezi DOUA notificari pentru acelasi eveniment, aia e important.
+
+**Limita declarata:** un memento pus cu mai mult de **31 de zile** inainte nu se trimite. Daca ai
+nevoie de mai mult, se ridica — dar costa o cautare mai larga la fiecare rulare.

@@ -239,6 +239,23 @@ exports.NOTIFY_STRINGS = {
         'it-IT': 'La battaglia è finita in parità.',
         'de-DE': 'Die Schlacht endete unentschieden.',
     },
+    // ── event reminders ──
+    notifReminder: {
+        'en-US': 'Reminder: ',
+        'ro-RO': 'Memento: ',
+        'fr-FR': 'Rappel : ',
+        'es-ES': 'Recordatorio: ',
+        'it-IT': 'Promemoria: ',
+        'de-DE': 'Erinnerung: ',
+    },
+    notifReminderAt: {
+        'en-US': 'Starts at ',
+        'ro-RO': 'Începe la ',
+        'fr-FR': 'Commence à ',
+        'es-ES': 'Empieza a las ',
+        'it-IT': 'Inizia alle ',
+        'de-DE': 'Beginnt um ',
+    },
 };
 /** A language we can actually render. Anything unknown or absent falls back to English. */
 function normaliseLang(raw) {

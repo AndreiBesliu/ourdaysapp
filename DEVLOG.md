@@ -3418,3 +3418,61 @@ conversatii inauntrul alteia.
 ### Ce ramane
 Widgetul flotant de pe calendar ramane — e util in context. Extragerea propriu-zisa a panoului din
 componenta de 1066 de linii ramane si ea, acum ca ecranul e construit peste ea.
+## 2026-09-14 - Mementourile pornesc, in sfarsit — de pe server
+
+**Model:** Claude Opus 5 · „2 si 3”
+
+Prima functie programata din proiect: `sendDueReminders`, la fiecare 5 minute.
+
+### Ce inlocuieste: nimic care sa fi functionat vreodata
+
+`CalendarHome` le programa prin `@capacitor/local-notifications`, care **nu e in
+`android/app/capacitor.build.gradle`** deloc — deci pe telefon pluginul lipseste — iar
+implementarea lui de web foloseste `setTimeout`, deci in browser un memento pornea doar daca tabul
+ramanea deschis pana in acel moment. Un memento pus pentru maine dimineata n-a ajuns la nimeni,
+niciodata.
+
+Am **sters** codul acela, nu l-am lasat adormit: in ziua in care pluginul chiar ajunge intr-un
+build Android, fiecare memento ar fi sosit de doua ori.
+
+### Cele trei lucruri care fac treaba asta grea
+
+**1. Instantul se CALCULEAZA, deci nu se poate interoga.** Un memento e datorat la (start −
+minute), iar startul e o ora de perete intr-o zona. Nu exista camp pe care sa faci un interval.
+Deci fereastra se margineste dupa **timpul de avans**: un eveniment al carui memento e datorat
+acum trebuie sa inceapa in maximum 31 de zile. E o limita **declarata**, nu o scapare — altfel ar
+insemna expandarea fiecarei serii recurente din baza la fiecare rulare.
+
+**2. O serie recurenta e UN document.** O serie saptamanala inceputa anul trecut are `date` departe
+de orice fereastra din jurul zilei de azi, deci o interogare pe interval rateaza fiecare ocurenta a
+ei. Se expandeaza cu `recurrenceServer.ts`, care exista chiar pentru asta.
+
+**3. Nu are voie sa trimita de doua ori.** Rulari suprapuse, reincercari si un redeploy la mijlocul
+ferestrei se intampla toate. Dedublarea e un document per (eveniment, zi de ocurenta) creat cu
+`create`, care **esueaza daca exista deja** — deci prima rulare castiga si a doua se opreste
+inainte sa trimita, fara ca cele doua sa trebuiasca sa cada de acord despre ceva.
+
+### Fereastra e SEMI-DESCHISA, si testul o probeaza
+
+`at > from && at <= to`. Ambele greseli sunt invizibile: un interval inchis la ambele capete trimite
+de doua ori fiecare memento care cade pe o granita de rulare, iar unul exclusiv sus inseamna ca un
+memento care cade exact pe granita nu pleaca niciodata. **Dovedit prin mutatie:** facut inchis,
+pica exact testul scris pentru asta si raman celelalte 18 verzi.
+
+### Evenimentele de zi intreaga
+
+Tratate ca incepand la **09:00 in zona PROPRIETARULUI**. Fiecare eveniment din aplicatie era de zi
+intreaga pana acum, deci a refuza sa le amintesc ar fi insemnat sa arunc tacut fiecare memento pus
+vreodata. Zona proprietarului si nu a cititorului, ca o ocurenta sa aiba **un** instant — unul per
+destinatar ar cere si o cheie de dedublare per destinatar.
+
+### A doua copie a modulului de timp
+
+`functions/src/eventTime.ts` e acelasi fisier ca cel din `src/utils/`. Trebuie sa fie: aplicatia nu
+poate importa din build-ul de functions si nici invers, iar amandoua trebuie sa raspunda identic la
+„când incepe evenimentul asta”. Exact situatia motorului Warlord, si cu aceeasi plasa — un test
+care refuza orice divergenta si normalizeaza sfarsiturile de linie, ca un esec sa fie mereu real si
+niciodata un artefact de checkout Windows.
+
+`npx tsc -b` verde · functions build verde · **950 de teste** (de la 928) · 114 teste de reguli ·
+build verde.
