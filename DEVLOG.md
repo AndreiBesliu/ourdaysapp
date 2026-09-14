@@ -3610,3 +3610,57 @@ ErrorBoundary si dintr-un `unhandledrejection` sunt doua situatii.
   automat.
 
 `npx tsc -b` verde · **992 de teste** (de la 975) · build verde · functions verde · livrat pe live.
+## 2026-09-14 - Un hook sub un `return`, si linterul care statea in cutie
+
+**Model:** Claude Opus 5 · „imi da eroare cand incerc sa deschid evenimentele"
+
+Gruparea livrata acum o ora a stramtat ~95 de randuri la patru probleme, iar a doua era chiar
+eroarea raportata: **React #310, 15 aparitii, 2 oameni, azi, pe `/`**.
+
+### Cum a fost gasita: prin masurare, nu prin banuiala
+
+Stiva avea `index-BOVkP7uW.js` si `serverActions-DQ1EwheB.js` — **exact** fisierele din `dist/`-ul
+curent. Deci nu era tab vechi, cum crezusem la prima raportare. Am taiat direct in bundle la
+coordonatele din stiva:
+
+```
+z.useEffect(...), qg(e,t), !e||!n) return null;  let ee=..., ne=(0,z.useRef)(null)
+```
+
+Un `useRef` **sub** iesirea devreme. De acolo, sursa: `EventDetailsModal.tsx`, linia 103
+`if (!isOpen || !event) return null;`, linia 124 `const materialising = useRef(...)`.
+
+`CalendarHome.tsx:1084` randeaza modalul **permanent** si il comuta prin `isOpen`. Deci o randare
+inchisa rula 8 hook-uri si una deschisa 9 — React #310, la **fiecare** eveniment deschis de oricine.
+A intrat pe 28.08, in `7e235ff`, tot intr-o sesiune de-a mea.
+
+### Ce m-a costat o verificare oarba
+
+Prima cautare de „alte hook-uri sub `return`" a dat zero. Tiparul cerea `useRef(`, iar linia scrie
+`useRef<Promise<string> | null>(null)` — genericul. **Instrumentul spunea curat fiindca nu se uita
+unde trebuie.**
+
+### Descoperirea care conteaza mai mult decat bugul
+
+`eslint-plugin-react-hooks` e in `package.json` **de la inceput**, si `npm run lint` la fel. CI-ul
+ruleaza typecheck, teste si build — **nu si lint**. Rulat, linterul numeste defectul cuvant cu
+cuvant, inclusiv „Did you accidentally call a React Hook after an early return?".
+
+Unealta era in cutie. Nimeni n-a deschis cutia. Pe tot `src/` (222 de fisiere): **exact o** incalcare
+`rules-of-hooks` — chiar cea care crapa.
+
+### Poarta, si de ce e o LISTA
+
+`eslint .` intreg e rosu din start: 338 `no-explicit-any`, 23 `set-state-in-effect`, 442 in total.
+**O poarta care nu poate fi verde in ziua in care o pui se stinge intr-o saptamana**, si te intorci
+la un linter pe care nu-l ruleaza nimeni — exact starea care a produs bugul.
+
+Deci `scripts/lint-gate.mjs` pica doar pe regulile care sunt **deja la zero**. Restul se **tipareste**
+ca restanta la fiecare rulare, nu se inghite: o datorie pe care o vezi e o datorie care se poate
+plati. Promovarea unei reguli = o cureti la zero, o adaugi in lista.
+
+**Dovedit prin mutatie:** mutat hook-ul inapoi sub `return` → poarta pica si numeste regula;
+restaurare verificata pe hash.
+
+`npx tsc -b` verde · 992 de teste · poarta verde · build verde · **livrat pe live**
+(`index-BgcUKQFo.js`, confirmat servit).

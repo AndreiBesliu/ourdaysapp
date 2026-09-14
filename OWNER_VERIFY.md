@@ -458,3 +458,15 @@ Nu pot vedea adminul (e in spatele autentificarii), deci **datele sunt la tine**
       date. Cu alea pot spune ce e fiecare si ce se repara.
 - [ ] Randul **„Counts cover the newest 500 of N"** apare doar daca log-ul e mai mare de 500. Daca
       apare, spune-mi.
+---
+
+## 23. Deschiderea unui eveniment (14.09)
+
+- [ ] **Reincarca tare** (Ctrl+Shift+R) si **deschide un eveniment**. Trebuie sa se deschida modalul,
+      nu „Something went wrong". Asta era eroarea raportata; crapa la fiecare deschidere.
+- [ ] Deschide si **inchide de cateva ori la rand**, si deschide **alt** eveniment fara sa
+      reincarci — acolo se manifesta defectul (acelasi modal, randari succesive).
+- [ ] Pe un **eveniment care se repeta**, apasa ceva care scrie (bifa unui element din checklist).
+      Butonul care foloseste ref-ul mutat trece prin calea aia.
+- [ ] **Admin -> Health**: grupul „Minified React error #310" **nu trebuie sa mai creasca** de acum.
+      Numarul vechi ramane — sunt aparitii deja inregistrate.

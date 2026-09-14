@@ -100,6 +100,16 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
 
   useModalBack(isOpen, onClose);
 
+  // Held across renders so two quick taps cannot create two overrides — see resolveWriteTarget
+  // below, which is the only thing that reads it.
+  //
+  // It is declared HERE, with the other hooks, rather than beside the code that uses it. Everything
+  // past the guard below runs only while the modal is open, so a hook down there is a hook that
+  // appears and disappears between renders of the same instance. CalendarHome keeps this modal
+  // permanently mounted and toggles `isOpen`, so a closed render ran eight hooks and an open one
+  // ran nine: React error #310, thrown on EVERY event anybody opened.
+  const materialising = useRef<Promise<string> | null>(null);
+
   if (!isOpen || !event) return null;
 
   const isOwner = event.ownerId === auth.currentUser?.uid;
@@ -121,7 +131,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   // See src/utils/eventWriteTarget.ts for why neither the synthetic id nor the parent will do.
   //
   // The promise is held in a ref, not awaited twice: two quick taps must not create two overrides.
-  const materialising = useRef<Promise<string> | null>(null);
+  // That ref is declared with the other hooks, ABOVE the early return — see the note there.
   const resolveWriteTarget = async (): Promise<string> => {
     const plan = planEventWrite(event as any);
     if (plan.kind === 'direct') return plan.id;

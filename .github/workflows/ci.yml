@@ -28,6 +28,13 @@ jobs:
       - name: Typecheck
         run: npx tsc -b
 
+      # Only the rules that are already at zero, so this starts green and every failure is a
+      # regression somebody made today. eslint-plugin-react-hooks was a dependency for months
+      # while nothing ran it, and a hook below an early return reached live as a crash on every
+      # event opened. See scripts/lint-gate.mjs.
+      - name: Lint gate
+        run: npm run lint:gate
+
       - name: Tests
         run: npm test
 
