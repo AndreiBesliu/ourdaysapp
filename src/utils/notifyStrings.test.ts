@@ -59,15 +59,27 @@ describe('the two dictionaries agree', () => {
     }
   });
 
-  it('body strings keep the trailing space the renderer depends on', () => {
-    // The bell renders `${t(bodyKey)}${param}` and the push does the same, so a body that takes a
-    // name has to end with a separator or it reads "accepted byAndrei".
-    for (const key of Object.keys(NOTIFY_STRINGS)) {
-      if (!/Body$/.test(key)) continue;
+  it('a string that takes a name ends with a separator in EVERY language, or in none', () => {
+    // The bell renders `${t(bodyKey)}${param}` and the push does the same, so a string the caller
+    // passes a name to has to end with a space or it reads "accepted byAndrei".
+    //
+    // The rule is CONSISTENCY, not "every body ends with a space": plenty of them take no
+    // parameter at all ("The enemy has ended their turn."). A first draft of this test asserted
+    // the blunt version and failed on a perfectly correct string — so what it checks now is that
+    // the translations agree with English about whether a name follows, which is the thing that
+    // would actually produce a mangled sentence in one language and not another.
+    const problems: string[] = [];
+    for (const [key, row] of Object.entries(NOTIFY_STRINGS)) {
+      const takesName = row['en-US'].endsWith(' ');
       for (const lang of NOTIFY_LANGS) {
-        expect(NOTIFY_STRINGS[key][lang].endsWith(' '), `${key} [${lang}] must end with a space`).toBe(true);
+        if (row[lang].endsWith(' ') === takesName) continue;
+        problems.push(
+          `${key} [${lang}]: English ${takesName ? 'expects' : 'does not expect'} a name after it, ` +
+          `but this one ${takesName ? 'does not' : 'does'}`,
+        );
       }
     }
+    expect(problems, problems.join('\n')).toEqual([]);
   });
 });
 

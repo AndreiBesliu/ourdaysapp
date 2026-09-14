@@ -3211,3 +3211,62 @@ engleza hardcodata si tot nu lasa rand in clopotel. Si o cerere de prietenie **p
 notifica nimic, nici macar in clopotel.
 
 `npx tsc -b` verde · functions build verde · **873 de teste** (de la 860) · build verde.
+## 2026-09-14 - Cele patru trimiteri vechi, si cererea de prietenie care nu spunea nimanui nimic
+
+**Model:** Claude Opus 5 · „continua cu alea patru plus golul"
+
+Toate patru treceau acum prin `notify()`: mesaj de chat, joc nou, provocare Warlord, tura ta /
+finalul bataliei. Erau in engleza hardcodata, nu lasau niciun rand in clopotel, si niciuna nu
+curata tokenurile moarte. **Zero `sendEachForMulticast` scris de mana au mai ramas in `index.ts`.**
+
+### Deciziile care nu erau evidente
+
+**Textul mesajului de chat se trimite ca `bodyText`, niciodata ca cheie.** Sunt cuvintele omului;
+a le traduce ar fi mai rau decat a le lasa. Doar invelisul — „Mesaj nou de la …" — se randeaza in
+limba cititorului.
+
+**Numele grupului a iesit din titlu**, la chat si la jocuri. Randerul adauga UN parametru la final,
+iar jumatatea mai utila pe un ecran de blocare e „de la cine" si „ce joc", nu „in care grup".
+Grupul pleaca in `data`, pentru rutare la atingere.
+
+**Retragerea a devenit CHEIE, nu sufix.** Vechiul cod adauga ` (by retreat)` la „Victory!". Un
+parametru e acelasi sir pentru toti destinatarii, deci un „(prin retragere)" tradus nu se poate
+exprima asa. Patru chei in loc de doua plus un sufix.
+
+**Push-urile Warlord SUNT traduse**, desi ecranele jocului raman engleze prin decizia ta. O
+notificare pe ecranul de blocare nu e un ecran pe care l-ai deschis — sa ajunga intr-o limba pe
+care n-o citesti e mai rau decat inconsecventa. Se poate intoarce usor daca vrei altfel.
+
+**`createdBy` la notificarile Warlord e CELALALT jucator.** `notify` isi scoate autorul din
+propria lista de destinatari; daca as fi pus acolo chiar persoana notificata, n-ar fi primit nimic
+— tacut.
+
+### Golul: o cerere de prietenie nu anunta pe nimeni
+
+Nici push, nici rand in clopotel. Aflai deschizand ecranul de Prieteni si observand o bulina.
+Cererile se creeaza din client cu `addDoc`, deci vestea se agata de un trigger nou,
+`onFriendRequestCreated`.
+
+**Prima varianta acoperea jumatatea rara.** Calea cu un tap de pe un membru de grup scrie `toId`;
+**calea prin email de pe ecranul Prieteni scrie `toId: null`** — si aia e calea pe care adaugi pe
+cineva care nu e deja in grup cu tine, adica cea folosita. Acum adresa se rezolva la cont prin
+`getUserByEmail`. Nu scurge nimic: notificarea ajunge la titularul contului, iar expeditorul nu
+afla nimic in niciun caz — deci nu poate descoperi din asta daca o adresa e inregistrata.
+
+### Testul si-a castigat existenta a doua oara
+
+Regula „orice cheie `*Body` se termina cu spatiu" a picat pe un sir perfect corect
+(„Inamicul si-a incheiat tura." nu primeste niciun nume). **Regula era gresita, nu sirul.** Ce
+verifica acum e CONSECVENTA: daca engleza asteapta un nume dupa ea, toate limbile trebuie sa-l
+astepte — ala e lucrul care ar produce o propozitie stalcita intr-o limba si nu in alta.
+
+Si o capcana de escapare pe care o aveam notata si in care am cazut oricum: `python -c "..."` cu
+ghilimele duble in bash a transformat `
+` intr-o linie noua **reala** in interiorul unui sir
+JavaScript. De-aia toate celelalte modificari din sesiune sunt fisiere, nu `-c`.
+
+`npx tsc -b` verde · functions build verde · **873 de teste** · build verde.
+
+### Ce ramane
+Mementourile de eveniment. Nu pornesc pe nicio platforma, si repararea lor e o functie programata
+— nu exista niciuna in proiect inca.

@@ -261,7 +261,6 @@ export const onMessageCreated = onDocumentCreated("groups/{groupId}/messages/{me
     const groupData = groupDoc.data();
     if (!groupData) return;
 
-    const groupName = groupData.name || "A group";
     const members = groupData.members || [];
     const targetUserIds = members.filter((id: string) => id !== senderId);
     
@@ -270,32 +269,74 @@ export const onMessageCreated = onDocumentCreated("groups/{groupId}/messages/{me
     const senderDoc = await admin.firestore().doc(`users/${senderId}`).get();
     const senderName = senderDoc.data()?.name || senderDoc.data()?.email?.split('@')[0] || "Someone";
 
-    const tokens: string[] = [];
-    for (const uid of targetUserIds) {
-      const userDoc = await admin.firestore().doc(`users/${uid}`).get();
-      if (userDoc.exists) {
-        const userData = userDoc.data();
-        if (userData?.fcmTokens && Array.isArray(userData.fcmTokens)) {
-          tokens.push(...userData.fcmTokens);
-        }
-      }
-    }
-
-    const uniqueTokens = [...new Set(tokens)];
-    if (uniqueTokens.length === 0) return;
-
-    const payload = {
-      notification: {
-        title: `${senderName} in ${groupName}`,
-        body: msgData.text || (msgData.imageUrl ? "Sent an image" : "Sent a message"),
-      },
-      tokens: uniqueTokens
-    };
-
-    const response = await admin.messaging().sendEachForMulticast(payload);
-    console.log(`Successfully sent ${response.successCount} messages; failed ${response.failureCount}`);
+    // The message TEXT is passed as `bodyText`, never as a key: it is the sender's own words,
+    // and translating them would be worse than leaving them alone. Only the wrapper around it —
+    // "New message from …" — is rendered in the reader's language.
+    await notify({
+      userIds: targetUserIds,
+      createdBy: senderId,
+      type: "chat",
+      titleKey: "notifNewMessage",
+      titleParam: senderName,
+      ...(msgData.text
+        ? { bodyText: String(msgData.text) }
+        : { bodyKey: msgData.imageUrl ? "notifSentImage" : "notifSentMessage" }),
+      data: { route: "/", groupId: String(groupId || "") },
+    });
   } catch (error) {
     console.error("Error sending FCM payload:", error);
+  }
+});
+
+// A friend request used to notify NOTHING — no push, no bell row. You found out by opening the
+// Friends screen and noticing a badge. Requests are created client-side with `addDoc`, so this is
+// where the news belongs.
+export const onFriendRequestCreated = onDocumentCreated("friend_requests/{requestId}", async (event) => {
+  const fr = event.data?.data();
+  if (!fr) return;
+
+  const fromId = typeof fr.fromId === "string" ? fr.fromId : "";
+  if (!fromId) return;
+
+  try {
+    const db = admin.firestore();
+
+    // Two ways a request is addressed, and the common one is the second.
+    //
+    //   toId   — one tap from a group member's row. Direct.
+    //   toEmail — typing an address on the Friends screen, which is how you add somebody who is
+    //     not already in a group with you. This is the path most requests take, and the first
+    //     version of this trigger did not cover it.
+    //
+    // Resolving the address to an account leaks nothing: the notification goes to the account
+    // holder, and the SENDER is told nothing either way — they cannot learn from this whether the
+    // address is registered. If it belongs to no account there is simply nobody to tell; the
+    // pending request is waiting on the Friends screen when that person does sign up.
+    let toId = typeof fr.toId === "string" ? fr.toId : "";
+    if (!toId && typeof fr.toEmail === "string" && fr.toEmail) {
+      try {
+        toId = (await admin.auth().getUserByEmail(fr.toEmail)).uid;
+      } catch {
+        return; // no account with that address yet
+      }
+    }
+    if (!toId || toId === fromId) return;
+    const prof = await db.doc(`profiles/${fromId}`).get();
+    const senderName = prof.data()?.name
+      || (typeof fr.fromEmail === "string" ? fr.fromEmail.split("@")[0] : "")
+      || "Someone";
+
+    await notify({
+      userIds: [toId],
+      createdBy: fromId,
+      type: "friend",
+      titleKey: "notifFriendRequest",
+      bodyKey: "notifFriendRequestBody",
+      param: senderName,
+      data: { route: "/friends" },
+    });
+  } catch (err) {
+    console.error("onFriendRequestCreated: could not notify", err);
   }
 });
 
@@ -316,7 +357,6 @@ export const onGameCreated = onDocumentCreated("games/{gameId}", async (event) =
     const groupData = groupDoc.data();
     if (!groupData) return;
 
-    const groupName = groupData.name || "A group";
     const members = groupData.members || [];
     const targetUserIds = members.filter((id: string) => id !== creatorId);
     
@@ -325,32 +365,21 @@ export const onGameCreated = onDocumentCreated("games/{gameId}", async (event) =
     const creatorDoc = await admin.firestore().doc(`users/${creatorId}`).get();
     const creatorName = creatorDoc.data()?.name || creatorDoc.data()?.email?.split('@')[0] || "Someone";
 
-    const tokens: string[] = [];
-    for (const uid of targetUserIds) {
-      const userDoc = await admin.firestore().doc(`users/${uid}`).get();
-      if (userDoc.exists) {
-        const userData = userDoc.data();
-        if (userData?.fcmTokens && Array.isArray(userData.fcmTokens)) {
-          tokens.push(...userData.fcmTokens);
-        }
-      }
-    }
-
-    const uniqueTokens = [...new Set(tokens)];
-    if (uniqueTokens.length === 0) return;
-
     const readableGameType = gameType.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
 
-    const payload = {
-      notification: {
-        title: `🎮 New Game in ${groupName}!`,
-        body: `${creatorName} wants to play ${readableGameType}. Tap to join!`,
-      },
-      tokens: uniqueTokens
-    };
-
-    const response = await admin.messaging().sendEachForMulticast(payload);
-    console.log(`Successfully sent ${response.successCount} game invites; failed ${response.failureCount}`);
+    // The game's NAME is a proper noun and stays as it is; the sentence around it is translated.
+    // The group name is dropped from the title deliberately — the renderer appends one parameter
+    // at the end, and "which game" is the more useful half on a lock screen than "which group".
+    await notify({
+      userIds: targetUserIds,
+      createdBy: creatorId,
+      type: "game",
+      titleKey: "notifNewGame",
+      titleParam: readableGameType,
+      bodyKey: "notifNewGameBody",
+      param: creatorName,
+      data: { route: "/", groupId: String(groupId || "") },
+    });
   } catch (error) {
     console.error("Error sending Game Invite FCM:", error);
   }
@@ -1966,30 +1995,19 @@ export const createWarlordChallenge = onCall({ enforceAppCheck: ENFORCE_APP_CHEC
   // challenges have no group. Mirrors respondToFriendRequest's direct write.
   const challengerName =
     (await db.doc(`profiles/${uid}`).get()).data()?.name || "A challenger";
-  batch.set(db.collection("notifications").doc(), {
-    userId: opponentUid,
-    createdBy: uid,
-    type: "warlord_challenge",
-    title: "⚔️ Warlord challenge",
-    body: `${challengerName} has challenged you to battle.`,
-    read: false,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
   await batch.commit();
 
-  // Push (best-effort, never fails the challenge).
-  try {
-    const oppDoc = await db.doc(`users/${opponentUid}`).get();
-    const tokens: string[] = [...new Set<string>(oppDoc.data()?.fcmTokens || [])];
-    if (tokens.length > 0) {
-      await admin.messaging().sendEachForMulticast({
-        notification: { title: "⚔️ Warlord challenge", body: `${challengerName} has challenged you to battle.` },
-        tokens,
-      });
-    }
-  } catch (e) {
-    console.error("Warlord challenge push failed:", e);
-  }
+  // One call instead of a hand-written row plus a hand-written push that had drifted into saying
+  // the same thing twice, in English, with no token pruning. Never fails the challenge.
+  await notify({
+    userIds: [opponentUid],
+    createdBy: uid,
+    type: "warlord_challenge",
+    titleKey: "notifWarlordChallenge",
+    bodyKey: "notifWarlordChallengeBody",
+    param: challengerName,
+    data: { route: "/warlord" },
+  });
   return { gameId: gameRef.id };
 });
 
@@ -2218,42 +2236,47 @@ export const onWarlordBattleUpdated = onDocumentUpdated("games/{gameId}", async 
 
   // One push target set per branch (else-if: the accept write flips status AND
   // creates state — it must not also fire the turn branch).
-  let targets: { uid: string; title: string; body: string }[] = [];
+  let targets: { uid: string; titleKey: string; bodyKey: string }[] = [];
 
   if (before.status === "waiting" && after.status === "playing") {
     targets = [{
       uid: players[0], // initial side = PLAYER = seat 0 (the challenger moves first)
-      title: "⚔️ Warlord: battle joined!",
-      body: "Your challenge was accepted — it's your move.",
+      titleKey: "notifWarlordJoined",
+      bodyKey: "notifWarlordJoinedBody",
     }];
   } else if (before.status !== "finished" && after.status === "finished") {
     const w = after.winner;
-    const suffix = after.forfeitedBy ? " (by retreat)" : "";
+    // Retreat is a separate KEY rather than a suffix appended to the outcome: the renderer only
+    // appends one parameter, and a parameter is the same string for every recipient — so a
+    // translated "(by retreat)" could not be expressed that way at all.
+    const retreat = !!after.forfeitedBy;
     targets = players.map((uid) => ({
       uid,
-      title: "⚔️ Warlord: battle over",
-      body: w == null ? "The battle ended in a draw." : uid === w ? `Victory!${suffix}` : `Defeat.${suffix}`,
+      titleKey: "notifWarlordOver",
+      bodyKey: w == null
+        ? "notifWarlordDraw"
+        : uid === w
+          ? (retreat ? "notifWarlordVictoryRetreat" : "notifWarlordVictory")
+          : (retreat ? "notifWarlordDefeatRetreat" : "notifWarlordDefeat"),
     }));
   } else if (after.status === "playing" && before.state?.side !== after.state?.side) {
     const seatUid = players[after.state.side === "PLAYER" ? 0 : 1];
-    targets = [{ uid: seatUid, title: "⚔️ Warlord: your turn", body: "The enemy has ended their turn." }];
+    targets = [{ uid: seatUid, titleKey: "notifWarlordTurn", bodyKey: "notifWarlordTurnBody" }];
   }
   if (targets.length === 0) return;
 
-  try {
-    for (const t of targets) {
-      const userDoc = await admin.firestore().doc(`users/${t.uid}`).get();
-      const tokens: string[] = userDoc.data()?.fcmTokens || [];
-      const unique = [...new Set(tokens)];
-      if (unique.length === 0) continue;
-      const res = await admin.messaging().sendEachForMulticast({
-        notification: { title: t.title, body: t.body },
-        tokens: unique,
-      });
-      console.log(`Warlord push to ${t.uid}: sent ${res.successCount}, failed ${res.failureCount}`);
-    }
-  } catch (error) {
-    console.error("Error sending Warlord FCM:", error);
+  // `createdBy` is the OTHER player: notify drops the actor from its own recipients, and here the
+  // recipient IS the person being told, so naming them as the cause would silently deliver
+  // nothing at all.
+  for (const t of targets) {
+    await notify({
+      userIds: [t.uid],
+      createdBy: players.find((p: string) => p !== t.uid) || "",
+      type: "warlord",
+      titleKey: t.titleKey,
+      bodyKey: t.bodyKey,
+      data: { route: "/warlord" },
+    });
   }
 });
 
