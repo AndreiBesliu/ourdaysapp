@@ -313,8 +313,37 @@ service cloud.firestore {
     }
 
     match /assets/{assetId} {
-      allow read: if isSignedIn() && resource.data.ownerId == request.auth.uid;
-      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      // A shared asset names ONE group, and membership is resolved HERE, at read.
+      //
+      // The wallet has shown a "Shared" badge since the beginning while this rule said
+      // owner-only, so the toggle was decoration: nobody could read anybody's shared asset,
+      // ever. The share target is a group id rather than a list of user ids precisely so that
+      // it cannot go stale — leaving a group revokes access in the same instant, with no
+      // Cloud Function to rewrite documents and no window where the revocation has not landed.
+      //
+      // `is string` is load-bearing, not defensive noise: an absent field makes
+      // `isMemberOfGroup(null)` build the path `groups/null`, which is a VALID Firestore path,
+      // so the guard has to refuse the shape before the lookup is attempted.
+      function sharedWithMe(d) {
+        return 'sharedGroupId' in d
+          && d.sharedGroupId is string
+          && isMemberOfGroup(d.sharedGroupId);
+      }
+      // You may only point an asset at a group you are actually in. Otherwise the wallet
+      // becomes a way to put an image in front of a group you were never invited to.
+      function shareTargetOk(d) {
+        return !('sharedGroupId' in d)
+          || d.sharedGroupId == null
+          || (d.sharedGroupId is string && isMemberOfGroup(d.sharedGroupId));
+      }
+
+      allow read: if isSignedIn() && (
+        resource.data.ownerId == request.auth.uid ||
+        sharedWithMe(resource.data)
+      );
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && shareTargetOk(request.resource.data);
       allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
       // An update may not CHANGE the owner.
       //
@@ -330,7 +359,8 @@ service cloud.firestore {
       // which is exactly why that check lives on the server.
       allow update: if isSignedIn()
         && resource.data.ownerId == request.auth.uid
-        && request.resource.data.ownerId == resource.data.ownerId;
+        && request.resource.data.ownerId == resource.data.ownerId
+        && shareTargetOk(request.resource.data);
     }
 
     // ── AI cost ledger, spend rollups, and budget counters ──

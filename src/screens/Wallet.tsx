@@ -13,12 +13,24 @@ import ExpensesTab from '../components/ExpensesTab';
 import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
 import { transferAssetCopy } from '../serverActions';
+import {
+  canEdit, groupNameOf, mergeAssets, shareFieldsFor, shareKindOf, shareListenerGroupIds,
+  shareTargetOf,
+} from '../utils/assetSharing';
 
 // One list, used by the initial state and by both fallbacks below.
 const DEFAULT_CATEGORIES = ['Home & Living', 'Health & Medical', 'Vehicles', 'Financial'];
 
 export default function Wallet() {
-  const [assets, setAssets] = useState<any[]>([]);
+  // Two listeners, because one query cannot express "mine, or shared with a group I am in".
+  // Kept apart in state rather than merged on arrival so that a failure in one does not empty
+  // the other — the same reason the asset listener does not clear its list on error.
+  const [ownedAssets, setOwnedAssets] = useState<any[]>([]);
+  const [sharedAssets, setSharedAssets] = useState<Record<string, any[]>>({});
+  const assets = React.useMemo(
+    () => mergeAssets(ownedAssets, Object.values(sharedAssets)),
+    [ownedAssets, sharedAssets],
+  );
   const [assetsLoadError, setAssetsLoadError] = useState(false);
   const [categoryError, setCategoryError] = useState(false);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
@@ -42,7 +54,9 @@ export default function Wallet() {
   // Form state
   const [name, setName] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [isShared, setIsShared] = useState(false);
+  // The GROUP an asset is shared with, or null for private. A boolean cannot answer
+  // "shared with which family?" the moment a person belongs to two.
+  const [shareGroupId, setShareGroupId] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [barcodeValue, setBarcodeValue] = useState('');
   const [barcodeFormat, setBarcodeFormat] = useState('');
@@ -60,15 +74,15 @@ export default function Wallet() {
   useEffect(() => {
     if (!auth.currentUser) return;
     
-    // Fetch the current user's assets. Must be filtered server-side by ownerId:
-    // the Firestore rules only allow reading assets you own, so an unfiltered
-    // query is rejected (permission-denied). (sharedWithFamily assets owned by
-    // others aren't readable under the current rule — see DEVLOG deferred work.)
+    // The assets this user OWNS. Filtered server-side by ownerId because a list query is
+    // validated against the rules without reading a document: the constraint has to guarantee
+    // the rule, it cannot be filtered afterwards. Assets shared WITH this user arrive from the
+    // per-group listeners in the effect below.
     const uid = auth.currentUser.uid;
     const q = query(collection(db, 'assets'), where('ownerId', '==', uid));
 
     const unsubscribe = liveQuery<any>(q, 'Wallet.assets',
-      (docs) => { setAssetsLoadError(false); setAssets(docs); },
+      (docs) => { setAssetsLoadError(false); setOwnedAssets(docs); },
       () => setAssetsLoadError(true));
 
     const unsubUser = liveDoc<any>(doc(db, 'users', auth.currentUser.uid), 'Wallet.userDoc',
@@ -115,6 +129,38 @@ export default function Wallet() {
     };
   }, []);
 
+  // Assets other people shared with a group this user belongs to.
+  //
+  // One listener per group, not one `in` query over all of them: the read rule calls
+  // `isMemberOfGroup` per document, each call costs two document accesses inside the rule, and a
+  // query is capped at twenty. One group per listener keeps that at two no matter how many
+  // groups a person joins — a ceiling that cannot be reached instead of one that is merely far
+  // away.
+  const groupIdsKey = shareListenerGroupIds(myGroups).join(',');
+  useEffect(() => {
+    if (!auth.currentUser) return;
+    const groupIds = groupIdsKey ? groupIdsKey.split(',') : [];
+
+    // Drop groups we have left, so their assets do not linger in a list that outlives access.
+    setSharedAssets((prev) => {
+      const next: Record<string, any[]> = {};
+      for (const id of groupIds) if (prev[id]) next[id] = prev[id];
+      return next;
+    });
+
+    const unsubs = groupIds.map((groupId) =>
+      liveQuery<any>(
+        query(collection(db, 'assets'), where('sharedGroupId', '==', groupId)),
+        `Wallet.sharedAssets.${groupId}`,
+        (docs) => setSharedAssets((prev) => ({ ...prev, [groupId]: docs })),
+        // No clearing on failure, for the same reason as the owned listener: a denied or dropped
+        // read must not be rendered as "nobody shared anything with you".
+        () => {},
+      ),
+    );
+    return () => unsubs.forEach((u) => u());
+  }, [groupIdsKey]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -157,7 +203,7 @@ export default function Wallet() {
         categories: selectedCategories,
         category: selectedCategories[0] || 'Uncategorized',
         imageUrl: url,
-        sharedWithFamily: isShared,
+        ...shareFieldsFor(shareGroupId),
         barcodeValue: barcodeValue || null,
         barcodeFormat: barcodeFormat || null
       };
@@ -196,7 +242,7 @@ export default function Wallet() {
       setSelectedPastImageUrl(null);
       setBarcodeValue('');
       setBarcodeFormat('');
-      setIsShared(false);
+      setShareGroupId(null);
     } catch (err: any) {
       console.error(err);
       alert(t('assetSaveFailed', language));
@@ -219,7 +265,7 @@ export default function Wallet() {
     setEditingAsset(asset);
     setName(asset.name);
     setSelectedCategories(asset.categories && asset.categories.length > 0 ? asset.categories : (asset.category ? [asset.category] : []));
-    setIsShared(asset.sharedWithFamily || false);
+    setShareGroupId(shareTargetOf(asset));
     setBarcodeValue(asset.barcodeValue || '');
     setBarcodeFormat(asset.barcodeFormat || '');
     setFile(null);
@@ -232,7 +278,7 @@ export default function Wallet() {
     setEditingAsset(null);
     setName('');
     setSelectedCategories([]);
-    setIsShared(false);
+    setShareGroupId(null);
     setBarcodeValue('');
     setBarcodeFormat('');
     setFile(null);
@@ -389,8 +435,54 @@ export default function Wallet() {
     return acc;
   }, {}) : {};
 
+  /**
+   * What the card says about who can see this.
+   *
+   * It used to read the boolean and print the literal English words "Shared" / "Private" — and
+   * the word Shared was false for every asset that ever carried it, because no reader existed.
+   */
+  const shareBadge = (asset: any) => {
+    const kind = shareKindOf(asset, auth.currentUser?.uid);
+    if (kind === 'fromOthers') {
+      const owner = sharedUsers.find((u) => u.id === asset.ownerId);
+      return (
+        <>
+          <Users className="w-3 h-3 text-sky-500" />
+          {t('walletShareFrom', language).replace('{name}', owner?.name || t('walletShareSomeone', language))}
+        </>
+      );
+    }
+    if (kind === 'shared') {
+      const name = groupNameOf(myGroups, shareTargetOf(asset));
+      return (
+        <>
+          <Users className="w-3 h-3 text-emerald-500" />
+          {name
+            ? t('walletShareWithGroup', language).replace('{group}', name)
+            : t('walletShareShared', language)}
+        </>
+      );
+    }
+    if (kind === 'neverShared') {
+      // Saying only "Private" here would read as this change having taken something away. It
+      // never worked; the card is the only place that can say so.
+      return (
+        <>
+          <User className="w-3 h-3 text-amber-500" />
+          <span className="text-amber-600 dark:text-amber-500">{t('walletShareNeverWas', language)}</span>
+        </>
+      );
+    }
+    return (
+      <>
+        <User className="w-3 h-3" />
+        {t('walletSharePrivate', language)}
+      </>
+    );
+  };
+
   const renderAssetCard = (asset: any) => {
-    const isOwner = asset.ownerId === auth.currentUser?.uid;
+    const isOwner = canEdit(asset, auth.currentUser?.uid);
     const handleCardClick = () => {
       if (isOwner) openEditModal(asset);
     };
@@ -452,8 +544,7 @@ export default function Wallet() {
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100 line-clamp-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{asset.name}</p>
               <div className="flex items-center gap-1 mt-1 text-xs text-zinc-500">
-                {asset.sharedWithFamily ? <Users className="w-3 h-3 text-emerald-500" /> : <User className="w-3 h-3" />}
-                {asset.sharedWithFamily ? 'Shared' : 'Private'}
+                {shareBadge(asset)}
               </div>
             </div>
             {isOwner && (
@@ -696,10 +787,21 @@ export default function Wallet() {
                   <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{t('walletShareAsset', language)}</p>
                   <p className="text-xs text-zinc-500">{t('walletShareHint', language)}</p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" checked={isShared} onChange={e => setIsShared(e.target.checked)} />
-                  <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                </label>
+                {myGroups.length === 0 ? (
+                  <p className="text-xs text-zinc-500 max-w-[45%] text-right">{t('walletShareNoGroups', language)}</p>
+                ) : (
+                  <select
+                    value={shareGroupId ?? ''}
+                    onChange={(e) => setShareGroupId(e.target.value || null)}
+                    aria-label={t('walletShareAsset', language)}
+                    className="px-3 py-2 text-sm border rounded-lg bg-white dark:bg-zinc-800 dark:border-zinc-700 outline-none focus:border-emerald-500 max-w-[55%]"
+                  >
+                    <option value="">{t('walletSharePrivate', language)}</option>
+                    {myGroups.map((g) => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {editingAsset && editingAsset.ownerId === auth.currentUser?.uid && sharedUsers.length > 0 && (

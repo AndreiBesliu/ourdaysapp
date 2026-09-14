@@ -303,3 +303,35 @@ Măsurate, nu presupuse — le scriu ca să știi unde **nu** trebuie să te ui�
   gresit pe 26.08.
 - Al doilea audit: 13 agenti, 6 lentile, 52 de constatari trecute prin respingere. Cele patru fara
   ambiguitate sunt reparate si au garzi care musca; restul de 48 sunt in DEVLOG, ordonate.
+---
+
+## 16. Portofelul: partajarea chiar functioneaza acum (14.09)
+
+**De ce nu pot eu:** e in spatele autentificarii, si jumatate din ea cere **doua conturi**.
+
+### Primul lucru, inainte de orice altceva
+
+- [ ] **Deschide portofelul si uita-te daca bunurile tale sunt acolo.** Am schimbat regula de
+      citire a activelor, si n-am putut s-o probez local (nu exista instanta de test, emulatorul
+      cere Java 11 iar masina are 8). Daca lista e goala sau apare eroarea de incarcare,
+      **spune-mi imediat** — se revine la regula veche in treizeci de secunde. Restul de mai jos
+      n-are rost pana nu trece asta.
+
+### Apoi
+
+- [ ] **Un bun marcat „Shared" inainte arata acum `N-a fost partajat de fapt`**, cu bulina
+      chihlimbarie. Nu e o regresie: comutatorul acela n-a fost niciodata legat de nimic, deci
+      nimeni nu vazuse vreodata acele bunuri. Alege un grup din selector ca sa-l partajezi cu
+      adevarat.
+- [ ] **Partajeaza un bun cu un grup** si verifica de pe **al doilea cont**, din grup, ca apare in
+      portofelul lui, cu eticheta `De la <numele tau>` — si ca **imaginea si codul de bare chiar se
+      vad**, nu doar numele.
+- [ ] **Pe contul celalalt, bunul tau nu trebuie sa se poata edita sau sterge.** Fara butoane de
+      creion si cos, iar clicul pe card nu deschide editarea.
+- [ ] **Scoate contul din grup** (sau iesi tu) si verifica faptul ca bunul **dispare imediat** din
+      portofelul lui. Asta e tot motivul pentru care partajarea numeste un grup si nu o lista de
+      oameni.
+- [ ] **Cand compui un eveniment pentru un grup**, selectorul de card din eveniment trebuie sa
+      arate si cardurile pe care grupul le-a partajat cu tine, nu doar pe ale tale.
+- [ ] **Selectorul de partajare in toate cele sase limbi** — eticheta, optiunea „Privat" si textul
+      de pe card.

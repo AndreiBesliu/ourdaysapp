@@ -2821,3 +2821,93 @@ el — exact semnalul pe care desfasurarea ascunsa exista ca sa-l previna.
 pe telefon — si esecul e un `console.error` gol, deci nu ajunge in `errorLogs`. Plus `targetSdk 35`
 porneste edge-to-edge fara sa rezerve barele de sistem. Cere `npx cap sync android` + reconstruire +
 un telefon, deci trece la owner.
+## 2026-09-14 - Portofelul spunea ca a partajat. Nu partajase niciodata.
+
+**Model:** Claude Opus 5 · „haide sa lucram la aplicatia ourdaysapp"
+
+### Intai, o scapare de proces a mea
+
+**Lista celor 48 de constatari ramase din auditul 2 nu mai exista.** Sectiunea din DEVLOG are 66
+de linii si **zero constatari enumerate** — doar numerele (10 grave / 17 medii / 25 mici) si proza
+despre cele patru reparate. Detaliile traiau doar in iesirea workflow-ului si s-au dus cu ea. Am
+cautat in scratchpad-urile de sesiune: nimic. Regula mea proprie spune ca ce nu incape intr-o
+sesiune se scrie intr-un fisier; am aplicat-o la ce trebuia verificat de owner si NU la ce ramanea
+de reparat. De acum, orice audit isi scrie constatarile intr-un fisier inainte sa repar prima.
+
+### Defectul, gasit masurand si nu pe vreo lista
+
+Regula `assets` era `ownerId == request.auth.uid` si atat. Portofelul avea in acelasi timp un
+comutator „Shared / Private", scria `sharedWithFamily: true`, si desena pe card o insigna verde cu
+iconita de familie si cuvantul **Shared**. Nimeni nu putea citi vreodata acel activ: niciun
+ascultator din aplicatie nu interoga altceva decat `ownerId`, si niciunul n-ar fi putut — o
+interogare pe care nicio ramura de regula n-o garanteaza e refuzata in intregime.
+
+Deci nu era stricat intr-un caz limita. **Comutatorul nu era legat de nimic, in absolut toate
+cazurile**, de la inceput. Iar `AddEventModal` avea id-ul grupului in mana si il reducea la un bit:
+`sharedWithFamily: selectedGroupId !== 'personal'`. Fiecare activ salvat in portofel dintr-un
+eveniment de grup e in starea „scrie Shared, citibil de nimeni".
+
+### Forma aleasa: un id de GRUP, nu o lista de utilizatori
+
+Un boolean nu poate raspunde „partajat cu care familie?" din clipa in care esti in doua grupuri.
+Activul poarta acum `sharedGroupId`; absent sau null inseamna privat.
+
+Alternativa evidenta era `allowedUserIds` cu `array-contains` — **o** interogare in loc de una pe
+grup. Am respins-o fiindca lista **se invecheste**: iesi din grup si continui sa citesti cardurile
+lui pana cand ceva rescrie fiecare activ care te numea. Acel ceva ar fi o Cloud Function pe
+apartenenta, o scriere in evantai, si o fereastra in care revocarea inca nu s-a intamplat.
+
+Un id de grup se rezolva **LA CITIRE** prin `isMemberOfGroup`. Iesirea din grup revoca accesul in
+aceeasi clipa, fara nimic de intretinut si nimic de uitat — exact motivul pentru care apartenenta
+se rezolva la citire peste tot in codul asta. Pretul e cate un ascultator per grup in loc de unul,
+si se plateste intr-un loc care nu poate fi tacut gresit.
+
+Cate un ascultator per grup, si nu un singur `in` peste toate: regula cheama `isMemberOfGroup` per
+document, fiecare apel costa doua accesari de document in interiorul regulii, iar o interogare e
+plafonata la douazeci. Un grup per ascultator tine numarul la doua **indiferent** cate grupuri are
+cineva — un plafon care nu poate fi atins, in loc de unul doar departe.
+
+`is string` din regula nu e prudenta decorativa: un camp absent face `isMemberOfGroup(null)` sa
+construiasca `groups/null`, care e o cale Firestore **valida**, deci garda trebuie sa refuze forma
+inainte de cautare.
+
+### Ce vede omul
+
+- Cardul spune adevarul: `Privat` · `Partajat cu <grup>` · `De la <nume>` pentru ce ti-a partajat
+  altcineva.
+- A patra stare, **`N-a fost partajat de fapt`**, cu bulina chihlimbarie, pentru activele vechi cu
+  `sharedWithFamily: true` si niciun grup. Sa scrie doar „Privat" ar fi citit ca si cum schimbarea
+  asta a luat ceva; nu s-a acordat niciodata nimic, si cardul e singurul loc care poate spune asta.
+- Comutatorul a devenit un selector de grup. Fara grupuri, spune ce-ti lipseste in loc sa arate un
+  control inert.
+- Ecranul stia deja sa nu editeze ce nu-i al tau: cardul calcula `isOwner`, inchidea clicul,
+  butoanele de editare si stergere, iar ambele scrieri in masa pe categorii filtrau dupa proprietar.
+  Garda supravietuise; ce lipsea era un ascultator care sa poata intoarce vreodata un activ strain.
+
+### Garzi
+
+- `assetSharing.ts` — decizia scoasa din componenta, pura: cine vede, cine poate edita, ce se scrie.
+  24 de teste. `sharedWithFamily` ramane, dar **DERIVAT** din `sharedGroupId`: scris independent,
+  cele doua ar putea sa nu fie de acord, ceea ce e chiar felul in care s-a ajuns aici.
+- `assetQueryRules.test.ts` — aceeasi verificare mecanica pe care `events` o are deja, acum ca
+  `assets` are mai mult de o ramura de citire si deci poate gresi. Campurile permise se **citesc
+  din reguli**, nu sunt scrise de mana, iar testul refuza explicit `sharedWithFamily`: e in
+  continuare pe fiecare document, arata in continuare ca steagul de partajare, si nu e garantat de
+  nicio ramura. **Dovedit ca musca:** cu interogarea mutata pe `sharedWithFamily`, testul a numit
+  fisierul si campul; fisierul restaurat verificat prin hash, nu prin `git checkout` (arborele avea
+  munca nesalvata).
+- Prima varianta a testului trecea degeaba: `match /assets/{assetId}` contine el insusi o acolada,
+  deci numararea incepea pe `{assetId}` si se inchidea imediat, cu lista de campuri **goala**.
+  Garda „trebuie sa contina ownerId" a prins-o.
+
+`npx tsc -b` verde · **818 teste verzi** (28 noi, de la 790) · build verde.
+
+### Ce NU am putut dovedi, si spun asta ca atare
+
+**Regulile nu sunt probate local.** Nu exista instanta de test pentru OurDaysApp, nu e configurat
+emulator, `@firebase/rules-unit-testing` nu e instalat, iar masina are doar Java 8 — emulatorul
+Firestore cere 11+. Memoria proiectului are deja lectia care conteaza aici: un macro CEL poate
+**compila** si sa refuze ORICE scriere, iar `--dry-run` nu e dovada. Deci regula asta merge pe live
+neprobata, si prima verificare o faci tu, deschizand portofelul. Revenirea e instantanee daca e
+gresita. Un ham de emulator ar fi reparatia permanenta — proiectul a livrat deja de trei ori
+defecte de reguli.

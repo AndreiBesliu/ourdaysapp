@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, Sparkles, GripVertical, Search, Check } from 'lucide-react';
 import { addDoc, collection, query, where, updateDoc, doc } from 'firebase/firestore';
 import { liveQuery } from '../utils/liveQuery';
+import { mergeAssets, shareFieldsFor } from '../utils/assetSharing';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
@@ -111,7 +112,14 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   };
   
   // Wallet Assets
-  const [assets, setAssets] = useState<any[]>([]);
+  const [ownedAssets, setOwnedAssets] = useState<any[]>([]);
+  // Cards other people shared with the group this event belongs to. Kept separate from the owned
+  // list so a failure to read one never empties the other.
+  const [groupSharedAssets, setGroupSharedAssets] = useState<any[]>([]);
+  const assets = React.useMemo(
+    () => mergeAssets(ownedAssets, [groupSharedAssets]),
+    [ownedAssets, groupSharedAssets],
+  );
   const [assetsLoadError, setAssetsLoadError] = useState(false);
   const [showAssetPicker, setShowAssetPicker] = useState<'main' | string | null>(null); // 'main' or checklistItem id
   const [selectedAssetUrl, setSelectedAssetUrl] = useState<string | null>(null);
@@ -157,7 +165,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     const uid = auth.currentUser.uid;
     const assetsQuery = query(collection(db, 'assets'), where('ownerId', '==', uid));
     const unsubAssets = liveQuery<any>(assetsQuery, 'AddEventModal.assets',
-      (docs) => { setAssetsLoadError(false); setAssets(docs); },
+      (docs) => { setAssetsLoadError(false); setOwnedAssets(docs); },
       // Deliberately does NOT clear `assets`: emptying the list on failure turned a denied read
       // into "you own nothing", and threw away a picker that was already populated when a late
       // failure arrived. Same query and same collection as the Wallet screen, which says so.
@@ -165,6 +173,23 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
     return () => unsubAssets();
   }, [isOpen]);
+
+  // While composing for a group, the group's shared wallet cards are offerable too — the read
+  // rule allows them because we are a member, and the picker is the one place you would look.
+  useEffect(() => {
+    if (!isOpen || !auth.currentUser || !selectedGroupId || selectedGroupId === 'personal') {
+      setGroupSharedAssets([]);
+      return;
+    }
+    const unsub = liveQuery<any>(
+      query(collection(db, 'assets'), where('sharedGroupId', '==', selectedGroupId)),
+      'AddEventModal.sharedAssets',
+      (docs) => setGroupSharedAssets(docs),
+      // Same rule as the owned list: a denied read must not be shown as "nothing is shared".
+      () => {},
+    );
+    return () => unsub();
+  }, [isOpen, selectedGroupId]);
 
   useEffect(() => {
     if (editEvent && isOpen) {
@@ -536,7 +561,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             imageUrl: imageUrl,
             ownerId: auth.currentUser?.uid,
             createdAt: new Date().toISOString(),
-            sharedWithFamily: selectedGroupId !== 'personal'
+            ...shareFieldsFor(selectedGroupId)
           });
         }
       } else if (selectedAssetUrl) {
@@ -559,7 +584,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               imageUrl: finalItemUrl,
               ownerId: auth.currentUser?.uid,
               createdAt: new Date().toISOString(),
-              sharedWithFamily: selectedGroupId !== 'personal'
+              ...shareFieldsFor(selectedGroupId)
             });
           }
         } else if (item.selectedAssetUrl) {
