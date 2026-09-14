@@ -504,3 +504,33 @@ Nu pot vedea adminul (e in spatele autentificarii), deci **datele sunt la tine**
 - [ ] **„Mark all seen"** apare doar cand sunt cel putin doua grupuri noi vizibile.
 - [ ] Daca vezi randul galben „N group(s) were not updated", spune-mi — inseamna ca jurnalul s-a
       rotit intre incarcare si clic.
+---
+
+## 26. Cheia de service account, ca sa citesc erorile live (14.09)
+
+**Eu nu pot crea cheia** — cere consola ta autentificata, si nu e ceva ce trebuie sa fac eu.
+Andrei alege DOAR CITIRE (14.09), deci rolul de mai jos nu e negociabil in pasii astia.
+
+1. Deschide <https://console.cloud.google.com/iam-admin/serviceaccounts?project=our-days-2a939>
+2. **+ CREATE SERVICE ACCOUNT**
+   - Name: `claude-error-reader`
+   - **Create and continue**
+3. La **Grant this service account access**, alege rolul **`Cloud Datastore Viewer`**.
+   *Nu* „Editor", *nu* „Cloud Datastore User" — alea dau scriere pe TOATA baza.
+   **Continue → Done**
+4. Intra in contul nou → tabul **KEYS** → **ADD KEY → Create new key → JSON → CREATE**.
+   Browserul descarca un fisier `.json`.
+5. Muta fisierul (nu copia) la:
+   `C:\Users\besli\.ourdays\service-account.json`
+   *(folderul exista deja; e in afara repo-ului intentionat)*
+6. Spune-mi si rulez `npm run errors`.
+
+**Ce inseamna:**
+- Cheia da **citire pe tot Firestore-ul**, nu doar pe erori — Firestore **nu are roluri pe colectie**.
+  Asta e pretul; de asta nu am cerut si scriere.
+- **Butonul de oprire:** acelasi tab KEYS → sterge cheia. Din secunda aia nu mai citesc nimic.
+- Scriptul **refuza sa porneasca** daca cheia e pusa in interiorul repo-ului.
+- Nu tiparesc niciodata uid sau email din jurnal.
+
+- [ ] Dupa ce e gata: confirma ca `npm run errors` imi arata grupurile, si ca stergerea cheii chiar
+      opreste accesul.

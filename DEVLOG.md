@@ -3795,3 +3795,30 @@ identitati: fara uid, fara email.
 
 `npx tsc -b` verde · **1036 de teste** (de la 1010) · poarta verde · build verde · functions verde ·
 livrat pe live (functions → rules → hosting).
+## 2026-09-14 - Citirea erorilor de pe live, cu cheie de service account
+
+**Model:** Claude Opus 5 · „haide sa setam cheia de service account"
+
+`logErrorDigest` acopera cazul fara nicio credentiala, dar la 6 ore. Asta acopera restul: aceleasi
+date, live, la cerere. `scripts/read-errors.mjs` + `npm run errors`.
+
+**Decizia lui Andrei: DOAR CITIRE** (`roles/datastore.viewer`). I-am pus alegerea ca pe ce era:
+Firestore **nu are roluri pe colectie**, deci varianta cu scriere n-ar fi fost „putin mai mult" — ar
+fi dat scriere pe evenimentele tuturor, chat, portofel si salvarile Warlord, in schimbul automatizarii
+unui clic de evidenta. Marcarea „vazut/rezolvat" ramane clicul lui, ceea ce e si corect: nu-mi
+corectez singur lucrarea, iar filigranul face un marcaj gresit sa se autocorecteze.
+
+**Trei lucruri construite in jurul cheii, nu in ea:**
+- Scriptul **refuza sa porneasca** daca cheia e in interiorul arborelui. O cheie in repo e la un
+  `git add` distanta de a fi publicata pentru totdeauna, iar istoria repo-ului asta contine chiar un
+  `git add -A` care a maturat 21 de fisiere straine. Probat: cu o cheie falsa in repo, refuza si spune
+  de ce.
+- `.gitignore` capata tipare pentru chei — plasa a doua, nu prima. **Prima e ca fisierul sta in afara
+  arborelui.**
+- Scriptul citeste DOAR (`get`, `getAll`, `count`) si nu tipareste niciodata uid sau email.
+
+**Nu reimplementeaza nimic:** gruparea si starile vin din `functions/lib` — exact codul compilat pe
+care il ruleaza serverul. Doua implementari ale unei decizii diverg, iar cea care diverge e mereu cea
+la care te uiti.
+
+Cheia **nu e inca creata** — e pasul lui Andrei, notat in OWNER_VERIFY §26.

@@ -27,3 +27,11 @@ dist-ssr
 .env
 functions/.env
 .firebase/
+
+# Service-account keys. The real protection is keeping them OUTSIDE this tree —
+# scripts/read-errors.mjs refuses to run against a key stored inside it — but a rule
+# here costs nothing and catches the copy somebody makes "just for a second".
+*service-account*.json
+*serviceaccount*.json
+*-adminsdk-*.json
+.secrets/
