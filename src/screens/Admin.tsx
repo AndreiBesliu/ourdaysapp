@@ -9,7 +9,7 @@ import {
 import { auth } from '../firebase';
 import {
   adminCheck, adminGetStats, adminListProfiles, adminListAdmins, adminSetAdmin,
-  adminGetHealth, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
+  adminGetHealth, adminSetErrorStatus, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
   adminBackfillExpenses,
 } from '../serverActions';
 
@@ -103,6 +103,12 @@ export default function Admin() {
   const [profiles, setProfiles] = useState<any[]>([]);
   const [admins, setAdmins] = useState<any[]>([]);
   const [health, setHealth] = useState<any>(null);
+  // Default to the two that want attention. Somebody opening this screen is asking "what
+  // needs me", not "what have I already dealt with" — and a list that opens with fifty
+  // resolved rows is the same unreadable wall the grouping was built to remove.
+  const [errorFilter, setErrorFilter] = useState<'open' | 'new' | 'seen' | 'resolved' | 'all'>('open');
+  const [errorBusy, setErrorBusy] = useState<string | null>(null);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [groups, setGroups] = useState<any[]>([]);
   const [growth, setGrowth] = useState<any>(null);
   const [detail, setDetail] = useState<any>(null); // open user drill-down
@@ -130,6 +136,56 @@ export default function Admin() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  /**
+   * Move a group between states, then reload so the derived status comes back FROM THE SERVER.
+   *
+   * Not patched locally: the server decides what a status means once it has been written, including
+   * whether a resolved group has already regressed. Two places computing that would drift, and the
+   * screen would be the one that is wrong.
+   */
+  const setErrorStatus = async (fingerprints: string[], status: 'new' | 'seen' | 'resolved') => {
+    if (fingerprints.length === 0) return;
+    setErrorBusy(fingerprints.length === 1 ? fingerprints[0] : 'bulk');
+    setErrorNotice(null);
+    try {
+      // In chunks: the callable caps a request at 100 keys, and one oversized call is rejected
+      // whole — so "Mark all seen" on a long list used to mark NOTHING while looking like it worked.
+      let skipped = 0;
+      for (let i = 0; i < fingerprints.length; i += 100) {
+        const res = await adminSetErrorStatus(fingerprints.slice(i, i + 100), status);
+        skipped += res?.skipped || 0;
+      }
+      const h = await adminGetHealth();
+      setHealth(h);
+      // The server skips a key whose rows have left the scanned window between the page loading and
+      // the click. It counts them; throwing that count away made a write that never happened look
+      // exactly like one that did.
+      if (skipped > 0) {
+        setErrorNotice(`${skipped} group(s) were not updated — their rows have left the scanned window. Refresh and try again.`);
+      }
+    } catch (e: any) {
+      setErrorNotice(e?.message || 'Could not update the error status.');
+    } finally {
+      setErrorBusy(null);
+    }
+  };
+
+  // Which groups the filter lets through. A plain const, deliberately not a hook: everything
+  // below an early return in a component has to be hook-free, and this file has an access gate.
+  //
+  // `status` is normalised to 'new' when absent. It can be absent for one real reason: hosting
+  // deployed ahead of functions, so the browser holds a build that expects the field from a server
+  // that does not send it yet. Falling back to 'new' keeps such a group VISIBLE; the alternative
+  // fell through the badge's ternary to the green "resolved" pill and out of the default filter —
+  // a panel confidently reporting that everything was fine.
+  const visibleErrorGroups: any[] = (health?.errorGroups || [])
+    .map((g: any) => (g.status ? g : { ...g, status: 'new' }))
+    .filter((g: any) => (
+      errorFilter === 'all' ? true
+        : errorFilter === 'open' ? (g.status === 'new' || g.status === 'regressed')
+        : g.status === errorFilter
+    ));
 
   const refresh = async () => {
     setLoading(true); setLoadError(false);
@@ -514,13 +570,67 @@ export default function Admin() {
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 text-center text-sm text-emerald-500 flex items-center justify-center gap-2"><CheckCircle2 className="w-4 h-4" /> Nothing to group.</div>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {health.errorGroups.map((g: any) => (
+                  {/* The filter. "Open" is new + regressed, and it is the default because somebody
+                      opening this screen is asking what needs them — not what they already dealt
+                      with. A counter that reads 0 is still shown: "no regressions" is information,
+                      and hiding the chip would make its absence look like a missing feature. */}
+                  <div className="flex flex-wrap items-center gap-1.5 pb-1">
+                    {([
+                      ['open', 'Needs attention', (health.errorCounts?.new || 0) + (health.errorCounts?.regressed || 0)],
+                      ['new', 'New', health.errorCounts?.new || 0],
+                      ['seen', 'Seen', health.errorCounts?.seen || 0],
+                      ['resolved', 'Resolved', health.errorCounts?.resolved || 0],
+                      ['all', 'All', health.errorGroups.length],
+                    ] as const).map(([key, label, n]) => (
+                      <button
+                        key={key}
+                        onClick={() => setErrorFilter(key as typeof errorFilter)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                          errorFilter === key
+                            ? 'bg-primary text-white'
+                            : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                        }`}
+                      >
+                        {label} <span className="tabular-nums opacity-70">{n}</span>
+                      </button>
+                    ))}
+                    {visibleErrorGroups.filter((g: any) => g.status === 'new').length > 1 && (
+                      <button
+                        onClick={() => setErrorStatus(visibleErrorGroups.filter((g: any) => g.status === 'new').map((g: any) => g.key), 'seen')}
+                        disabled={errorBusy !== null}
+                        className="ml-auto px-2.5 py-1 rounded-lg text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 disabled:opacity-50"
+                      >
+                        {errorBusy === 'bulk' ? 'Marking…' : 'Mark all seen'}
+                      </button>
+                    )}
+                  </div>
+
+                  {errorNotice && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 px-1">{errorNotice}</p>
+                  )}
+
+                  {visibleErrorGroups.length === 0 && (
+                    <p className="text-sm text-zinc-400 text-center py-6">Nothing in this state.</p>
+                  )}
+
+                  {visibleErrorGroups.map((g: any) => (
                     <div key={g.key} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
                       <div className="flex items-start gap-3">
                         <span className="shrink-0 min-w-[28px] h-6 px-1.5 rounded-md bg-red-500/10 text-red-500 text-xs font-bold flex items-center justify-center tabular-nums">
                           {g.count}
                         </span>
                         <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 break-words flex-1">{g.sample}</p>
+                        {/* `regressed` is not a state anybody chooses — it means this was declared
+                            fixed and has happened since. It is louder than "new" on purpose: a
+                            belief that turned out to be wrong is worse news than an unread one. */}
+                        <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
+                          g.status === 'regressed' ? 'bg-red-500 text-white'
+                            : g.status === 'new' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                            : g.status === 'seen' ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'
+                            : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                        }`}>
+                          {g.status}
+                        </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] text-zinc-500 pl-[40px]">
                         {g.context && <span className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded">{g.context}</span>}
@@ -536,6 +646,43 @@ export default function Admin() {
                           <pre className="mt-1 text-[10px] text-zinc-400 whitespace-pre-wrap break-words max-h-40 overflow-y-auto bg-zinc-50 dark:bg-zinc-800/50 rounded p-2">{g.sampleStack}</pre>
                         </details>
                       )}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2 pl-[40px]">
+                        {g.status !== 'seen' && g.status !== 'resolved' && (
+                          <button
+                            onClick={() => setErrorStatus([g.key], 'seen')}
+                            disabled={errorBusy !== null}
+                            className="px-2 py-1 rounded-lg text-[11px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50"
+                          >
+                            Mark seen
+                          </button>
+                        )}
+                        {g.status !== 'resolved' && (
+                          <button
+                            onClick={() => setErrorStatus([g.key], 'resolved')}
+                            disabled={errorBusy !== null}
+                            className="px-2 py-1 rounded-lg text-[11px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 disabled:opacity-50"
+                          >
+                            {errorBusy === g.key ? 'Saving…' : 'Resolved'}
+                          </button>
+                        )}
+                        {g.status === 'resolved' && (
+                          <button
+                            onClick={() => setErrorStatus([g.key], 'new')}
+                            disabled={errorBusy !== null}
+                            className="px-2 py-1 rounded-lg text-[11px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-50"
+                          >
+                            Reopen
+                          </button>
+                        )}
+                        {/* Saying it happened again is the point of the whole mechanism; saying
+                            WHEN is what tells you whether the fix simply has not shipped yet. */}
+                        {g.recurred && g.status !== 'regressed' && (
+                          <span className="text-[11px] text-amber-600 dark:text-amber-400">still happening</span>
+                        )}
+                        {g.status === 'regressed' && (
+                          <span className="text-[11px] text-red-500">came back after being resolved</span>
+                        )}
+                      </div>
                     </div>
                   ))}
                   {/* Without this line the counts above could be a count of the window rather than

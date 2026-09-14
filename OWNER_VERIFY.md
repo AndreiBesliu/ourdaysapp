@@ -490,3 +490,17 @@ Nu pot vedea adminul (e in spatele autentificarii), deci **datele sunt la tine**
 - [ ] **Warlord, neatins (e submodul):** `TraditionPanel.tsx:342`, butonul „copiaza codul" —
       `navigator.clipboard?.writeText(c).then(...)`. Pe un WebView fara clipboard arunca. Spune-mi
       daca vrei sa-l reparam in repo-ul jocului.
+---
+
+## 25. Starile erorilor (14.09)
+
+- [ ] **Admin -> Health**: deasupra listei sunt cipuri **Needs attention / New / Seen / Resolved /
+      All**, cu numere. Se deschide pe „Needs attention".
+- [ ] **Apasa „Resolved"** pe un grup. Dispare din „Needs attention" si apare in „Resolved".
+- [ ] **„Reopen"** il aduce inapoi.
+- [ ] **Proba care conteaza:** marcheaza ceva rezolvat, apoi provoaca acea eroare din nou. La
+      urmatoarea incarcare trebuie sa reapara cu eticheta rosie **`regressed`** si textul „came back
+      after being resolved". Daca NU reapare, filigranul e stricat si vreau sa stiu.
+- [ ] **„Mark all seen"** apare doar cand sunt cel putin doua grupuri noi vizibile.
+- [ ] Daca vezi randul galben „N group(s) were not updated", spune-mi — inseamna ca jurnalul s-a
+      rotit intre incarcare si clic.

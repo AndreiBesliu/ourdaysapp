@@ -141,6 +141,12 @@ export async function adminGetHealth(): Promise<any> {
   const fn = httpsCallable(getFunctions(app), "adminGetHealth");
   return (await fn({})).data;
 }
+export async function adminSetErrorStatus(
+  fingerprints: string[], status: 'new' | 'seen' | 'resolved', note?: string,
+): Promise<{ ok: boolean; written: number; skipped: number }> {
+  const fn = httpsCallable(getFunctions(app), "adminSetErrorStatus");
+  return (await fn({ fingerprints, status, note })).data as { ok: boolean; written: number; skipped: number };
+}
 export async function adminGetUser(uid: string): Promise<any> {
   const fn = httpsCallable(getFunctions(app), "adminGetUser");
   return (await fn({ uid })).data;

@@ -14,6 +14,9 @@ import { charsPerToken, estimateUsdFor, usageOf, withLedger } from "./aiLedger";
 import { readFriendship } from "./friendship";
 import { notify } from "./notify";
 import { groupErrors } from "./errorGrouping";
+import {
+  ERROR_STATUSES, STATUS_RANK, groupDocId, isErrorStatus, joinState,
+} from "./errorState";
 import { AI_QUOTA_CODE, isProviderQuotaError } from "./aiProviderError";
 
 // Invite links live in their own module — index.ts is already long, and these four are a
@@ -26,6 +29,9 @@ export {
 } from "./inviteLinks";
 export { openDirectChat, onDirectMessageCreated } from "./directChat";
 export { sendDueReminders } from "./reminders";
+// A daily copy of the health panel into the function logs, which the CLI can read without a
+// key — see functions/src/errorDigest.ts for why that gap was worth closing.
+export { logErrorDigest } from "./errorDigest";
 
 admin.initializeApp();
 
@@ -1585,6 +1591,31 @@ export const logClientError = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
 /** How many error rows the health check reads in order to group them. */
 const ERROR_SCAN_LIMIT = 500;
 
+/** How many state documents to fetch per `getAll`. Chunked so no group is left without its state. */
+const STATE_CHUNK = 300;
+
+/**
+ * Read the stored state for a set of fingerprints, keyed by fingerprint.
+ *
+ * Returns a lookup rather than an array so the caller has no indices to line up: the defect this
+ * replaces was a slice applied to the refs and not to the groups, which made every group past the
+ * cap report `new` — silently, and worst for the rare recurrences the whole mechanism exists for.
+ */
+async function readErrorStates(
+  db: FirebaseFirestore.Firestore, keys: readonly string[],
+): Promise<(key: string) => Record<string, unknown> | null> {
+  const byKey = new Map<string, Record<string, unknown>>();
+  const refs = keys.map((k) => db.doc(`errorGroups/${groupDocId(k)}`));
+  for (let i = 0; i < refs.length; i += STATE_CHUNK) {
+    const snaps = await db.getAll(...refs.slice(i, i + STATE_CHUNK));
+    snaps.forEach((snap, j) => {
+      const data = snap.data() as Record<string, unknown> | undefined;
+      if (data) byKey.set(keys[i + j], data);
+    });
+  }
+  return (key: string) => byKey.get(key) || null;
+}
+
 // Health / observability: recent errors + AI & notification usage.
 export const adminGetHealth = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   await assertAdmin(request);
@@ -1605,21 +1636,105 @@ export const adminGetHealth = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
   });
   // Eighty logged errors is rarely eighty problems. The list answers "what happened last"; the
   // groups answer "what is wrong", which is the question somebody opening this screen actually has.
-  const errorGroups = groupErrors(scanned as any);
+  const grouped = groupErrors(scanned as any);
   const errors = scanned.slice(0, 50);
+
+  // ── what has already been looked at ─────────────────────────────────────
+  //
+  // The state lives per GROUP, never per row: marking seventy-four rows of one thing is not a
+  // workflow, and the row ids change every time the log rolls over while the fingerprint does not.
+  //
+  // Read state for EVERY group, in chunks. The first version sliced the refs to 200 and then mapped
+  // over all of them, so from the 201st onward `stateSnaps[i]` was undefined and the group reported
+  // `new` for ever — and since groups are ordered by how often they happen, the one that sits past
+  // the cap is the rare one: a bug resolved while it was frequent that has since recurred ONCE.
+  // That is precisely the case the watermark exists to catch, so the cap silently removed the
+  // feature from the only situation that needed it. `errorDigest.ts` had it right, which is how it
+  // was clear this was an error rather than a decision.
+  const errorGroups = joinState(grouped, await readErrorStates(db, grouped.map((g) => g.key)));
+
+  // Regressed first, then new, then merely known, then done — and within each, the frequent ones.
+  errorGroups.sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || b.count - a.count);
+
+  const errorCounts: Record<string, number> = { new: 0, seen: 0, resolved: 0, regressed: 0 };
+  for (const g of errorGroups) errorCounts[g.status] = (errorCounts[g.status] || 0) + 1;
   let aiToday = 0; const aiTop: { uid: string; count: number }[] = [];
   aiSnap.forEach((d) => { const u = d.data(); if (u.date === today && u.count) { aiToday += u.count; aiTop.push({ uid: d.id, count: u.count }); } });
   aiTop.sort((a, b) => b.count - a.count);
   let notifToday = 0;
   notifSnap.forEach((d) => { const u = d.data(); if (u.date === today) notifToday += u.count || 0; });
   return {
-    errors, errorGroups, errorTotal: errCount,
+    errors, errorGroups, errorCounts, errorTotal: errCount,
     // Says plainly whether the counts above cover the whole log or only its newest slice.
     errorsScanned: scanned.length, errorScanLimit: ERROR_SCAN_LIMIT,
     truncated: aiSnap.size >= 3000 || notifSnap.size >= 3000,
     ai: { today: aiToday, dailyLimitPerUser: AI_DAILY_LIMIT, activeUsers: aiTop.length, top: aiTop.slice(0, 10) },
     notifications: { today: notifToday, dailyLimitPerUser: NOTIF_DAILY_LIMIT },
   };
+});
+
+/**
+ * Move one or more error groups between new / seen / resolved.
+ *
+ * The WATERMARK is computed here, from the log, and never accepted from the caller. It is the whole
+ * mechanism by which a resolved group comes back when it happens again, so a wrong value does not
+ * produce an error anybody would notice — it quietly disables the check, which is the worst kind of
+ * defect this panel could have.
+ */
+export const adminSetErrorStatus = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = await assertAdmin(request);
+  const { fingerprints, status, note } = request.data || {};
+
+  if (!isErrorStatus(status)) {
+    throw new HttpsError("invalid-argument", `status must be one of ${ERROR_STATUSES.join(", ")}`);
+  }
+  const keys = Array.isArray(fingerprints)
+    ? [...new Set(fingerprints.filter((f: unknown): f is string => typeof f === "string" && !!f))]
+    : [];
+  if (keys.length === 0 || keys.length > 100) {
+    throw new HttpsError("invalid-argument", "fingerprints must hold between 1 and 100 keys.");
+  }
+
+  const db = admin.firestore();
+  const snap = await db.collection("errorLogs").orderBy("createdAt", "desc").limit(ERROR_SCAN_LIMIT).get();
+  const scanned = snap.docs.map((d) => {
+    const e = d.data();
+    return { id: d.id, ...e, createdAt: e.createdAt?.toDate?.()?.toISOString?.() || null };
+  });
+  const byKey = new Map(groupErrors(scanned as any).map((g) => [g.key, g]));
+
+  const now = new Date().toISOString();
+  const batch = db.batch();
+  let written = 0;
+
+  for (const key of keys) {
+    const group = byKey.get(key);
+    // A key with nothing behind it is either a stale screen or a typed request. Writing state for a
+    // group that does not exist would leave a row nothing can ever clear.
+    if (!group) continue;
+    batch.set(db.doc(`errorGroups/${groupDocId(key)}`), {
+      schema: 1,
+      fingerprint: key,
+      status,
+      // The newest occurrence known right now. Anything after this refutes a "resolved".
+      watermark: group.lastSeen || now,
+      sample: String(group.sample || "").slice(0, 300),
+      note: typeof note === "string" ? note.slice(0, 500) : null,
+      // Clear the stamps of the status NOT being set. `merge: true` never removes a field, so a
+      // group reopened after being resolved kept its `resolvedAt` and went on reporting a resolve
+      // time it no longer had — a screen quietly describing a state that is over.
+      ...(status === "resolved"
+        ? { resolvedAt: now, resolvedBy: uid, seenAt: null, seenBy: null }
+        : status === "seen"
+          ? { seenAt: now, seenBy: uid, resolvedAt: null, resolvedBy: null }
+          : { seenAt: null, seenBy: null, resolvedAt: null, resolvedBy: null }),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    written++;
+  }
+
+  if (written > 0) await batch.commit();
+  return { ok: true, written, skipped: keys.length - written };
 });
 
 // Full detail for one user (drill-down).

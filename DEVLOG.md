@@ -3739,3 +3739,59 @@ doar din vot. **Autoritatea o da ESLint:** 1 incalcare `rules-of-hooks` in 222 d
 
 `npx tsc -b` verde · **1010 teste** (de la 992) · poarta verde · build verde · functions verde ·
 livrat pe live (`index-kk51C5S1.js`, confirmat byte-identic cu ce s-a construit).
+## 2026-09-14 - Erorile capata stari, iar „rezolvat" trebuie sa fie adevarat
+
+**Model:** Claude Opus 5 · „vreau un sistem de organizare pentru erori... noi / vazute / rezolvate"
+
+### De ce un simplu bulinut n-ar fi fost de ajuns
+
+„Rezolvat" nu e o insemnare despre cum se simte cineva. E o **afirmatie despre cod**: asta nu se mai
+poate intampla. Un steag care inregistreaza doar afirmatia transforma panoul intr-o lista de bifat
+ca sa te simti bine, iar cel mai rapid drum spre un panou gol devine sa marchezi tot ca rezolvat.
+
+Deci un grup rezolvat poarta un **filigran**: momentul celei mai noi aparitii cunoscute atunci cand
+a fost rezolvat. O aparitie de dupa filigran **infirma** afirmatia, si grupul se intoarce singur ca
+**`regressed`** — mai tare decat „nou", fiindca ceva crezut reparat si nereparat e o veste mai
+proasta decat ceva ce n-a citit nimeni. Nimeni nu trebuie sa-si aminteasca sa verifice; asta e tot
+rostul, fiindca o stare care se schimba doar cu mana devine o minciuna in clipa in care atentia
+pleaca in alta parte.
+
+`seen` NU functioneaza la fel: nu afirma nimic despre cod, doar „stiu de asta". O aparitie noua nu-l
+contrazice, deci nu se reseteaza — dar „stiut SI inca se intampla" se arata, ca steag separat. Un
+camp, un inteles.
+
+Starea sta **pe grup**, niciodata pe rand: sa marchezi 74 de randuri ale aceluiasi lucru nu e un
+flux de lucru, iar id-urile randurilor se schimba cand jurnalul se roteste, in timp ce amprenta nu.
+
+### Recenzia adversariala a gasit un defect al meu, serios
+
+Am pus patru recenzenti plus verificare pe diff **inainte de livrare**, fiindcă adminul e punct orb
+la randare. Cinci constatari au supravietuit; cea mai grava era a mea:
+
+Citeam starea pentru primele 200 de grupuri, dar parcurgeam **toate**. De la al 201-lea,
+`stateSnaps[i]` era `undefined` → grupul raporta „new" pe veci. Verificatorul l-a reprodus rulând
+modulele reale: 260 de grupuri, toate `resolved` in baza, panoul arata 200 rezolvate si 60 noi.
+Si fiindca sortarea e dupa frecventa, **exact grupul rezolvat-si-revenit-o-data sta la coada**,
+dincolo de plafon — singurul caz pentru care exista tot mecanismul era cel a carui stare nu se
+citea niciodata. Propriul meu `errorDigest.ts` o facea corect, ceea ce a aratat ca e greseala, nu
+decizie.
+
+Reparatia nu e „mut si plafonul": **am facut defectul nereprezentabil.** `joinState` primeste o
+**cautare dupa cheie**, nu un array paralel. Un index e un fapt despre doua tablouri; o cheie e un
+fapt despre date. Nu mai exista aliniere de gresit. Pinuit cu un test de 260 de grupuri.
+
+Celelalte patru, toate reparate: apelul in masa depasea plafonul de 100 de chei al serverului si
+atunci **nu marca nimic** (acum se taie in bucati); serverul numara cheile sarite iar clientul
+arunca numarul, deci o scriere care nu s-a intamplat arata exact ca una care s-a intamplat (acum se
+spune); `merge: true` pastra `resolvedAt` dupa redeschidere, deci ecranul raporta o ora de rezolvare
+pe care n-o mai avea; si o stare lipsa cadea prin ternarul insignei pe verdele „resolved" —
+un panou care raporta increzator ca totul e in regula.
+
+### Si un canal ca sa nu mai fie nevoie de screenshot
+
+`logErrorDigest` scrie la 6 ore acelasi rezumat, ca o linie JSON, in log-urile de functii — care se
+citesc cu CLI-ul deja autentificat, **fara nicio cheie noua si fara sa faci tu nimic**. Numere, nu
+identitati: fara uid, fara email.
+
+`npx tsc -b` verde · **1036 de teste** (de la 1010) · poarta verde · build verde · functions verde ·
+livrat pe live (functions → rules → hosting).

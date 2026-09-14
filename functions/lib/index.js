@@ -11,7 +11,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.sendDueReminders = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
+exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.logErrorDigest = exports.sendDueReminders = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -26,6 +26,7 @@ const aiLedger_1 = require("./aiLedger");
 const friendship_1 = require("./friendship");
 const notify_1 = require("./notify");
 const errorGrouping_1 = require("./errorGrouping");
+const errorState_1 = require("./errorState");
 const aiProviderError_1 = require("./aiProviderError");
 // Invite links live in their own module — index.ts is already long, and these four are a
 // self-contained feature. Re-exported here because Firebase deploys what index exports.
@@ -42,6 +43,10 @@ Object.defineProperty(exports, "openDirectChat", { enumerable: true, get: functi
 Object.defineProperty(exports, "onDirectMessageCreated", { enumerable: true, get: function () { return directChat_1.onDirectMessageCreated; } });
 var reminders_1 = require("./reminders");
 Object.defineProperty(exports, "sendDueReminders", { enumerable: true, get: function () { return reminders_1.sendDueReminders; } });
+// A daily copy of the health panel into the function logs, which the CLI can read without a
+// key — see functions/src/errorDigest.ts for why that gap was worth closing.
+var errorDigest_1 = require("./errorDigest");
+Object.defineProperty(exports, "logErrorDigest", { enumerable: true, get: function () { return errorDigest_1.logErrorDigest; } });
 admin.initializeApp();
 // App Check enforcement is toggled via env so it can be switched on AFTER the
 // reCAPTCHA key is registered and verified in monitor mode in the Firebase
@@ -1492,6 +1497,28 @@ exports.logClientError = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
 });
 /** How many error rows the health check reads in order to group them. */
 const ERROR_SCAN_LIMIT = 500;
+/** How many state documents to fetch per `getAll`. Chunked so no group is left without its state. */
+const STATE_CHUNK = 300;
+/**
+ * Read the stored state for a set of fingerprints, keyed by fingerprint.
+ *
+ * Returns a lookup rather than an array so the caller has no indices to line up: the defect this
+ * replaces was a slice applied to the refs and not to the groups, which made every group past the
+ * cap report `new` — silently, and worst for the rare recurrences the whole mechanism exists for.
+ */
+async function readErrorStates(db, keys) {
+    const byKey = new Map();
+    const refs = keys.map((k) => db.doc(`errorGroups/${(0, errorState_1.groupDocId)(k)}`));
+    for (let i = 0; i < refs.length; i += STATE_CHUNK) {
+        const snaps = await db.getAll(...refs.slice(i, i + STATE_CHUNK));
+        snaps.forEach((snap, j) => {
+            const data = snap.data();
+            if (data)
+                byKey.set(keys[i + j], data);
+        });
+    }
+    return (key) => byKey.get(key) || null;
+}
 // Health / observability: recent errors + AI & notification usage.
 exports.adminGetHealth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     await assertAdmin(request);
@@ -1513,8 +1540,26 @@ exports.adminGetHealth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
     });
     // Eighty logged errors is rarely eighty problems. The list answers "what happened last"; the
     // groups answer "what is wrong", which is the question somebody opening this screen actually has.
-    const errorGroups = (0, errorGrouping_1.groupErrors)(scanned);
+    const grouped = (0, errorGrouping_1.groupErrors)(scanned);
     const errors = scanned.slice(0, 50);
+    // ── what has already been looked at ─────────────────────────────────────
+    //
+    // The state lives per GROUP, never per row: marking seventy-four rows of one thing is not a
+    // workflow, and the row ids change every time the log rolls over while the fingerprint does not.
+    //
+    // Read state for EVERY group, in chunks. The first version sliced the refs to 200 and then mapped
+    // over all of them, so from the 201st onward `stateSnaps[i]` was undefined and the group reported
+    // `new` for ever — and since groups are ordered by how often they happen, the one that sits past
+    // the cap is the rare one: a bug resolved while it was frequent that has since recurred ONCE.
+    // That is precisely the case the watermark exists to catch, so the cap silently removed the
+    // feature from the only situation that needed it. `errorDigest.ts` had it right, which is how it
+    // was clear this was an error rather than a decision.
+    const errorGroups = (0, errorState_1.joinState)(grouped, await readErrorStates(db, grouped.map((g) => g.key)));
+    // Regressed first, then new, then merely known, then done — and within each, the frequent ones.
+    errorGroups.sort((a, b) => errorState_1.STATUS_RANK[a.status] - errorState_1.STATUS_RANK[b.status] || b.count - a.count);
+    const errorCounts = { new: 0, seen: 0, resolved: 0, regressed: 0 };
+    for (const g of errorGroups)
+        errorCounts[g.status] = (errorCounts[g.status] || 0) + 1;
     let aiToday = 0;
     const aiTop = [];
     aiSnap.forEach((d) => { const u = d.data(); if (u.date === today && u.count) {
@@ -1526,13 +1571,63 @@ exports.adminGetHealth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
     notifSnap.forEach((d) => { const u = d.data(); if (u.date === today)
         notifToday += u.count || 0; });
     return {
-        errors, errorGroups, errorTotal: errCount,
+        errors, errorGroups, errorCounts, errorTotal: errCount,
         // Says plainly whether the counts above cover the whole log or only its newest slice.
         errorsScanned: scanned.length, errorScanLimit: ERROR_SCAN_LIMIT,
         truncated: aiSnap.size >= 3000 || notifSnap.size >= 3000,
         ai: { today: aiToday, dailyLimitPerUser: AI_DAILY_LIMIT, activeUsers: aiTop.length, top: aiTop.slice(0, 10) },
         notifications: { today: notifToday, dailyLimitPerUser: NOTIF_DAILY_LIMIT },
     };
+});
+/**
+ * Move one or more error groups between new / seen / resolved.
+ *
+ * The WATERMARK is computed here, from the log, and never accepted from the caller. It is the whole
+ * mechanism by which a resolved group comes back when it happens again, so a wrong value does not
+ * produce an error anybody would notice — it quietly disables the check, which is the worst kind of
+ * defect this panel could have.
+ */
+exports.adminSetErrorStatus = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    const uid = await assertAdmin(request);
+    const { fingerprints, status, note } = request.data || {};
+    if (!(0, errorState_1.isErrorStatus)(status)) {
+        throw new https_1.HttpsError("invalid-argument", `status must be one of ${errorState_1.ERROR_STATUSES.join(", ")}`);
+    }
+    const keys = Array.isArray(fingerprints)
+        ? [...new Set(fingerprints.filter((f) => typeof f === "string" && !!f))]
+        : [];
+    if (keys.length === 0 || keys.length > 100) {
+        throw new https_1.HttpsError("invalid-argument", "fingerprints must hold between 1 and 100 keys.");
+    }
+    const db = admin.firestore();
+    const snap = await db.collection("errorLogs").orderBy("createdAt", "desc").limit(ERROR_SCAN_LIMIT).get();
+    const scanned = snap.docs.map((d) => {
+        var _a, _b, _c, _d;
+        const e = d.data();
+        return Object.assign(Object.assign({ id: d.id }, e), { createdAt: ((_d = (_c = (_b = (_a = e.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString) === null || _d === void 0 ? void 0 : _d.call(_c)) || null });
+    });
+    const byKey = new Map((0, errorGrouping_1.groupErrors)(scanned).map((g) => [g.key, g]));
+    const now = new Date().toISOString();
+    const batch = db.batch();
+    let written = 0;
+    for (const key of keys) {
+        const group = byKey.get(key);
+        // A key with nothing behind it is either a stale screen or a typed request. Writing state for a
+        // group that does not exist would leave a row nothing can ever clear.
+        if (!group)
+            continue;
+        batch.set(db.doc(`errorGroups/${(0, errorState_1.groupDocId)(key)}`), Object.assign(Object.assign({ schema: 1, fingerprint: key, status, 
+            // The newest occurrence known right now. Anything after this refutes a "resolved".
+            watermark: group.lastSeen || now, sample: String(group.sample || "").slice(0, 300), note: typeof note === "string" ? note.slice(0, 500) : null }, (status === "resolved"
+            ? { resolvedAt: now, resolvedBy: uid, seenAt: null, seenBy: null }
+            : status === "seen"
+                ? { seenAt: now, seenBy: uid, resolvedAt: null, resolvedBy: null }
+                : { seenAt: null, seenBy: null, resolvedAt: null, resolvedBy: null })), { updatedAt: admin.firestore.FieldValue.serverTimestamp() }), { merge: true });
+        written++;
+    }
+    if (written > 0)
+        await batch.commit();
+    return { ok: true, written, skipped: keys.length - written };
 });
 // Full detail for one user (drill-down).
 exports.adminGetUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {

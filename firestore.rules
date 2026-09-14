@@ -483,6 +483,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Which error groups have been looked at or declared fixed. Written only by
+    // `adminSetErrorStatus` (Admin SDK) and read back through `adminGetHealth`, for the same
+    // reason as the log itself: nothing here is a client's business.
+    match /errorGroups/{groupId} {
+      allow read, write: if false;
+    }
+
     // ── Friend Requests ──
     // Readable by the sender or the recipient (matched by uid or email). Any
     // signed-in user may send (must record an honest fromId). Responding
