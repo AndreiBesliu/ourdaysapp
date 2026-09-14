@@ -569,3 +569,13 @@ Andrei alege DOAR CITIRE (14.09), deci rolul de mai jos nu e negociabil in pasii
 - [ ] **§16 Partajeaza un bun cu un grup.** Zero bunuri sunt partajate cu adevarat acum, deci toata
       jumatatea aia a portofelului n-a fost inca probata pe date reale.
 - [ ] **§19 Porneste o conversatie privata.** Zero exista, deci calea aia n-a fost exercitata deloc.
+---
+
+## 29. Butonul „Resolve N fixed" (14.09)
+
+- [ ] **Admin -> Health.** Deasupra listei apare **„Resolve 4 fixed"** (verde). Apasa-l o data.
+- [ ] Trebuie sa scrie dedesubt **cate a rezolvat**, si toate patru sa treaca pe `RESOLVED`.
+- [ ] **Filtrul „Needs attention" trebuie sa ramana gol** dupa aia. Aia e starea normala.
+- [ ] Butonul **dispare** cand nu mai e nimic de aplicat. Nu e un bug.
+- [ ] Daca scrie vreodata **„N refused: the recorded fix did not hold"**, spune-mi imediat —
+      inseamna ca o reparatie de-a mea a picat si sistemul a refuzat s-o marcheze rezolvata.

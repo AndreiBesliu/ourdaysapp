@@ -3917,3 +3917,33 @@ grup** si **16 vechi cu `sharedWithFamily` fara grup** (exact cazul pentru care 
 chihlimbarie) · 0 conversatii private · 11 randuri in clopotel · 3 randuri in `aiLedger`.
 
 `npx tsc -b` verde · 1056 de teste · poarta verde · build verde · livrat pe live.
+## 2026-09-14 - Un singur buton pentru tot ce e deja reparat
+
+**Model:** Claude Opus 5 · ideea lui Andrei: „un buton pe care sa il apas eu, sa se verifice acea
+lista, iar sistemul sa schimbe automat statusul"
+
+Lista de afirmatii decidea deja ce e reparat; clicul pe fiecare rand era reintroducerea manuala a
+unei decizii luate. Acum e un buton: **„Resolve N fixed"**.
+
+**Ce s-a pastrat dinadins.** Omul ramane cel care apasa. Panoul e evidenta LUI, nu afirmatia unui
+script despre propria munca — un sistem care se declara singur reparat n-ar mai fi o evidenta, ar fi
+un ecou. Se elimina repetitia, nu autoritatea.
+
+**Si verificarea se face pe SERVER, nu se ia pe incredere de la ecran.** Un ecran poate fi vechi de
+cateva minute: o afirmatie infirmata intre timp de o aparitie noua n-are voie sa fie aplicata doar
+fiindca browserul inca o crede valida. Modul nou (`onlyIfClaimHolds`) recalculeaza verdictul din date
+proaspete si refuza orice nu e `holding`. Rezolvarea manuala ramane neatinsa — un admin care a reparat
+ceva fara sa scrie o afirmatie tot poate spune asta.
+
+**Si spune ce a facut:** „Resolved 3 group(s) with a fix on record. 1 refused: the recorded fix did
+not hold." Un buton in masa al carui efect nu se vede e unul in care nu mai ai incredere a doua oara.
+
+### Trei greseli de scriptare, toate prinse de garzi
+
+Perechi de inlocuire cu doua elemente unde se asteptau trei; un meta-script rupt de un `U` majuscul
+precedat de backslash dintr-o cale Windows, dupa care scriptul original a rulat din nou si a refuzat
+corect ce era deja aplicat; si acelasi tipar de escape a omorat scriptul de documentatie DUPA ce
+commit-ul de cod plecase — asa ca intrarile astea vin intr-un commit separat. Regula proprie pe care
+o incalcasem: scriptul se scrie in FISIER, nu se conducteaza ca heredoc.
+
+`npx tsc -b` verde · 1056 de teste · poarta verde · build verde · functions verde · livrat pe live.
