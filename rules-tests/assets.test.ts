@@ -24,52 +24,23 @@
 // against the rules WITHOUT reading documents, so a listener whose constraints do not guarantee
 // the rule is rejected whole — and a rejected listener renders as an empty wallet, not an error.
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import {
-  assertFails, assertSucceeds, initializeTestEnvironment,
-  type RulesTestEnvironment,
-} from '@firebase/rules-unit-testing';
+import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import { ALICE, BOB, CAROL, G1, G2, anon, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
 
-const ALICE = 'uid-alice';
-const BOB = 'uid-bob';
-const CAROL = 'uid-carol';
-const G1 = 'group-one';   // Alice and Bob
-const G2 = 'group-two';   // Carol only
-
-let env: RulesTestEnvironment;
-
-beforeAll(async () => {
-  env = await initializeTestEnvironment({
-    projectId: 'demo-ourdays-rules',
-    firestore: {
-      rules: readFileSync(join(__dirname, '..', 'firestore.rules'), 'utf8'),
-      host: '127.0.0.1',
-      port: 8080,
-    },
-  });
-});
-
-afterAll(async () => { await env?.cleanup(); });
+beforeAll(async () => { await startEnv('demo-ourdays-assets'); });
+afterAll(stopEnv);
 
 beforeEach(async () => {
-  await env.clearFirestore();
-  await env.withSecurityRulesDisabled(async (ctx) => {
-    const db = ctx.firestore();
-    await setDoc(doc(db, 'groups', G1), { name: 'Family', members: [ALICE, BOB], ownerId: ALICE });
-    await setDoc(doc(db, 'groups', G2), { name: 'Others', members: [CAROL], ownerId: CAROL });
-
+  await resetWorld();
+  await seed(async (db) => {
     await setDoc(doc(db, 'assets', 'a-private'), { ownerId: ALICE, name: 'Private card' });
     await setDoc(doc(db, 'assets', 'a-shared'), { ownerId: ALICE, name: 'Shared card', sharedGroupId: G1, sharedWithFamily: true });
     await setDoc(doc(db, 'assets', 'a-legacy'), { ownerId: ALICE, name: 'Old card', sharedWithFamily: true });
     await setDoc(doc(db, 'assets', 'a-foreign'), { ownerId: CAROL, name: 'Their card', sharedGroupId: G2, sharedWithFamily: true });
   });
 });
-
-const as = (uid: string) => env.authenticatedContext(uid).firestore();
-const anon = () => env.unauthenticatedContext().firestore();
 
 describe('reading a single asset', () => {
   it('the owner reads their own private asset', async () => {
@@ -185,8 +156,8 @@ describe('revocation', () => {
   it('leaving the group takes the access with it, immediately', async () => {
     await assertSucceeds(getDoc(doc(as(BOB), 'assets', 'a-shared')));
 
-    await env.withSecurityRulesDisabled(async (ctx) => {
-      await updateDoc(doc(ctx.firestore(), 'groups', G1), { members: [ALICE] });
+    await seed(async (db) => {
+      await updateDoc(doc(db, 'groups', G1), { members: [ALICE] });
     });
 
     // This is the whole argument for naming a GROUP rather than keeping a list of user ids:

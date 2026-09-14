@@ -2975,3 +2975,66 @@ n-a trebuit sa rescrie activul, si nu exista fereastra in care cel plecat inca i
 
 Hamul acopera `assets`. Restul colectiilor — `events`, `groups`, `expenses`, `messages`,
 `group_invites`, `profiles` — n-au niciun test de reguli. Acum exista unde sa fie scrise.
+## 2026-09-14 - 88 de teste de reguli, si doua defecte istorice reintroduse ca sa dovedeasca
+
+**Model:** Claude Opus 5 · „continua", dupa hamul de reguli
+
+Hamul acoperea doar `assets`. Acum acopera si `events`, `groups` (cu chatul din ele), `expenses`
+si `group_invites`. **88 de teste pe motorul real**, in patru fisiere, plus un ham comun
+(`rules-tests/_harness.ts`) care descrie o singura lume: Alice detine G1, Bob e in G1, Carol e
+doar in G2, Dave nu e nicaieri.
+
+### De ce fix colectiile astea
+
+Nu sunt alese la intamplare — fiecare are un defect REAL, deja livrat si reparat, care pana azi
+n-avea cum sa fie dovedit ca ramane reparat:
+
+- **`events`** — de trei ori o interogare LIST ale carei constrangeri nu garantau regula (se
+  vedea ca un calendar gol, nu ca o eroare); o ramura de citire `sharedWithFamily == true` fara
+  nicio alta conditie, deci orice cont autentificat putea **citi si ENUMERA** fiecare eveniment cu
+  steagul; si o regula de creare care fixa doar `ownerId`, deci oricine putea scrie un eveniment
+  numind un strain in `assigneeIds` si sa-i apara text arbitrar in calendar.
+- **`groups`** — `update, delete: if uid in members` lasa ORICE membru sa excluda pe oricine
+  altcineva, proprietarul inclusiv, si sa stearga tot grupul cu evenimentele lui.
+- **`expenses`** si **`group_invites`** — aceeasi forma de defect, aceeasi reparatie: se fixeaza
+  campul care spune CINE, ca accesul de citire la un grup sa nu devina scriere in numele altuia.
+
+### Verdele nu e dovada — l-am probat
+
+88 verzi din prima. O suita care nu afirma nimic ar spune exact la fel. Deci am **reintrodus in
+`firestore.rules` doua dintre defectele de mai sus** si am verificat ca suita le numeste:
+
+| defect reintrodus | ce a picat |
+|---|---|
+| ramura `sharedWithFamily == true` la citirea evenimentelor | 2 teste: citirea de catre un strain **si** enumerarea |
+| `true \|\|` in poarta de update a grupurilor | 2 teste: excluderea altuia **si** adaugarea cuiva |
+
+Fisierul de reguli restaurat si verificat prin hash, nu prin `git checkout` — arborele avea munca
+nesalvata.
+
+### Doua lucruri pe care testele le fixeaza dinadins
+
+**Perechi, nu permisiuni.** Fiecare capacitate se afirma de doua ori: cineva care poate si cineva
+care nu. O suita numai cu `assertSucceeds` trece la fel de fericit peste o regula care permite
+orice.
+
+**„Permis" si „chiar intoarce ceva" sunt afirmatii diferite.** Acolo unde conteaza, testul verifica
+si RANDURILE, nu doar ca interogarea a fost acceptata: o regula legala care nu potriveste nimic
+arata pe ecran exact ca una stricata.
+
+### Asimetrii pe care le-am fixat fiindca arata ca scapari
+
+- La `events`, un membru de grup **poate edita** un eveniment care nu-i al lui, dar **nu-l poate
+  sterge**. E intentionat — un calendar partajat in care doar autorul repara o greseala de scris
+  nu e partajat — si acum e scris ca atare.
+- La `groups`, un membru simplu **poate** sa se scoata pe el insusi din lista de membri (aia e
+  „plec"), dar nu poate scoate pe altcineva. A treia ramura a regulii, cea usor de gresit.
+- Un grup fara `ownerId` (dinainte ca el sa fie cerut) **nu poate fi sters de nimeni**, dar poate
+  fi in continuare editat. E directia sigura de esec, si acum e probata.
+
+`npx tsc -b` verde · **818 teste** in suita obisnuita, neschimbat · **88 de teste de reguli** verzi.
+
+### Ramane
+`profiles`, `games`, `notifications`, `friend_requests`, `errorLogs`, `warlord*` si colectiile de
+cost AI. Cele cu `if false` explicit sunt cele mai ieftine de acoperit si cele mai usor de spart
+tacut de un catch-all viitor.
