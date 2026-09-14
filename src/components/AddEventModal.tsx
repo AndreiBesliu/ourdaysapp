@@ -3,6 +3,7 @@ import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckC
 import { addDoc, collection, query, where, updateDoc, doc } from 'firebase/firestore';
 import { liveQuery } from '../utils/liveQuery';
 import { mergeAssets, shareFieldsFor } from '../utils/assetSharing';
+import { localZone, timeFieldsFor } from '../utils/eventTime';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
@@ -60,7 +61,7 @@ const REMINDER_UNIT_TO_MINUTES = { minutes: 1, hours: 60, days: 1440 } as const;
 type ReminderUnit = keyof typeof REMINDER_UNIT_TO_MINUTES;
 
 export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent, initialTemplate, userMap = {}, activeGroupId = 'personal', groups = [] }: AddEventModalProps) {
-  const { language } = useThemeStore();
+  const { language, timezone } = useThemeStore();
   const [title, setTitle] = useState('');
   const [eventDate, setEventDate] = useState<string>('');
   const [description, setDescription] = useState('');
@@ -91,6 +92,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const [rsvpEnabled, setRsvpEnabled] = useState(false);
   const [location, setLocation] = useState('');
   const [reminderMinutes, setReminderMinutes] = useState<number | null>(null);
+  // '' means an all-day event, which is what every event in the app was until now.
+  const [eventTime, setEventTime] = useState<string>('');
   const [customReminder, setCustomReminder] = useState(false);
   const [customReminderValue, setCustomReminderValue] = useState('');
   const [customReminderUnit, setCustomReminderUnit] = useState<ReminderUnit>('minutes');
@@ -208,6 +211,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setRsvpEnabled(!!editEvent.rsvpEnabled);
       setLocation(editEvent.location || '');
       applyReminder(editEvent.reminderMinutes || null);
+      setEventTime(typeof editEvent.time === 'string' ? editEvent.time : '');
     } else if (isOpen && !editEvent) {
       let loadedDraft = false;
       const draftJSON = localStorage.getItem('ourDays_draftEvent');
@@ -233,6 +237,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             if (parsed.rsvpEnabled !== undefined) setRsvpEnabled(parsed.rsvpEnabled);
             if (parsed.location !== undefined) setLocation(parsed.location);
             if (parsed.reminderMinutes !== undefined) applyReminder(parsed.reminderMinutes);
+            if (typeof parsed.eventTime === 'string') setEventTime(parsed.eventTime);
             loadedDraft = true;
           } else {
             localStorage.removeItem('ourDays_draftEvent');
@@ -269,7 +274,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   useEffect(() => {
     if (isOpen && !editEvent) {
       const draft = {
-        title, eventDate, description, checklistItems, categoryId: category.id, color, emoji, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes
+        title, eventDate, eventTime, description, checklistItems, categoryId: category.id, color, emoji, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes
       };
       if (title || description || checklistItems.length > 0) {
         localStorage.setItem('ourDays_draftEvent', JSON.stringify(draft));
@@ -320,7 +325,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             updatedAt: new Date().toISOString(),
             rsvpEnabled: rsvpEnabled,
             location: location,
-            reminderMinutes: reminderMinutes
+            reminderMinutes: reminderMinutes,
+        ...timeFieldsFor(eventTime, timezone || localZone())
           };
 
           await updateDoc(doc(db, 'events', editEvent.id), baseEventData);
@@ -627,7 +633,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         // here fixes all four. Both are always defined ('' and null), so there is no undefined for
         // Firestore to reject.
         location: location,
-        reminderMinutes: reminderMinutes
+        reminderMinutes: reminderMinutes,
+        ...timeFieldsFor(eventTime, timezone || localZone())
       };
 
       if (editEvent) {
@@ -733,12 +740,22 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 relative">
-              <input 
+              <input
                 type="date"
                 value={eventDate}
                 onChange={(e) => setEventDate(e.target.value)}
                 className="text-sm font-medium text-primary bg-primary/10 px-3 py-2 rounded-lg outline-none border-none focus:ring-2 focus:ring-primary/50 cursor-pointer min-w-[140px]"
                 required
+              />
+              {/* Empty is a real answer, not a missing one: it means an all-day event, which is
+                  what every event in this app has been. So no `required`. */}
+              <input
+                type="time"
+                value={eventTime}
+                onChange={(e) => setEventTime(e.target.value)}
+                aria-label={t('eventTimeLabel', language)}
+                title={eventTime ? t('eventTimeLabel', language) : t('eventAllDay', language)}
+                className="text-sm font-medium text-primary bg-primary/10 px-3 py-2 rounded-lg outline-none border-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
               />
               {owner && (
                   <div className="relative">

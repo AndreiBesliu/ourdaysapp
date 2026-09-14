@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { localZone } from './utils/eventTime';
 
 // The chosen language lives in the user's Firestore document, which is only read AFTER sign-in.
 // That left two windows in permanent English for everyone else: the whole login screen, and the
@@ -9,6 +10,9 @@ import { create } from 'zustand';
 // source of truth; this is only what to render before it answers, and it is corrected the moment
 // it does.
 const LANG_KEY = 'ourdays.language';
+// Remembered locally for the same reason the language is: it is needed to render times on
+// the very first paint, before the user document has been read.
+const TZ_KEY = 'ourdays.timezone';
 
 function rememberedLanguage(): string {
   try {
@@ -17,6 +21,21 @@ function rememberedLanguage(): string {
     // Private mode, disabled storage, an embedded webview: none of them are worth a crash at boot.
     return 'en-US';
   }
+}
+
+function rememberedZone(): string {
+  try {
+    return localStorage.getItem(TZ_KEY) || localZone();
+  } catch {
+    return localZone();
+  }
+}
+
+function rememberZone(timezone: string | undefined) {
+  if (!timezone) return;
+  try {
+    localStorage.setItem(TZ_KEY, timezone);
+  } catch { /* private mode */ }
 }
 
 function remember(language: string | undefined) {
@@ -38,6 +57,8 @@ interface ThemeState {
   backgroundOverlay?: number;
   overlayColor?: string | null;
   language?: string;
+  /** IANA zone. Event wall-clock times and reminders are resolved against it. */
+  timezone?: string;
   soundEnabled: boolean;
   hapticsEnabled: boolean;
   setTheme: (color: string, isDark: boolean) => void;
@@ -68,9 +89,11 @@ const DEFAULT_THEME = {
 export const useThemeStore = create<ThemeState>((set) => ({
   ...DEFAULT_THEME,
   language: rememberedLanguage(),
+  timezone: rememberedZone(),
   setTheme: (color, isDark) => set({ primaryColor: color, isDarkMode: isDark }),
   setAdvancedTheme: (theme) => {
     remember(theme.language);
+    rememberZone(theme.timezone);
     set((state) => ({ ...state, ...theme }));
   },
   // The LANGUAGE deliberately survives. It is the one preference that belongs to the device and

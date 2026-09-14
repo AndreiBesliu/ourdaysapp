@@ -23,6 +23,7 @@ const Warlord = lazy(() => import('./screens/Warlord')); // large embedded game 
 const PeriodLog = lazy(() => import('./screens/PeriodLog'));
 import { useThemeStore } from './store';
 import { shouldUseLightText } from './utils/themeContrast';
+import { localZone } from './utils/eventTime';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -177,6 +178,9 @@ function App() {
                 backgroundOverlay: data.backgroundOverlay ?? 50,
                 overlayColor: data.overlayColor || null,
                 language: data.language || 'en-US',
+                // Absent for every account until now. The device's own zone is the only
+                // honest default; Settings can change it.
+                timezone: data.timezone || localZone(),
                 customThemeIsDark: data.customThemeIsDark ?? true,
                 soundEnabled: data.soundEnabled ?? true,
                 hapticsEnabled: data.hapticsEnabled ?? true

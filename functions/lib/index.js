@@ -655,7 +655,7 @@ const OVERRIDE_FIELDS = [
     "title", "description", "date",
     "checklistItems", "isTask", "taskStatus",
     "categoryId", "color", "emoji", "imageUrl",
-    "location", "reminderMinutes", "assetId",
+    "location", "reminderMinutes", "assetId", "time", "timezone",
     "rsvpEnabled", "visibleTo",
 ];
 exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {

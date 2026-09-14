@@ -368,3 +368,24 @@ Măsurate, nu presupuse — le scriu ca să știi unde **nu** trebuie să te ui�
       consumat de primul care ajunge, nu o usa deschisa catre tot grupul de WhatsApp.
       *Consecinta practica:* pentru trei persoane faci trei linkuri. Butonul „Creeaza alt link"
       e chiar sub canalele de trimitere.
+---
+
+## 18. Ora pe evenimente si fusul orar (14.09)
+
+**De ce nu pot eu:** calendarul e in spatele autentificarii.
+
+- [ ] **Adauga un eveniment si pune-i o ora.** Câmpul de ora e lânga cel de data. Redeschide-l:
+      ora trebuie sa fie acolo.
+- [ ] **Iconita de ceas apare acum lânga eveniment** — in grila de calendar si in lista de acasa.
+      **N-a aparut niciodata pâna azi:** codul o desena de mult, dar nimic nu scria vreodata o ora.
+- [ ] **Lasa ora goala** la alt eveniment — ala e „zi intreaga", exact cum erau toate pâna acum, si
+      nu trebuie sa arate niciun ceas.
+- [ ] **Setari → Fus orar.** Trebuie sa fie deja pe zona ta, detectata singura. Schimb-o pe
+      `Europe/London` si uita-te la un eveniment cu ora: trebuie sa arate ora convertita **si** sa
+      spuna zona evenimentului. Pune-o inapoi dupa.
+- [ ] **Evenimentele vechi n-au zona** — se afiseaza exact cum au fost scrise, fara conversie. E
+      intentionat: a le converti cu o presupunere le-ar muta cu ore.
+- [ ] **In toate cele sase limbi**: eticheta de ora si sectiunea de fus orar din Setari.
+
+**Nota:** mementourile **inca nu pornesc**. Asta e felia urmatoare; pâna atunci ora e doar afisata
+si stocata corect.

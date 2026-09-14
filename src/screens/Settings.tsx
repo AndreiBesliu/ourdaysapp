@@ -9,6 +9,7 @@ import { signOut, updateProfile } from 'firebase/auth';
 import { doc, updateDoc, setDoc } from 'firebase/firestore';
 import { liveDoc } from '../utils/liveQuery';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { localZone, zoneChoices, zoneLabel } from '../utils/eventTime';
 
 const THEME_COLORS = [
   { name: 'Blue', value: '221.2 83.2% 53.3%', class: 'bg-blue-500' },
@@ -52,7 +53,7 @@ function hexToHSL(hex: string): string {
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { primaryColor, isDarkMode, customThemeIsDark, backgroundColor, overlayColor, soundEnabled, hapticsEnabled, setTheme, backgroundImage, backgroundOverlay, language, setAdvancedTheme } = useThemeStore();
+  const { primaryColor, isDarkMode, customThemeIsDark, backgroundColor, overlayColor, soundEnabled, hapticsEnabled, setTheme, backgroundImage, backgroundOverlay, language, setAdvancedTheme, timezone } = useThemeStore();
 
   // Only rendered when the derivation DISAGREES with the toggle, or when neither text colour can
   // reach AA on this background — a note that appears always would stop being read.
@@ -305,6 +306,21 @@ export default function Settings() {
                 <option value="es-ES">Español</option>
                 <option value="it-IT">Italiano</option>
                 <option value="de-DE">Deutsch</option>
+              </select>
+            </div>
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('timezoneLabel', language)}</p>
+                <p className="text-sm text-zinc-500">{t('timezoneHint', language)}</p>
+              </div>
+              <select
+                value={timezone || localZone()}
+                onChange={(e) => handleAdvancedThemeUpdate({ timezone: e.target.value })}
+                className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2 max-w-[60%]"
+              >
+                {zoneChoices(timezone || localZone()).map((z) => (
+                  <option key={z} value={z}>{zoneLabel(z)}</option>
+                ))}
               </select>
             </div>
           </div>

@@ -25,6 +25,7 @@ import { useThemeStore } from '../store';
 import { t, getDateLocale } from '../utils/i18n';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { acceptGroupInvite, ADMIN_BOOTSTRAP_EMAILS } from '../serverActions';
+import { displayTime, localZone } from '../utils/eventTime';
 
 export default function CalendarHome() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -56,7 +57,7 @@ export default function CalendarHome() {
   const [isRecurringPanelOpen, setIsRecurringPanelOpen] = useState(false);
   const [pendingFriendCount, setPendingFriendCount] = useState(0);
   const navigate = useNavigate();
-  const { language } = useThemeStore();
+  const { language, timezone } = useThemeStore();
   const dateLocale = getDateLocale(language);
   // Cosmetic gate for the Admin entry (the /admin screen + callables re-check server-side).
   const isAdminEmail = ADMIN_BOOTSTRAP_EMAILS.includes((auth.currentUser?.email || '').toLowerCase());
@@ -1063,7 +1064,7 @@ export default function CalendarHome() {
                         </p>
                         <div className="flex items-center gap-3 mt-1 flex-wrap">
                           {ev.time && (
-                            <span className="text-xs text-zinc-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {ev.time}</span>
+                            <span className="text-xs text-zinc-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {displayTime(ev, timezone || localZone())?.text ?? ev.time}</span>
                           )}
                           {activeGroupId !== 'personal' && userMap && (
                             <div className="flex items-center gap-1">

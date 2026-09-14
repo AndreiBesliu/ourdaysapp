@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useModalBack } from '../hooks/useModalBack';
 import { useThemeStore } from '../store';
 import { getDateLocale, t } from '../utils/i18n';
+import { displayTime, localZone } from '../utils/eventTime';
 
 interface CalendarGridProps {
   currentDate: Date;
@@ -23,7 +24,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
   const [isDayModalOpen, setIsDayModalOpen] = useState(false);
   const [modalDay, setModalDay] = useState<Date | null>(null);
   const [isWeekView, setIsWeekView] = useState(false);
-  const { language } = useThemeStore();
+  const { language, timezone } = useThemeStore();
   const dateLocale = getDateLocale(language);
 
   useModalBack(isDayModalOpen, () => setIsDayModalOpen(false));
@@ -426,7 +427,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                           </p>
                           <div className="flex items-center gap-3 mt-1 flex-wrap">
                             {ev.time && (
-                              <span className="text-xs text-zinc-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {ev.time}</span>
+                              <span className="text-xs text-zinc-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {displayTime(ev, timezone || localZone())?.text ?? ev.time}</span>
                             )}
                             {view !== 'personal' && userMap && (
                               <div className="flex items-center gap-1">

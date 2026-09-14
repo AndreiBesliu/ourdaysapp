@@ -3270,3 +3270,60 @@ JavaScript. De-aia toate celelalte modificari din sesiune sunt fisiere, nu `-c`.
 ### Ce ramane
 Mementourile de eveniment. Nu pornesc pe nicio platforma, si repararea lor e o functie programata
 — nu exista niciuna in proiect inca.
+## 2026-09-14 - Un ceas pe eveniment, si un fus orar pe cont
+
+**Model:** Claude Opus 5 · „direct pe mementouri" → „va trebui sa adaugam un ceas si sa separam
+zilele in ore, si va trebui sa putem selecta fusuri orare"
+
+Am pornit spre mementouri si m-am oprit dupa masuratori: **nu se putea construi unul corect.**
+
+### Blocantul
+
+Evenimentele **n-aveau ora deloc**. Câmpul e `type="date"`, iar salvarea face
+`new Date('2026-09-20').toISOString()` — ceea ce JavaScript citeste ca **miezul noptii UTC**. Deci
+fiecare eveniment din aplicatie statea la 00:00Z, iar „aminteste-mi cu 30 de minute inainte" se
+traducea in 23:30 UTC in ziua precedenta: **02:30 dimineata** in Bucuresti. Interfata ofera minute,
+ore si zile inainte — toate trei promiteau o precizie pe care datele n-o aveau.
+
+**Si e a treia oara in sesiunea asta cu aceeasi forma.** Trei locuri citesc `ev.time`: grila de
+calendar si lista de acasa (amandoua deseneaza o iconita de ceas lânga el) si planificatorul de
+mementouri, care il sparge in ore si minute. **Nimic nu-l scria.** Nu era nici macar in lista alba
+de pe server. Deci ceasul de lânga un eveniment n-a aparut niciodata pentru nimeni.
+
+### Modelul
+
+Un eveniment poarta acum `time` ('HH:mm', absent = zi intreaga) si `timezone` (zona IANA in care a
+fost scrisa ora). `date` ramâne exact ce era — ziua, la miezul noptii UTC — deci fiecare
+interogare, fiecare bucket din grila si toata expandarea recurentei merg mai departe neatinse.
+
+**Zona sta pe EVENIMENT, nu se presupune a cititorului.** „Cina la 19:00" inseamna 19:00 acolo unde
+e cina; cine citeste din alta tara vrea sa stie asta, nu sa vada ora mutata tacut. Randarea spune
+zona doar când difera de a cititorului — „19:00" e ce vrei sa citesti in noua cazuri din zece.
+
+Contul are si el un fus orar, ales in Setari, cu zona dispozitivului ca implicit.
+
+### Conversia, si de ce are doua treceri
+
+Nu e instalata nicio biblioteca de fusuri, iar `date-fns` singur nu stie zone. `Intl` stie, in
+browser si in Node, si e corect la ora de vara fiindca platforma detine regulile. Inversarea lui
+cere **doua** treceri: prima citeste offsetul la instantul GRESIT (ora de perete citita ca si cum
+ar fi UTC), care de doua ori pe an cade de partea cealalta a schimbarii.
+
+### Testele mi-au dat incredere falsa, si am prins-o
+
+Scrisesem doua teste „spring-forward" si le-am probat prin mutatie: **am scos a doua trecere si
+toate cele 33 de teste au ramas verzi.** Testele pretindeau ca fixeaza corectia si nu fixau nimic —
+cele doua treceri difera doar când schimbarea cade **intre** instantul naiv si cel corectat, o
+fereastra de vreo trei ore in jurul comutarii. Ambele teste erau la 23:00, departe.
+
+Cazul care chiar distinge: **02:30 in dimineata schimbarii**. Bucurestiul trece EET(+2) → EEST(+3)
+la 01:00 UTC pe 29.03.2026, deci 03:00–03:59 local nu exista in ziua aia, iar 02:30 e ultima ora pe
+offsetul vechi. O trecere raspunde 23:30Z pe 28 — adica 01:30 local, **cu o ora mai devreme, tacut**.
+Doua treceri raspund 00:30Z, care e 02:30 local, adica ce s-a scris.
+
+Acum mutatia omoara **exact** testul scris pentru ea si lasa celelalte 33 verzi.
+
+`npx tsc -b` verde · functions build verde · **907 teste** (de la 873) · build verde.
+
+### Ce urmeaza
+Felia 2: mementourile — acum au pe ce se sprijini. Felia 3: ziua impartita pe ore.
