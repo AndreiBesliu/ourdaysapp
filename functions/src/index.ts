@@ -11,6 +11,16 @@ import { deriveScope } from "./aiScope";
 import { fetchAssets, fetchChat, fetchEvents, fetchExpenses } from "./aiSources";
 import { dayRangePeriod, monthPeriod, periodDays, isRealDay } from "./period";
 import { charsPerToken, estimateUsdFor, usageOf, withLedger } from "./aiLedger";
+import { readFriendship } from "./friendship";
+
+// Invite links live in their own module — index.ts is already long, and these four are a
+// self-contained feature. Re-exported here because Firebase deploys what index exports.
+// They call `admin.firestore()` only inside their handlers, so the initializeApp() below
+// has always run by the time one of them executes.
+export {
+  createGroupInviteLink, peekGroupInviteLink, redeemGroupInviteLink,
+  revokeGroupInviteLink, listMyInviteLinks,
+} from "./inviteLinks";
 
 admin.initializeApp();
 
@@ -1091,8 +1101,7 @@ export const acceptGroupInvite = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
     }
 
     if (inv.groupId) {
-      const groupRef = db.doc(`groups/${inv.groupId}`);
-      const groupSnap = await tx.get(groupRef);
+      const groupSnap = await tx.get(db.doc(`groups/${inv.groupId}`));
       if (!groupSnap.exists) {
         throw new HttpsError("not-found", "That group no longer exists.");
       }
@@ -1116,9 +1125,25 @@ export const acceptGroupInvite = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
       if (!Array.isArray(members) || !members.includes(inviter)) {
         throw new HttpsError("permission-denied", "Whoever sent this invitation is no longer in the group.");
       }
-
-      tx.update(groupRef, { members: admin.firestore.FieldValue.arrayUnion(uid) });
     }
+
+    // Whoever let you in is the one person in the group you certainly know, so accepting an
+    // invitation also makes you two friends. Read here, in the read phase; applied below with
+    // the other writes, because a transaction may not read after it has written.
+    //
+    // `inv.fromId` rather than the group: a personal invitation carries no group at all, and it
+    // should still make a friendship.
+    const inviterUid = typeof inv.fromId === "string" ? inv.fromId : "";
+    const friendship = await readFriendship(tx, db, inviterUid, uid, {
+      aName: inv.fromName, aEmail: inv.fromEmail, bEmail: email,
+    });
+
+    if (inv.groupId) {
+      tx.update(db.doc(`groups/${inv.groupId}`), {
+        members: admin.firestore.FieldValue.arrayUnion(uid),
+      });
+    }
+    friendship.apply();
     tx.update(inviteRef, { status: "accepted", toId: uid });
     return { status: "accepted", groupId: inv.groupId || null };
   });

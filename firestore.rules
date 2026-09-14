@@ -113,6 +113,21 @@ service cloud.firestore {
     }
 
     // ── Events ──
+    // ── Invite links ──
+    // Bearer invitations, readable by NOBODY from a client.
+    //
+    // The document id IS the secret code, so a client that could read this collection could
+    // enumerate every live invitation in the app. Everything goes through the callables
+    // (createGroupInviteLink / peekGroupInviteLink / redeemGroupInviteLink /
+    // revokeGroupInviteLink / listMyInviteLinks), which run on the Admin SDK and are not
+    // constrained by these rules — so the code is only ever compared server-side.
+    //
+    // Denied EXPLICITLY rather than by the absence of a rule: an absence reads as an oversight,
+    // and the day somebody adds a catch-all these would open with it.
+    match /invite_links/{code} {
+      allow read, write: if false;
+    }
+
     match /events/{eventId} {
       // NO `sharedWithFamily == true` term. It used to be the last branch of this OR, and it
       // had no other condition attached — so ANY signed-in account could read ANY event

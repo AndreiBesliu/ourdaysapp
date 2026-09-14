@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { X, UserPlus, Mail, AlertCircle, CheckCircle2, Share2, Check, Users } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, UserPlus, Mail, AlertCircle, CheckCircle2, Share2, Check, Users, Link2, Copy, QrCode, MessageCircle, Send, Smartphone, Trash2 } from 'lucide-react';
+import QRCode from 'react-qr-code';
 import { db, auth } from '../firebase';
 import { collection, addDoc, doc } from 'firebase/firestore';
 import { reportError } from '../reportError';
@@ -7,8 +8,31 @@ import { liveDoc } from '../utils/liveQuery';
 import { useModalBack } from '../hooks/useModalBack';
 import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
+import {
+  createGroupInviteLink, listMyInviteLinks, revokeGroupInviteLink, type InviteLinkRow,
+} from '../serverActions';
+import {
+  buildMessage, canUseNativeShare, channelHref, fullText, joinUrl,
+  type InviteChannel,
+} from '../utils/inviteShare';
 
 interface Friend { uid: string; name?: string; email?: string }
+/** One channel. Same edges, same padding, same place for the icon, seven times over. */
+function ChannelButton({ onClick, icon, label }: {
+  onClick: () => void; icon: React.ReactNode; label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex flex-col items-center justify-center gap-1 py-2.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+    >
+      {icon}
+      <span className="text-[10px] font-medium leading-none text-center">{label}</span>
+    </button>
+  );
+}
+
 
 interface InviteFamilyModalProps {
   isOpen: boolean;
@@ -26,6 +50,11 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName,
   const [success, setSuccess] = useState('');
   const [friends, setFriends] = useState<Friend[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [linkCode, setLinkCode] = useState<string | null>(null);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showQr, setShowQr] = useState(false);
+  const [myLinks, setMyLinks] = useState<InviteLinkRow[]>([]);
 
   useModalBack(isOpen, onClose);
 
@@ -40,7 +69,10 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName,
   // Reset transient state when the modal opens or the target group changes, so a
   // selection made for one group can't carry over to another.
   useEffect(() => {
-    if (isOpen) { setSelected(new Set()); setError(''); setSuccess(''); setEmail(''); }
+    if (isOpen) {
+      setSelected(new Set()); setError(''); setSuccess(''); setEmail('');
+      setLinkCode(null); setCopied(false); setShowQr(false);
+    }
   }, [isOpen, groupId]);
 
   // Load my friends so I can invite them with one tap.
@@ -51,6 +83,21 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName,
       () => setFriends([]));
     return () => unsub();
   }, [isOpen]);
+
+  // The links already minted for this group, so somebody does not create a fifth one because
+  // they cannot see the four that already work.
+  useEffect(() => {
+    if (!isOpen || !auth.currentUser) return;
+    let cancelled = false;
+    listMyInviteLinks(groupId ?? null)
+      .then((rows) => { if (!cancelled) setMyLinks(rows); })
+      .catch((err) => {
+        // Deliberately silent in the UI: not being able to LIST old links must not stop somebody
+        // creating a new one, which is the thing they came here to do.
+        reportError(err instanceof Error ? err.message : String(err), { context: 'InviteFamilyModal.listLinks' });
+      });
+    return () => { cancelled = true; };
+  }, [isOpen, groupId, linkCode]);
 
   if (!isOpen) return null;
 
@@ -119,13 +166,69 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName,
     }
   };
 
-  const handleShare = async () => {
-    const text = `Hey! I've invited you to join my group "${groupName || 'Group'}" on Our Days.\n\nSign up or log in at https://our-days-2a939.web.app with your email to accept the invite!`;
-    if (navigator.share) {
-      try { await navigator.share({ title: 'Join my group on Our Days', text }); }
-      catch (err) { console.error('Error sharing', err); }
-    } else {
-      navigator.clipboard.writeText(text);
+  const myName = auth.currentUser?.displayName || (auth.currentUser?.email || '').split('@')[0] || '';
+
+  const message = (code: string) => buildMessage({
+    title: t('inviteLinkMessageTitle', language),
+    body: (groupName
+      ? t('inviteLinkMessageBodyGroup', language).replace('{group}', groupName)
+      : t('inviteLinkMessageBody', language)
+    ).replace('{name}', myName),
+    origin: window.location.origin,
+    code,
+  });
+
+  const handleCreateLink = async () => {
+    setLinkBusy(true); setError('');
+    try {
+      const res = await createGroupInviteLink({ groupId: groupId ?? null });
+      setLinkCode(res.code);
+    } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'InviteFamilyModal.createLink' });
+      setError(t('inviteFailed', language));
+    } finally {
+      setLinkBusy(false);
+    }
+  };
+
+  /**
+   * Hand the message to something the sender already has.
+   *
+   * Nothing is sent by us — no provider, no key, no domain to verify, which is the whole reason
+   * these particular channels are the ones on offer.
+   */
+  const send = async (channel: InviteChannel) => {
+    if (!linkCode) return;
+    const m = message(linkCode);
+    if (channel === 'copy') {
+      try {
+        await navigator.clipboard.writeText(fullText(m));
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        reportError(err instanceof Error ? err.message : String(err), { context: 'InviteFamilyModal.copy' });
+        setError(t('inviteFailed', language));
+      }
+      return;
+    }
+    if (channel === 'qr') { setShowQr((v) => !v); return; }
+    if (channel === 'native') {
+      try { await navigator.share({ title: m.title, text: m.text, url: m.url }); }
+      catch { /* the sheet was dismissed; that is not a failure worth reporting */ }
+      return;
+    }
+    const href = channelHref(channel, m);
+    if (href) window.open(href, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleRevoke = async (code: string) => {
+    try {
+      await revokeGroupInviteLink(code);
+      setMyLinks((rows) => rows.map((r) => (r.code === code ? { ...r, revoked: true } : r)));
+      if (code === linkCode) setLinkCode(null);
+    } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'InviteFamilyModal.revoke' });
+      setError(t('inviteFailed', language));
     }
   };
 
@@ -146,6 +249,101 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName,
         </div>
 
         <div className="p-6 space-y-4 overflow-y-auto flex-1">
+          {/* ── Invite with a link ──────────────────────────────────────────────
+              First, and deliberately: this is the one that reaches somebody who has no account
+              and no reason to know which email address to sign up with. The email invitation
+              below it is still the stronger form when you DO know the address, so it stays. */}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col">
+              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-primary" aria-hidden="true" />
+                {t('inviteLinkSection', language)}
+              </p>
+              <p className="text-xs text-zinc-500">{t('inviteLinkHint', language)}</p>
+            </div>
+
+            {!linkCode ? (
+              <button
+                type="button"
+                onClick={handleCreateLink}
+                disabled={linkBusy}
+                className="w-full bg-primary text-white font-semibold py-2.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                {linkBusy ? t('inviteLinkCreating', language) : t('inviteLinkCreate', language)}
+              </button>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <div className="px-3 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
+                  <p className="text-xs font-mono text-zinc-600 dark:text-zinc-300 break-all">
+                    {joinUrl(window.location.origin, linkCode)}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-400 mb-2">{t('inviteSendWith', language)}</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {canUseNativeShare(navigator) && (
+                      <ChannelButton onClick={() => send('native')} icon={<Share2 className="w-4 h-4" />} label={t('inviteChannelNative', language)} />
+                    )}
+                    <ChannelButton onClick={() => send('whatsapp')} icon={<MessageCircle className="w-4 h-4" />} label="WhatsApp" />
+                    <ChannelButton onClick={() => send('email')} icon={<Mail className="w-4 h-4" />} label={t('inviteChannelEmail', language)} />
+                    <ChannelButton onClick={() => send('sms')} icon={<Smartphone className="w-4 h-4" />} label="SMS" />
+                    <ChannelButton onClick={() => send('telegram')} icon={<Send className="w-4 h-4" />} label="Telegram" />
+                    <ChannelButton
+                      onClick={() => send('copy')}
+                      icon={copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                      label={copied ? t('inviteCopied', language) : t('inviteCopyLink', language)}
+                    />
+                    <ChannelButton onClick={() => send('qr')} icon={<QrCode className="w-4 h-4" />} label={t('inviteShowQr', language)} />
+                  </div>
+                </div>
+
+                {showQr && (
+                  <div className="flex justify-center p-4 bg-white rounded-lg">
+                    {/* White ground on purpose, in both themes: a QR code inverted for dark mode
+                        is not reliably readable by phone cameras. */}
+                    <QRCode value={joinUrl(window.location.origin, linkCode)} size={160} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {myLinks.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[10px] uppercase tracking-wider text-zinc-400">{t('inviteLinkActiveLabel', language)}</p>
+                {myLinks.map((row) => (
+                  <div key={row.code} className="flex items-center gap-2 text-xs px-2.5 py-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-800">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-mono text-zinc-500 truncate">{row.code.slice(0, 10)}…</p>
+                      <p className="text-zinc-500">
+                        {t('inviteLinkUsesLabel', language).replace('{used}', String(row.uses)).replace('{max}', String(row.maxUses))}
+                        {row.expiresAt ? ` · ${t('inviteLinkExpiresLabel', language).replace('{date}', new Date(row.expiresAt).toLocaleDateString(language))}` : ''}
+                      </p>
+                    </div>
+                    {row.revoked ? (
+                      <span className="text-zinc-400 shrink-0">{t('inviteLinkRevokedLabel', language)}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleRevoke(row.code)}
+                        aria-label={t('inviteLinkRevoke', language)}
+                        className="p-1.5 text-zinc-400 hover:text-red-500 rounded-md transition-colors shrink-0"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 pt-1">
+              <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-800" />
+              <span className="text-[10px] uppercase tracking-wider text-zinc-400">{t('orInviteByEmail', language)}</span>
+              <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-800" />
+            </div>
+          </div>
+
           {/* Invite friends */}
           {invitableFriends.length > 0 && (
             <div className="space-y-2">
@@ -222,19 +420,9 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName,
           )}
 
           {success && (
-            <div className="flex flex-col gap-3">
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm rounded-lg flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
-                <p>{success}</p>
-              </div>
-              <button
-                type="button"
-                onClick={handleShare}
-                className="w-full flex items-center justify-center gap-2 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors font-medium text-sm"
-              >
-                <Share2 className="w-4 h-4" />
-                {t('shareInvite', language)}
-              </button>
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm rounded-lg flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+              <p>{success}</p>
             </div>
           )}
         </div>

@@ -12,6 +12,7 @@ import CalendarHome from './screens/CalendarHome';
 import Wallet from './screens/Wallet';
 import Settings from './screens/Settings';
 import Friends from './screens/Friends';
+import JoinInvite, { peekPendingInvite } from './screens/JoinInvite';
 import ErrorBoundary from './components/ErrorBoundary';
 import NewVersionNotice from './components/NewVersionNotice';
 import { installGlobalErrorHandlers, reportError } from './reportError';
@@ -268,16 +269,35 @@ function App() {
     );
   }
 
+  // Where to land after signing in. Normally the calendar — but somebody who arrived through
+  // an invitation link and signed up to accept it should come back to the invitation, not to an
+  // empty calendar with no sign that anything happened.
+  //
+  // Reads WITHOUT consuming: React can render a <Navigate> more than once, and a code taken on
+  // the first render would send the second one to the calendar instead. JoinInvite clears it.
+  const pendingJoinPath = () => {
+    const code = peekPendingInvite();
+    return code ? `/join/${encodeURIComponent(code)}` : '/';
+  };
+
   return (
     <ErrorBoundary>
     {/* Outside the router on purpose: a build going stale is not a property of any one route. */}
     <NewVersionNotice />
     <BrowserRouter>
       <Routes>
-        <Route 
-          path="/login" 
-          element={!user ? <Login /> : <Navigate to="/" />} 
+        <Route
+          path="/login"
+          element={!user ? <Login /> : <Navigate to={pendingJoinPath()} />}
         />
+        {/*
+          The ONE route that renders signed out.
+          A link invitation is opened by somebody who may have no account at all — sending them
+          to a login form with no explanation is how an invitation gets closed unread. The screen
+          says who invited them and to what first, using a callable that runs unauthenticated,
+          and asks for an account second.
+        */}
+        <Route path="/join/:code" element={<JoinInvite />} />
         <Route 
           path="/" 
           element={user ? <CalendarHome /> : <Navigate to="/login" />} 

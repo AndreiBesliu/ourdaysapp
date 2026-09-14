@@ -258,3 +258,61 @@ export async function adminBackfillExpenses(apply = false): Promise<{
   const fn = httpsCallable(getFunctions(app), "adminBackfillExpenses");
   return (await fn({ apply })).data as any;
 }
+// ── Invite links ──────────────────────────────────────────────────────────────
+// Bearer invitations that can be sent through any channel. The `invite_links` collection is
+// denied to clients outright (the document id IS the secret code, so a readable collection would
+// be an enumerable list of every live invitation), which is why all five of these are callables.
+
+export interface InviteLinkRow {
+  code: string;
+  groupId: string | null;
+  groupName: string | null;
+  createdAt: number | null;
+  expiresAt: number | null;
+  maxUses: number;
+  uses: number;
+  revoked: boolean;
+}
+
+/** Mint a link. Server clamps `maxUses` and `days` to its own ceilings. */
+export async function createGroupInviteLink(params: {
+  groupId?: string | null; maxUses?: number; days?: number;
+}): Promise<{ code: string; maxUses: number; days: number; groupName: string | null }> {
+  const fn = httpsCallable(getFunctions(app), "createGroupInviteLink");
+  return (await fn(params)).data as any;
+}
+
+/**
+ * What a link is for, WITHOUT redeeming it.
+ *
+ * Deliberately usable before sign-in: the join screen has to say who invited you and to what
+ * before asking you to create an account. It returns only what a poster would carry.
+ */
+export async function peekGroupInviteLink(code: string): Promise<{
+  valid: boolean; reason: string | null; groupName: string | null; invitedBy: string | null;
+}> {
+  const fn = httpsCallable(getFunctions(app), "peekGroupInviteLink");
+  return (await fn({ code })).data as any;
+}
+
+/** Join, and become friends with whoever sent it. Requires a signed-in caller. */
+export async function redeemGroupInviteLink(code: string): Promise<{
+  status: 'accepted' | 'already'; groupId: string | null; groupName: string | null;
+  invitedBy: string; joinedGroup: boolean;
+}> {
+  const fn = httpsCallable(getFunctions(app), "redeemGroupInviteLink");
+  return (await fn({ code })).data as any;
+}
+
+/** Withdraw a link. Redemptions already made stand — this only stops further ones. */
+export async function revokeGroupInviteLink(code: string): Promise<void> {
+  const fn = httpsCallable(getFunctions(app), "revokeGroupInviteLink");
+  await fn({ code });
+}
+
+/** The caller's own links, newest first. */
+export async function listMyInviteLinks(groupId?: string | null): Promise<InviteLinkRow[]> {
+  const fn = httpsCallable(getFunctions(app), "listMyInviteLinks");
+  const res = (await fn({ groupId: groupId ?? null })).data as { links: InviteLinkRow[] };
+  return res.links || [];
+}

@@ -11,7 +11,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = void 0;
+exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -23,6 +23,17 @@ const aiScope_1 = require("./aiScope");
 const aiSources_1 = require("./aiSources");
 const period_1 = require("./period");
 const aiLedger_1 = require("./aiLedger");
+const friendship_1 = require("./friendship");
+// Invite links live in their own module — index.ts is already long, and these four are a
+// self-contained feature. Re-exported here because Firebase deploys what index exports.
+// They call `admin.firestore()` only inside their handlers, so the initializeApp() below
+// has always run by the time one of them executes.
+var inviteLinks_1 = require("./inviteLinks");
+Object.defineProperty(exports, "createGroupInviteLink", { enumerable: true, get: function () { return inviteLinks_1.createGroupInviteLink; } });
+Object.defineProperty(exports, "peekGroupInviteLink", { enumerable: true, get: function () { return inviteLinks_1.peekGroupInviteLink; } });
+Object.defineProperty(exports, "redeemGroupInviteLink", { enumerable: true, get: function () { return inviteLinks_1.redeemGroupInviteLink; } });
+Object.defineProperty(exports, "revokeGroupInviteLink", { enumerable: true, get: function () { return inviteLinks_1.revokeGroupInviteLink; } });
+Object.defineProperty(exports, "listMyInviteLinks", { enumerable: true, get: function () { return inviteLinks_1.listMyInviteLinks; } });
 admin.initializeApp();
 // App Check enforcement is toggled via env so it can be switched on AFTER the
 // reCAPTCHA key is registered and verified in monitor mode in the Firebase
@@ -968,8 +979,7 @@ exports.acceptGroupInvite = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
             return { status: inv.status, groupId: inv.groupId || null };
         }
         if (inv.groupId) {
-            const groupRef = db.doc(`groups/${inv.groupId}`);
-            const groupSnap = await tx.get(groupRef);
+            const groupSnap = await tx.get(db.doc(`groups/${inv.groupId}`));
             if (!groupSnap.exists) {
                 throw new https_1.HttpsError("not-found", "That group no longer exists.");
             }
@@ -992,8 +1002,23 @@ exports.acceptGroupInvite = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
             if (!Array.isArray(members) || !members.includes(inviter)) {
                 throw new https_1.HttpsError("permission-denied", "Whoever sent this invitation is no longer in the group.");
             }
-            tx.update(groupRef, { members: admin.firestore.FieldValue.arrayUnion(uid) });
         }
+        // Whoever let you in is the one person in the group you certainly know, so accepting an
+        // invitation also makes you two friends. Read here, in the read phase; applied below with
+        // the other writes, because a transaction may not read after it has written.
+        //
+        // `inv.fromId` rather than the group: a personal invitation carries no group at all, and it
+        // should still make a friendship.
+        const inviterUid = typeof inv.fromId === "string" ? inv.fromId : "";
+        const friendship = await (0, friendship_1.readFriendship)(tx, db, inviterUid, uid, {
+            aName: inv.fromName, aEmail: inv.fromEmail, bEmail: email,
+        });
+        if (inv.groupId) {
+            tx.update(db.doc(`groups/${inv.groupId}`), {
+                members: admin.firestore.FieldValue.arrayUnion(uid),
+            });
+        }
+        friendship.apply();
         tx.update(inviteRef, { status: "accepted", toId: uid });
         return { status: "accepted", groupId: inv.groupId || null };
     });

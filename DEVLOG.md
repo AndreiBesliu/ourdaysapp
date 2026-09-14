@@ -3038,3 +3038,81 @@ arata pe ecran exact ca una stricata.
 `profiles`, `games`, `notifications`, `friend_requests`, `errorLogs`, `warlord*` si colectiile de
 cost AI. Cele cu `if false` explicit sunt cele mai ieftine de acoperit si cele mai usor de spart
 tacut de un catch-all viitor.
+## 2026-09-14 - Invitatii pe care le poti pune intr-un mesaj de WhatsApp
+
+**Model:** Claude Opus 5 · „vreau sa marim optiunile de invite… pe mail sau whatsapp… daca nu
+necesita setup din partea mea" + „cel care raspunde la invitatie sa fie adaugat automat in lista
+de prieteni a celui care a trimis invitatia"
+
+### Butonul care nu facea nimic
+
+„Share invite" exista deja in modal. Compunea un text **englezesc hardcodat** — „sign up or log in
+… to accept the invite" — si il trimitea. **Nu crea nicio invitatie.** Cine il primea se inscria si
+nu gasea nimic care sa-l astepte. Aceeasi forma exacta ca insigna „Shared" din portofel: un control
+legat de nimic, care arata ca merge.
+
+### De ce a trebuit un lucru nou, nu un buton in plus
+
+Invitatia care exista e adresata unui **email stiut dinainte**, iar `acceptGroupInvite` o onoreaza
+doar daca emailul tau verificat se potriveste. E puternica si **ramane**. Dar nu poate fi trimisa pe
+WhatsApp, fiindca nu exista ce sa trimiti: destinatarul o descopera in aplicatie, dupa ce s-a
+inscris cu exact adresa aia.
+
+Un link de invitatie e compromisul invers. E o **credentiala la purtator** — cine il are il poate
+folosi — ceea ce cumpara exact ce s-a cerut (orice canal, catre cineva fara cont) si costa
+garantia ca doar persoana vizata il foloseste.
+
+Deci riscul e **marginit, nu ignorat**: cod de 128 de biti din CSPRNG (nu se ghiceste si nu se
+enumera) · fiecare link **expira**, iar durata maxima e plafonata pe server · fiecare are un
+**numar de folosiri**, la fel plafonat · creatorul il poate **retrage** · la folosire se
+**reverifica** faptul ca cel care l-a creat e INCA membru al grupului (aceeasi verificare pe care
+`acceptGroupInvite` a invatat-o, si din acelasi motiv: altfel un link creat cat erai membru si
+folosit dupa ce ai fost scos e o usa din dos permanenta) · iar documentele stau intr-o colectie pe
+care clientii **nu o pot citi deloc**. Id-ul documentului E codul, deci o colectie citibila ar fi
+lista enumerabila a fiecarei invitatii vii.
+
+### Canalele, si de ce fix astea
+
+Constrangerea a fost „fara setup din partea mea". Aia elimina orice furnizor care cere cont, cheie
+sau domeniu verificat — SendGrid, Mailgun, Twilio, WhatsApp Business API. Ce ramane e categoria
+care nu cere nimic: **dai textul unei aplicatii pe care expeditorul o are deja**. Nu trimite
+serverul nimic; trimite OMUL.
+
+`navigator.share` e prima fiindca deschide foaia de partajare a sistemului, care listeaza fiecare
+aplicatie de pe telefon ce accepta text — WhatsApp, Telegram, Signal, Messenger, SMS, mail. **Un
+canal care e de fapt toate**, fara nimic de integrat si nimic de intretinut. Butoanele explicite de
+sub ea exista fiindca foaia lipseste pe desktop, si fiindca cine vrea WhatsApp n-ar trebui sa
+treaca printr-un meniu. Plus **cod QR** pentru cand dai invitatia in mana cuiva — `react-qr-code`
+era deja dependinta.
+
+### Prietenia, ceruta explicit
+
+Cine accepta o invitatie devine prieten cu cine a trimis-o, **in aceeasi tranzactie**. Aplicat pe
+AMBELE cai, nu doar pe link: „cel care raspunde la invitatie" le acopera pe amandoua, iar o
+invitatie pe email care nu face prietenie ar fi acum inconsecventa.
+
+Scris ca modul separat, `functions/src/friendship.ts`, fiindca are doua capcane pe care apelantul
+nu le vede: `friends` tine OBIECTE, deci `arrayUnion` nu deduplica (doua acceptari produceau doua
+intrari, iar cea veche pastra un nume invechit pentru totdeauna) — si o tranzactie Firestore nu
+poate citi dupa ce a scris, deci helperul e taiat in doua: `readFriendship` in faza de citire,
+`apply()` in cea de scriere.
+
+### Fisiere
+
+Server: `functions/src/inviteLinks.ts` (5 callable-uri: create / peek / redeem / revoke / list),
+`functions/src/friendship.ts`. Reguli: `invite_links` refuzata EXPLICIT. Trei indecsi compusi.
+Client: `src/utils/inviteShare.ts` (pur, 25 de teste), `src/screens/JoinInvite.tsx`, ruta
+`/join/:code`, modalul rescris. 37 de chei i18n × 6 limbi.
+
+`/join/:code` e **singura ruta care se randeaza deconectat**, si trebuie sa fie: cine deschide
+linkul poate sa n-aiba cont deloc. Spune INTAI ce e invitatia si CINE o trimite — prin
+`peekGroupInviteLink`, care ruleaza neautentificat si intoarce doar ce ar scrie pe o invitatie de
+hartie — si abia apoi cere un cont. Cine aterizeaza pe un formular de login fara explicatie inchide
+tabul.
+
+`npx tsc -b` verde · functions build verde · **843 de teste** (de la 818) · **92 de teste de
+reguli** (de la 88) · build verde.
+
+### Ce nu e livrat inca
+Nimic din asta nu e pe live: cere deploy in ordinea **functions → indecsi → reguli → hosting**,
+fiindca clientul depinde de callable-uri care inca nu exista acolo.

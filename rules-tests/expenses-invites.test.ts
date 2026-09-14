@@ -148,3 +148,40 @@ describe('group invites', () => {
     expect(snap.docs.map((d) => d.id)).toEqual(['i-to-dave']);
   });
 });
+
+describe('invite links are denied to clients outright', () => {
+  it('nobody can read one, even knowing the code', async () => {
+    // The document id IS the secret, so a readable collection would be an enumerable list of
+    // every live invitation. Everything goes through the callables instead.
+    await seed(async (db) => {
+      await setDoc(doc(db, 'invite_links', 'secret-code'), {
+        groupId: G1, createdBy: ALICE, maxUses: 5, uses: 0, revoked: false,
+      });
+    });
+    await assertFails(getDoc(doc(as(ALICE), 'invite_links', 'secret-code')));
+    await assertFails(getDoc(doc(as(DAVE), 'invite_links', 'secret-code')));
+  });
+
+  it('nobody can list them', async () => {
+    await assertFails(getDocs(collection(as(ALICE), 'invite_links')));
+  });
+
+  it('nobody can forge one', async () => {
+    // A client-written link would let somebody mint themselves an unlimited, never-expiring way
+    // into any group id they cared to type.
+    await assertFails(setDoc(doc(as(DAVE), 'invite_links', 'forged'), {
+      groupId: G1, createdBy: DAVE, maxUses: 999, uses: 0, revoked: false,
+    }));
+  });
+
+  it('the creator cannot even edit their own', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'invite_links', 'mine'), {
+        groupId: G1, createdBy: ALICE, maxUses: 1, uses: 1, revoked: false,
+      });
+    });
+    // Withdrawing goes through revokeGroupInviteLink; a direct write could reset `uses`.
+    await assertFails(updateDoc(doc(as(ALICE), 'invite_links', 'mine'), { uses: 0 }));
+    await assertFails(deleteDoc(doc(as(ALICE), 'invite_links', 'mine')));
+  });
+});

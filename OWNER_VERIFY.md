@@ -335,3 +335,34 @@ Măsurate, nu presupuse — le scriu ca să știi unde **nu** trebuie să te ui�
       arate si cardurile pe care grupul le-a partajat cu tine, nu doar pe ale tale.
 - [ ] **Selectorul de partajare in toate cele sase limbi** — eticheta, optiunea „Privat" si textul
       de pe card.
+---
+
+## 17. Invitatii prin link (14.09) — WhatsApp, mail, SMS, QR
+
+**De ce nu pot eu:** cere doua telefoane, doua conturi si aplicatii instalate.
+
+### Inainte de orice
+- [ ] **Butonul vechi „Share invite" a disparut.** Nu e o pierdere: compunea un text englezesc
+      care spunea „inscrie-te si accepta invitatia" **fara sa creeze vreo invitatie**. Cine il
+      primea se inscria si nu gasea nimic.
+
+### De verificat
+- [ ] **Creeaza un link** dintr-un grup, si trimite-l pe **WhatsApp**. Pe telefon, butonul
+      `Distribuie…` trebuie sa deschida foaia sistemului cu toate aplicatiile instalate.
+- [ ] **Deschide linkul pe un telefon unde NU esti conectat.** Trebuie sa vada „X te invita in
+      Y" **inainte** sa i se ceara cont — asta e tot rostul ecranului.
+- [ ] **Fa un cont nou de pe acel link.** Dupa inscriere trebuie sa ajunga **inapoi la invitatie**,
+      nu intr-un calendar gol, si sa intre in grup.
+- [ ] **Verifica prietenia in AMBELE sensuri:** el trebuie sa apara la tine in Prieteni si tu la
+      el. Si trebuie sa primesti o notificare „Invitatie acceptata".
+- [ ] **Acelasi lucru pe invitatia veche, pe email** — acum si aia face prietenie.
+- [ ] **Retrage un link** si verifica faptul ca deschis din nou spune „Invitatia a fost retrasa".
+- [ ] **Foloseste acelasi link de doua ori de pe ACELASI cont** — a doua oara nu trebuie sa
+      consume inca o folosire.
+- [ ] **Codul QR** scanat cu camera altui telefon duce la ecranul de invitatie.
+- [ ] **In toate cele sase limbi** — ecranul de invitatie si sectiunea din modal.
+
+### Ce trebuie sa stii, nu sa verifici
+- [ ] **Un link e la purtator: cine il are, intra.** Daca cineva il da mai departe in alt grup de
+      WhatsApp, acei oameni pot intra pana expira sau pana il retragi. Implicit: **5 folosiri, 7
+      zile**. Spune-mi daca vrei alte valori, sau un comutator „o singura folosire".
