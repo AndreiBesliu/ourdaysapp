@@ -429,3 +429,16 @@ conturi**.
 
 **Limita declarata:** un memento pus cu mai mult de **31 de zile** inainte nu se trimite. Daca ai
 nevoie de mai mult, se ridica — dar costa o cautare mai larga la fiecare rulare.
+---
+
+## 21. Ziua pe ore (14.09)
+
+- [ ] **Sub calendar apare grila pe ore** pentru ziua selectata. Schimbi ziua din calendar, se
+      schimba si ea.
+- [ ] **Un eveniment cu ora** apare in dreptul orei lui. **Doua la aceeasi ora** stau unul langa
+      altul, nu unul peste altul — asta e cazul care conteaza.
+- [ ] **Evenimentele de zi intreaga** apar intr-o banda deasupra grilei, nu la miezul noptii.
+- [ ] **Schimba fusul orar din Setari** pe alt continent: un eveniment cu zona proprie trebuie sa
+      se **mute** in grila si sa arate zona lui sub titlu. Pune-l inapoi dupa.
+- [ ] **O zi goala** scrie „Nimic programat”, nu o grila goala fara explicatie.
+- [ ] **Pe telefon**, grila nu trebuie sa produca derulare pe orizontala.

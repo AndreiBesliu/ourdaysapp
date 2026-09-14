@@ -8,6 +8,7 @@ import { reportError } from '../reportError';
 import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu, ShieldCheck, Swords, ClipboardList, MessageCircle } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import CalendarGrid from '../components/CalendarGrid';
+import DayTimeline from '../components/DayTimeline';
 import AddEventModal from '../components/AddEventModal';
 import EventDetailsModal from '../components/EventDetailsModal';
 import InviteFamilyModal from '../components/InviteFamilyModal';
@@ -882,6 +883,21 @@ export default function CalendarHome() {
           onEventClick={(ev) => setSelectedEvent(ev)}
           onAddEventClick={() => { setEventToEdit(null); setInitialTemplate(null); setIsAddModalOpen(true); }}
         />
+
+        {/* The hour grid for whichever day is selected.
+            Under the month grid rather than replacing it: the month answers "what is this
+            month like" and this answers "what does that day look like", and they are both
+            worth having on screen at once. Events are already expanded by the caller, so
+            recurrence is not the timeline’s business. */}
+        {selectedDate && (
+          <div className="mt-4">
+            <DayTimeline
+              date={selectedDate}
+              events={allCalendarEvents.filter((ev: any) => ev.date && isSameDay(new Date(ev.date), selectedDate))}
+              onEventClick={(ev) => setSelectedEvent(ev)}
+            />
+          </div>
+        )}
 
       </main>
 

@@ -3476,3 +3476,45 @@ niciodata un artefact de checkout Windows.
 
 `npx tsc -b` verde · functions build verde · **950 de teste** (de la 928) · 114 teste de reguli ·
 build verde.
+## 2026-09-14 - Ziua impartita pe ore
+
+**Model:** Claude Opus 5 · „2 si 3”
+
+Grila lunara raspunde „cum arata luna asta”; asta raspunde „cum arata ziua aia” — intrebarea pe care
+ora de pe eveniment o face posibila. Inainte de ceas, fiecare eveniment statea la miezul noptii si
+o grila pe ore ar fi desenat o singura gramada sus. Sta SUB grila lunara, nu in locul ei: amandoua
+merita pe ecran deodata.
+
+### Doua lucruri care se strica tacut, ambele in `dayLayout.ts`
+
+**Pozitia.** Ora stocata e o ora de perete in zona EVENIMENTULUI; grila se deseneaza in zona
+CITITORULUI. Deci se converteste — iar un eveniment fara zona (tot ce s-a salvat inainte de ceas)
+se aseaza la ora scrisa, fiindca o conversie pe baza unei presupuneri l-ar muta cu ore prin zi.
+
+**Suprapunerea.** Doua evenimente la aceeasi ora trebuie sa stea unul langa altul. Desenate unul
+peste altul, cel de dedesubt nu e „greu de vazut” — e **invizibil**, iar nimeni nu raporteaza un bug
+despre un eveniment pe care nu-l vede.
+
+Algoritmul e lacom: fiecare eveniment ia prima coloana libera la ora lui de inceput. Un **grup** e
+un sir de evenimente legate prin suprapunere, si toate blocurile dintr-un grup primesc **acelasi**
+numar de coloane — altfel doua blocuri alaturate s-ar desena la latimi diferite si n-ar mai fi
+aliniate.
+
+**„Se ating” nu inseamna „se suprapun”:** unul care se termina la 10:00 si unul care incepe la 10:00
+impart o granita, nu un minut. Sa-i pun in doua coloane ar injumatati ambele blocuri degeaba.
+**Dovedit prin mutatie:** schimbat `<=` in `<`, pica exact testul de reutilizare a coloanei si raman
+celelalte 21 verzi.
+
+### Detalii care nu se vad, dar se simt
+
+- **Evenimentele de zi intreaga stau DEASUPRA grilei**, nu pe ea. N-au ora; puse la miezul noptii ar
+  citi ca o programare reala la miezul noptii.
+- **Ferestre de ore adaptive:** minimum 07:00–22:00, largita doar daca exista ceva in afara. O grila
+  care arata mereu 00:00–23:00 isi cheltuie toata inaltimea pe ore nefolosite.
+- **Departajare stabila** la evenimente in acelasi minut, altfel isi schimba coloanele la fiecare
+  randare.
+- **Durata e o alegere de AFISARE, nu date.** Nu exista inca `endTime`; fiecare bloc se deseneaza la
+  o lungime nominala si nimic nu se scrie inapoi, deci adaugarea unei ore de final schimba un
+  singur fisier.
+
+`npx tsc -b` verde · **972 de teste** (de la 950) · build verde.
