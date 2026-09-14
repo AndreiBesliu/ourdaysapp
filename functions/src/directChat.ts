@@ -91,8 +91,16 @@ export const openDirectChat = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
   }
 
   // The other person must exist. Otherwise a typo'd uid creates a chat with nobody in it that
-  // still appears in one person's list forever.
-  const other = await db.doc(`profiles/${otherUid}`).get();
+  // still appears in one person's list forever — a stale friend entry or a group membership left
+  // behind by a deleted account would do it, since neither of the checks above proves the other
+  // side is still there.
+  //
+  // Checked against `users`, NOT `profiles`. The profile is a public MIRROR of name and photo that
+  // an account writes for itself when it next signs in, so five of the eight accounts here have no
+  // profile document at all — and every one of them was offered in the "New message" picker and
+  // then refused by this line with "That person could not be found." `users` is the document that
+  // actually says whether somebody exists.
+  const other = await db.doc(`users/${otherUid}`).get();
   if (!other.exists) {
     throw new HttpsError("not-found", "That person could not be found.");
   }

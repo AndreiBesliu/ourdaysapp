@@ -17,6 +17,7 @@ import { t } from '../utils/i18n';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import * as chrono from 'chrono-node';
+import { EVENT_COLORS, eventSwatchClass } from '../utils/eventColors';
 
 interface ChecklistItem {
   id: string;
@@ -212,6 +213,14 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setLocation(editEvent.location || '');
       applyReminder(editEvent.reminderMinutes || null);
       setEventTime(typeof editEvent.time === 'string' ? editEvent.time : '');
+      // Default to the harmless choice, and reset it on every open.
+      //
+      // It used to start as null and was never reset, so two things went wrong at once:
+      // saving without touching the choice fell through to "all occurrences", and a choice
+      // of "all" made once stayed selected for the next event edited in the same session.
+      // Asking for a confirmation was considered and rejected — people click past those.
+      // The fix is that forgetting does the thing you can undo.
+      setEditScope('this');
     } else if (isOpen && !editEvent) {
       let loadedDraft = false;
       const draftJSON = localStorage.getItem('ourDays_draftEvent');
@@ -644,8 +653,12 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
         if (isRecurringInstance && parentId) {
           // Ask user: edit this one or all?
+          // Written as "only an explicit 'all' rewrites the series" rather than "anything that
+          // is not 'this' rewrites the series". The difference is the whole defect: with the test
+          // the other way round, every value the variable could hold except one — including the
+          // null it used to start as — took the destructive path.
           const scope = editScope;
-          if (scope === 'this') {
+          if (scope !== 'all') {
             // The single-occurrence override keeps the ORIGINAL owner, so it's
             // created server-side (clients can only create events they own). The
             // function also adds the exception date to the parent.
@@ -1187,14 +1200,14 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 >
                   {t('defaultCategoryColor', language)}
                 </button>
-                {['red', 'orange', 'amber', 'emerald', 'blue', 'indigo', 'violet', 'fuchsia', 'pink', 'rose'].map((c) => (
+                {EVENT_COLORS.map((c) => (
                   <button
                     key={c}
                     type="button"
                     onClick={() => setColor(c)}
                     className={`w-8 h-8 rounded-full flex items-center justify-center transition-transform ${
                       color === c ? 'scale-110 ring-2 ring-offset-2 dark:ring-offset-zinc-900 ring-zinc-400' : 'hover:scale-105'
-                    } bg-${c}-500`}
+                    } ${eventSwatchClass(c)}`}
                   >
                     {color === c && <div className="w-2 h-2 bg-white rounded-full shadow-sm"></div>}
                   </button>

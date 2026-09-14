@@ -9,7 +9,7 @@ import {
 import { auth } from '../firebase';
 import {
   adminCheck, adminGetStats, adminListProfiles, adminListAdmins, adminSetAdmin,
-  adminGetHealth, adminSetErrorStatus, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
+  adminGetHealth, adminSetErrorStatus, adminGetAiLedger, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
   adminBackfillExpenses,
 } from '../serverActions';
 
@@ -109,6 +109,7 @@ export default function Admin() {
   const [errorFilter, setErrorFilter] = useState<'open' | 'new' | 'seen' | 'resolved' | 'all'>('open');
   const [errorBusy, setErrorBusy] = useState<string | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
+  const [ledger, setLedger] = useState<any>(null);
   const [groups, setGroups] = useState<any[]>([]);
   const [growth, setGrowth] = useState<any>(null);
   const [detail, setDetail] = useState<any>(null); // open user drill-down
@@ -211,8 +212,13 @@ export default function Admin() {
     setLoading(true); setLoadError(false);
     const results = await Promise.allSettled([
       adminGetStats(), adminListProfiles(), adminListAdmins(), adminGetHealth(), adminListGroups(), adminGetGrowth(),
+      // Every AI call writes a ledger row, failures included. Since provider quota refusals stopped
+      // being written to errorLogs, this is the ONLY place they are kept — and it had no screen, so
+      // they were being recorded nowhere anybody looks.
+      adminGetAiLedger(),
     ]);
-    const [s, p, a, h, g, gr] = results;
+    const [s, p, a, h, g, gr, led] = results;
+    if (led.status === 'fulfilled') setLedger(led.value);
     if (s.status === 'fulfilled') setStats(s.value);
     if (p.status === 'fulfilled') setProfiles(p.value.profiles || []);
     if (a.status === 'fulfilled') setAdmins(a.value.admins || []);
@@ -778,6 +784,46 @@ export default function Admin() {
                       {er.stack && <pre className="mt-2 text-[10px] text-zinc-400 whitespace-pre-wrap break-words max-h-24 overflow-y-auto bg-zinc-50 dark:bg-zinc-800/50 rounded p-2">{er.stack}</pre>}
                     </div>
                   ))}
+                </div>
+              )}
+            </Section>
+
+            {/* One row per AI call, failures included. Worth its own section rather than a number
+                on a tile: a cost total tells you how much was spent, and this tells you what for —
+                and, since today, it is the only record of the provider refusing on quota. */}
+            <Section icon={<Activity className="w-4 h-4 text-primary" />} title={`AI calls · ${ledger?.date || 'today'}`}>
+              {(!ledger?.rows || ledger.rows.length === 0) ? (
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 text-center text-sm text-zinc-400">
+                  No AI calls recorded for this day.
+                </div>
+              ) : (
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
+                  <div className="flex items-center gap-3 px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 text-[11px] text-zinc-500">
+                    <span className="flex-1">{ledger.rows.length} call(s)</span>
+                    <span>{ledger.rows.filter((r: any) => r.ok === false).length} failed</span>
+                    <span className="tabular-nums">
+                      ${ledger.rows.reduce((t: number, r: any) => t + (r.costUsd || 0), 0).toFixed(4)}
+                    </span>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {ledger.rows.map((r: any) => (
+                      <div key={r.id} className="flex items-center gap-2 px-3 py-2 text-[11px]">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${r.ok === false ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                        <span className="font-medium text-zinc-700 dark:text-zinc-300 w-36 truncate">{r.feature}</span>
+                        <span className="text-zinc-400 w-40 truncate">{r.model}</span>
+                        {/* The reason, not just the fact. `http-429` is the quota refusal that used
+                            to fill three quarters of the error log. */}
+                        <span className="flex-1 text-red-500 truncate">{r.ok === false ? (r.errorCode || 'failed') : ''}</span>
+                        <span className="text-zinc-400 tabular-nums">{(r.promptTokens || 0) + (r.completionTokens || 0)} tok</span>
+                        <span className="text-zinc-500 tabular-nums w-16 text-right">${(r.costUsd || 0).toFixed(4)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {ledger.truncated && (
+                    <p className="px-3 py-2 text-[11px] text-zinc-400 border-t border-zinc-100 dark:border-zinc-800">
+                      More rows exist than are shown.
+                    </p>
+                  )}
                 </div>
               )}
             </Section>

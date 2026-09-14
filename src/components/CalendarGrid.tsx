@@ -7,6 +7,7 @@ import { useModalBack } from '../hooks/useModalBack';
 import { useThemeStore } from '../store';
 import { getDateLocale, t } from '../utils/i18n';
 import { displayTime, localZone } from '../utils/eventTime';
+import { eventColorClass } from '../utils/eventColors';
 
 interface CalendarGridProps {
   currentDate: Date;
@@ -243,7 +244,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
 
                 let colorClass = 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800';
                 if (ev.color) {
-                  colorClass = `text-${ev.color}-500 bg-${ev.color}-50 dark:bg-${ev.color}-500/10`;
+                  colorClass = eventColorClass(ev.color, colorClass);
                 } else {
                   switch (ev.categoryId) {
                     case 'work': colorClass = 'text-blue-500 bg-blue-50 dark:bg-blue-500/10'; break;
@@ -390,7 +391,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
 
                     let colorClass = 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800';
                     if (ev.color) {
-                      colorClass = `text-${ev.color}-500 bg-${ev.color}-50 dark:bg-${ev.color}-500/10`;
+                      colorClass = eventColorClass(ev.color, colorClass);
                     } else {
                       switch (ev.categoryId) {
                         case 'work': colorClass = 'text-blue-500 bg-blue-50 dark:bg-blue-500/10'; break;

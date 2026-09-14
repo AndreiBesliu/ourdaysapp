@@ -27,6 +27,7 @@ import { t, getDateLocale } from '../utils/i18n';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { acceptGroupInvite, ADMIN_BOOTSTRAP_EMAILS } from '../serverActions';
 import { displayTime, localZone } from '../utils/eventTime';
+import { eventColorClass } from '../utils/eventColors';
 
 export default function CalendarHome() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -1028,7 +1029,7 @@ export default function CalendarHome() {
                   let colorClass = 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800';
 
                   if (ev.color) {
-                    colorClass = `text-${ev.color}-500 bg-${ev.color}-50 dark:bg-${ev.color}-500/10`;
+                    colorClass = eventColorClass(ev.color, colorClass);
                   } else {
                     switch (ev.categoryId) {
                       case 'work': Icon = Briefcase; colorClass = 'text-blue-500 bg-blue-50 dark:bg-blue-500/10'; break;

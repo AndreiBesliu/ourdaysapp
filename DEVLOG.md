@@ -4000,3 +4000,72 @@ esueze tacut.
 
 `npx tsc -b` verde · **1064 de teste** (de la 1056) · poarta verde · build verde · livrat pe live,
 cheia moarta confirmata disparuta din bundle.
+## 2026-09-14 - Cinci reparatii din auditul de defecte tacute
+
+**Model:** Claude Opus 5 · „1, nu vreau confirmare, userii mai uita sa confirme. 3-6 poti sa le rezolvi"
+
+### 1. Editarea unei serii: uitarea ducea la distrugere
+
+`editScope` pornea `null` si **nu se reseta niciodata**. Doua consecinte deodata: salvarea fara sa
+atingi alegerea cadea pe `else` si **rescria toata seria**; iar un „toate" ales o data ramanea ales
+pentru urmatorul eveniment editat in aceeasi sesiune.
+
+Andrei a respins explicit confirmarea — „userii mai uita sa confirme" — si are dreptate: o
+confirmare e un lucru pe langa care se apasa. Asa ca reparatia e alta: **implicitul e cel sigur**
+(`'this'`, setat la fiecare deschidere, ceea ce il si reseteaza), iar ramura a fost **inversata**:
+`if (scope !== 'all')`. Diferenta e tot defectul — scris invers, orice valoare in afara de una,
+inclusiv `null`-ul de la care pornea, lua calea distructiva.
+
+### 3. Trei culori nu existau deloc
+
+Selectorul oferea zece; **portocaliu, fucsia si roz nu produceau nicio culoare**. Nu alta culoare —
+niciuna. Cauza nu e CSS lipsa, ci ca **toate zece** se construiau dintr-o variabila:
+`` `text-${ev.color}-500` ``. Tailwind genereaza CSS scanand **siruri literale**; nu vede prin
+template. Sapte mergeau **din accident**, fiindca exact acele siruri apar altundeva in aplicatie.
+
+Masurat in `dist/assets/index-*.css` inainte: 7 prezente, 3 absente. Dupa: 10 din 10.
+
+`src/utils/eventColors.ts` e o harta plictisitor de repetitiva, si aia e toata ideea — o versiune
+mai scurta care ar compune sirurile ar fi exact bugul. **Testul citeste sursa modulului** si cere ca
+fiecare clasa sa apara literal, fiindca un refactor destept ar trece de toate celelalte teste si ar
+reintroduce defectul. *Testul a picat intai pe propriul meu comentariu, care citeaza linia
+defecta ca explicatie — verifica acum codul, nu proza.*
+
+### 4. Preferintele nu se restaurau pentru conturile facute prin inregistrare
+
+`Login.tsx` scria `theme: { primaryColor, isDarkMode }` **imbricat**, si nimic n-a citit vreodata
+forma aia. Poarta din `App.tsx` cerea campurile de **nivel superior**, deci era falsa pentru fiecare
+cont creat prin inregistrare — iar inauntrul ei stateau sunetul, haptics, fundalurile **si fusul
+orar pe care l-am hidratat azi**. Sunetul n-are nicio legatura cu alegerea unei culori; n-avea ce
+cauta in spatele ei.
+
+Acum se restaureaza neconditionat. **N-am adoptat culoarea imbricata** si merita spus de ce: e un
+hex (`#3b82f6`), iar valoarea se atribuie direct lui `--primary`, pe care Tailwind il consuma ca
+`hsl(var(--primary))` — un hex acolo ar da `hsl(#3b82f6)` si ar strica accentul peste tot. Campul
+era greutate moarta in formatul gresit; Login nu-l mai scrie.
+
+### 5. „Mesaj nou" oferea oameni pe care serverul ii refuza
+
+`openDirectChat` verifica existenta omului in `profiles/{uid}` — dar aia e o **oglinda publica** pe
+care un cont si-o scrie singur abia la urmatoarea autentificare. Censusul: **3 documente `profiles`
+la 8 conturi.** Deci cinci oameni erau oferiti in selector si apoi refuzati cu „That person could not
+be found." Verificarea se face acum pe `users/{uid}`, documentul care chiar spune daca cineva exista.
+
+### 6. Ledgerul AI n-avea ecran — gol facut chiar azi
+
+Callable-urile existau, `serverActions.ts` le impacheta, si **nicio componenta nu le importa**. Cum
+azi am mutat refuzurile de cota din `errorLogs` in ledger, ledgerul devenise **singurul** loc unde se
+tin — si era invizibil. Are acum sectiune in Health: un rand pe apel, cu motivul esecului
+(`http-429`), tokeni si cost.
+
+### 2, neatins
+
+Andrei a cerut explicatia, nu reparatia. I-am dat-o masurat: o serie saptamanala cu 9 aparitii
+devine 3 daca deschizi apariția din 14 septembrie si salvezi „toate". Reparatia propusa — „toate din
+serie" sa schimbe proprietatile si sa NU atinga data de inceput — asteapta acordul lui.
+
+`npx tsc -b` verde · **1072 de teste** (de la 1064) · poarta verde · build verde · functions verde ·
+livrat pe live si verificat (chunk byte-identic, cele trei culori prezente in CSS-ul servit).
+
+*Nota de metoda: prima sondare a chunk-ului de admin mi-a intors HTML — cache de margine dinainte de
+livrare. A doua oara azi. Sondarea unui fisier proaspat livrat cere parametru anti-cache.*

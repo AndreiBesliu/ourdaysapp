@@ -597,3 +597,20 @@ Toate notificarile push trimise vreodata au sarit fiecare destinatar.
       sfarsit un token. Abia atunci pune-ti un memento peste 10 minute si asteapta sa sune telefonul.
 - [ ] **Pana atunci:** clopotelul din aplicatie functioneaza si a functionat mereu. Doar push-ul pe
       telefon lipsea.
+---
+
+## 31. Cele cinci reparatii din audit (14.09)
+
+- [ ] **Eveniment recurent:** deschide o apariție, schimba titlul, **salveaza fara sa atingi**
+      alegerea „aceasta / toate". Trebuie sa se schimbe **doar acea apariție**. Inainte rescria
+      toata seria.
+- [ ] Apoi editeaza **alt** eveniment recurent: alegerea trebuie sa fie iar pe „aceasta", nu sa fi
+      ramas pe ce ai ales data trecuta.
+- [ ] **Culorile:** pune unui eveniment **portocaliu**, altuia **fucsia**, altuia **roz**. Trebuie
+      sa se coloreze. Pana azi cele trei nu produceau nicio culoare, nici pe bulina din selector.
+- [ ] **Sunet si vibratii:** daca ai contul facut prin inregistrare (nu Google), schimba-le in
+      Setari, iesi si intra din nou. Trebuie sa ramana schimbate.
+- [ ] **Chat → Mesaj nou:** alege pe cineva care n-a mai intrat de mult in aplicatie. Trebuie sa se
+      deschida conversatia, nu „That person could not be found".
+- [ ] **Admin → Health → „AI calls":** sectiune noua, un rand pe apel. Azi ar trebui sa fie goala
+      sau cu putine randuri. Cand se atinge cota, apare rosu cu `http-429`.

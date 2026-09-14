@@ -166,26 +166,41 @@ function App() {
             // Settings writes neither top-level field. Once the language is also remembered in
             // localStorage, that gate turned a stale preference into one account inheriting the
             // previous account's language on a shared device.
-            setAdvancedTheme({ language: data.language || 'en-US' });
+            // Everything that is NOT the accent colour, restored unconditionally.
+            //
+            // All of this used to live inside the `if` below, and that condition is false for every
+            // account created through signup: Login.tsx writes `theme: { primaryColor, isDarkMode }`
+            // NESTED, and nothing has ever read that shape, so neither top-level field exists. Those
+            // accounts silently lost their sound, haptics, background AND time zone on every single
+            // sign-in — including the time-zone hydration added earlier today, which was sitting in
+            // the dead branch. Sound has nothing to do with having picked a colour; it should never
+            // have been gated on one.
+            setAdvancedTheme({
+              language: data.language || 'en-US',
+              backgroundImage: data.backgroundImage || null,
+              backgroundColor: data.backgroundColor || null,
+              backgroundStyle: data.backgroundStyle || 'stretch',
+              backgroundOverlay: data.backgroundOverlay ?? 50,
+              overlayColor: data.overlayColor || null,
+              // The device's own zone is the only honest default; Settings can change it.
+              timezone: data.timezone || localZone(),
+              customThemeIsDark: data.customThemeIsDark ?? true,
+              soundEnabled: data.soundEnabled ?? true,
+              hapticsEnabled: data.hapticsEnabled ?? true,
+            });
+
+            // The accent colour still needs one, because there is no honest default to restore.
+            //
+            // The nested `theme.primaryColor` that signup writes is deliberately NOT adopted here:
+            // it holds a hex string ('#3b82f6') while this value is assigned straight to the
+            // `--primary` custom property, which Tailwind consumes as `hsl(var(--primary))`. Feeding
+            // it a hex would produce `hsl(#3b82f6)` and break the accent everywhere. That field is
+            // dead weight in the wrong format, and Login no longer writes it.
             if (data.primaryColor || data.isDarkMode !== undefined) {
               setTheme(
                 data.primaryColor || '221.2 83.2% 53.3%',
                 data.isDarkMode !== undefined ? data.isDarkMode === true : true
               );
-              setAdvancedTheme({
-                backgroundImage: data.backgroundImage || null,
-                backgroundColor: data.backgroundColor || null,
-                backgroundStyle: data.backgroundStyle || 'stretch',
-                backgroundOverlay: data.backgroundOverlay ?? 50,
-                overlayColor: data.overlayColor || null,
-                language: data.language || 'en-US',
-                // Absent for every account until now. The device's own zone is the only
-                // honest default; Settings can change it.
-                timezone: data.timezone || localZone(),
-                customThemeIsDark: data.customThemeIsDark ?? true,
-                soundEnabled: data.soundEnabled ?? true,
-                hapticsEnabled: data.hapticsEnabled ?? true
-              });
             }
           }
 

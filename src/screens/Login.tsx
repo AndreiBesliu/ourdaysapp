@@ -51,8 +51,7 @@ export default function Login() {
           await setDoc(doc(db, 'users', userCredential.user.uid), {
             name,
             email,
-            createdAt: new Date(),
-            theme: { primaryColor: '#3b82f6', isDarkMode: false }
+            createdAt: new Date()
           });
         } catch (dbErr) {
           console.error("Failed to create user doc:", dbErr);
@@ -91,8 +90,7 @@ export default function Login() {
           await setDoc(userDocRef, {
             name: result.user.displayName || 'User',
             email: result.user.email,
-            createdAt: new Date(),
-            theme: { primaryColor: '#3b82f6', isDarkMode: false }
+            createdAt: new Date()
           });
         }
       } catch (dbErr) {
