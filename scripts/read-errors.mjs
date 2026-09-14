@@ -155,7 +155,7 @@ groups.forEach((g, i) => {
     : g.status === 'new' ? 'new' : g.status === 'seen' ? 'seen' : 'resolved';
   console.log(`  #${i + 1}  ${String(g.count).padStart(4)}×  [${tag}]${g.recurred && g.status !== 'regressed' ? ' (still happening)' : ''}`);
   console.log(`        ${g.sample.slice(0, 150)}`);
-  console.log(`        ${g.context || '—'} · ${g.people} ${g.people === 1 ? 'person' : 'people'} · ${day(g.firstSeen)} → ${day(g.lastSeen)}${g.urls?.length ? ` · ${g.urls.join(', ')}` : ''}`);
+  console.log(`        ${g.context || '—'} · ${g.users} ${g.users === 1 ? 'person' : 'people'} · ${day(g.firstSeen)} → ${day(g.lastSeen)}${g.urls?.length ? ` · ${g.urls.join(', ')}` : ''}`);
   console.log('');
 });
 
