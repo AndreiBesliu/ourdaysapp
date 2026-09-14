@@ -3327,3 +3327,44 @@ Acum mutatia omoara **exact** testul scris pentru ea si lasa celelalte 33 verzi.
 
 ### Ce urmeaza
 Felia 2: mementourile — acum au pe ce se sprijini. Felia 3: ziua impartita pe ore.
+
+## 2026-09-14 - Panoul de chat serveste si o conversatie privata, si accepta un screenshot lipit
+
+**Model:** Claude Opus 5 · „Continua cu panoul” + „in chat vreau sa pot da paste la un screenshot”
+
+### Parametrizare, nu extragere — si de ce
+
+Planuisem sa scot panoul de mesaje din componenta de 1066 de linii. **N-am facut-o.** A scoate un
+panou dintr-un fisier pe care nu l-am citit cap-coada e riscul gresit pentru ce s-a cerut de fapt:
+un tab de chat care merge.
+
+Componenta primeste acum `convId` + `convKind` si construieste **o singura** cale, `basePath`. Toate
+cele 13 folosiri de cale vin din ea, deci un grup si o conversatie privata difera intr-o singura
+linie. Redenumirea si extragerea propriu-zisa vin separat, dupa ce ecranul e dovedit.
+
+Plus `embedded`: fara pozitionare fixa, fara butonul flotant, mereu deschis, umple ce i se da —
+forma de care are nevoie ecranul. Rezumatul AI ramane doar pentru grupuri: o conversatie in doi
+n-are grup de rezumat.
+
+**Capcana numarata gresit:** credeam 7 folosiri ale caii de mesaje, erau 9. Scriptul a refuzat si
+n-a scris nimic, fiindca scrierea e la final. Numaratoarea din `grep` nu e numaratoarea din fisier.
+
+### Lipirea unui screenshot
+
+Mica, fiindca drumul de incarcare exista deja: alegerea unui fisier seteaza `imageFile` si
+`imagePreview`, iar restul compozitorului le ia de acolo. Lipirea trebuie doar sa produca aceleasi
+doua valori din clipboard. Trei lucruri care nu-s evidente:
+
+- **Clipboardul poarta mai multe reprezentari** ale aceleiasi lipiri; un screenshot copiat dintr-un
+  browser vine de obicei intai ca HTML si abia apoi ca imagine. Deci se cauta primul element care
+  **este** imagine, nu primul element.
+- **`preventDefault` doar dupa ce s-a gasit o imagine.** Lipirea de text obisnuit trebuie sa mearga
+  mai departe; s-o inghit ar fi un bug mai suparator decat cel reparat.
+- **Un screenshot lipit n-are nume** — `getAsFile()` il cheama „image.png” pentru toata lumea. Fara
+  redenumire cu timestamp, doua screenshoturi in aceeasi conversatie nimeresc aceeasi cale in
+  Storage si al doilea il suprascrie tacut pe primul.
+
+`npx tsc -b` verde · **907 teste** · build verde.
+
+### Ce urmeaza
+Ecranul: doua panouri pe desktop, fullscreen cu panou de conversatii pe telefon.

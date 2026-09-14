@@ -13,11 +13,27 @@ import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
 
 
+export type ConversationKind = 'group' | 'chat';
+
 interface GroupChatWidgetProps {
-  groupId: string;
-  groupName: string;
+  /** Group id, or direct-chat id. */
+  convId: string;
+  /**
+   * Which collection it lives in. A direct chat is deliberately NOT a two-person group — see
+   * `functions/src/directChat.ts` — but its message subcollection has the same shape, so
+   * everything below this line is identical for both.
+   */
+  convKind: ConversationKind;
+  title: string;
   userMap: Record<string, any>;
-  groupMembers?: string[];
+  members?: string[];
+  /**
+   * Render inside a screen instead of as a floating widget: no fixed positioning, no launcher
+   * button, always open, filling whatever it is put in.
+   */
+  embedded?: boolean;
+  /** Shown as a back/close control when embedded (the mobile chat view uses it). */
+  onClose?: () => void;
 }
 
 // Audio Player sub-component for voice messages
@@ -76,9 +92,16 @@ function AudioPlayer({ src, isMe }: { src: string; isMe: boolean }) {
   );
 }
 
-export default function GroupChatWidget({ groupId, groupName, userMap, groupMembers = [] }: GroupChatWidgetProps) {
+export default function GroupChatWidget({
+  convId, convKind, title, userMap, members = [], embedded = false, onClose,
+}: GroupChatWidgetProps) {
+  // One place the collection is chosen. Every path below is built from this, so a direct chat and
+  // a group differ in exactly one line.
+  const basePath = convKind === 'group' ? `groups/${convId}` : `chats/${convId}`;
   const { language } = useThemeStore();
   const [isOpen, setIsOpen] = useState(false);
+  // Embedded in a screen there is nothing to open or close: the pane IS the screen.
+  const open = embedded || isOpen;
   const [messages, setMessages] = useState<any[]>([]);
   const [chatLoadError, setChatLoadError] = useState(false);
   // The recorded blob lives in a ref and nowhere else. Losing it is losing the message, so a
@@ -123,13 +146,13 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
   // Other members in the group (excluding me)
-  const otherMemberIds = groupMembers.filter(id => id !== auth.currentUser?.uid);
+  const otherMemberIds = members.filter(id => id !== auth.currentUser?.uid);
 
   useEffect(() => {
-    if (!groupId) return;
+    if (!convId) return;
 
     const q = query(
-      collection(db, `groups/${groupId}/messages`),
+      collection(db, `${basePath}/messages`),
       orderBy('createdAt', 'asc')
     );
 
@@ -139,7 +162,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
       setChatLoadError(false);
       setMessages(fetchedMessages);
 
-      if (!isOpen) {
+      if (!open) {
         const unread = fetchedMessages.filter(m =>
           m.createdAt &&
           m.createdAt.toMillis() > lastRead &&
@@ -153,7 +176,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     }, () => setChatLoadError(true));
 
     // Listen to typing status
-    const typingQuery = query(collection(db, `groups/${groupId}/typing`));
+    const typingQuery = query(collection(db, `${basePath}/typing`));
     // Typing dots are the one listener here with nothing to show on failure: an absent dot and a
     // broken dot look the same to a reader and neither is a lie. It still reports, so the pattern
     // stays uniform and the admin log sees it if the whole subcollection is denied.
@@ -168,11 +191,11 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
       unsubscribe();
       unsubTyping();
     };
-  }, [groupId, isOpen]);
+  }, [convId, open]);
 
   // Mark messages as seen when chat opens
   useEffect(() => {
-    if (!isOpen || !auth.currentUser || messages.length === 0) return;
+    if (!open || !auth.currentUser || messages.length === 0) return;
 
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     setUnreadCount(0);
@@ -188,13 +211,13 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     if (unseen.length > 0) {
       const batch = writeBatch(db);
       unseen.forEach(m => {
-        batch.update(doc(db, `groups/${groupId}/messages`, m.id), {
+        batch.update(doc(db, `${basePath}/messages`, m.id), {
           seenBy: arrayUnion(myUid)
         });
       });
       batch.commit().catch(console.error);
     }
-  }, [messages, isOpen]);
+  }, [messages, open]);
 
   // ESC key: cancel editing or replying
   useEffect(() => {
@@ -212,11 +235,42 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [editingMsg, replyingTo]);
 
+  const attachImage = (file: File) => {
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+    attachImage(file);
+  };
+
+  /**
+   * Ctrl+V a screenshot into the message box.
+   *
+   * The clipboard carries several representations of one paste, so this looks for the first item
+   * that IS an image rather than assuming `items[0]` — a screenshot copied out of a browser
+   * usually arrives as HTML first and the picture second.
+   *
+   * `preventDefault` only when an image was actually found: pasting ordinary text has to keep
+   * working, and swallowing it would be a far more annoying bug than the one being fixed.
+   *
+   * A pasted screenshot has no filename — `getAsFile()` names it "image.png" for everybody — so
+   * it is renamed with a timestamp. Without that, two screenshots in one conversation land on the
+   * same Storage path and the second silently overwrites the first.
+   */
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const imageItem = items.find((item) => item.kind === 'file' && item.type.startsWith('image/'));
+    if (!imageItem) return;
+
+    const file = imageItem.getAsFile();
+    if (!file) return;
+
+    e.preventDefault();
+    const ext = (file.type.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '');
+    attachImage(new File([file], `pasted_${Date.now()}.${ext}`, { type: file.type }));
   };
 
   const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -225,14 +279,14 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     if (!auth.currentUser) return;
     
     // Set typing to true
-    setDoc(doc(db, `groups/${groupId}/typing`, auth.currentUser.uid), {
+    setDoc(doc(db, `${basePath}/typing`, auth.currentUser.uid), {
       updatedAt: serverTimestamp()
     }).catch(console.error);
 
     // Clear typing after 3 seconds of inactivity
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      deleteDoc(doc(db, `groups/${groupId}/typing`, auth.currentUser!.uid)).catch(console.error);
+      deleteDoc(doc(db, `${basePath}/typing`, auth.currentUser!.uid)).catch(console.error);
     }, 3000);
   };
 
@@ -250,7 +304,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     try {
       let imageUrl: string | null = null;
       if (imageFile) {
-        const fileRef = ref(storage, `chat-images/${groupId}/${Date.now()}_${imageFile.name}`);
+        const fileRef = ref(storage, `chat-images/${convId}/${Date.now()}_${imageFile.name}`);
         await uploadBytes(fileRef, imageFile);
         imageUrl = await getDownloadURL(fileRef);
       }
@@ -264,7 +318,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     if (unseenByMe.length > 0) {
       const batch = writeBatch(db);
       unseenByMe.forEach(m => {
-        batch.update(doc(db, `groups/${groupId}/messages`, m.id), {
+        batch.update(doc(db, `${basePath}/messages`, m.id), {
           seenBy: arrayUnion(myUid)
         });
       });
@@ -272,14 +326,14 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     }
 
       if (editingMsg) {
-        await updateDoc(doc(db, `groups/${groupId}/messages`, editingMsg.id), {
+        await updateDoc(doc(db, `${basePath}/messages`, editingMsg.id), {
           text: newMessage.trim() || null,
           imageUrl: imageUrl || editingMsg.imageUrl || null,
           isEdited: true
         });
         setEditingMsg(null);
       } else {
-        await addDoc(collection(db, `groups/${groupId}/messages`), {
+        await addDoc(collection(db, `${basePath}/messages`), {
           text: newMessage.trim() || null,
           imageUrl: imageUrl || null,
           senderId: auth.currentUser.uid,
@@ -300,7 +354,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
       
       // Stop typing indicator immediately when sending
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      deleteDoc(doc(db, `groups/${groupId}/typing`, auth.currentUser.uid)).catch(console.error);
+      deleteDoc(doc(db, `${basePath}/typing`, auth.currentUser.uid)).catch(console.error);
       
     } catch (err) {
       console.error('Failed to send message:', err);
@@ -311,7 +365,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
 
   const handleDelete = async (msgId: string) => {
     if (confirm(t('deleteMessageConfirm', language))) {
-      await updateDoc(doc(db, `groups/${groupId}/messages`, msgId), {
+      await updateDoc(doc(db, `${basePath}/messages`, msgId), {
         isDeleted: true,
         text: null,
         imageUrl: null
@@ -378,7 +432,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
       newReactions[emoji] = usersForEmoji;
     }
     
-    await updateDoc(doc(db, `groups/${groupId}/messages`, msgId), {
+    await updateDoc(doc(db, `${basePath}/messages`, msgId), {
       reactions: newReactions
     });
     setActiveReactionMsg(null);
@@ -388,7 +442,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   const handlePin = async (msgId: string) => {
     const msg = messages.find(m => m.id === msgId);
     if (!msg) return;
-    await updateDoc(doc(db, `groups/${groupId}/messages`, msgId), {
+    await updateDoc(doc(db, `${basePath}/messages`, msgId), {
       isPinned: !msg.isPinned
     });
     triggerHaptic('light');
@@ -431,11 +485,11 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     setUploading(true);
     setVoiceSendFailed(false);
     try {
-      const fileRef = ref(storage, `chat-audio/${groupId}/${Date.now()}.webm`);
+      const fileRef = ref(storage, `chat-audio/${convId}/${Date.now()}.webm`);
       await uploadBytes(fileRef, audioBlob);
       const audioUrl = await getDownloadURL(fileRef);
 
-      await addDoc(collection(db, `groups/${groupId}/messages`), {
+      await addDoc(collection(db, `${basePath}/messages`), {
         text: null,
         imageUrl: null,
         audioUrl,
@@ -535,7 +589,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
     setIsGeneratingDigest(true);
     setDigestError(false);
     try {
-      const { digest, truncated } = await generateGroupDigestAI(groupId);
+      const { digest, truncated } = await generateGroupDigestAI(convId);
       setDigestText(digest || t('digestNothing', language));
       setDigestTruncated(truncated);
     } catch (e) {
@@ -549,16 +603,20 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
   };
 
   return (
-    <div className="fixed bottom-[104px] right-4 sm:right-8 z-40 flex flex-col items-end">
-      {isOpen && (
-        <div className="mb-4 w-[calc(100vw-2rem)] sm:w-96 h-[60vh] sm:h-[450px] bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden">
+    <div className={embedded
+      ? 'flex flex-col h-full w-full min-h-0'
+      : 'fixed bottom-[104px] right-4 sm:right-8 z-40 flex flex-col items-end'}>
+      {open && (
+        <div className={embedded
+          ? 'flex-1 min-h-0 flex flex-col overflow-hidden bg-white dark:bg-zinc-900'
+          : 'mb-4 w-[calc(100vw-2rem)] sm:w-96 h-[60vh] sm:h-[450px] bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden'}>
           {/* Header */}
           <div className="p-3 bg-primary flex items-center justify-between shrink-0">
             <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-sm">{t('groupChatTitle', language)} · {groupName}</h3>
+              <h3 className="font-bold text-sm truncate">{title}</h3>
               {/* Member avatars */}
               <div className="flex items-center gap-1 mt-1">
-                {groupMembers.map(memberId => {
+                {members.map(memberId => {
                   const member = userMap[memberId];
                   if (!member) return null;
                   return (
@@ -580,7 +638,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
               </div>
             </div>
             <div className="flex items-center gap-1 ml-2">
-              {(
+              {convKind === 'group' && (
                 <button
                   onClick={handleGenerateDigest}
                   disabled={isGeneratingDigest}
@@ -597,9 +655,15 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
               <button onClick={() => { setIsSearchOpen(!isSearchOpen); setSearchQuery(''); setCurrentSearchIndex(0); }} className="p-1 hover:bg-black/10 rounded-full transition-colors">
                 <Search className="w-4 h-4" />
               </button>
-              <button onClick={() => setIsOpen(false)} className="p-1 hover:bg-black/10 rounded-full transition-colors">
-                <X className="w-4 h-4" />
-              </button>
+              {(!embedded || onClose) && (
+                <button
+                  onClick={() => (embedded ? onClose?.() : setIsOpen(false))}
+                  className="p-1 hover:bg-black/10 rounded-full transition-colors"
+                  aria-label={embedded ? t('back', language) : t('closeAction', language)}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -1019,6 +1083,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
                 type="text"
                 value={newMessage}
                 onChange={handleTyping}
+                onPaste={handlePaste}
                 placeholder={t('typeAMessage', language)}
                 className="flex-1 px-3 py-2 bg-zinc-100 dark:bg-zinc-800 border-none rounded-full text-sm outline-none focus:ring-2 focus:ring-primary/50"
               />
@@ -1049,7 +1114,8 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
         </div>
       )}
 
-      {/* Floating Button */}
+      {/* Floating Button — absent when embedded: the pane is not something you open. */}
+      {!embedded && (
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-12 h-12 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-primary rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 relative"
@@ -1061,6 +1127,7 @@ export default function GroupChatWidget({ groupId, groupName, userMap, groupMemb
           </span>
         )}
       </button>
+      )}
     </div>
   );
 }

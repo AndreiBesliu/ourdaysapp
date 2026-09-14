@@ -979,11 +979,12 @@ export default function CalendarHome() {
 
       {/* Group Chat Widget */}
       {activeGroupId !== 'personal' && (
-        <GroupChatWidget 
-          groupId={activeGroupId} 
-          groupName={groups.find(g => g.id === activeGroupId)?.name || t('group', language)}
+        <GroupChatWidget
+          convId={activeGroupId}
+          convKind="group"
+          title={`${t('groupChatTitle', language)} · ${groups.find(g => g.id === activeGroupId)?.name || t('group', language)}`}
           userMap={userMap}
-          groupMembers={groups.find(g => g.id === activeGroupId)?.members || []}
+          members={groups.find(g => g.id === activeGroupId)?.members || []}
         />
       )}
 
