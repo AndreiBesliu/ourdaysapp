@@ -311,11 +311,11 @@ Măsurate, nu presupuse — le scriu ca să știi unde **nu** trebuie să te ui�
 
 ### Primul lucru, inainte de orice altceva
 
-- [ ] **Deschide portofelul si uita-te daca bunurile tale sunt acolo.** Am schimbat regula de
-      citire a activelor, si n-am putut s-o probez local (nu exista instanta de test, emulatorul
-      cere Java 11 iar masina are 8). Daca lista e goala sau apare eroarea de incarcare,
-      **spune-mi imediat** — se revine la regula veche in treizeci de secunde. Restul de mai jos
-      n-are rost pana nu trece asta.
+- [ ] **Deschide portofelul si uita-te daca bunurile tale sunt acolo.**
+      *Actualizare, cateva ore mai tarziu:* regula **e probata acum** — 20 de teste pe motorul
+      real de reguli, prin emulator (`npm run test:rules`), inclusiv „proprietarul isi citeste
+      activele exact ca inainte". Deci asta a devenit o confirmare, nu o alarma. Daca totusi lista
+      e goala, **spune-mi** — se revine la regula veche in treizeci de secunde.
 
 ### Apoi
 

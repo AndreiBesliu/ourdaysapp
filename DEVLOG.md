@@ -2911,3 +2911,67 @@ Firestore cere 11+. Memoria proiectului are deja lectia care conteaza aici: un m
 neprobata, si prima verificare o faci tu, deschizand portofelul. Revenirea e instantanee daca e
 gresita. Un ham de emulator ar fi reparatia permanenta — proiectul a livrat deja de trei ori
 defecte de reguli.
+## 2026-09-14 - Regulile se pot, in sfarsit, proba. JDK-ul era deja pe masina.
+
+**Model:** Claude Opus 5 · „continua", dupa livrarea partajarii din portofel
+
+Acum o ora am livrat pe live o regula Firestore pe care **nu o probasem**, si am spus asta ca
+atare. Blocantul parea de netrecut fara o instalare de sistem: emulatorul Firestore cere Java 11+,
+iar `java` de pe PATH e 1.8.
+
+**Era un JDK 21 deja instalat** — `C:\Program Files\Android\Android Studio\jbr`, livrat cu
+Android Studio pentru build-ul Capacitor. Deci hamul a costat un pachet npm si doua fisiere, nu o
+instalare. Nu l-am cautat pana azi fiindca m-am oprit la prima masuratoare („`java -version` zice
+8") in loc sa intreb daca exista altul.
+
+### Ce s-a construit
+
+- `rules-tests/assets.test.ts` — **20 de teste pe motorul REAL de reguli**, prin emulator.
+- `scripts/test-rules.mjs` — cauta un JDK 11+ (JAVA_HOME, apoi runtime-ul din Android Studio, apoi
+  PATH), il pune in mediu si porneste `emulators:exec`. Daca nu gaseste niciunul, spune exact asta
+  si precizeaza ca `npm test` nu e afectat.
+- `vitest.config.ts` — suita obisnuita, cu `rules-tests/` EXCLUS. Testele alea cer emulator si
+  deci un JDK; CI-ul si orice masina fara Java nu trebuie sa le vada picand. Tiparul de include e
+  chiar implicitul lui Vitest, scris pe fata, ca suita sa colecteze exact ce colecta si inainte —
+  verificat: tot **818**.
+- `vitest.rules.config.ts` — doar `rules-tests/`, fara paralelism intre fisiere (un singur
+  emulator, aceleasi documente).
+- `firebase.json` — bloc de emulatoare, UI oprit, port fix 8080 (testul se conecteaza pe numar; un
+  port dinamic ar face ca „nu asculta nimeni" sa arate ca „regulile au refuzat tot").
+- `npm run test:rules`.
+
+Id-ul de proiect e prefixat `demo-`, deci emulatorul sare peste credentiale si **nu poate fi
+indreptat spre proiectul real** nici din greseala.
+
+### Rezultatul: regula livrata e corecta
+
+Fiecare capacitate e afirmata ca **PERECHE** — cineva care poate si cineva care nu. O suita numai
+cu permisiuni trece la fel de fericit peste o regula care permite orice.
+
+Probat: proprietarul isi citeste activul privat · un coleg de grup **nu** poate citi un activ
+nepartajat · un coleg de grup **poate** citi unul partajat cu grupul · cineva din afara nu ·
+nesemnat nu · **booleanul vechi nu acorda nimic** · interogarea per-grup e servita **si intoarce
+activul, nu o pagina goala** · un nemembru e refuzat pe aceeasi interogare · interogarea
+nefiltrata e refuzata · filtrarea pe `sharedWithFamily` e refuzata · partajarea intr-un grup din
+care nu faci parte e refuzata si la creare si la editare · **cine citeste nu poate scrie sau
+sterge** · `ownerId` nu poate fi schimbat · activul privat se creeaza, editeaza si sterge exact ca
+inainte · **iesirea din grup taie accesul imediat**.
+
+Ultima e chiar argumentul pentru care partajarea numeste un GRUP si nu o lista de oameni: nimic
+n-a trebuit sa rescrie activul, si nu exista fereastra in care cel plecat inca intra.
+
+### Doua lucruri pe care le-am stricat si reparat pe drum
+
+1. `@firebase/rules-unit-testing@5` cere firebase ^12; aplicatia e pe 11. Am fixat **4.0.1**, care
+   cere ^11. N-am urcat firebase pentru un ham de teste.
+2. `emulators:exec` primeste scriptul ca UN argument pozitional. Trimis ca lista prin `shell:true`,
+   shell-ul l-a re-spart si firebase a raspuns „Too many arguments" — un mesaj despre invelis, fara
+   nicio legatura cu regulile. Acum e un singur sir, cu ghilimele simple inauntru si duble afara.
+
+`npx tsc -b` verde (configurile de vitest intra acum in `tsconfig.node.json`, ca `vite.config.ts`) ·
+**818 teste** in suita obisnuita, neschimbat · **20 de teste de reguli** verzi.
+
+### Ce ramane
+
+Hamul acopera `assets`. Restul colectiilor — `events`, `groups`, `expenses`, `messages`,
+`group_invites`, `profiles` — n-au niciun test de reguli. Acum exista unde sa fie scrise.
