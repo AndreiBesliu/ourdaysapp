@@ -614,3 +614,15 @@ Toate notificarile push trimise vreodata au sarit fiecare destinatar.
       deschida conversatia, nu „That person could not be found".
 - [ ] **Admin → Health → „AI calls":** sectiune noua, un rand pe apel. Azi ar trebui sa fie goala
       sau cu putine randuri. Cand se atinge cota, apare rosu cu `http-429`.
+---
+
+## 32. Seria nu-si mai pierde trecutul (14.09)
+
+- [ ] **Ia un eveniment care se repeta si care a inceput acum ceva timp.** Deschide o apariție
+      RECENTA, schimba-i titlul, alege **„toate din serie"**, salveaza.
+- [ ] **Aparitiile vechi trebuie sa fie tot acolo.** Inainte dispareau toate cele dinaintea zilei pe
+      care o deschisesesi. Asta e proba care conteaza.
+- [ ] **Apoi incearca sa MUTI seria:** deschide o apariție, schimba data cu doua zile, „toate din
+      serie". Toata seria trebuie sa se mute cu doua zile — inclusiv aparitiile vechi — nu sa
+      inceapa de la ziua editata.
+- [ ] Daca vezi aparitii care dispar in oricare din cele doua cazuri, **spune-mi imediat**.

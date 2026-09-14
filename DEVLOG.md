@@ -4069,3 +4069,36 @@ livrat pe live si verificat (chunk byte-identic, cele trei culori prezente in CS
 
 *Nota de metoda: prima sondare a chunk-ului de admin mi-a intors HTML — cache de margine dinainte de
 livrare. A doua oara azi. Sondarea unui fisier proaspat livrat cere parametru anti-cache.*
+## 2026-09-14 - Editarea unei serii nu-i mai muta inceputul
+
+**Model:** Claude Opus 5 · continuare, dupa ce Andrei a cerut explicatia inainte de reparatie
+
+O serie nu e o lista de date. E **o singura data de inceput plus o regula**, iar fiecare aparitie se
+calculeaza de-acolo. Campul de data din modal e precompletat cu ziua **apariției pe care ai
+deschis-o**, iar „toate din serie" scria acea valoare direct peste inceputul seriei. Deci deschideai
+apariția din septembrie a unei serii incepute in august, schimbai titlul, si seria devenea „incepe in
+septembrie" — tot ce era inainte inceta sa existe.
+
+Masurat pe expandorul real: **noua aparitii au devenit trei**, iar exceptiile (care sunt cheiate pe
+data) au ramas orfane.
+
+### De ce mutarea, si nu ignorarea
+
+Propusesem intai ca „toate din serie" sa nu atinga deloc data. Am schimbat solutia in timpul
+implementarii, si motivul merita scris: daca cineva **chiar schimba** data cu intentia de a muta
+seria, ignorarea ar produce **un camp care nu face nimic** — exact clasa de defect pe care am vanat-o
+toata ziua (comutatorul din portofel, `ev.time`, fusul orar al proprietarului).
+
+Asa ca: data neschimbata → seria ramane unde e; data schimbata → **toata seria se muta cu acelasi
+decalaj**, ceea ce inseamna „muta seria" si ii pastreaza istoria.
+
+`shiftedSeriesStart` e pura si refuza sa scrie ori de cate ori ceva nu se poate verifica — refuzul e
+mereu directia sigura aici, fiindca un inceput gresit sterge istorie tacut. Primul test ruleaza
+scenariul real prin `expandRecurringEvents`: neschimbat → 9 ramane 9; mutat cu doua zile → tot 9, dar
+incepand cu 5 august.
+
+*Un test al meu a picat si avea el dreptate pe jumatate: mutarea cu trei zile inapoi pune prima
+aparitie pe 31 iulie, care e in afara ferestrei de expansiune — deci aserttia trebuia pe valoarea
+intoarsa, nu pe expansiune.*
+
+`npx tsc -b` verde · **1080 de teste** (de la 1072) · poarta verde · build verde · livrat pe live.

@@ -95,3 +95,45 @@ export function expandRecurringEvents(
 
   return result;
 }
+
+/**
+ * Where a series should start after an "All events in series" edit.
+ *
+ * ── The defect this exists to stop ──────────────────────────────────────────────────
+ *
+ * A series is not a list of dates. It is ONE start date plus a rule, and every occurrence is
+ * computed from that start — see `expandRecurringEvents`, which reads `event.date` as the series
+ * start. The edit modal pre-fills its date field with the date of the occurrence you opened, and
+ * saving with "all" used to write that value straight onto the parent. So opening the September
+ * occurrence of a series that began in August and changing nothing but the title MOVED the series
+ * to September, and every occurrence before it stopped existing.
+ *
+ * Measured on the real expander: a weekly series with nine occurrences became three, and any
+ * single-occurrence exceptions — which are keyed by date — were orphaned.
+ *
+ * ── Why this shifts rather than ignoring ────────────────────────────────────────────
+ *
+ * The obvious fix is to leave the start alone. But then a person who deliberately changes the date
+ * while editing the whole series gets nothing, silently — a control wired to nothing, which is the
+ * defect this codebase keeps producing. So an unchanged date leaves the series where it is, and a
+ * changed one moves the WHOLE series by the same offset, which is what "move the series" means.
+ *
+ * Returns null when nothing should be written, including when the inputs cannot be trusted:
+ * refusing to write is always safe here, and a wrong start silently deletes history.
+ */
+export function shiftedSeriesStart(
+  parentDate: unknown, occurrenceDay: unknown, newDay: unknown,
+): string | null {
+  if (typeof occurrenceDay !== 'string' || typeof newDay !== 'string') return null;
+  // Unchanged: the overwhelmingly common case, and the one that used to destroy the series.
+  if (occurrenceDay === newDay) return null;
+
+  const from = new Date(`${occurrenceDay}T00:00:00.000Z`);
+  const to = new Date(`${newDay}T00:00:00.000Z`);
+  const start = typeof parentDate === 'string' ? new Date(parentDate) : new Date(NaN);
+  if ([from, to, start].some((d) => Number.isNaN(d.getTime()))) return null;
+
+  const deltaDays = Math.round((to.getTime() - from.getTime()) / 86_400_000);
+  if (deltaDays === 0) return null;
+  return addDays(start, deltaDays).toISOString();
+}

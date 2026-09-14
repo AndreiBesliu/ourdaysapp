@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, Sparkles, GripVertical, Search, Check } from 'lucide-react';
-import { addDoc, collection, query, where, updateDoc, doc } from 'firebase/firestore';
+import { addDoc, collection, query, where, updateDoc, doc, getDoc } from 'firebase/firestore';
 import { liveQuery } from '../utils/liveQuery';
 import { mergeAssets, shareFieldsFor } from '../utils/assetSharing';
 import { localZone, timeFieldsFor } from '../utils/eventTime';
@@ -18,6 +18,7 @@ import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-p
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import * as chrono from 'chrono-node';
 import { EVENT_COLORS, eventSwatchClass } from '../utils/eventColors';
+import { shiftedSeriesStart } from '../utils/recurrence';
 
 interface ChecklistItem {
   id: string;
@@ -669,8 +670,27 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               data: { ...baseEventData, date: new Date(eventDate).toISOString() },
             });
           } else {
-            // Edit the parent (all occurrences)
-            await updateDoc(doc(db, 'events', parentId), { ...baseEventData, date: new Date(eventDate).toISOString() });
+            // Edit the parent — that is, the SERIES.
+            //
+            // A series is one start date plus a rule, and every occurrence is computed from that
+            // start. This used to write the opened occurrence's date onto the parent, so editing
+            // the title of a September occurrence moved a series that began in August to September
+            // and every earlier occurrence stopped existing. Measured on the real expander: nine
+            // occurrences became three, and date-keyed exceptions were orphaned.
+            //
+            // The start now moves only when the date was actually CHANGED, and then by the same
+            // offset — which is what moving a series means, and keeps its history. Leaving a
+            // changed date unwritten was the other option and was rejected: a date field that
+            // silently does nothing is the defect this codebase keeps producing.
+            const parentRef = doc(db, 'events', parentId);
+            const parentSnap = await getDoc(parentRef);
+            const nextStart = shiftedSeriesStart(
+              parentSnap.data()?.date, editEvent.recurrenceDate, eventDate,
+            );
+            await updateDoc(parentRef, {
+              ...baseEventData,
+              ...(nextStart ? { date: nextStart } : {}),
+            });
           }
         } else {
           // Normal (non-recurring) edit
