@@ -144,7 +144,9 @@ export default function Admin() {
    * whether a resolved group has already regressed. Two places computing that would drift, and the
    * screen would be the one that is wrong.
    */
-  const setErrorStatus = async (fingerprints: string[], status: 'new' | 'seen' | 'resolved') => {
+  const setErrorStatus = async (
+    fingerprints: string[], status: 'new' | 'seen' | 'resolved', onlyIfClaimHolds = false,
+  ) => {
     if (fingerprints.length === 0) return;
     setErrorBusy(fingerprints.length === 1 ? fingerprints[0] : 'bulk');
     setErrorNotice(null);
@@ -152,8 +154,12 @@ export default function Admin() {
       // In chunks: the callable caps a request at 100 keys, and one oversized call is rejected
       // whole — so "Mark all seen" on a long list used to mark NOTHING while looking like it worked.
       let skipped = 0;
+      let written = 0;
+      let refusedFailed = 0;
       for (let i = 0; i < fingerprints.length; i += 100) {
-        const res = await adminSetErrorStatus(fingerprints.slice(i, i + 100), status);
+        const res = await adminSetErrorStatus(fingerprints.slice(i, i + 100), status, { onlyIfClaimHolds });
+        written += res?.written || 0;
+        refusedFailed += res?.refused?.failed || 0;
         skipped += res?.skipped || 0;
       }
       const h = await adminGetHealth();
@@ -161,7 +167,15 @@ export default function Admin() {
       // The server skips a key whose rows have left the scanned window between the page loading and
       // the click. It counts them; throwing that count away made a write that never happened look
       // exactly like one that did.
-      if (skipped > 0) {
+      if (onlyIfClaimHolds) {
+        // Says what it did, always. A bulk button whose effect you cannot see is one you stop
+        // trusting the second time you press it.
+        setErrorNotice(
+          `Resolved ${written} group(s) with a fix on record.`
+          + (refusedFailed > 0 ? ` ${refusedFailed} refused: the recorded fix did not hold.` : '')
+          + (skipped - refusedFailed > 0 ? ` ${skipped - refusedFailed} skipped.` : ''),
+        );
+      } else if (skipped > 0) {
         setErrorNotice(`${skipped} group(s) were not updated — their rows have left the scanned window. Refresh and try again.`);
       }
     } catch (e: any) {
@@ -186,6 +200,12 @@ export default function Admin() {
         : errorFilter === 'open' ? (g.status === 'new' || g.status === 'regressed')
         : g.status === errorFilter
     ));
+
+  // Groups whose recorded fix still stands and that are not already resolved. Read from what
+  // the SERVER said, never computed from the fix list here — the browser does not get a vote
+  // on whether a claim holds, and the server re-checks it again before applying anything.
+  const applicableFixes: any[] = (health?.errorGroups || [])
+    .filter((g: any) => g.fixVerdict === 'holding' && g.status !== 'resolved');
 
   const refresh = async () => {
     setLoading(true); setLoadError(false);
@@ -594,6 +614,18 @@ export default function Admin() {
                         {label} <span className="tabular-nums opacity-70">{n}</span>
                       </button>
                     ))}
+                    {/* One press instead of one per row. The human still decides WHEN — this is
+                        their record, not a script's assertion about its own work — but they stop
+                        re-entering a decision the fix list already made. */}
+                    {applicableFixes.length > 0 && (
+                      <button
+                        onClick={() => setErrorStatus(applicableFixes.map((g: any) => g.key), 'resolved', true)}
+                        disabled={errorBusy !== null}
+                        className="px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 disabled:opacity-50"
+                      >
+                        {errorBusy === 'bulk' ? 'Applying…' : `Resolve ${applicableFixes.length} fixed`}
+                      </button>
+                    )}
                     {visibleErrorGroups.filter((g: any) => g.status === 'new').length > 1 && (
                       <button
                         onClick={() => setErrorStatus(visibleErrorGroups.filter((g: any) => g.status === 'new').map((g: any) => g.key), 'seen')}

@@ -141,11 +141,20 @@ export async function adminGetHealth(): Promise<any> {
   const fn = httpsCallable(getFunctions(app), "adminGetHealth");
   return (await fn({})).data;
 }
+export interface ErrorStatusResult {
+  ok: boolean;
+  written: number;
+  skipped: number;
+  refused?: { failed: number; unclaimed: number; missing: number };
+}
 export async function adminSetErrorStatus(
-  fingerprints: string[], status: 'new' | 'seen' | 'resolved', note?: string,
-): Promise<{ ok: boolean; written: number; skipped: number }> {
+  fingerprints: string[], status: 'new' | 'seen' | 'resolved',
+  opts?: { note?: string; onlyIfClaimHolds?: boolean },
+): Promise<ErrorStatusResult> {
   const fn = httpsCallable(getFunctions(app), "adminSetErrorStatus");
-  return (await fn({ fingerprints, status, note })).data as { ok: boolean; written: number; skipped: number };
+  return (await fn({
+    fingerprints, status, note: opts?.note, onlyIfClaimHolds: opts?.onlyIfClaimHolds === true,
+  })).data as ErrorStatusResult;
 }
 export async function adminGetUser(uid: string): Promise<any> {
   const fn = httpsCallable(getFunctions(app), "adminGetUser");

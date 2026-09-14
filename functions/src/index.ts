@@ -1696,7 +1696,7 @@ export const adminGetHealth = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
  */
 export const adminSetErrorStatus = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const uid = await assertAdmin(request);
-  const { fingerprints, status, note } = request.data || {};
+  const { fingerprints, status, note, onlyIfClaimHolds } = request.data || {};
 
   if (!isErrorStatus(status)) {
     throw new HttpsError("invalid-argument", `status must be one of ${ERROR_STATUSES.join(", ")}`);
@@ -1719,12 +1719,25 @@ export const adminSetErrorStatus = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   const now = new Date().toISOString();
   const batch = db.batch();
   let written = 0;
+  const refused = { failed: 0, unclaimed: 0, missing: 0 };
 
   for (const key of keys) {
     const group = byKey.get(key);
     // A key with nothing behind it is either a stale screen or a typed request. Writing state for a
     // group that does not exist would leave a row nothing can ever clear.
-    if (!group) continue;
+    if (!group) { refused.missing++; continue; }
+
+    // The bulk path. The CHECK happens here rather than on the screen that asked, because a screen
+    // can be minutes old: a claim that has since been refuted by a new occurrence must not be
+    // applied just because the browser still believes it holds. Manual resolution is unaffected —
+    // an admin who fixed something without writing a claim can still say so.
+    if (onlyIfClaimHolds === true) {
+      const verdict = fixVerdict(fixFor(key), group.lastSeen);
+      if (verdict !== "holding") {
+        if (verdict === "failed") refused.failed++; else refused.unclaimed++;
+        continue;
+      }
+    }
     batch.set(db.doc(`errorGroups/${groupDocId(key)}`), {
       schema: 1,
       fingerprint: key,
@@ -1747,7 +1760,7 @@ export const adminSetErrorStatus = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   }
 
   if (written > 0) await batch.commit();
-  return { ok: true, written, skipped: keys.length - written };
+  return { ok: true, written, skipped: keys.length - written, refused };
 });
 
 // Full detail for one user (drill-down).
