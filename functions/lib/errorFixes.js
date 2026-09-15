@@ -73,6 +73,15 @@ exports.ERROR_FIXES = [
         what: "Four occurrences over twelve days, all naming chunk hashes from one build that no longer exists. The minified name `t` survives normalisation, so the same fault from another build would have formed its own group — one group across twelve days is the signature of one stale tab, not a live bug. Nothing has reproduced it in a month.",
         verify: "If it appears again naming a CURRENT chunk hash, this judgement was wrong and the group will refuse to stay resolved.",
     },
+    {
+        // The <id> is the normaliser swallowing the env-var name, VITE_FIREBASE_VAPID_KEY.
+        fingerprint: "fcm.token.web::web push is not configured: no vapid key is configured (<id>)",
+        kind: "fixed",
+        since: "2026-09-15T09:25:00Z",
+        commit: "1f07d28",
+        what: "The web-push registration read its VAPID key from the environment and found nothing there, so every load reported it and no device could ever get a token. The key is now configured and baked into the bundle. Reported deliberately rather than logged: this is how four months of silent push failure became visible in the first place.",
+        verify: "This row stops appearing for any load after the deploy. One more occurrence means a phone is still running the old bundle — hard-reload it. A token on the account (users/{uid}.fcmTokens) is the positive proof.",
+    },
 ];
 /** The claim for a fingerprint, if anybody has made one. */
 function fixFor(fingerprint, fixes = exports.ERROR_FIXES) {
