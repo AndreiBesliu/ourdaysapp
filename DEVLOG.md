@@ -4736,3 +4736,51 @@ instant-based pe care revizia m-a convins sa-l schimb. Actualizate, cu motivul s
 
 `npx tsc -b` verde · functions `tsc` verde · **1211 de teste** (de la 1177), verzi si sub
 `TZ=Europe/Bucharest`, nu doar UTC · poarta verde · build verde.
+## 2026-09-15 - Evenimente pe mai multe zile, felia 3: formularul
+
+**Model:** Claude Opus 5 · „continua cu felia 3"
+
+Acum se pot si CREA. Un buton discret „+ adauga un sfarsit" langa ora — optional, fiindca aproape
+orice eveniment e de o zi si doua controale in plus pe fiecare formular ar costa toate ca sa serveasca
+cateva. La editarea unui eveniment care are deja un interval, randul apare deschis si completat.
+
+Omul da o **data** de sfarsit, fiindca „pana joi" asta inseamna; evenimentul stocheaza un **decalaj**,
+fiindca asta poate mosteni o aparitie recurenta. `dayOffsetBetween` e imbinarea.
+
+Decizia „ce se scrie si de ce s-ar refuza" a iesit in `src/utils/eventForm.ts` ca sa poata fi
+**rulata**: ecranul e in spatele autentificarii, iar de doua ori azi o decizie lasata intr-o
+componenta s-a dovedit gresita fara ca vreo poarta s-o vada. Refuzul e `spanProblem`, acelasi pe care
+serverul il aplica unui override — deci formularul si serverul nu pot ajunge la concluzii diferite.
+
+### Revizia a daramat iar o afirmatie de-a mea, si bine a facut
+
+**HIGH: formularul citea inceputul LOCAL si sfarsitul in UTC.** `format(new Date(ev.date))`
+formateaza local un instant de miezul noptii UTC — vest de Greenwich aia e seara precedenta. Iar
+sfarsitul venea din `spanOf`, care citeste UTC. **Diferenta dintre ele e exact decalajul care se
+stocheaza.** Deci o excursie de trei zile deschisa la New York se salva ca patru, apoi cinci, apoi
+sase — si autosave-ul scrie **la o secunda dupa deschidere, fara niciun gest**. Pe ramura „toate din
+serie" decalajul umflat ajungea pe parinte, deci crestea fiecare aparitie.
+
+Verificat de mine inainte sa repar: ziua locala a lui `2026-09-20T00:00:00Z` e **19** la New York si
+Los Angeles, **20** la Bucuresti, Londra si Auckland. Acum ambele parti citesc UTC — ceea ce repara
+si un bug mai vechi: campul de data arata ziua precedenta pentru oricine la vest, si salvarea o
+scria inapoi.
+
+Plus trei MEDIUM, toate reale:
+- **Draftul nu vedea o schimbare doar de sfarsit** — tabloul de dependente nu fusese atins, exact
+  clasa pe care o reparasem cu 40 de linii mai jos in efectul frate.
+- **Stergerea orei de inceput ingheta formularul**: campul de ora de sfarsit se ascunde, dar starea
+  ramane, iar refuzul arata spre un camp care nu mai e pe ecran. Acum stergerea orei de inceput
+  sterge ora de sfarsit si **pastreaza zilele**.
+- **Un eveniment nou mostenea sfarsitul celui editat inainte** — modalul nu se demonteaza niciodata,
+  iar ramura de resetare nu stia de campurile noi.
+
+Si o imbunatatire de la mine: **mutarea inceputului muta si sfarsitul**, pastrand durata. Doar
+impingerea lui cand ar ramane in urma ar fi scurtat tacut o excursie de trei zile la doua.
+
+### Plasa
+
+Testul de dus-intors probeaza AJUTOARELE, nu componenta — cine ar pune formatarea locala la loc l-ar
+lasa verde. Deci exista si o plasa pe SURSA, verificata prin mutatie: pusa la loc, pica exact ea.
+
+`npx tsc -b` verde · functions `tsc` verde · **1239 de teste** (de la 1217) · poarta verde · build.

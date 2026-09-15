@@ -62,6 +62,7 @@ exports.displayEndTime = displayEndTime;
 exports.timeFieldsFor = timeFieldsFor;
 exports.isValidDayOffset = isValidDayOffset;
 exports.dayPlus = dayPlus;
+exports.dayOffsetBetween = dayOffsetBetween;
 exports.spanOf = spanOf;
 exports.occursOn = occursOn;
 exports.daysOf = daysOf;
@@ -245,6 +246,24 @@ function dayPlus(day, n) {
     if (!Number.isFinite(ms))
         return null;
     return new Date(ms).toISOString().slice(0, 10);
+}
+/**
+ * Whole days from `startDay` to `endDay`, or null when either is unreadable or the end is before
+ * the start.
+ *
+ * The form asks a person for an end DATE, because that is what a person means; the event stores an
+ * OFFSET, because that is what a recurring occurrence can inherit. This is the join between them,
+ * and it is here rather than in the form so both the form and its tests can use it.
+ */
+function dayOffsetBetween(startDay, endDay) {
+    if (typeof startDay !== 'string' || typeof endDay !== 'string')
+        return null;
+    const a = Date.parse(`${startDay}T00:00:00.000Z`);
+    const b = Date.parse(`${endDay}T00:00:00.000Z`);
+    if (!Number.isFinite(a) || !Number.isFinite(b))
+        return null;
+    const days = Math.round((b - a) / 86400000);
+    return isValidDayOffset(days) ? days : null;
 }
 /** The days an event covers, from its stored fields. An unknown or absent span means one day. */
 function spanOf(ev) {

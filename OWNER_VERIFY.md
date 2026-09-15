@@ -829,3 +829,22 @@ Inca nu poti CREA unul din formular — aia e felia 3. Dar randarea e livrata, d
 - [ ] **Detaliile unui eveniment** arata acum si ora sub data. Daca data arata o zi diferita decat
       inainte, spune-mi imediat: vestul Greenwich-ului era gresit inainte si e corectat acum, dar
       vreau sa stiu daca se vede altceva.
+---
+
+## 46. Evenimente pe mai multe zile: creeaza unul (15.09)
+
+Acum e complet — model, randare si formular.
+
+- [ ] **Creeaza o petrecere care trece de miezul noptii:** 22:00 azi, „+ adauga un sfarsit", data de
+      maine, ora 02:00. Trebuie sa apara pe AMBELE zile: azi `22:00 ▸`, maine `◂ → 02:00`.
+- [ ] **Creeaza o excursie de trei zile fara ore** (doar datele). Trebuie sa apara in banda de sus a
+      fiecarei zile, cu `1/3`, `2/3`, `3/3`.
+- [ ] **PROBA CARE CONTEAZA CEL MAI MULT:** deschide evenimentul de mai multe zile, **nu schimba
+      nimic**, inchide-l. Redeschide-l. Durata trebuie sa fie **aceeasi**. Daca a crescut cu o zi,
+      spune-mi imediat — exact asta a fost bug-ul prins la revizie.
+- [ ] **Sterge ora de inceput** unui eveniment de mai multe zile: trebuie sa devina „toata ziua" si
+      sa-si **pastreze zilele**, nu sa se blocheze.
+- [ ] **Editeaza o serie recurenta cu interval, alege „toate din serie":** toate aparitiile trebuie
+      sa aiba aceeasi durata, nu doar cea deschisa.
+- [ ] **Un eveniment obisnuit, de o zi, nu trebuie sa se fi schimbat in niciun fel** — randul de
+      sfarsit nici nu apare pana nu-l ceri.

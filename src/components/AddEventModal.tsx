@@ -3,7 +3,8 @@ import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckC
 import { addDoc, collection, query, where, updateDoc, doc, getDoc } from 'firebase/firestore';
 import { liveQuery } from '../utils/liveQuery';
 import { mergeAssets, shareFieldsFor } from '../utils/assetSharing';
-import { localZone, timeFieldsFor } from '../utils/eventTime';
+import { localZone, timeFieldsFor, endFieldsFor, spanOf, dayOf, dayPlus, dayOffsetBetween } from '../utils/eventTime';
+import { formSpan, SPAN_MESSAGE_KEY } from '../utils/eventForm';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
@@ -97,6 +98,22 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const [reminderMinutes, setReminderMinutes] = useState<number | null>(null);
   // '' means an all-day event, which is what every event in the app was until now.
   const [eventTime, setEventTime] = useState<string>('');
+  // The form thinks in an end DATE, because that is what a person means by "until Thursday"; the
+  // event stores an OFFSET, because that is what a recurring occurrence inherits unchanged.
+  // `dayOffsetBetween` is the join, and it is the only place the two meet.
+  const [endDate, setEndDate] = useState<string>('');
+  const [endTime, setEndTime] = useState<string>('');
+  const [showEnd, setShowEnd] = useState(false);
+
+  // What will actually be stored, and why it might be refused. Derived rather than held in state
+  // so the form cannot disagree with itself, and computed in src/utils/eventForm.ts so it can be
+  // RUN: this screen is behind a login, and a decision that lives only in a component is one no
+  // gate in this repo can see. The refusal itself is `spanProblem`, which the server applies to an
+  // override too, so the two cannot come to different conclusions about the same event.
+  const { offset: spanOffset, issue: spanIssue } = formSpan({
+    startDay: eventDate, endDay: endDate, startTime: eventTime, endTime, showEnd,
+  });
+  const spanError = spanIssue ? t(SPAN_MESSAGE_KEY[spanIssue], language) : null;
   const [customReminder, setCustomReminder] = useState(false);
   const [customReminderValue, setCustomReminderValue] = useState('');
   const [customReminderUnit, setCustomReminderUnit] = useState<ReminderUnit>('minutes');
@@ -221,7 +238,18 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   useEffect(() => {
     if (editEvent && isOpen) {
       setTitle(editEvent.title || '');
-      setEventDate(editEvent.date ? format(new Date(editEvent.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'));
+      // The stored day, read the SAME way the end is read — out of the instant in UTC, which is
+      // how every date in this app is written. `format(new Date(ev.date), …)` formats that instant
+      // LOCALLY, and for anyone west of Greenwich a midnight-UTC instant is the previous evening:
+      // the field showed 19 September for an event stored on the 20th, and saving wrote that back.
+      //
+      // That was wrong before spans existed and merely moved the event a day. With an end it
+      // compounds: the end is read in UTC, the start locally, and the difference between them is
+      // the offset that gets STORED — so a three-day trip opened in New York saved as four days,
+      // then five, then six, with no gesture from anybody because the autosave fires a second
+      // later. Proven: the local day of 2026-09-20T00:00:00Z is the 19th in New York and Los
+      // Angeles, the 20th in Bucharest, London and Auckland.
+      setEventDate(dayOf(editEvent.date) || format(new Date(), 'yyyy-MM-dd'));
       setDescription(editEvent.description || '');
       setChecklistItems(editEvent.checklistItems || []);
       setCategory(CATEGORIES.find(c => c.id === editEvent.categoryId) || CATEGORIES[0]);
@@ -236,6 +264,17 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setLocation(editEvent.location || '');
       applyReminder(editEvent.reminderMinutes || null);
       setEventTime(typeof editEvent.time === 'string' ? editEvent.time : '');
+      // Loaded from the OCCURRENCE, which for a series carries the parent's offset applied to its
+      // own day — so editing one occurrence of a two-day series shows that occurrence's two days,
+      // not the series start's. Without this, every edit of a multi-day event would quietly
+      // collapse it back to a single day on the next save.
+      {
+        const span = spanOf(editEvent);
+        const hasSpan = !!span && (span.offset > 0 || !!span.endTime);
+        setEndDate(hasSpan ? span!.endDay : '');
+        setEndTime(hasSpan && span!.endTime ? span!.endTime : '');
+        setShowEnd(hasSpan);
+      }
       // Default to the harmless choice, and reset it on every open.
       //
       // It used to start as null and was never reset, so two things went wrong at once:
@@ -270,6 +309,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             if (parsed.location !== undefined) setLocation(parsed.location);
             if (parsed.reminderMinutes !== undefined) applyReminder(parsed.reminderMinutes);
             if (typeof parsed.eventTime === 'string') setEventTime(parsed.eventTime);
+            if (typeof parsed.endDate === 'string') setEndDate(parsed.endDate);
+            if (typeof parsed.endTime === 'string') setEndTime(parsed.endTime);
+            if (parsed.endDate || parsed.endTime) setShowEnd(true);
             loadedDraft = true;
           } else {
             localStorage.removeItem('ourDays_draftEvent');
@@ -280,6 +322,13 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       if (!loadedDraft) {
         setTitle(initialTemplate?.title || '');
         setEventDate(selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'));
+        // This modal is never unmounted — CalendarHome only toggles `isOpen` — so anything not
+        // reset here survives into the next event. Without these three, opening a three-day trip
+        // and then tapping + carried the trip's end date into the new event: saved silently as
+        // multi-day if the date was later, or refused with an error about a field nobody touched.
+        setEndDate('');
+        setEndTime('');
+        setShowEnd(false);
         setDescription('');
         setChecklistItems([]);
         setCategory(initialTemplate?.category ? CATEGORIES.find(c => c.id === initialTemplate.category) || CATEGORIES[0] : CATEGORIES[0]);
@@ -306,7 +355,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   useEffect(() => {
     if (isOpen && !editEvent) {
       const draft = {
-        title, eventDate, eventTime, description, checklistItems, categoryId: category.id, color, emoji, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes
+        title, eventDate, eventTime, endDate, endTime, description, checklistItems, categoryId: category.id, color, emoji, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes
       };
       if (title || description || checklistItems.length > 0) {
         localStorage.setItem('ourDays_draftEvent', JSON.stringify(draft));
@@ -314,12 +363,19 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         localStorage.removeItem('ourDays_draftEvent');
       }
     }
-  }, [title, eventDate, description, checklistItems, category, color, emoji, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes, isOpen, editEvent]);
+    // `eventTime` was missing here before spans existed, so an end-only change would have
+    // inherited the same silence: the draft is what survives the app being killed, and the one
+    // field this feature added was the one it would not have saved.
+  }, [title, eventDate, eventTime, endDate, endTime, showEnd, description, checklistItems, category, color, emoji, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes, isOpen, editEvent]);
 
   // Auto-save edits to Firestore
   useEffect(() => {
     if (isOpen && editEvent) {
       if (!title.trim() || !eventDate) return;
+      // Autosave is the second write path and needs its own guard: the submit button can be
+      // blocked while this effect keeps writing every second, which is how a half-typed end would
+      // otherwise reach the database.
+      if (spanIssue) return;
       // An occurrence of a repeating series has a synthetic id and no document behind it, so this
       // wrote into nothing on every debounce tick — and it ignores `editScope` entirely, which is
       // the reason NOT to simply route it through createEventOverride: on a debounce that would
@@ -358,7 +414,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             rsvpEnabled: rsvpEnabled,
             location: location,
             reminderMinutes: reminderMinutes,
-        ...timeFieldsFor(eventTime, timezone || localZone())
+        ...timeFieldsFor(eventTime, timezone || localZone()),
+            ...endFieldsFor(spanOffset, endTime, !!eventTime)
           };
 
           await updateDoc(doc(db, 'events', editEvent.id), baseEventData);
@@ -371,7 +428,10 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       
       return () => clearTimeout(timeoutId);
     }
-  }, [title, eventDate, description, checklistItems, category, color, isTask, assigneeIds, visibleTo, selectedGroupId, removeMainImage, selectedAssetId, selectedAssetUrl, rsvpEnabled, location, reminderMinutes, isOpen, editEvent]);
+    // `eventTime` was already missing here before spans existed — a time-only change was not
+    // re-saved until something else changed — so the end fields are added alongside it rather than
+    // inheriting the same quirk.
+  }, [title, eventDate, eventTime, endDate, endTime, showEnd, spanIssue, description, checklistItems, category, color, isTask, assigneeIds, visibleTo, selectedGroupId, removeMainImage, selectedAssetId, selectedAssetUrl, rsvpEnabled, location, reminderMinutes, isOpen, editEvent]);
 
   if (!isOpen) return null;
 
@@ -603,6 +663,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth.currentUser || !selectedDate) return;
+    // The message is already on screen beside the fields; this stops the write.
+    if (spanIssue) return;
 
     setLoading(true);
     try {
@@ -687,7 +749,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         // Firestore to reject.
         location: location,
         reminderMinutes: reminderMinutes,
-        ...timeFieldsFor(eventTime, timezone || localZone())
+        ...timeFieldsFor(eventTime, timezone || localZone()),
+        ...endFieldsFor(spanOffset, endTime, !!eventTime)
       };
 
       if (editEvent) {
@@ -819,7 +882,17 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               <input
                 type="date"
                 value={eventDate}
-                onChange={(e) => setEventDate(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  // Moving the start moves the whole event: the end travels with it and the length
+                  // is kept. Only bumping it when it would fall behind would silently shorten a
+                  // three-day trip to two whenever its start was nudged forward by a day.
+                  if (next && endDate) {
+                    const keep = dayOffsetBetween(eventDate, endDate);
+                    if (keep !== null) setEndDate(dayPlus(next, keep) ?? next);
+                  }
+                  setEventDate(next);
+                }}
                 className="text-sm font-medium text-primary bg-primary/10 px-3 py-2 rounded-lg outline-none border-none focus:ring-2 focus:ring-primary/50 cursor-pointer min-w-[140px]"
                 required
               />
@@ -828,11 +901,31 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               <input
                 type="time"
                 value={eventTime}
-                onChange={(e) => setEventTime(e.target.value)}
+                onChange={(e) => {
+                  setEventTime(e.target.value);
+                  // Turning a timed event back into an all-day one clears the end CLOCK and keeps
+                  // the end DATE. Leaving the clock behind froze the form: the end-time input is
+                  // only rendered when there is a start time, so the refusal ("an end time needs a
+                  // start time") pointed at a field that was no longer on screen, and both Save and
+                  // the autosave refused with no way out but deleting the whole span.
+                  if (!e.target.value) setEndTime('');
+                }}
                 aria-label={t('eventTimeLabel', language)}
                 title={eventTime ? t('eventTimeLabel', language) : t('eventAllDay', language)}
                 className="text-sm font-medium text-primary bg-primary/10 px-3 py-2 rounded-lg outline-none border-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
               />
+              {/* The end is opt-in: almost every event is one day, and two more controls on every
+                  form would cost all of them to serve a few. Revealed already filled in when the
+                  event being edited has one. */}
+              {!showEnd && (
+                <button
+                  type="button"
+                  onClick={() => { setShowEnd(true); if (!endDate) setEndDate(eventDate); }}
+                  className="text-xs font-medium text-primary hover:underline shrink-0"
+                >
+                  + {t('eventAddEnd', language)}
+                </button>
+              )}
               {owner && (
                   <div className="relative">
                     <button type="button" onClick={() => setShowOwnerProfile(!showOwnerProfile)} className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 flex items-center justify-center overflow-hidden hover:ring-2 hover:ring-primary transition-all shadow-sm" title={t('viewOwner', language)}>
@@ -887,6 +980,46 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 )}
               </div>
           </div>
+
+          {/* The end, when there is one. An end DATE is what a person means; the offset it becomes
+              is derived above. `min` keeps the picker honest, but the real refusal is `spanIssue`,
+              which the server applies too — a date input's `min` is a suggestion to a browser. */}
+          {showEnd && (
+            <div className="flex items-center gap-2 flex-wrap -mt-2">
+              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{t('eventEndsOn', language)}</span>
+              <input
+                type="date"
+                value={endDate}
+                min={eventDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                aria-label={t('eventEndsOn', language)}
+                className="text-sm font-medium text-primary bg-primary/10 px-3 py-2 rounded-lg outline-none border-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
+              />
+              {/* Only meaningful once the event has a start clock; without one it is an all-day
+                  event that happens to last several days, and endFieldsFor drops the time anyway. */}
+              {!!eventTime && (
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  aria-label={t('eventEndsOn', language)}
+                  className="text-sm font-medium text-primary bg-primary/10 px-3 py-2 rounded-lg outline-none border-none focus:ring-2 focus:ring-primary/50 cursor-pointer"
+                />
+              )}
+              <button
+                type="button"
+                onClick={() => { setShowEnd(false); setEndDate(''); setEndTime(''); }}
+                aria-label={t('eventRemoveEnd', language)}
+                title={t('eventRemoveEnd', language)}
+                className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          {spanError && (
+            <p role="alert" className="text-xs text-rose-600 dark:text-rose-400 -mt-2">{spanError}</p>
+          )}
 
           <div className="space-y-2">
             <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center gap-2">

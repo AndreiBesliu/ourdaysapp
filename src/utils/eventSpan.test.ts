@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   MAX_SPAN_DAYS, isValidDayOffset, dayPlus, spanOf, occursOn, daysOf,
-  endInstant, startInstant, spanProblem, endFieldsFor, timeFieldsFor,
+  endInstant, startInstant, spanProblem, endFieldsFor, timeFieldsFor, dayOffsetBetween,
 } from './eventTime';
 import { expandRecurringEvents } from './recurrence';
 
@@ -222,5 +222,42 @@ describe('an occurrence agreeing with itself', () => {
   it('never puts two occurrences of a daily series on one day', () => {
     const days = occ.map((o) => o.recurrenceDate);
     expect(new Set(days).size).toBe(days.length);
+  });
+});
+
+describe('turning an end DATE into the offset that gets stored', () => {
+  // The form asks for a date because that is what a person means by "until Thursday"; the event
+  // stores an offset because that is what a recurring occurrence can inherit unchanged.
+  it('counts whole days, inclusive of neither end', () => {
+    expect(dayOffsetBetween('2026-09-15', '2026-09-15')).toBe(0);
+    expect(dayOffsetBetween('2026-09-15', '2026-09-17')).toBe(2);
+  });
+
+  it('crosses months, years and a leap day', () => {
+    expect(dayOffsetBetween('2026-01-31', '2026-02-01')).toBe(1);
+    expect(dayOffsetBetween('2026-12-30', '2027-01-01')).toBe(2);
+    expect(dayOffsetBetween('2028-02-28', '2028-03-01')).toBe(2);
+  });
+
+  it('refuses an end before the start rather than returning a negative', () => {
+    expect(dayOffsetBetween('2026-09-15', '2026-09-14')).toBeNull();
+  });
+
+  it('refuses a span longer than the cap', () => {
+    expect(dayOffsetBetween('2026-01-01', '2026-12-31')).toBe(364);
+    expect(dayOffsetBetween('2026-01-01', '2030-01-01')).toBeNull();
+  });
+
+  it('refuses anything unreadable', () => {
+    for (const bad of [null, undefined, 42, '', 'soon', '2026-13-45']) {
+      expect(dayOffsetBetween('2026-09-15', bad)).toBeNull();
+      expect(dayOffsetBetween(bad, '2026-09-15')).toBeNull();
+    }
+  });
+
+  it('round-trips with dayPlus, which is the other direction', () => {
+    for (const n of [0, 1, 2, 30, 365]) {
+      expect(dayOffsetBetween('2026-09-15', dayPlus('2026-09-15', n))).toBe(n);
+    }
   });
 });
