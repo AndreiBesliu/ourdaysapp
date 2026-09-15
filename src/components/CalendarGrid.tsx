@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { auth } from '../firebase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDialog } from '../hooks/useDialog';
+import { modalDepth } from '../utils/dialogStack';
 import { useThemeStore } from '../store';
 import { getDateLocale, t } from '../utils/i18n';
 import { localZone, occursOn, localDayKey } from '../utils/eventTime';
@@ -88,8 +89,21 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger if user is typing in an input
       if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '')) return;
-      
-      // Don't trigger if ANY modal is open
+
+      // Don't trigger if a window covers the calendar...
+      if (modalDepth() > 0) return;
+      // ...or if this key is aimed at a menu or popover the user is inside.
+      //
+      // Two conditions rather than one, and neither is the CSS sniff below. A MENU is not
+      // `.fixed.inset-0` and never was — the floating button's menu is `fixed bottom-8 right-8`,
+      // the hamburger's is `absolute` inside the header — so an arrow key aimed at a menu ALSO
+      // stepped the calendar a week, and Enter on a menu item opened the day panel behind it.
+      // But standing down for every open overlay would be too much the other way: the chat pane
+      // is a popover that sits open for minutes at a time, and the calendar's arrow keys used to
+      // keep working behind it. Where the FOCUS is settles both cases exactly.
+      if (document.activeElement?.closest('[role="menu"],[role="dialog"]')) return;
+      // Kept as a second net for anything that has not adopted an overlay hook yet: an unadopted
+      // overlay is invisible to the stack, and this is a guard, not a decision.
       if (document.querySelector('.fixed.inset-0')) return;
 
       if (!selectedDate) {

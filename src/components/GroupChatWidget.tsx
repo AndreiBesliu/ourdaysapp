@@ -12,6 +12,7 @@ import { generateGroupDigestAI } from '../ai';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { dialogDepth } from '../utils/dialogStack';
+import { useMenu } from '../hooks/useMenu';
 
 
 export type ConversationKind = 'group' | 'chat';
@@ -147,6 +148,57 @@ export default function GroupChatWidget({
 
   const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
+  /**
+   * Escape peels one layer off the composer. Returns whether it found one — the caller decides
+   * what "nothing left" means, and it means different things in the two modes: the floating pane
+   * closes, the embedded screen stays, because there it IS the screen.
+   */
+  const dismissChatLayer = () => {
+    if (editingMsg) {
+      setEditingMsg(null);
+      setNewMessage('');
+      return true;
+    }
+    if (replyingTo) {
+      setReplyingTo(null);
+      return true;
+    }
+    // The search bar is a layer too. It used to close itself from the input's own onKeyDown, which
+    // did not stop the key propagating — so once the pane started answering Escape, ONE press
+    // closed the search AND the whole conversation. Owned here instead, in the same order as
+    // everything else that can be peeled off.
+    if (isSearchOpen) {
+      setIsSearchOpen(false);
+      setSearchQuery('');
+      return true;
+    }
+    return false;
+  };
+
+  // The floating pane. Not a menu and not quite a dialog: the calendar behind it stays usable, so
+  // it must not claim `aria-modal`, and a stray tap on the page must NOT dismiss it — that would
+  // take a half-typed message off the screen. What it does get is Escape that peels one layer at a
+  // time and an Android back button that closes the pane instead of leaving the calendar entirely.
+  const chatPane = useMenu(open && !embedded, () => setIsOpen(false), {
+    kind: 'popover',
+    label: title,
+    dismissOnOutsideClick: false,
+    history: true,
+    // Focus moves into the pane. It is rendered BEFORE its own launcher in the DOM, so a keyboard
+    // user pressing Tab from that button lands past the pane rather than in it — the panel would
+    // be announced as openable and then be unreachable except by Shift+Tab. (An earlier version
+    // left this off in case the pane opened by itself; it does not — `setIsOpen(true)` happens
+    // only from the launcher.)
+    onEscape: () => { if (!dismissChatLayer()) setIsOpen(false); },
+  });
+
+  // One picker is rendered at a time — the message whose id is in `activeReactionMsg` — so one
+  // hook covers all of them. Horizontal, because the row of emoji runs that way.
+  const reactionPicker = useMenu(activeReactionMsg !== null, () => setActiveReactionMsg(null), {
+    orientation: 'horizontal',
+    label: t('addReactionTooltip', language),
+  });
+
   // Other members in the group (excluding me)
   const otherMemberIds = members.filter(id => id !== auth.currentUser?.uid);
 
@@ -221,27 +273,25 @@ export default function GroupChatWidget({
     }
   }, [messages, open]);
 
-  // ESC key: cancel editing or replying.
+  // ESC key, EMBEDDED only: cancel editing or replying. The floating pane gets the same thing
+  // through `chatPane`'s `onEscape`; here there is no overlay to hang it on, because the pane IS
+  // the screen — so the listener stays, calling the same function rather than a second copy of it.
   //
   // Guarded twice, because this listener sits on `window` and this widget is mounted the whole time
-  // a group is selected — collapsed or not. Unguarded it answered Escape presses that had nothing to
-  // do with the chat: closing an event modal silently threw away a reply the user had lined up, and
-  // did it while the chat pane was not even on screen. `dialogDepth()` is the same stack the modals
-  // register in, so "something is open above me" is a fact here rather than a guess.
+  // a group is selected. Unguarded it answered Escape presses that had nothing to do with the chat:
+  // closing an event modal silently threw away a reply the user had lined up. `dialogDepth()` is
+  // the same stack every overlay registers in — including the reaction picker, which is exactly
+  // right: while that is open, Escape belongs to it.
   useEffect(() => {
+    if (!embedded) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (!open || dialogDepth() > 0) return;
-      if (editingMsg) {
-        setEditingMsg(null);
-        setNewMessage('');
-      } else if (replyingTo) {
-        setReplyingTo(null);
-      }
+      dismissChatLayer();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [editingMsg, replyingTo, open]);
+  }, [editingMsg, replyingTo, open, embedded]);
 
   const attachImage = (file: File) => {
     setImageFile(file);
@@ -615,9 +665,15 @@ export default function GroupChatWidget({
       ? 'flex flex-col h-full w-full min-h-0'
       : 'fixed bottom-[104px] right-4 sm:right-8 z-40 flex flex-col items-end'}>
       {open && (
-        <div className={embedded
+        // The overlay props go on ONLY when this is the floating pane. Embedded, this element is
+        // the screen itself: announcing it as a dialog would tell a screen reader the page it is
+        // already on is a thing that can be dismissed.
+        <div
+          ref={embedded ? undefined : chatPane.menuRef}
+          {...(embedded ? {} : chatPane.menuProps)}
+          className={embedded
           ? 'flex-1 min-h-0 flex flex-col overflow-hidden bg-white dark:bg-zinc-900'
-          : 'mb-4 w-[calc(100vw-2rem)] sm:w-96 h-[60vh] sm:h-[450px] bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden'}>
+          : 'mb-4 w-[calc(100vw-2rem)] sm:w-96 h-[60vh] sm:h-[450px] bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 flex flex-col overflow-hidden outline-none'}>
           {/* Header */}
           <div className="p-3 bg-primary flex items-center justify-between shrink-0">
             <div className="flex-1 min-w-0">
@@ -711,9 +767,11 @@ export default function GroupChatWidget({
                 placeholder={t('searchMessages', language)}
                 autoFocus
                 className="flex-1 bg-transparent text-sm outline-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+                // Escape is NOT handled here: it belongs to `dismissChatLayer`, which peels the
+                // layers in one order from one place. Two handlers for one key is how a single
+                // press closed the search and the conversation behind it.
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') navigateSearch('down');
-                  if (e.key === 'Escape') { setIsSearchOpen(false); setSearchQuery(''); }
                 }}
               />
               {searchQuery && (
@@ -918,6 +976,18 @@ export default function GroupChatWidget({
                             <Pin className="w-3.5 h-3.5 rotate-45" />
                           </button>
                           <button
+                            // The ref goes only on the trigger whose picker is OPEN. One hook
+                            // serves every message, and pointing it at all of them would leave it
+                            // holding the last one rendered — so pressing a different message's
+                            // smiley would look like a press outside, and the picker would close
+                            // and reopen in the same gesture. This way, pressing another message's
+                            // smiley correctly closes this picker and opens that one.
+                            ref={activeReactionMsg === msg.id ? reactionPicker.triggerRef : undefined}
+                            // Written out rather than spread from the hook: `triggerProps` carries
+                            // one `aria-expanded` for the whole hook, and every message would have
+                            // claimed to be expanded at once. Per message, it is per message.
+                            aria-haspopup="menu"
+                            aria-expanded={activeReactionMsg === msg.id}
                             onClick={() => setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id)}
                             className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full shrink-0"
                             title={t('addReactionTooltip', language)}
@@ -951,10 +1021,11 @@ export default function GroupChatWidget({
                     
                     {/* Active Reaction Picker */}
                     {activeReactionMsg === msg.id && (
-                      <div className={`absolute z-10 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-xl rounded-full px-2 py-1 flex items-center gap-1 -mt-8 ${isMe ? 'right-0' : 'left-0'}`}>
+                      <div ref={reactionPicker.menuRef} {...reactionPicker.menuProps} className={`absolute z-10 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-xl rounded-full px-2 py-1 flex items-center gap-1 -mt-8 outline-none ${isMe ? 'right-0' : 'left-0'}`}>
                         {EMOJIS.map(emoji => (
                           <button
                             key={emoji}
+                            role="menuitem"
                             onClick={() => handleReaction(msg.id, emoji)}
                             className="w-8 h-8 flex items-center justify-center hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-full transition-all hover:scale-125"
                           >
@@ -1126,6 +1197,12 @@ export default function GroupChatWidget({
       {/* Floating Button — absent when embedded: the pane is not something you open. */}
       {!embedded && (
       <button
+        ref={chatPane.triggerRef}
+        {...chatPane.triggerProps}
+        // The count goes in the name. Before the label, the badge's text WAS the only spoken
+        // difference between "chat" and "chat, three unread"; a bare `aria-label` would have
+        // replaced the whole accessible name and silently taken that away.
+        aria-label={unreadCount > 0 ? `${title} (${unreadCount})` : title}
         onClick={() => setIsOpen(!isOpen)}
         className="w-12 h-12 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-primary rounded-full flex items-center justify-center shadow-lg hover:shadow-xl transition-all hover:-translate-y-1 relative"
       >

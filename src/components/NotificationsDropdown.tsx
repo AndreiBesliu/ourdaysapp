@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Bell, Check, Trash2, MessageCircle, UserPlus } from 'lucide-react';
 import { collection, query, where, orderBy, updateDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { liveQuery } from '../utils/liveQuery';
 import { db, auth } from '../firebase';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
+import { useMenu } from '../hooks/useMenu';
 
 
 export default function NotificationsDropdown() {
@@ -12,7 +13,13 @@ export default function NotificationsDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loadError, setLoadError] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // A popover, not a menu: what is inside is a list of notifications with their own controls, in
+  // reading order, not a ring of commands. Ordinary Tab is the right way through it.
+  const { menuRef, triggerRef, menuProps, triggerProps } = useMenu(isOpen, () => setIsOpen(false), {
+    kind: 'popover',
+    label: t('notificationsTitle', language),
+  });
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -35,16 +42,6 @@ export default function NotificationsDropdown() {
     );
 
     return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const unreadCount = notifications.filter(n => !n.read).length;
@@ -77,8 +74,10 @@ export default function NotificationsDropdown() {
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
-      <button 
+    <div className="relative">
+      <button
+        ref={triggerRef}
+        {...triggerProps}
         onClick={() => setIsOpen(!isOpen)}
         className="p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors relative"
         title={t('notificationsTitle', language)}
@@ -90,7 +89,7 @@ export default function NotificationsDropdown() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-800 z-50 overflow-hidden flex flex-col max-h-[400px]">
+        <div ref={menuRef} {...menuProps} className="absolute right-0 mt-2 w-80 bg-white dark:bg-zinc-900 rounded-xl shadow-xl border border-zinc-200 dark:border-zinc-800 z-50 overflow-hidden flex flex-col max-h-[400px] outline-none">
           <div className="p-3 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between bg-zinc-50 dark:bg-zinc-800/50">
             <h3 className="font-bold text-zinc-900 dark:text-zinc-100">{t('notificationsTitle', language)}</h3>
             {unreadCount > 0 && (

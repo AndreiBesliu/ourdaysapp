@@ -848,3 +848,43 @@ Acum e complet — model, randare si formular.
       sa aiba aceeasi durata, nu doar cea deschisa.
 - [ ] **Un eveniment obisnuit, de o zi, nu trebuie sa se fi schimbat in niciun fel** — randul de
       sfarsit nici nu apare pana nu-l ceri.
+---
+
+## 47. Meniuri si popovere: cele sapte ramase (15.09)
+
+Bancul de proba a probat **primitiva**, nu fiecare loc care o foloseste. Astea sunt locurile.
+
+- [ ] **Clopotelul (notificari):** deschide-l, apoi da click oriunde in pagina — trebuie sa se
+      inchida. Escape trebuie sa-l inchida si el (inainte nu facea).
+- [ ] **Meniul de mobil (hamburger):** deschide-l si da click in alta parte — se inchide. Alege
+      „Recurente" din el: panoul trebuie sa se deschida, iar Back sa inchida **panoul**, nu sa te
+      scoata din calendar.
+- [ ] **Butonul plutitor (+):** deschide-l, alege „Eveniment standard" — formularul trebuie sa se
+      deschida normal, iar meniul sa fie inchis in spatele lui.
+- [ ] **Panoul de chat:** deschide-l si da click pe calendar — trebuie sa RAMANA deschis (altfel
+      un mesaj pe jumatate scris dispare de pe ecran). Pe telefon, **Back trebuie sa inchida
+      panoul**, nu sa te scoata din calendar.
+- [ ] **In chat:** apasa „raspunde" la un mesaj, apoi Escape — trebuie sa anuleze raspunsul, nu sa
+      inchida panoul. Inca un Escape inchide panoul.
+- [ ] **Selectorul de reactii:** apasa fata zambitoare la un mesaj, apoi pe cea de la ALT mesaj —
+      primul selector trebuie sa se inchida si al doilea sa se deschida. Un click oriunde in alta
+      parte il inchide (pana acum ramanea deschis pana alegeai ceva).
+- [ ] **Fisa de proprietar** (avatarul din detaliile evenimentului SI din formular): deschide-o si
+      apasa Escape — trebuie sa se inchida **doar fisa**, evenimentul sa ramana deschis. Al doilea
+      Escape inchide evenimentul.
+- [ ] **Nimic altceva nu s-a schimbat:** ferestrele obisnuite se comporta la fel, iar pagina se
+      poate derula dupa ce inchizi orice combinatie de meniu + fereastra.
+
+### Cele pe care revizia le-a prins — merita probate anume
+
+- [ ] **Back cu fisa de proprietar deschisa** (pe telefon): deschide un eveniment, apasa avatarul,
+      apoi Back. Trebuie sa se inchida evenimentul dintr-o singura apasare. **Daca prima apasare
+      nu face nimic si a doua te scoate din calendar, spune-mi** — ala era bug-ul.
+- [ ] **Cautarea in chat:** deschide panoul, apasa lupa, apoi Escape. Trebuie sa se inchida
+      **doar cautarea**. Inca un Escape inchide panoul.
+- [ ] **Fisa lasata deschisa:** deschide un eveniment, deschide fisa de proprietar, apoi inchide
+      evenimentul de la X. Sagetile de pe calendar trebuie sa mearga imediat, fara sa fie nevoie
+      sa dai un click intai.
+- [ ] **Sagetile pe calendar cu chatul deschis:** trebuie sa mute in continuare ziua selectata
+      (chatul nu e o fereastra). Dar cu meniul „+" deschis, sagetile trebuie sa umble prin meniu
+      si **sa NU mute calendarul**.

@@ -24,30 +24,12 @@ import {
   openDialog,
   closeDialog,
   isTopDialog,
-  dialogDepth,
+  isTopModal,
+  modalDepth,
   nextFocusIndex,
-  expectProgrammaticPop,
-  isProgrammaticPop,
-  hasPendingProgrammaticPop,
 } from '../utils/dialogStack';
-
-// Deliberately not `[tabindex]` in general: a container given tabindex="-1" to receive programmatic
-// focus is not a tab stop, and including it would let Tab land on the panel itself.
-const FOCUSABLE = [
-  'a[href]',
-  'button:not([disabled])',
-  'input:not([disabled]):not([type="hidden"])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
-  '[tabindex]:not([tabindex="-1"])',
-].join(',');
-
-function focusableIn(panel: HTMLElement): HTMLElement[] {
-  return Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE))
-    // `offsetParent` is null for anything display:none — a collapsed section, a step of a wizard
-    // that is not on screen. Tabbing to an invisible control looks to the user like focus vanished.
-    .filter((el) => el.offsetParent !== null || el === document.activeElement);
-}
+import { useOverlayHistory } from './useOverlayHistory';
+import { focusableIn } from './focusables';
 
 export interface DialogOptions {
   /**
@@ -108,7 +90,7 @@ export function useDialog(isOpen: boolean, onClose: () => void, opts: DialogOpti
     // open — which was already 'hidden' — and the page stays unscrollable for the rest of the
     // session, with no error anywhere. Nothing else in this app writes body.overflow (App.tsx
     // touches only the background properties), so the baseline is simply empty.
-    if (dialogDepth() === 1) document.body.style.overflow = 'hidden';
+    if (modalDepth() === 1) document.body.style.overflow = 'hidden';
 
     // Focus the panel itself, never the first field. Focusing an input here would raise the
     // on-screen keyboard the instant any dialog opened on a phone, including ones that only ask
@@ -120,15 +102,20 @@ export function useDialog(isOpen: boolean, onClose: () => void, opts: DialogOpti
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!isTopDialog(id)) return;
-
       if (event.key === 'Escape') {
+        // The very top, menus and popovers included: one opened inside this dialog must swallow
+        // Escape, or the dialog closes with it and takes whatever was typed.
+        if (!isTopDialog(id)) return;
         event.preventDefault();
         onCloseRef.current();
         return;
       }
 
       if (event.key !== 'Tab') return;
+      // The Tab ring belongs to the topmost dialog even while a popover floats above it — that
+      // popover is rendered INSIDE this panel, so its controls are already part of the ring.
+      // Standing down here would let Tab walk out of a modal form into the page behind it.
+      if (!isTopModal(id)) return;
 
       const current = dialogRef.current;
       if (!current) return;
@@ -145,70 +132,11 @@ export function useDialog(isOpen: boolean, onClose: () => void, opts: DialogOpti
 
     window.addEventListener('keydown', onKeyDown);
 
-    // The back button. One history entry per open dialog, popped by whichever is on top.
-    let pushed = false;
-    let pushWhenSettled: (() => void) | null = null;
-    const marker = `dialog:${id}`;
-    const push = () => {
-      window.history.pushState({ dialogMarker: marker }, '');
-      pushed = true;
-    };
-    const onPopState = (event: PopStateEvent) => {
-      // A rewind this app started on some other dialog's way out is not the user pressing Back.
-      // Without this the dialog underneath closes too, which is the very bug the stack exists
-      // to prevent — it just arrives by the history route instead of the keyboard one.
-      if (isProgrammaticPop(event)) {
-        // And if THIS dialog opened while that rewind was still in flight, its own entry was
-        // held back until now — see below. The rewind has landed; nothing can traverse over it.
-        if (pushWhenSettled) {
-          const settled = pushWhenSettled;
-          pushWhenSettled = null;
-          settled();
-        }
-        return;
-      }
-      if (!isTopDialog(id)) return;
-      pushed = false; // the entry this dialog pushed is the one that was just popped
-      onCloseRef.current();
-    };
-    if (withHistory) {
-      window.addEventListener('popstate', onPopState);
-      // "Close the panel, open the editor" in one handler is a common shape in this app, and it
-      // races: `history.back()` is asynchronous while `pushState` is not, so the new entry landed
-      // first and the rewind then traversed OVER it. The dialog was open with its entry stranded
-      // forward, and the next Back press closed it AND stepped the app one screen further back
-      // than it should. Measured in a browser. CalendarGrid had been papering over the same race
-      // with a 50 ms setTimeout in three places. So: when a rewind is still in flight, the push
-      // waits for it to land rather than guessing at a delay.
-      if (hasPendingProgrammaticPop()) pushWhenSettled = push;
-      else push();
-    }
-
     return () => {
-      // A dialog closed before the rewind it was waiting on has landed must never push after
-      // its own death — that would strand an entry for a dialog that no longer exists.
-      pushWhenSettled = null;
       window.removeEventListener('keydown', onKeyDown);
-      if (withHistory) window.removeEventListener('popstate', onPopState);
       closeDialog(id);
 
-      if (dialogDepth() === 0) document.body.style.overflow = '';
-
-      // Only wind the history back if this dialog's own entry is still the current one — that is,
-      // it was closed by its own X or backdrop rather than by the back button that already popped
-      // it. Checking the marker rather than a bare flag keeps a second dialog's entry from being
-      // mistaken for this one's.
-      if (withHistory && pushed && window.history.state?.dialogMarker === marker) {
-        expectProgrammaticPop();
-        // The credit is spent by the EVENT, never left for a listener to find. If this was the only
-        // dialog open, no dialog listener survives to see the pop that follows — and a credit left
-        // behind swallowed the user's next real Back press on whatever opened next: one dead press,
-        // silently. This one-shot listener is registered before the other dialogs' (they attach on
-        // open, later), so it runs first and marks the event; `isProgrammaticPop` remembers per
-        // event, so every other listener still gets the same answer.
-        window.addEventListener('popstate', (event) => { isProgrammaticPop(event); }, { once: true });
-        window.history.back();
-      }
+      if (modalDepth() === 0) document.body.style.overflow = '';
 
       // Give focus back, but only if it is still inside the dialog that is going away. If the user
       // has already clicked somewhere else, stealing it back would be the rude version of helpful.
@@ -218,7 +146,11 @@ export function useDialog(isOpen: boolean, onClose: () => void, opts: DialogOpti
         restoreTo.focus({ preventScroll: true });
       }
     };
-  }, [isOpen, id, withHistory]);
+  }, [isOpen, id]);
+
+  // The back button. One history entry per open dialog, popped by whichever is on top — the rules
+  // live in their own hook because the floating chat panel needs exactly the same ones.
+  useOverlayHistory(isOpen, id, withHistory, () => onCloseRef.current());
 
   return {
     dialogRef,

@@ -4784,3 +4784,118 @@ Testul de dus-intors probeaza AJUTOARELE, nu componenta — cine ar pune formata
 lasa verde. Deci exista si o plasa pe SURSA, verificata prin mutatie: pusa la loc, pica exact ea.
 
 `npx tsc -b` verde · functions `tsc` verde · **1239 de teste** (de la 1217) · poarta verde · build.
+## 2026-09-15 - Cele sapte care NU sunt ferestre
+
+**Model:** Claude Opus 5 · „continua"
+
+Cand cele 22 de ferestre au trecut prin `useDialog`, sapte au ramas pe dinafara si nota spunea de
+ce: **un meniu vrea alte reguli.** Se inchide cand dai click in alta parte, se umbla prin el cu
+sagetile, si nu are voie sa fie `aria-modal`, fiindca pagina din spate NU e blocata — a pretinde ca
+e ar fi o minciuna spusa exact omului care nu vede ecranul. Acum au primitiva lor: clopotelul,
+hamburgerul, meniul butonului plutitor, panoul de chat, selectorul de reactii si cele doua fise de
+proprietar.
+
+### O singura stiva, si cazul care a decis-o
+
+Meniurile se inregistreaza pe **aceeasi stiva** ca ferestrele. Cazul care rezolva discutia e fisa
+de proprietar din formularul de eveniment: pluteste **INAUNTRUL** ferestrei, deci Escape trebuie sa
+ajunga la fisa si sa se opreasca acolo. Cu doua stive, un singur Escape ar fi inchis fisa SI
+formularul de sub ea, aruncand ce era scris — exact defectul pentru care s-a scris `dialogStack`,
+in alt costum.
+
+Ce difera nu e ordinea, ci **ce datoreaza o fereastra paginii din spate**: zavorul de derulare si
+inelul de Tab. Amandoua numara acum doar intrarile **modale** (`modalDepth`, `isTopModal`). Fara
+asta: deschizi un meniu (adancime 1), din el o fereastra (adancime 2, deci nu mai zavoraste
+niciodata), le inchizi pe amandoua — si pagina ramane nederulabila **tot restul sesiunii**, fara
+nicio eroare nicaieri. Aceeasi forma cu bug-ul `previousOverflow` aruncat deja o data de aici.
+
+Iar inelul de Tab **ramane la fereastra** cat timp un popover pluteste deasupra ei: popover-ul e
+randat inauntrul ei, deci butoanele lui sunt deja in inel. Sa-l fi predat ar fi lasat Tab-ul sa
+iasa dintr-un formular modal in pagina din spate — o regresie deghizata in rafinament.
+
+### Ce am mutat, ca sa nu existe in doua exemplare
+
+Istoricul (`pushState`, derularea, creditul „pop-ul asta e al nostru") a iesit din `useDialog` in
+`useOverlayHistory`, fiindca panoul de chat are nevoie de **exact** aceleasi reguli: azi, Back cu
+chatul deschis scoate omul din calendar si lasa panoul in urma. Regulile alea au costat un banc de
+proba si doua versiuni gresite — deci exista o **singura** data. La fel lista de elemente
+focusabile (`focusables.ts`): altfel ar fi divergit la primul control adaugat intr-una din ele, si
+s-ar fi vazut ca „Tab ajunge la el, sagetile il sar".
+
+### Escape si Back sunt gesturi diferite
+
+Panoul de chat a cerut singura optiune in plus din toata primitiva. Escape acolo **desface un
+strat**: anuleaza editarea, altfel anuleaza raspunsul, altfel inchide panoul. Back inchide panoul,
+punct. Trecute amandoua prin `onClose`, un Back in timp ce raspunzi ar fi anulat raspunsul **si i-ar
+fi consumat intrarea din istoric pe drum** — deci urmatoarea apasare iesea din calendar cu panoul
+inca deschis.
+
+Si o capcana prinsa inainte sa fie livrata: `GroupChatWidget` folosea `dialogDepth() > 0` ca sa
+insemne „ceva e deschis deasupra mea". Panoul plutitor se inregistreaza acum el insusi pe stiva,
+deci conditia aia devenea mereu adevarata si Escape n-ar mai fi anulat niciodata un raspuns. Un
+**camp nou invalideaza un invariant vechi**; ascultatorul a ramas doar pentru modul incorporat (unde
+panoul E ecranul), si cheama aceeasi functie, nu o a doua copie a ei.
+
+### Bancul de proba, iar el a fost proba
+
+Ecranele sunt in spatele autentificarii, deci typecheck + teste + build pot fi toate verzi cu
+primitiva stricata. Bancul a montat hook-urile ADEVARATE in forma care doare — un popover
+INAUNTRUL unei ferestre — si a masurat stari, nu impresii: `dialogDepth`, `modalDepth`,
+`document.activeElement.id`, `document.body.style.overflow`, `history.state`.
+
+Verificat acolo: Escape inchide doar fisa, al doilea inchide fereastra · inelul de Tab ramane in
+fereastra cu fisa deasupra · apasarea pe declansator comuta fara sa se inchida-si-redeschida ·
+click in alta parte inchide si **nu** fura focusul inapoi · sagetile se rotesc, Home/End merg, axa
+necerura e ignorata · zavorul de derulare: gol cu meniu, `hidden` cu fereastra deasupra, gol dupa
+amandoua · Back inchide panoul, iar **urmatorul** Back misca istoricul paginii (creditul nu s-a
+scurs). Ultimele patru le-am refacut cu **click si Escape REALE**, nu sintetice — sintetic,
+`.click()` nu da focus, si asta ascundea exact restaurarea focusului.
+
+### Revizia: cinci constatari confirmate, cinci respinse
+
+Patru recenzii independente. **Trei din patru au gasit acelasi defect**, si e cel mai grav:
+
+**Butonul Back inghitit.** Un popover deschis PESTE o fereastra facea fereastra „sa nu mai fie
+deasupra", deci ascultatorul ei de `popstate` se dadea la o parte — si nimeni altcineva nu asculta,
+fiindca un popover nu impinge nicio intrare. Intrarea era deja consumata de browser: **prima
+apasare pe Back nu facea nimic, iar a doua iesea din calendar cu formularul inca pe ecran.**
+Regula care o inlocuieste e cea pe care o implementeaza chiar browserul: intrarea scoasa e ultima
+impinsa, deci raspunde **ultimul care a impins**, nu cel de deasupra. Doua siruri, nu unul.
+
+**Un Escape inchidea cautarea SI toata conversatia.** Inputul de cautare isi inchidea singur bara
+dintr-un `onKeyDown` care nu oprea propagarea — iar de cand panoul raspunde la Escape, aceeasi
+apasare mergea mai departe si inchidea conversatia. Verificatorul a probat-o cu o pagina reala in
+Chromium, nu prin rationament. Acum cautarea e **inca un strat** in aceeasi functie, in aceeasi
+ordine ca celelalte.
+
+**Fisa de proprietar ii supravietuia ferestrei.** `EventDetailsModal` nu se demonteaza, face
+`return null` — deci o fisa lasata deschisa continua sa se inregistreze ca overlay fara nimic pe
+ecran: statea pe varful stivei, manca urmatorul Escape si ingheta sagetile calendarului pana cand
+omul se intampla sa dea un click. Plus: **Escape nu putea s-o inchida**, fiindca ascultatorul
+cauta panoul inainte sa se uite la tasta. Amandoua reparate.
+
+**Tab dintr-un popover sarea in capul formularului.** Panoul primea `tabindex="-1"`, deci inelul
+de Tab al ferestrei nu-l vedea, `indexOf` dadea -1 si urmatorul Tab ateriza pe primul control al
+formularului — sarind exact continutul fisei. Reprodus in Chromium real. Acum panoul unui popover
+e `tabindex="0"`: un popas adevarat, in ordinea documentului.
+
+**Eticheta butonului de chat stergea numarul de mesaje necitite.** Butonul n-avea nume accesibil
+deloc; textul bulinei („3") ERA tot numele. Un `aria-label` simplu l-ar fi inlocuit si ar fi luat
+tacut numarul cu el. Acum numarul e in eticheta.
+
+Respinse cu probe, nu cu opinii: restaurarea focusului la selectorul de reactii (bancul o aratase
+deja corecta), ordinea DOM a panourilor, si o presupusa stergere a evenimentului sub fisa — `|| prev`
+din `CalendarHome` refuza fix asta.
+
+**Una confirmata si LASATA asa, deliberat:** daca pleci de pe ecran (schimbare de ruta) cu panoul
+deschis, intrarea lui din istoric ramane orfana si costa o apasare moarta pe Back. E adevarat, dar
+e adevarat la fel pentru toate cele 22 de ferestre dinainte — routerul si overlay-urile impart
+acelasi istoric si n-au un model comun. Nu e o regresie a acestei schimbari si nu se repara
+onest intr-o felie despre meniuri.
+
+**Si una gasita de mine, in aceeasi familie:** navigarea cu sagetile din calendar se oprea doar
+daca gasea un `.fixed.inset-0` in pagina. Un meniu nu e asa — deci o sageata trimisa unui meniu
+**muta si calendarul cu o saptamana**, iar Enter pe un element de meniu deschidea panoul zilei in
+spate. Acum intreaba stiva (`modalDepth`) si unde e focusul, nu clasele CSS.
+
+`npx tsc -b` verde · poarta de lint verde · **1268 de teste** (de la 1239) · build verde.

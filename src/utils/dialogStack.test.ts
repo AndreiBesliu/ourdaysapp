@@ -10,12 +10,17 @@ import {
   closeDialog,
   topDialog,
   isTopDialog,
+  isTopModal,
   dialogDepth,
+  modalDepth,
   resetDialogStack,
   nextFocusIndex,
   expectProgrammaticPop,
   isProgrammaticPop,
   hasPendingProgrammaticPop,
+  pushHistoryOwner,
+  dropHistoryOwner,
+  isTopHistoryOwner,
 } from './dialogStack';
 
 beforeEach(resetDialogStack);
@@ -233,5 +238,114 @@ describe('knowing a rewind is still in flight', () => {
     expectProgrammaticPop();
     resetDialogStack();
     expect(hasPendingProgrammaticPop()).toBe(false);
+  });
+});
+
+describe('menus and popovers share the stack, without claiming to cover the page', () => {
+  // The case that settles the design: the owner card inside the event form. Two separate stacks
+  // would mean one Escape closing the card AND the form under it — the original defect, wearing
+  // a different hat.
+  it('gives Escape to a popover opened inside a dialog', () => {
+    openDialog('add-event');
+    openDialog('owner-card', false);
+
+    expect(isTopDialog('owner-card')).toBe(true);
+    expect(isTopDialog('add-event')).toBe(false);
+  });
+
+  it('but leaves the Tab ring with the form underneath it', () => {
+    // The popover is rendered INSIDE the form's panel, so its buttons are already part of the
+    // ring. Standing the ring down would let Tab walk out of a modal form into the page behind.
+    openDialog('add-event');
+    openDialog('owner-card', false);
+
+    expect(isTopModal('add-event')).toBe(true);
+    expect(isTopModal('owner-card')).toBe(false);
+  });
+
+  it('hands the ring back to the dialog below when a dialog closes over a menu', () => {
+    openDialog('bell', false);
+    openDialog('recurring-panel');
+    expect(isTopModal('recurring-panel')).toBe(true);
+
+    closeDialog('recurring-panel');
+    expect(isTopModal('bell')).toBe(false);
+    expect(isTopDialog('bell')).toBe(true);
+  });
+
+  it('reports no top modal when only menus are open', () => {
+    openDialog('bell', false);
+    openDialog('fab', false);
+    expect(isTopModal('bell')).toBe(false);
+    expect(isTopModal('fab')).toBe(false);
+    expect(isTopDialog('fab')).toBe(true);
+  });
+
+  it('counts only the overlays that cover the page', () => {
+    // The scroll lock rides on this number. Counting menus too would strand it: a menu open
+    // (depth 1), a dialog opened FROM it (depth 2, so it never locks), then both closed — the
+    // dialog's cleanup sees 1 and does not restore, the menu never touched `overflow`, and the
+    // page stays unscrollable for the rest of the session with no error anywhere.
+    openDialog('fab', false);
+    expect(dialogDepth()).toBe(1);
+    expect(modalDepth()).toBe(0);
+
+    openDialog('add-event');
+    expect(dialogDepth()).toBe(2);
+    expect(modalDepth()).toBe(1);
+
+    closeDialog('fab');
+    expect(modalDepth()).toBe(1);
+    closeDialog('add-event');
+    expect(modalDepth()).toBe(0);
+  });
+
+  it('gives a real Back press to the last overlay that PUSHED, not to the top one', () => {
+    // Four independent reviews found the same defect in the first version of this, which asked
+    // `isTopDialog`: a popover open above a dialog made the dialog "not top", so its own popstate
+    // listener stood down — and nothing else was listening, because a popover pushes nothing. The
+    // entry was already gone: the first Back press did NOTHING, and the second walked out of the
+    // calendar with the form still on screen.
+    openDialog('event-form');
+    pushHistoryOwner('event-form');
+    openDialog('owner-card', false); // no history entry: menus do not push
+
+    expect(isTopDialog('owner-card')).toBe(true);   // Escape goes to the card...
+    expect(isTopHistoryOwner('event-form')).toBe(true); // ...but Back belongs to the form
+    expect(isTopHistoryOwner('owner-card')).toBe(false);
+  });
+
+  it('hands ownership back in push order as overlays close', () => {
+    pushHistoryOwner('details');
+    pushHistoryOwner('editor');
+    expect(isTopHistoryOwner('editor')).toBe(true);
+    expect(isTopHistoryOwner('details')).toBe(false);
+
+    dropHistoryOwner('editor');
+    expect(isTopHistoryOwner('details')).toBe(true);
+
+    dropHistoryOwner('details');
+    expect(isTopHistoryOwner('details')).toBe(false);
+  });
+
+  it('nobody owns a pop when nothing has pushed', () => {
+    expect(isTopHistoryOwner('anything')).toBe(false);
+    openDialog('bell', false);
+    expect(isTopHistoryOwner('bell')).toBe(false);
+  });
+
+  it('is cleared by reset, so one test cannot hand an owner to the next', () => {
+    pushHistoryOwner('leftover');
+    resetDialogStack();
+    expect(isTopHistoryOwner('leftover')).toBe(false);
+  });
+
+  it('keeps a re-registered id at the kind it was opened with', () => {
+    // `openDialog` is called from an effect that can re-run; a second registration must not
+    // quietly promote a menu into a modal and take the page's scrollbar with it.
+    openDialog('bell', false);
+    openDialog('bell', true);
+    expect(modalDepth()).toBe(0);
+    expect(dialogDepth()).toBe(1);
   });
 });

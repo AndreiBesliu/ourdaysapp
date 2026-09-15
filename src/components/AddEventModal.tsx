@@ -13,6 +13,7 @@ import { createEventOverride } from '../serverActions';
 import { format } from 'date-fns';
 import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
 import { useDialog } from '../hooks/useDialog';
+import { useMenu } from '../hooks/useMenu';
 import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
@@ -190,6 +191,18 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     label: t('pickFromAssets', language),
   });
 
+  // The owner card is the case that decided menus and dialogs share one stack: it floats INSIDE
+  // this form, so Escape has to reach the card and stop there. Two stacks would have closed the
+  // form with it and thrown away the edit — the original defect, in a new costume.
+  //
+  // Gated on `isOpen` too: this modal is never unmounted, only hidden behind `return null`, so a
+  // card left open would keep registering as an overlay with nothing on screen — top of the stack,
+  // eating the next Escape, and freezing the calendar's arrow keys behind it.
+  const ownerCard = useMenu(isOpen && showOwnerProfile, () => setShowOwnerProfile(false), {
+    kind: 'popover',
+    label: t('viewOwner', language),
+  });
+
   useEffect(() => {
     if (!isOpen || !auth.currentUser) return;
     // Derive the assignee list from the group/family members already loaded by
@@ -329,6 +342,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         setEndDate('');
         setEndTime('');
         setShowEnd(false);
+        setShowOwnerProfile(false);
         setDescription('');
         setChecklistItems([]);
         setCategory(initialTemplate?.category ? CATEGORIES.find(c => c.id === initialTemplate.category) || CATEGORIES[0] : CATEGORIES[0]);
@@ -928,7 +942,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               )}
               {owner && (
                   <div className="relative">
-                    <button type="button" onClick={() => setShowOwnerProfile(!showOwnerProfile)} className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 flex items-center justify-center overflow-hidden hover:ring-2 hover:ring-primary transition-all shadow-sm" title={t('viewOwner', language)}>
+                    <button type="button" ref={ownerCard.triggerRef} {...ownerCard.triggerProps} onClick={() => setShowOwnerProfile(!showOwnerProfile)} className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 flex items-center justify-center overflow-hidden hover:ring-2 hover:ring-primary transition-all shadow-sm" title={t('viewOwner', language)}>
                       {owner.photoURL ? (
                         <img src={owner.photoURL} alt={owner.name || owner.email} className="w-full h-full object-cover" />
                       ) : (
@@ -939,7 +953,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                     </button>
                     
                     {showOwnerProfile && (
-                      <div className="absolute top-10 left-0 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl z-50 p-4 animate-in fade-in zoom-in duration-200">
+                      <div ref={ownerCard.menuRef} {...ownerCard.menuProps} className="absolute top-10 left-0 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl z-50 p-4 animate-in fade-in zoom-in duration-200 outline-none">
                         <div className="flex items-start gap-3 border-b border-zinc-100 dark:border-zinc-700 pb-3 mb-3">
                           <div className="w-12 h-12 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 overflow-hidden shrink-0">
                             {owner.photoURL ? (

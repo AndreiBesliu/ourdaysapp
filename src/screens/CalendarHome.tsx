@@ -29,6 +29,7 @@ import { acceptGroupInvite, ADMIN_BOOTSTRAP_EMAILS } from '../serverActions';
 import { displayTime, localZone, occursOn, localDayKey } from '../utils/eventTime';
 import { eventColorClass } from '../utils/eventColors';
 import { useDialog } from '../hooks/useDialog';
+import { useMenu } from '../hooks/useMenu';
 
 export default function CalendarHome() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -69,6 +70,13 @@ export default function CalendarHome() {
       : overviewModalType === 'pending' ? t('pendingTasksToday', language)
       : overviewModalType === 'completed' ? t('completedTasksToday', language)
       : undefined,
+  });
+  // Two menus, same reason they are here and not beside their state: both want a translated label.
+  const mobileMenu = useMenu(isMobileMenuOpen, () => setIsMobileMenuOpen(false), {
+    label: t('menuLabel', language),
+  });
+  const fabMenu = useMenu(isFabExpanded, () => setIsFabExpanded(false), {
+    label: t('quickAddLabel', language),
   });
   const dateLocale = getDateLocale(language);
   // Cosmetic gate for the Admin entry (the /admin screen + callables re-check server-side).
@@ -581,6 +589,9 @@ export default function CalendarHome() {
           {/* Mobile Menu */}
           <div className="sm:hidden relative">
             <button
+              ref={mobileMenu.triggerRef}
+              {...mobileMenu.triggerProps}
+              aria-label={t('menuLabel', language)}
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
             >
@@ -588,9 +599,10 @@ export default function CalendarHome() {
             </button>
 
             {isMobileMenuOpen && (
-              <div className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg flex flex-col py-2 animate-in fade-in slide-in-from-top-2 origin-top-right z-[110]">
+              <div ref={mobileMenu.menuRef} {...mobileMenu.menuProps} className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg flex flex-col py-2 animate-in fade-in slide-in-from-top-2 origin-top-right z-[110] outline-none">
                 <button
                   onClick={() => { navigate('/friends'); setIsMobileMenuOpen(false); }}
+                  role="menuitem"
                   className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-blue-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
                 >
                   <Users className="w-4 h-4" /> {t('friendsMenuLabel', language)}
@@ -600,24 +612,28 @@ export default function CalendarHome() {
                 </button>
                 <button
                   onClick={() => { setIsRecurringPanelOpen(true); setIsMobileMenuOpen(false); }}
+                  role="menuitem"
                   className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-indigo-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
                 >
                   <Repeat className="w-4 h-4" /> {t('recurring', language)}
                 </button>
                 <button
                   onClick={() => { navigate('/log'); setIsMobileMenuOpen(false); }}
+                  role="menuitem"
                   className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-indigo-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
                 >
                   <ClipboardList className="w-4 h-4" /> {t('logTitle', language)}
                 </button>
                 <button 
                   onClick={() => { navigate('/wallet'); setIsMobileMenuOpen(false); }}
+                  role="menuitem"
                   className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-emerald-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
                 >
                   <Wallet className="w-4 h-4" /> {t('assetsTitle', language)}
                 </button>
                 <button
                   onClick={() => { navigate('/settings'); setIsMobileMenuOpen(false); }}
+                  role="menuitem"
                   className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
                 >
                   <Settings className="w-4 h-4" /> {t('settings', language)}
@@ -625,6 +641,7 @@ export default function CalendarHome() {
                 {isAdminEmail && (
                   <button
                     onClick={() => { navigate('/admin'); setIsMobileMenuOpen(false); }}
+                    role="menuitem"
                     className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-amber-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
                   >
                     <ShieldCheck className="w-4 h-4" /> Admin
@@ -632,6 +649,7 @@ export default function CalendarHome() {
                 )}
                 <button
                   onClick={() => { navigate('/warlord'); setIsMobileMenuOpen(false); }}
+                  role="menuitem"
                   className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-rose-500 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
                 >
                   <Swords className="w-4 h-4" /> Warlord
@@ -970,7 +988,7 @@ export default function CalendarHome() {
       {/* Floating Action Button with Expansion */}
       <div className="fixed bottom-8 right-8 z-[90] flex flex-col items-end gap-3">
         {isFabExpanded && (
-          <div className="flex flex-col items-end gap-3 mb-2">
+          <div ref={fabMenu.menuRef} {...fabMenu.menuProps} className="flex flex-col items-end gap-3 mb-2 outline-none">
             <button
               onClick={() => {
                 setEventToEdit(null);
@@ -978,6 +996,7 @@ export default function CalendarHome() {
                 setIsAddModalOpen(true);
                 setIsFabExpanded(false);
               }}
+              role="menuitem"
               className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full shadow-lg text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-all animate-in slide-in-from-bottom-4 fade-in"
             >
               {t('groceryList', language)} <ShoppingCart className="w-4 h-4 text-emerald-500" />
@@ -989,6 +1008,7 @@ export default function CalendarHome() {
                 setIsAddModalOpen(true);
                 setIsFabExpanded(false);
               }}
+              role="menuitem"
               className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full shadow-lg text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-all animate-in slide-in-from-bottom-6 fade-in"
             >
               {t('newChore', language)} <Wrench className="w-4 h-4 text-amber-500" />
@@ -1000,13 +1020,17 @@ export default function CalendarHome() {
                 setIsAddModalOpen(true);
                 setIsFabExpanded(false);
               }}
+              role="menuitem"
               className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full shadow-lg text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-all animate-in slide-in-from-bottom-8 fade-in"
             >
               {t('standardEvent', language)} <CalendarIcon className="w-4 h-4 text-primary" />
             </button>
           </div>
         )}
-        <button 
+        <button
+          ref={fabMenu.triggerRef}
+          {...fabMenu.triggerProps}
+          aria-label={t('quickAddLabel', language)}
           onClick={() => setIsFabExpanded(!isFabExpanded)}
           className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all z-[90] ${
             isFabExpanded 

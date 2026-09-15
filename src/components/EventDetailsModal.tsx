@@ -11,6 +11,7 @@ import { Wallet } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { format } from 'date-fns';
 import { useDialog } from '../hooks/useDialog';
+import { useMenu } from '../hooks/useMenu';
 import { getFrequencyLabel } from '../utils/recurrence';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { t } from '../utils/i18n';
@@ -98,7 +99,11 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   // identity on every Firestore snapshot and clearing there would shut the picture while you were
   // still looking at it.
   useEffect(() => {
-    if (!isOpen) setFullScreenImage(null);
+    if (!isOpen) {
+      setFullScreenImage(null);
+      // Same reasoning, one state later: the owner card must not be waiting behind the next event.
+      setShowOwnerProfile(false);
+    }
   }, [isOpen]);
 
   // The picture is its own dialog, stacked above this one. Until now Escape over an open picture
@@ -110,6 +115,17 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   // Declared with the other hooks and above the early return, like everything else here —
   // see the note below about React #310.
   const { dialogRef, dialogProps } = useDialog(isOpen, onClose, { label: event?.title });
+
+  // Floats inside the dialog above, so Escape must stop at the card. See `dialogStack`.
+  //
+  // Gated on `isOpen` as well: this component does not unmount when the event is closed, it
+  // returns null — so a card left open would go on registering as an overlay with nothing on
+  // screen, holding the top of the stack, eating the next Escape and freezing the calendar's
+  // arrow keys until the user happened to click something.
+  const ownerCard = useMenu(isOpen && showOwnerProfile, () => setShowOwnerProfile(false), {
+    kind: 'popover',
+    label: t('viewOwner', language),
+  });
 
   // Held across renders so two quick taps cannot create two overrides — see resolveWriteTarget
   // below, which is the only thing that reads it.
@@ -443,7 +459,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
               )}
               {owner && (
                 <div className="relative">
-                  <button type="button" onClick={() => setShowOwnerProfile(!showOwnerProfile)} className="w-7 h-7 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 flex items-center justify-center overflow-hidden hover:ring-2 hover:ring-primary transition-all shadow-sm" title={t('viewOwner', language)}>
+                  <button type="button" ref={ownerCard.triggerRef} {...ownerCard.triggerProps} onClick={() => setShowOwnerProfile(!showOwnerProfile)} className="w-7 h-7 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 flex items-center justify-center overflow-hidden hover:ring-2 hover:ring-primary transition-all shadow-sm" title={t('viewOwner', language)}>
                     {owner.photoURL ? (
                       <img src={owner.photoURL} alt={owner.name || owner.email} className="w-full h-full object-cover" />
                     ) : (
@@ -454,7 +470,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                   </button>
                   
                   {showOwnerProfile && (
-                    <div className="absolute top-9 left-0 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl z-50 p-4 animate-in fade-in zoom-in duration-200">
+                    <div ref={ownerCard.menuRef} {...ownerCard.menuProps} className="absolute top-9 left-0 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl z-50 p-4 animate-in fade-in zoom-in duration-200 outline-none">
                       <div className="flex items-start gap-3 border-b border-zinc-100 dark:border-zinc-700 pb-3 mb-3">
                         <div className="w-12 h-12 rounded-full bg-zinc-200 dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 overflow-hidden shrink-0">
                           {owner.photoURL ? (
