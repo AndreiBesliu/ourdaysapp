@@ -4448,3 +4448,43 @@ Am scos si `@google/generative-ai` din `package.json`-ul RADACINA: aplicatia nu-
 nu era in bundle. Dependenta moarta.
 
 `npx tsc -b` verde · **1130 de teste** (de la 1116) · poarta verde · functions build verde.
+## 2026-09-15 - Sugestia de asset: sapte apeluri in loc de treisprezece
+
+**Model:** Claude Opus 5 · „Da" (la temporizare)
+
+Erau **doua** risipe, nu una, si a doua era mai mare decat cea pe care o semnalasem.
+
+**Nicio temporizare.** Sugestia pleca la trei evenimente: titlul pierde focusul, fiecare element de
+checklist adaugat, fiecare element care pierde focusul.
+
+**Nicio memorie.** Iar aia costa mai mult: elementul care **pierde focusul fara sa fi fost editat**
+punea exact aceeasi intrebare a doua oara. O lista de sase elemente trimitea ~13 apeluri, din care
+sase erau identice cu unul deja raspuns.
+
+Pe `gemini-2.5-flash-lite` era marunt. Pe `gemini-3.8-flash` un jeton de iesire costa de 9,4 ori mai
+mult, deci acelasi obicei devenise cel mai scump lucru pe care-l face aplicatia din greseala.
+
+### Ce face acum
+
+Un programator (`src/utils/aiSuggestionGate.ts`) care tine impreuna cele doua lucruri ce trebuie sa
+fie de acord: **ce s-a intrebat deja** si **ce asteapta sa fie intrebat**. Intreaba o singura data
+per intrebare distincta, si doar dupa ce omul s-a oprit.
+
+„Aceeasi intrebare" ignora majusculele, spatiile din jur si cele dinauntru — o zona de text
+re-editata aduna spatii, iar „lapte  paine" nu e alta intrebare decat „lapte paine". Sub trei
+caractere nu intreaba deloc: un apel costa la fel indiferent cat de buna e intrebarea.
+
+**Temporizarea pastreaza ULTIMUL text**, si asta e corect, nu doar ieftin: functia alege UN singur
+asset, deci cel mai proaspat lucru scris e cel care merita intrebat. O pauza normala intre elemente
+e mai lunga decat intervalul, deci fiecare tot isi primeste apelul; se contopeste doar o rafala.
+
+### Probat pe ceas fals
+
+Partea de timp e fix aia care pare evident corecta si nu e — „ultimul castiga" si „mai verifica o
+data la iesire". Deci nu e afirmata intr-un comentariu, e rulata: 19 teste, printre care reluarea
+listei reale de sase elemente care **trimite sapte apeluri, nu treisprezece**.
+
+Modalul **importa** programatorul, nu o copie a lui. Altfel aveam o varianta probata si alta livrata
+— vezi [[feedback_plasa_pe_sursa_vs_rulare]].
+
+`npx tsc -b` verde · **1149 de teste** (de la 1130) · poarta verde · build verde · livrat pe live.

@@ -742,3 +742,14 @@ si vor alt fel de tratament.
 `checkForAssetSuggestionsAI` porneste la fiecare element de checklist adaugat si la fiecare iesire
 din camp, fara temporizare: o lista de 6 elemente = 7+ apeluri. Pe flash-lite era ieftin. Pe 3.8
 Flash costa de ~9 ori mai mult per apel. **Vrei sa pun o temporizare?**
+---
+
+## 40. Temporizarea sugestiilor (15.09)
+
+- [ ] **Fa o lista de cumparaturi cu 5-6 elemente** intr-un eveniment nou. Sugestia de asset trebuie
+      sa apara in continuare — doar ca dupa o scurta pauza, nu instant.
+- [ ] **Iesi si intra in acelasi element de checklist fara sa-l modifici.** NU trebuie sa se mai
+      trimita nimic — inainte, fiecare astfel de iesire era un apel AI platit.
+- [ ] **Admin → Health → AI calls**, dupa ce completezi lista: numarul de randuri `asset` trebuie sa
+      fie aproximativ **cate elemente distincte ai scris + 1**, nu dublu.
+- [ ] Daca sugestia nu mai apare deloc, spune-mi — inseamna ca am strans prea mult.

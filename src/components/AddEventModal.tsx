@@ -19,6 +19,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import * as chrono from 'chrono-node';
 import { EVENT_COLORS, eventSwatchClass } from '../utils/eventColors';
 import { shiftedSeriesStart } from '../utils/recurrence';
+import { createAskScheduler, type AskScheduler } from '../utils/aiSuggestionGate';
 
 interface ChecklistItem {
   id: string;
@@ -142,6 +143,29 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const { dialogRef, dialogProps } = useDialog(isOpen, onClose, {
     label: editEvent ? t('edit', language) : t('addNewEvent', language),
   });
+
+  // Asking which asset a piece of text is about: at most once per distinct question, and only
+  // after the person has stopped. The rules and the timing both live in the scheduler, which is
+  // tested on a fake clock in src/utils/aiSuggestionGate.test.ts — a second copy of them here is
+  // how one version ends up proven and a different one shipped.
+  //
+  // Declared with the other hooks, ABOVE the `if (!isOpen) return null` below. CalendarHome keeps
+  // this modal permanently mounted, so a hook past that guard appears and disappears between
+  // renders of one instance: React error #310, which this app has already shipped once.
+  const runAskRef = useRef<(text: string) => void>(() => {});
+  const askSchedulerRef = useRef<AskScheduler | null>(null);
+  if (!askSchedulerRef.current) {
+    askSchedulerRef.current = createAskScheduler((text) => runAskRef.current(text));
+  }
+
+  useEffect(() => {
+    // A fresh event is a fresh set of questions — the same words for a different event are worth
+    // asking again. `reset` also drops anything pending, which matters on close: an ask that
+    // survived would spend a call on a form nobody is looking at and land its suggestion on the
+    // NEXT event opened.
+    askSchedulerRef.current?.reset();
+    return () => askSchedulerRef.current?.cancel();
+  }, [isOpen]);
 
   // The asset picker opens on top of this form. Escape used to close the form underneath it and
   // throw away the whole edit.
@@ -369,8 +393,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
 
 
-  const checkForAssetSuggestionsAI = async (text: string) => {
-    if (!text || selectedAssetId || assets.length === 0) return;
+  const runAssetSuggestion = async (text: string) => {
     try {
       const assetId = await suggestAssetForTextAI(text, assets);
       if (assetId) {
@@ -382,6 +405,28 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     } catch (e) {
       console.error(e);
     }
+  };
+  runAskRef.current = (text: string) => { void runAssetSuggestion(text); };
+
+  /**
+   * Ask which asset this text is about — at most once per distinct question, and only after the
+   * person has stopped.
+   *
+   * This used to be a direct call on three events: the title losing focus, every checklist item
+   * added, and every checklist item losing focus. Blurring an item you had not edited asked the
+   * same question again, so a six-item list sent about thirteen calls with half of them repeats.
+   * Measured in src/utils/aiSuggestionGate.test.ts: the same list now sends seven.
+   *
+   * The timer keeps only the LATEST text, which is right rather than merely cheap — the feature
+   * sets ONE suggested asset, so the freshest thing typed is the one worth asking about. A normal
+   * pause between items is longer than the interval, so they still get asked about individually;
+   * only a genuine burst collapses.
+   */
+  const checkForAssetSuggestionsAI = (text: string) => {
+    // Nothing to match against, or the person has already chosen — the one judgement that belongs
+    // here rather than in the scheduler, because it is about this form, not about the question.
+    if (selectedAssetId || assets.length === 0) return;
+    askSchedulerRef.current?.request(text);
   };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -437,7 +482,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         const cat = CATEGORIES.find(c => c.id === suggestedCategoryId);
         if (cat) setCategory(cat);
       }
-      await checkForAssetSuggestionsAI(title);
+      checkForAssetSuggestionsAI(title);
     } catch (e) {
       console.error(e);
     } finally {
@@ -457,7 +502,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     setNewItemText('');
     setLastAddedItemId(newId);
     Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
-    await checkForAssetSuggestionsAI(addedText);
+    checkForAssetSuggestionsAI(addedText);
   };
 
   const handleGenerateChecklist = async () => {
@@ -1008,9 +1053,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                                     e.target.style.height = `${e.target.scrollHeight}px`;
                                     handleEditChecklistText(item.id, e.target.value);
                                   }}
-                                  onBlur={async (e) => {
-                                    await checkForAssetSuggestionsAI(e.target.value);
-                                  }}
+                                  onBlur={(e) => checkForAssetSuggestionsAI(e.target.value)}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
                                       e.preventDefault();
