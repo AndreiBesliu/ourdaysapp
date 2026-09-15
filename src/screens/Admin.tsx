@@ -243,7 +243,7 @@ export default function Admin() {
     setBcBusy(true); setBcMsg(null);
     try {
       const res = await adminBroadcast({ target: bcTarget, title: bcTitle.trim(), body: bcBody.trim() });
-      setBcMsg({ ok: true, text: `Sent to ${res.created} user${res.created === 1 ? '' : 's'}.` });
+      setBcMsg({ ok: true, text: `Bell row for ${res.created} user${res.created === 1 ? '' : 's'} · pushed to ${res.pushed ?? 0} device${(res.pushed ?? 0) === 1 ? '' : 's'}.` });
       setBcTitle(''); setBcBody('');
     } catch (e: any) { setBcMsg({ ok: false, text: e?.message || 'Failed.' }); }
     finally { setBcBusy(false); }
@@ -599,7 +599,10 @@ export default function Admin() {
               />
               <Stat label="AI calls today" value={health?.ai?.today} accent="text-primary" />
               <Stat label="AI users today" value={health?.ai?.activeUsers} />
-              <Stat label="Notifs today" value={health?.notifications?.today} />
+              {/* Counts bell rows written today. The old value was the per-user daily QUOTA
+                  ledger (notif_usage), which the shared notify() path never writes — so the tile
+                  read 0 beside eight rows that had just been created. */}
+              <Stat label="Notifs today · bell rows" value={health?.notifications?.rowsToday} />
             </div>
 
             {/* Distinct problems, most frequent first.
@@ -781,8 +784,14 @@ export default function Admin() {
                         )}
                         {/* Saying it happened again is the point of the whole mechanism; saying
                             WHEN is what tells you whether the fix simply has not shipped yet. */}
+                        {/* `recurred` is measured against the "seen" watermark — the moment somebody last
+                            looked — not against the fix. A group can have recurred since it was seen AND
+                            not since it was fixed, and showing "still happening" beside a Resolved button
+                            for that case read as a contradiction. The fix verdict is the newer fact. */}
                         {g.recurred && g.status !== 'regressed' && (
-                          <span className="text-[11px] text-amber-600 dark:text-amber-400">still happening</span>
+                          g.fixVerdict === 'holding'
+                            ? <span className="text-[11px] text-zinc-400">happened again after it was seen, not since the fix</span>
+                            : <span className="text-[11px] text-amber-600 dark:text-amber-400">still happening</span>
                         )}
                         {g.status === 'regressed' && (
                           <span className="text-[11px] text-red-500">came back after being resolved</span>

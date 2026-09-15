@@ -1629,7 +1629,7 @@ export const adminGetHealth = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
   await assertAdmin(request);
   const db = admin.firestore();
   const today = new Date().toISOString().slice(0, 10);
-  const [errSnap, errCount, aiSnap, notifSnap] = await Promise.all([
+  const [errSnap, errCount, aiSnap, notifSnap, notifRowsToday] = await Promise.all([
     // Deeper than the list shows. Fifty rows is enough to READ, but not enough to group: the
     // point of grouping is to say how often something happens, and a count taken from a window
     // narrower than the log is a count of the window.
@@ -1637,6 +1637,11 @@ export const adminGetHealth = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
     db.collection("errorLogs").count().get().then((s) => s.data().count).catch(() => 0),
     db.collection("ai_usage").limit(3000).get(),
     db.collection("notif_usage").limit(3000).get(),
+    // Rows actually written today, by anything. The quota ledger above is a different thing —
+    // per-user allowance for user-initiated sends — and the shared notify() path never touches
+    // it, so a tile built on it read 0 while a broadcast had just written eight rows.
+    db.collection("notifications").where("createdAt", ">=", new Date(`${today}T00:00:00.000Z`))
+      .count().get().then((s) => s.data().count).catch(() => 0),
   ]);
   const scanned = errSnap.docs.map((d) => {
     const e = d.data();
@@ -1712,7 +1717,7 @@ export const adminGetHealth = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
     errorsScanned: scanned.length, errorScanLimit: ERROR_SCAN_LIMIT,
     truncated: aiSnap.size >= 3000 || notifSnap.size >= 3000,
     ai: { today: aiToday, dailyLimitPerUser: AI_DAILY_LIMIT, activeUsers: aiTop.length, top: aiTop.slice(0, 10) },
-    notifications: { today: notifToday, dailyLimitPerUser: NOTIF_DAILY_LIMIT },
+    notifications: { today: notifToday, rowsToday: notifRowsToday, dailyLimitPerUser: NOTIF_DAILY_LIMIT },
   };
 });
 
@@ -1939,7 +1944,10 @@ export const adminModerateUser = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
 export const adminBroadcast = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const callerUid = await assertAdmin(request);
   const { target, title, body } = request.data || {};
-  if (!title || !target) throw new HttpsError("invalid-argument", "target and title are required.");
+  // A string, and not a blank one. A truthy non-string (an array, say) passed the old check, and
+  // String([]) is "" — which made notify() fall back to a titleKey that exists nowhere, so the
+  // bell would have shown the literal text "notifBroadcast". Unreachable from the form; cheap to close.
+  if (typeof title !== "string" || !title.trim() || !target) throw new HttpsError("invalid-argument", "target and title are required.");
   const db = admin.firestore();
 
   let recipients: string[] = [];
@@ -1953,22 +1961,29 @@ export const adminBroadcast = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
   }
   recipients = [...new Set(recipients)];
 
-  const now = admin.firestore.FieldValue.serverTimestamp();
+  // Through notify(), which is where the push lives. This used to write the bell rows by hand in
+  // batches of 400 and stop — no push, ever, for as long as the button has existed. The admin
+  // panel said "Sent to 8 users" and eight phones stayed dark. Chunked to notify()'s own recipient
+  // cap; the actor is kept because an announcement is for everyone including its author.
   let created = 0;
-  for (const group of chunk(recipients, 400)) {
-    const batch = db.batch();
-    group.forEach((uid) => {
-      const ref = db.collection("notifications").doc();
-      batch.set(ref, {
-        userId: uid, createdBy: callerUid, type: "broadcast",
-        title: String(title).slice(0, 200), body: typeof body === "string" ? body.slice(0, 500) : "",
-        read: false, createdAt: now,
-      });
-      created++;
+  let pushed = 0;
+  let pruned = 0;
+  for (const group of chunk(recipients, 50)) {
+    const r = await notify({
+      userIds: group,
+      createdBy: callerUid,
+      includeActor: true,
+      type: "broadcast",
+      titleKey: "notifBroadcast", // never written nor shown: titleText takes its place
+      titleText: String(title).slice(0, 200),
+      bodyText: typeof body === "string" ? body.slice(0, 500) : "",
+      data: { route: "/" },
     });
-    await batch.commit();
+    created += r.rows;
+    pushed += r.pushed;
+    pruned += r.pruned;
   }
-  return { ok: true, created };
+  return { ok: true, created, pushed, pruned };
 });
 
 // ── All groups with per-group activity (admin-only) ──

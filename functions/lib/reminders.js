@@ -50,77 +50,114 @@ exports.sendDueReminders = (0, scheduler_1.onSchedule)({ schedule: "every 5 minu
     const db = admin.firestore();
     const now = Date.now();
     const from = now - WINDOW_MS;
-    // ── candidates ──────────────────────────────────────────────────────────
-    //
-    // Two queries rather than one unbounded scan, and neither can be served by a range on the
-    // reminder instant, because there is no such field.
-    //
-    //   * events starting inside the lookahead — covers every non-recurring one;
-    //   * recurring parents, which start anywhere and are expanded below.
-    const fromDay = dayString(now - 2 * 86400000);
-    const toDay = dayString(now + MAX_LEAD_DAYS * 86400000);
-    const [plain, recurring] = await Promise.all([
-        db.collection("events")
-            .where("date", ">=", `${fromDay}T00:00:00.000Z`)
-            .where("date", "<=", `${toDay}T23:59:59.999Z`)
-            .limit(2000).get(),
-        db.collection("events").where("recurrenceRule", "!=", null).limit(2000).get(),
-    ]);
-    const byId = new Map();
-    for (const d of [...plain.docs, ...recurring.docs]) {
-        byId.set(d.id, Object.assign({ id: d.id }, d.data()));
+    // One line per run, whatever the run did. Until now this function wrote NOTHING — every
+    // execution was an empty log line — so "did it find anything?" had no answer short of
+    // reading the database. Same shape as ERROR_DIGEST: a fixed prefix and one JSON object, so it
+    // can be grepped and parsed by the same means.
+    const counts = { candidates: 0, occurrences: 0, due: 0, sent: 0, dupes: 0, rows: 0, pushed: 0, failed: 0 };
+    const done = () => {
+        console.log("REMINDERS_RUN " + JSON.stringify(Object.assign({ at: new Date(now).toISOString() }, counts)));
+    };
+    // Everything below sits in a try so that the finally can keep the promise made above: one
+    // REMINDERS_RUN line per run, whatever the run did — including a run that delivered three
+    // reminders and then died in housekeeping. Without this, a throw anywhere lost the line and
+    // the counters with it. (Review finding.)
+    try {
+        // ── candidates ──────────────────────────────────────────────────────────
+        //
+        // Two queries rather than one unbounded scan, and neither can be served by a range on the
+        // reminder instant, because there is no such field.
+        //
+        //   * events starting inside the lookahead — covers every non-recurring one;
+        //   * recurring parents, which start anywhere and are expanded below.
+        const fromDay = dayString(now - 2 * 86400000);
+        const toDay = dayString(now + MAX_LEAD_DAYS * 86400000);
+        const [plain, recurring] = await Promise.all([
+            db.collection("events")
+                .where("date", ">=", `${fromDay}T00:00:00.000Z`)
+                .where("date", "<=", `${toDay}T23:59:59.999Z`)
+                .limit(2000).get(),
+            db.collection("events").where("recurrenceRule", "!=", null).limit(2000).get(),
+        ]);
+        const byId = new Map();
+        for (const d of [...plain.docs, ...recurring.docs]) {
+            byId.set(d.id, Object.assign({ id: d.id }, d.data()));
+        }
+        const docs = [...byId.values()];
+        counts.candidates = docs.length;
+        if (docs.length === 0)
+            return;
+        const occurrences = (0, recurrenceServer_1.expandInWindow)(docs, fromDay, toDay)
+            .map((o) => ({ source: o.source, day: o.day }));
+        // Owners' zones, for the all-day fallback. One read per distinct owner, not per event.
+        const ownerIds = [...new Set(docs.map((d) => (typeof d.ownerId === "string" ? d.ownerId : "")).filter(Boolean))];
+        const ownerZones = {};
+        if (ownerIds.length > 0) {
+            const snaps = await db.getAll(...ownerIds.slice(0, 400).map((u) => db.doc(`users/${u}`)));
+            snaps.forEach((s, i) => { var _a; ownerZones[ownerIds[i]] = (_a = s.data()) === null || _a === void 0 ? void 0 : _a.timezone; });
+        }
+        const due = (0, remindersCore_1.dueIn)(occurrences, ownerZones, from, now);
+        counts.occurrences = occurrences.length;
+        counts.due = due.length;
+        if (due.length === 0)
+            return;
+        // ── send, at most once each ─────────────────────────────────────────────
+        for (const d of due) {
+            const logRef = db.doc(`reminder_log/${d.key}`);
+            try {
+                // `create` throws if the document exists. That is the dedupe: the first run to get here
+                // wins, and a second one stops before sending rather than having to coordinate.
+                await logRef.create({ eventId: d.eventId, day: d.day, at: d.at, sentAt: admin.firestore.FieldValue.serverTimestamp() });
+            }
+            catch (err) {
+                // Only ALREADY_EXISTS means an overlapping run got here first. Counting every rejection
+                // as a dupe would have made a transient UNAVAILABLE read as "somebody else delivered it" —
+                // a log line that lies is worse than the silence it replaced. (Review finding.)
+                const code = err === null || err === void 0 ? void 0 : err.code;
+                const already = code === 6 || code === "already-exists"
+                    || String((err === null || err === void 0 ? void 0 : err.message) || "").includes("ALREADY_EXISTS");
+                if (already) {
+                    counts.dupes += 1;
+                }
+                else {
+                    counts.failed += 1;
+                    console.error("reminder: dedupe write failed", d.key, err);
+                }
+                continue;
+            }
+            try {
+                const delivered = await (0, notify_1.notify)({
+                    userIds: d.recipients,
+                    // Nobody caused this; the schedule did. An empty `createdBy` also means `notify` drops
+                    // nobody from the recipients — the owner is meant to be reminded of their own event.
+                    createdBy: "",
+                    type: "reminder",
+                    titleKey: "notifReminder",
+                    titleParam: d.title,
+                    bodyKey: "notifReminderAt",
+                    param: d.clock,
+                    data: { route: "/", eventId: d.eventId },
+                });
+                counts.sent += 1;
+                counts.rows += delivered.rows;
+                counts.pushed += delivered.pushed;
+            }
+            catch (err) {
+                counts.failed += 1;
+                console.error("reminder: could not deliver", d.key, err);
+            }
+        }
+        // ── housekeeping ────────────────────────────────────────────────────────
+        const cutoff = dayString(now - LOG_TTL_DAYS * 86400000);
+        const stale = await db.collection("reminder_log").where("day", "<", cutoff).limit(400).get();
+        if (!stale.empty) {
+            const batch = db.batch();
+            stale.docs.forEach((s) => batch.delete(s.ref));
+            await batch.commit();
+        }
     }
-    const docs = [...byId.values()];
-    if (docs.length === 0)
-        return;
-    const occurrences = (0, recurrenceServer_1.expandInWindow)(docs, fromDay, toDay)
-        .map((o) => ({ source: o.source, day: o.day }));
-    // Owners' zones, for the all-day fallback. One read per distinct owner, not per event.
-    const ownerIds = [...new Set(docs.map((d) => (typeof d.ownerId === "string" ? d.ownerId : "")).filter(Boolean))];
-    const ownerZones = {};
-    if (ownerIds.length > 0) {
-        const snaps = await db.getAll(...ownerIds.slice(0, 400).map((u) => db.doc(`users/${u}`)));
-        snaps.forEach((s, i) => { var _a; ownerZones[ownerIds[i]] = (_a = s.data()) === null || _a === void 0 ? void 0 : _a.timezone; });
-    }
-    const due = (0, remindersCore_1.dueIn)(occurrences, ownerZones, from, now);
-    if (due.length === 0)
-        return;
-    // ── send, at most once each ─────────────────────────────────────────────
-    for (const d of due) {
-        const logRef = db.doc(`reminder_log/${d.key}`);
-        try {
-            // `create` throws if the document exists. That is the dedupe: the first run to get here
-            // wins, and a second one stops before sending rather than having to coordinate.
-            await logRef.create({ eventId: d.eventId, day: d.day, at: d.at, sentAt: admin.firestore.FieldValue.serverTimestamp() });
-        }
-        catch (_a) {
-            continue; // already sent by an overlapping run
-        }
-        try {
-            await (0, notify_1.notify)({
-                userIds: d.recipients,
-                // Nobody caused this; the schedule did. An empty `createdBy` also means `notify` drops
-                // nobody from the recipients — the owner is meant to be reminded of their own event.
-                createdBy: "",
-                type: "reminder",
-                titleKey: "notifReminder",
-                titleParam: d.title,
-                bodyKey: "notifReminderAt",
-                param: d.clock,
-                data: { route: "/", eventId: d.eventId },
-            });
-        }
-        catch (err) {
-            console.error("reminder: could not deliver", d.key, err);
-        }
-    }
-    // ── housekeeping ────────────────────────────────────────────────────────
-    const cutoff = dayString(now - LOG_TTL_DAYS * 86400000);
-    const stale = await db.collection("reminder_log").where("day", "<", cutoff).limit(400).get();
-    if (!stale.empty) {
-        const batch = db.batch();
-        stale.docs.forEach((s) => batch.delete(s.ref));
-        await batch.commit();
+    finally {
+        done();
     }
 });
 //# sourceMappingURL=reminders.js.map

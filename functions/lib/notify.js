@@ -42,7 +42,7 @@ async function notify(spec) {
     var _a;
     const db = admin.firestore();
     const targets = [...new Set(spec.userIds)]
-        .filter((u) => typeof u === "string" && u && u !== spec.createdBy)
+        .filter((u) => typeof u === "string" && u && (spec.includeActor || u !== spec.createdBy))
         .slice(0, 50);
     if (targets.length === 0)
         return { rows: 0, pushed: 0, pruned: 0 };
@@ -65,7 +65,7 @@ async function notify(spec) {
     // English line among four Romanian ones.
     const batch = db.batch();
     for (const r of recipients) {
-        batch.set(db.collection("notifications").doc(), Object.assign(Object.assign(Object.assign(Object.assign({ userId: r.uid, createdBy: spec.createdBy, type: spec.type, titleKey: spec.titleKey.slice(0, 60) }, (spec.titleParam ? { titleParam: spec.titleParam.slice(0, CAP) } : {})), (spec.bodyKey ? { bodyKey: spec.bodyKey.slice(0, 60) } : {})), (spec.param ? { param: spec.param.slice(0, CAP) } : {})), { title: (0, notifyStrings_1.renderNotify)(spec.titleKey, r.lang, spec.titleParam).slice(0, CAP), body: spec.bodyText
+        batch.set(db.collection("notifications").doc(), Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({ userId: r.uid, createdBy: spec.createdBy, type: spec.type }, (spec.titleText ? {} : { titleKey: spec.titleKey.slice(0, 60) })), (spec.titleParam && !spec.titleText ? { titleParam: spec.titleParam.slice(0, CAP) } : {})), (spec.bodyKey ? { bodyKey: spec.bodyKey.slice(0, 60) } : {})), (spec.param ? { param: spec.param.slice(0, CAP) } : {})), { title: (spec.titleText || (0, notifyStrings_1.renderNotify)(spec.titleKey, r.lang, spec.titleParam)).slice(0, CAP), body: spec.bodyText
                 ? spec.bodyText.slice(0, 500)
                 : spec.bodyKey ? (0, notifyStrings_1.renderNotify)(spec.bodyKey, r.lang, spec.param).slice(0, 500) : "", read: false, createdAt: admin.firestore.FieldValue.serverTimestamp() }));
     }
@@ -93,7 +93,7 @@ async function notify(spec) {
             continue;
         try {
             const res = await admin.messaging().sendEachForMulticast(Object.assign({ tokens, notification: {
-                    title: (0, notifyStrings_1.renderNotify)(spec.titleKey, lang, spec.titleParam),
+                    title: spec.titleText || (0, notifyStrings_1.renderNotify)(spec.titleKey, lang, spec.titleParam),
                     body: spec.bodyText || (spec.bodyKey ? (0, notifyStrings_1.renderNotify)(spec.bodyKey, lang, spec.param) : ""),
                 } }, (spec.data ? { data: spec.data } : {})));
             pushed += res.successCount;

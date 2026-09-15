@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { isSameDay, format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { auth, db, messaging } from '../firebase';
-import { getToken } from 'firebase/messaging';
+import { getToken, onMessage } from 'firebase/messaging';
 import { collection, query, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
 import { liveQuery, liveDoc } from '../utils/liveQuery';
 import { reportError } from '../reportError';
@@ -277,6 +277,36 @@ export default function CalendarHome() {
     };
 
     requestPermission();
+
+    // A push that arrives while the app is in the FOREGROUND is not shown by the service worker;
+    // it is handed to the page, and a page with no handler drops it on the floor. That is what
+    // happened to the very first test: the broadcast was sent from inside the app.
+    //
+    // Shown through the FCM worker's registration when it can be found, so the notification is
+    // owned by the same worker that shows background pushes. It is asked for by SCOPE: the SDK
+    // registers firebase-messaging-sw.js under '/firebase-cloud-messaging-push-scope', while
+    // `navigator.serviceWorker.ready` resolves to the PWA worker at '/' — a first draft used
+    // `.ready` and claimed otherwise in this comment. (Review finding.) Any registration can show
+    // a notification, so `.ready` remains the fallback.
+    const stopForeground = onMessage(messaging, (payload) => {
+      const title = payload.notification?.title || payload.data?.title;
+      if (!title) return;
+      const body = payload.notification?.body || payload.data?.body || '';
+      void (async () => {
+        if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+        try {
+          const sw = 'serviceWorker' in navigator ? navigator.serviceWorker : null;
+          const reg = sw
+            ? (await sw.getRegistration('/firebase-cloud-messaging-push-scope')) || (await sw.ready)
+            : null;
+          if (reg) await reg.showNotification(title, { body, data: payload.data });
+          else new Notification(title, { body });
+        } catch (err) {
+          reportError(err instanceof Error ? err.message : String(err), { context: 'fcm.foreground' });
+        }
+      })();
+    });
+    return stopForeground;
   }, []);
 
   useEffect(() => {

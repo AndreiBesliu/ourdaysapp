@@ -4549,3 +4549,56 @@ spre `index-B3MbGGmq.js`, iar acel fisier contine cheia.
 aplicatia si accepta permisiunea — pasul de la Andrei. Pana atunci, `notify()` scrie clopotelul si
 sare peste push, exact ca pana acum. Diagnosticul `fcm.token.web` din Health trebuie sa **inceteze**
 sa mai apara de la deploy incolo; daca mai apare o data, cheia nu s-a incarcat si e de cautat de ce.
+## 2026-09-15 - Notificari: broadcast-ul care n-a trimis niciodata push, si inca patru
+
+**Model:** Claude Fable 5.1 · „da la toate"
+
+Andrei a testat push-ul apasand *Send broadcast* din admin, cu aplicatia deschisa, si n-a primit
+nimic. Intrebarea lui: „are legatura cu VAPID?" **Nu.** VAPID mersese — doua tokenuri pe contul lui.
+Testul nu putea produce push din trei motive independente, si le-am reparat pe toate, plus doua.
+
+**(a) Broadcast-ul scria doar clopotelul.** `adminBroadcast` punea randurile direct, in loturi de
+400, si intorcea `{ ok, created }` — zero linii legate de push in tot corpul functiei, de cand exista
+butonul. Adminul spunea „Sent to 8 users" si opt telefoane ramaneau intunecate. Trece acum prin
+`notify()`, in loturi de 50 (plafonul lui propriu), cu doua optiuni noi: `includeActor` — o
+comunicare e pentru toti, inclusiv autorul, si oricum singurul cont cu token era al adminului, deci
+excluderea facea functia netestabila — si `titleText`, text liber in loc de cheie. Regula
+clopotelului decide forma: **daca randul are `titleKey`, dropdown-ul il randeaza pe acela** si
+ignora `title`, deci un broadcast se scrie *fara* `titleKey`, altfel cuvintele adminului ar fi fost
+inlocuite de o eticheta.
+
+**(b) Nu exista handler de prim-plan.** Un push sosit cu aplicatia deschisa nu e afisat de service
+worker; ajunge in pagina, si o pagina fara `onMessage` il arunca tacut. Acum se afiseaza prin
+inregistrarea worker-ului FCM, ceruta *dupa scope* (`/firebase-cloud-messaging-push-scope`), cu
+`.ready` ca rezerva.
+
+**(c) Programatorul de mementouri scria linii goale.** Acum o linie `REMINDERS_RUN {json}` per
+rulare — candidati, aparitii, scadente, trimise, duplicate, randuri, push, esuate — in acelasi
+tipar ca `ERROR_DIGEST`, ca sa se poata grepui la fel.
+
+**(d) „Resolved" langa „still happening"** era o contradictie aparenta: al doilea se masura fata de
+marcajul „seen" de ieri, nu fata de reparatie. Cand reparatia tine, scrie acum ca s-a repetat
+*dupa* ce a fost vazut, *nu de la reparatie incoace*.
+
+**(e) Tila NOTIFS TODAY arata 0 langa opt randuri tocmai scrise** — masura `notif_usage`, cota
+zilnica per utilizator pentru trimiteri initiate de om, pe care `notify()` n-o scrie niciodata.
+Numara acum randurile din `notifications` de azi, printr-un `count()`.
+
+### Revizia adversariala, si ce a gasit in codul MEU
+
+Patru sceptici, fiecare cu o afirmatie de daramat, inainte de a livra ceva care trimite la opt
+telefoane reale. Doua afirmatii au rezistat, una cu o corectie, **una a cazut** — corect:
+
+- Afirmatia mea spunea „sapte apelanti existenti ai `notify()`". Erau **noua** — `directChat.ts` si
+  `inviteLinks.ts` lipseau din inventarul meu. Agentul i-a verificat pe toti noua si a rulat
+  compararea in memorie: 22/22 identice octet cu octet. Codul era bun; numaratoarea mea, nu.
+- `dupes` crestea la *orice* respingere a scrierii de dedupe, nu doar la ALREADY_EXISTS — o eroare
+  tranzitorie ar fi aparut in log ca „a trimis altcineva". Iar `done()` nu era intr-un `finally`,
+  deci un throw pierdea linia si contoarele unei rulari care chiar livrase. Comentariul meu
+  promitea „o linie per rulare, orice ar face" si nu era adevarat. Amandoua reparate.
+- `navigator.serviceWorker.ready` se rezolva la worker-ul PWA de la `/`, nu la cel FCM.
+  Notificarea se afisa oricum, dar comentariul meu sustinea altceva. Corectat, cu cautare dupa scope.
+- Un titlu de broadcast care nu e sir cadea pe o cheie inexistenta. De neatins din formular; inchis.
+
+`npx tsc -b` verde · functions `tsc` verde (cu cod de iesire REAL — `$?` dupa un `| head` era al lui
+`head`) · 1153 de teste · poarta verde · build verde · livrat functions -> hosting.

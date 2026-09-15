@@ -164,7 +164,7 @@ export async function adminModerateUser(uid: string, action: 'enable' | 'disable
   const fn = httpsCallable(getFunctions(app), "adminModerateUser");
   return (await fn({ uid, action })).data;
 }
-export async function adminBroadcast(params: { target: string; title: string; body?: string }): Promise<{ created: number }> {
+export async function adminBroadcast(params: { target: string; title: string; body?: string }): Promise<{ created: number; pushed?: number; pruned?: number }> {
   const fn = httpsCallable(getFunctions(app), "adminBroadcast");
   return (await fn(params)).data as { created: number };
 }

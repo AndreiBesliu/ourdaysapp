@@ -780,3 +780,22 @@ Cheia VAPID e pe live. Mai lipseste un singur lucru si e la tine:
       contul respectiv (`users/{uid}.fcmTokens`) — numar, nu continut.
 - [ ] **Proba finala:** pune un memento la un eveniment cu 10 minute inainte, si vezi daca
       notificarea ajunge pe ecranul blocat. Asta e prima data cand ar putea.
+---
+
+## 43. Notificarile, de testat cu telefonul (15.09)
+
+Cheia e pusa, tokenurile exista, si acum si drumurile sunt deschise. Trei probe, in ordinea asta:
+
+- [ ] **Cu aplicatia DESCHISA, in admin, apasa Send broadcast.** Trebuie sa apara o notificare de
+      sistem — desi esti in aplicatie. Asta probeaza doua lucruri deodata: ca broadcast-ul trimite
+      push, si ca handler-ul de prim-plan il afiseaza. Mesajul de confirmare trebuie sa scrie acum
+      „pushed to N devices", nu doar „sent".
+- [ ] **Blocheaza telefonul si roaga pe cineva sa-ti scrie in chat** (sau trimite broadcast de pe
+      alt dispozitiv). Trebuie sa apara pe ecranul blocat — ala e drumul de fundal, prin
+      `firebase-messaging-sw.js`.
+- [ ] **Un memento la un eveniment al tau, telefonul blocat cand vine ora.** E drumul de zi cu zi.
+      Daca nu vine, de data asta pot vedea de ce: rulare cu rulare, in jurnal.
+- [ ] **Admin -> Health:** tila NOTIFS TODAY trebuie sa arate cel putin numarul de randuri scrise
+      azi (opt de la broadcast-ul de dimineata, plus ce mai trimiti).
+- [ ] Randul VAPID: eticheta trebuie sa zica acum ca s-a repetat *dupa ce a fost vazut, nu de la
+      reparatie*, nu „still happening".

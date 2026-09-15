@@ -52,6 +52,22 @@ export interface NotifySpec {
   push?: boolean;
   /** Extra key/values delivered with the push, for click routing. Values must be strings. */
   data?: Record<string, string>;
+  /**
+   * Keep `createdBy` among the recipients.
+   *
+   * The default drops the actor, and for almost everything that is right: you do not need to be
+   * told about your own message. A broadcast is the exception — an admin announcing something
+   * wants to see it land too, and, practically, until the day this was added the only account in
+   * the system holding a push token was the admin's, so excluding it made the feature untestable.
+   */
+  includeActor?: boolean;
+  /**
+   * A title given as words rather than as a key — a broadcast is typed by a person, not chosen
+   * from the dictionary. When set, the bell row is written WITHOUT `titleKey`: the dropdown
+   * renders the key whenever one is present, so leaving it in would replace the admin's words
+   * with a label. `titleKey` is then only a type-level requirement and is never written or shown.
+   */
+  titleText?: string;
 }
 
 export interface NotifyResult {
@@ -80,7 +96,7 @@ export async function notify(spec: NotifySpec): Promise<NotifyResult> {
   const db = admin.firestore();
 
   const targets = [...new Set(spec.userIds)]
-    .filter((u) => typeof u === "string" && u && u !== spec.createdBy)
+    .filter((u) => typeof u === "string" && u && (spec.includeActor || u !== spec.createdBy))
     .slice(0, 50);
   if (targets.length === 0) return { rows: 0, pushed: 0, pruned: 0 };
 
@@ -105,11 +121,11 @@ export async function notify(spec: NotifySpec): Promise<NotifyResult> {
       userId: r.uid,
       createdBy: spec.createdBy,
       type: spec.type,
-      titleKey: spec.titleKey.slice(0, 60),
-      ...(spec.titleParam ? { titleParam: spec.titleParam.slice(0, CAP) } : {}),
+      ...(spec.titleText ? {} : { titleKey: spec.titleKey.slice(0, 60) }),
+      ...(spec.titleParam && !spec.titleText ? { titleParam: spec.titleParam.slice(0, CAP) } : {}),
       ...(spec.bodyKey ? { bodyKey: spec.bodyKey.slice(0, 60) } : {}),
       ...(spec.param ? { param: spec.param.slice(0, CAP) } : {}),
-      title: renderNotify(spec.titleKey, r.lang, spec.titleParam).slice(0, CAP),
+      title: (spec.titleText || renderNotify(spec.titleKey, r.lang, spec.titleParam)).slice(0, CAP),
       body: spec.bodyText
         ? spec.bodyText.slice(0, 500)
         : spec.bodyKey ? renderNotify(spec.bodyKey, r.lang, spec.param).slice(0, 500) : "",
@@ -149,7 +165,7 @@ export async function notify(spec: NotifySpec): Promise<NotifyResult> {
       const res = await admin.messaging().sendEachForMulticast({
         tokens,
         notification: {
-          title: renderNotify(spec.titleKey, lang, spec.titleParam),
+          title: spec.titleText || renderNotify(spec.titleKey, lang, spec.titleParam),
           body: spec.bodyText || (spec.bodyKey ? renderNotify(spec.bodyKey, lang, spec.param) : ""),
         },
         ...(spec.data ? { data: spec.data } : {}),
