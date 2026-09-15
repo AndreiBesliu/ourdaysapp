@@ -11,6 +11,7 @@ import { triggerHaptic } from '../utils/haptics';
 import { generateGroupDigestAI } from '../ai';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
+import { dialogDepth } from '../utils/dialogStack';
 
 
 export type ConversationKind = 'group' | 'chat';
@@ -38,6 +39,7 @@ interface GroupChatWidgetProps {
 
 // Audio Player sub-component for voice messages
 function AudioPlayer({ src, isMe }: { src: string; isMe: boolean }) {
+  const { language } = useThemeStore();
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -74,7 +76,7 @@ function AudioPlayer({ src, isMe }: { src: string; isMe: boolean }) {
 
   return (
     <div className={`flex items-center gap-2 px-3 py-2.5 min-w-[180px] ${isMe ? 'text-white' : 'text-zinc-700 dark:text-zinc-200'}`}>
-      <button onClick={toggle} className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors ${isMe ? 'bg-white/20 hover:bg-white/30' : 'bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600'}`}>
+      <button aria-label={playing ? t('pauseVoiceMessage', language) : t('playVoiceMessage', language)} onClick={toggle} className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors ${isMe ? 'bg-white/20 hover:bg-white/30' : 'bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600'}`}>
         {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
       </button>
       <div className="flex-1 flex flex-col gap-1">
@@ -219,21 +221,27 @@ export default function GroupChatWidget({
     }
   }, [messages, open]);
 
-  // ESC key: cancel editing or replying
+  // ESC key: cancel editing or replying.
+  //
+  // Guarded twice, because this listener sits on `window` and this widget is mounted the whole time
+  // a group is selected — collapsed or not. Unguarded it answered Escape presses that had nothing to
+  // do with the chat: closing an event modal silently threw away a reply the user had lined up, and
+  // did it while the chat pane was not even on screen. `dialogDepth()` is the same stack the modals
+  // register in, so "something is open above me" is a fact here rather than a guess.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (editingMsg) {
-          setEditingMsg(null);
-          setNewMessage('');
-        } else if (replyingTo) {
-          setReplyingTo(null);
-        }
+      if (e.key !== 'Escape') return;
+      if (!open || dialogDepth() > 0) return;
+      if (editingMsg) {
+        setEditingMsg(null);
+        setNewMessage('');
+      } else if (replyingTo) {
+        setReplyingTo(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [editingMsg, replyingTo]);
+  }, [editingMsg, replyingTo, open]);
 
   const attachImage = (file: File) => {
     setImageFile(file);
@@ -643,7 +651,7 @@ export default function GroupChatWidget({
                   onClick={handleGenerateDigest}
                   disabled={isGeneratingDigest}
                   className="p-1 hover:bg-black/10 rounded-full transition-colors"
-                  title={t('aiDigestTooltip', language)}
+                  aria-label={t('aiDigestTooltip', language)} title={t('aiDigestTooltip', language)}
                 >
                   {isGeneratingDigest ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -1024,7 +1032,7 @@ export default function GroupChatWidget({
               <button
                 onClick={cancelRecording}
                 className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors shrink-0"
-                title={t('cancel', language)}
+                aria-label={t('cancel', language)} title={t('cancel', language)}
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -1046,7 +1054,7 @@ export default function GroupChatWidget({
               <button
                 onClick={stopRecording}
                 className="w-9 h-9 rounded-full bg-red-500 flex items-center justify-center hover:opacity-90 transition-opacity shrink-0 text-white"
-                title={t('sendVoiceMessageTooltip', language)}
+                aria-label={t('sendVoiceMessageTooltip', language)} title={t('sendVoiceMessageTooltip', language)}
               >
                 <Send className="w-4 h-4 ml-0.5" />
               </button>
@@ -1091,6 +1099,7 @@ export default function GroupChatWidget({
                 <button
                   type="submit"
                   disabled={uploading}
+                  aria-label={t('sendMessageAction', language)}
                   className="w-9 h-9 rounded-full bg-primary flex items-center justify-center disabled:opacity-50 hover:opacity-90 transition-opacity shrink-0"
                 >
                   {uploading
@@ -1103,7 +1112,7 @@ export default function GroupChatWidget({
                   type="button"
                   onClick={startRecording}
                   className="w-9 h-9 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors shrink-0 text-zinc-500"
-                  title={t('recordVoiceMessageTooltip', language)}
+                  aria-label={t('recordVoiceMessageTooltip', language)} title={t('recordVoiceMessageTooltip', language)}
                 >
                   <Mic className="w-4 h-4" />
                 </button>

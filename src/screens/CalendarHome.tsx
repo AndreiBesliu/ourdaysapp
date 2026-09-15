@@ -650,6 +650,7 @@ export default function CalendarHome() {
               </button>
               <button 
                 onClick={handleDismissBirthdayPrompt}
+                aria-label={t('dismissAction', language)}
                 className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />

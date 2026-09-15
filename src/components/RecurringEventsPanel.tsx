@@ -96,7 +96,7 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
             <Repeat className="w-5 h-5 text-indigo-500" />
             {t('recurring', language)}
           </h3>
-          <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 rounded-full transition-colors">
+          <button aria-label={t('closeAction', language)} onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 rounded-full transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>

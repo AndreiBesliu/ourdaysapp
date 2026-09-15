@@ -225,7 +225,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
     <div className="flex flex-col h-full bg-zinc-50 dark:bg-zinc-950">
       {/* Header */}
       <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 p-4 flex items-center justify-between shrink-0">
-        <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors">
+        <button aria-label={t('back', language)} onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex flex-col items-center leading-tight">

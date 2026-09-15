@@ -151,7 +151,7 @@ export default function GroupSettingsModal({
             <Settings2 className="w-5 h-5 text-primary" />
             {t('groupSettings', language)}
           </h3>
-          <button onClick={onClose} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-700 rounded-full transition-colors">
+          <button aria-label={t('closeAction', language)} onClick={onClose} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-700 rounded-full transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -171,7 +171,7 @@ export default function GroupSettingsModal({
                     onKeyDown={e => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') { e.stopPropagation(); setIsEditingName(false); setEditedName(groupName); } }}
                     className="flex-1 px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 outline-none focus:border-primary"
                   />
-                  <button onClick={handleRename} disabled={loading} className="p-2 bg-primary text-white rounded-lg hover:opacity-90 transition-opacity">
+                  <button aria-label={t('save', language)} onClick={handleRename} disabled={loading} className="p-2 bg-primary text-white rounded-lg hover:opacity-90 transition-opacity">
                     <Check className="w-4 h-4" />
                   </button>
                   <button onClick={() => setIsEditingName(false)} className="p-2 bg-zinc-100 dark:bg-zinc-700 rounded-lg text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors">

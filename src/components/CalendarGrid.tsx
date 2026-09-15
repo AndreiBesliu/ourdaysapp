@@ -148,10 +148,10 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
           </button>
         </h2>
         <div className="flex gap-2">
-          <button onClick={prevPeriod} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
+          <button aria-label={t('previousPeriod', language)} onClick={prevPeriod} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
             <ChevronLeft className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
           </button>
-          <button onClick={nextPeriod} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
+          <button aria-label={t('nextPeriod', language)} onClick={nextPeriod} className="p-2 bg-zinc-100 dark:bg-zinc-800 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors">
             <ChevronRight className="w-5 h-5 text-zinc-600 dark:text-zinc-400" />
           </button>
         </div>

@@ -107,7 +107,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
     <div ref={dialogRef} {...dialogProps} className="fixed inset-0 z-[100] bg-black flex flex-col">
       <div className="p-4 flex justify-between items-center bg-black/50 absolute top-0 left-0 right-0 z-10">
         <h3 className="text-white font-medium">{t('scanBarcodeTitle', language)}</h3>
-        <button onClick={onClose} className="p-2 text-white bg-white/20 rounded-full">
+        <button aria-label={t('closeAction', language)} onClick={onClose} className="p-2 text-white bg-white/20 rounded-full">
           <X className="w-6 h-6" />
         </button>
       </div>

@@ -237,7 +237,7 @@ export default function InviteFamilyModal({ isOpen, onClose, groupId, groupName,
             <UserPlus className="w-5 h-5 text-primary" />
             {t('invite', language)} · {groupName || t('group', language)}
           </h3>
-          <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+          <button aria-label={t('closeAction', language)} onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>

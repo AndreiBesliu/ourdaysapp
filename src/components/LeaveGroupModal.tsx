@@ -151,7 +151,7 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
             {isOwner ? <Trash2 className="w-5 h-5 text-red-500" /> : <LogOut className="w-5 h-5 text-amber-500" />}
             {isOwner ? t('deleteGroup', language) : t('leaveGroup', language)}
           </h3>
-          <button onClick={onClose} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors">
+          <button aria-label={t('closeAction', language)} onClick={onClose} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>

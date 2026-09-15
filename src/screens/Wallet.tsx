@@ -603,6 +603,7 @@ export default function Wallet() {
         {activeTab === 'assets' && (
           <button
             onClick={openAddModal}
+            aria-label={t('addNewAsset', language)}
             className="p-2 bg-emerald-50 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 rounded-lg hover:bg-emerald-100 transition-colors"
           >
             <Plus className="w-5 h-5" />

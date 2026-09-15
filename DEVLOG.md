@@ -4314,3 +4314,41 @@ butonul care deschisese. E corect — `.click()` din script nu muta focusul, dec
 inapoi. Cand butonul chiar are focus, focusul se intoarce la el; asta se vede in proba de dimineata.
 
 `npx tsc -b` verde · 1100 de teste · poarta verde · build verde · livrat pe live.
+## 2026-09-15 - Butoanele care nu spuneau nimic
+
+**Model:** Claude Opus 5 · „Continua"
+
+Optsprezece butoane din aplicatie **nu aveau niciun nume**. Un cititor de ecran le anunta „buton" si
+atat; controlul vocal n-avea niciun cuvant cu care sa le apese. Alte sapte erau numite doar prin
+`title` — ultima sursa la care se uita calculul numelui accesibil, **invizibila pe telefon** si
+anuntata inconstant. Acum toate au `aria-label`, iar cele cu tooltip si l-au pastrat.
+
+Sapte chei noi in sase limbi (inainte/inapoi la calendar, respinge, adauga cheltuiala, trimite
+mesajul, reda/pune pauza la mesajul vocal).
+
+### Numarul a fost gresit prima data, si merita spus
+
+Primul scanner a raportat **68**. Era gresit: elimina orice `{...}` din continutul butonului, deci
+`<button>{t('save', language)}</button>` ii parea gol. **O eticheta randata de o expresie e tot o
+eticheta.** Numarul adevarat era 18 + 7. Daca livram „am reparat 68 de butoane", cifra ar fi fost
+o minciuna curata.
+
+Regula stricta de acum **sub-raporteaza** in schimb (un buton `{loading ? <A/> : <B/>}` chiar n-are
+nume si e sarit), asa ca scanner-ul scoate si o a treia categorie, „nesigure", in loc sa le ascunda.
+Trei au iesit acolo; doua chiar aveau text, una nu — reparata.
+
+### Si o poarta, nu o maturare
+
+`src/utils/buttonNames.test.ts` reface scanarea la fiecare rulare si **pica** daca reapare un buton
+fara nume. Urmatorul buton cu iconita va fi adaugat de cineva care n-a citit commit-ul asta. Testul
+are si o verificare ca a citit efectiv fisiere — altfel un glob stricat l-ar face verde degeaba.
+
+### Escape din chat nu mai fura din alta parte
+
+`GroupChatWidget` avea **singurul** ascultator de Escape ramas fara nicio garda, iar widget-ul e
+montat tot timpul cat e un grup selectat. Deci inchideai un eveniment cu Escape si **se anula tacut
+si raspunsul pregatit in chat** — pe un panou care nici macar nu era pe ecran. Acum raspunde doar
+cand chatul e deschis si nu e nimic peste el (`dialogDepth()`, acelasi teanc in care se inscriu
+ferestrele).
+
+`npx tsc -b` verde · **1103 de teste** (de la 1100) · poarta verde · build verde · livrat pe live.

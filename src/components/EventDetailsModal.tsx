@@ -479,11 +479,11 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           </div>
           <div className="flex items-center gap-1">
             {canEdit && onEdit && (
-              <button onClick={onEdit} className="p-2 text-primary hover:bg-primary/10 transition-colors rounded-full" title={t('edit', language)}>
+              <button onClick={onEdit} className="p-2 text-primary hover:bg-primary/10 transition-colors rounded-full" aria-label={t('edit', language)} title={t('edit', language)}>
                 <Edit2 className="w-5 h-5" />
               </button>
             )}
-            <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors bg-zinc-100 dark:bg-zinc-800 rounded-full" title={t('closeTooltip', language)}>
+            <button onClick={onClose} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors bg-zinc-100 dark:bg-zinc-800 rounded-full" aria-label={t('closeTooltip', language)} title={t('closeTooltip', language)}>
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -891,7 +891,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       {fullScreenImage && (
         <div onClick={(e) => { e.stopPropagation(); setFullScreenImage(null); }} ref={lightbox.dialogRef} {...lightbox.dialogProps} className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-pointer">
           <img src={fullScreenImage} className="max-w-full max-h-full object-contain animate-in fade-in zoom-in duration-200" alt="Full screen asset" />
-          <button className="absolute top-4 right-4 text-white/50 hover:text-white bg-black/50 hover:bg-black/80 transition-all p-2 rounded-full">
+          <button aria-label={t('closeAction', language)} className="absolute top-4 right-4 text-white/50 hover:text-white bg-black/50 hover:bg-black/80 transition-all p-2 rounded-full">
             <X className="w-6 h-6" />
           </button>
         </div>

@@ -312,7 +312,7 @@ export default function Admin() {
             <button onClick={() => navigate('/')} className="p-2 -ml-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white"><ArrowLeft className="w-5 h-5" /></button>
             <h1 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary" /> Admin</h1>
           </div>
-          <button onClick={refresh} disabled={loading} className="p-2 text-zinc-500 hover:text-primary disabled:opacity-50" title="Refresh">
+          <button onClick={refresh} disabled={loading} className="p-2 text-zinc-500 hover:text-primary disabled:opacity-50" aria-label="Refresh" title="Refresh">
             <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>

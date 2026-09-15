@@ -196,7 +196,7 @@ export default function ExpensesTab(
           step="0.01" 
           className="w-24 px-3 py-2 border rounded-lg bg-white dark:bg-zinc-900 dark:border-zinc-800 outline-none focus:border-emerald-500" 
         />
-        <button type="submit" disabled={loading} className="px-4 bg-emerald-500 text-white rounded-lg font-bold hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center justify-center">
+        <button aria-label={t('addExpenseAction', language)} type="submit" disabled={loading} className="px-4 bg-emerald-500 text-white rounded-lg font-bold hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center justify-center">
           <Plus className="w-5 h-5"/>
         </button>
       </form>

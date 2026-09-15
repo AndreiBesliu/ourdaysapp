@@ -704,3 +704,12 @@ Tot fara sa le pot vedea — sunt in spatele contului. De verificat:
 **Ce NU s-a schimbat, si e intentionat:** meniul de notificari, meniul mobil, meniul butonului
 plutitor, panoul de chat flotant si selectorul de emoji raman cum erau. Sunt meniuri, nu ferestre,
 si vor alt fel de tratament.
+---
+
+## 37. Butoane cu nume (15.09)
+
+- [ ] **Nimic vizibil nu trebuie sa se fi schimbat.** Daca vezi vreun buton care si-a pierdut
+      tooltip-ul sau arata altfel, spune-mi — am adaugat doar etichete, n-am mutat nimic.
+- [ ] **Chat:** pregateste un raspuns la un mesaj (Reply), apoi **fara sa trimiti** deschide un
+      eveniment si inchide-l cu Escape. Raspunsul pregatit trebuie sa fie **inca acolo**.
+      Inainte se anula tacut.
