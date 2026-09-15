@@ -4527,3 +4527,25 @@ care marcheaza pop-ul urmator, indiferent daca vreo fereastra mai asculta. Zece 
 in browser, toate exact cum trebuie — inclusiv secventa scurgerii, redata ca atare.
 
 `npx tsc -b` verde · **1153 de teste** (de la 1149) · poarta verde · build verde · livrat pe live.
+## 2026-09-15 - Cheia VAPID e pe live; push-ul poate, in sfarsit, sa ajunga undeva
+
+**Model:** Claude Fable 5.1 · Andrei a lipit cheia in chat, fiind fara acces la PC
+
+Push-ul web n-a livrat niciodata nimic, nimanui: codul de inregistrare avea o cheie de 44 de
+caractere unde trebuia una de 87, deci `subscribe()` esua de fiecare data si niciun cont n-a avut
+vreodata un token. Ieri s-a reparat codul (`bc970d1`); azi a venit si cheia.
+
+**De ce a fost in regula sa treaca prin chat**, spre deosebire de cheia de service account de ieri:
+aia era o cheie **privata** — cine o are poate scrie in baza. Asta e cheia **publica** a perechii
+VAPID; pe cea privata o tine Firebase si n-o arata. Cea publica ajunge oricum in bundle-ul din
+browser, la fiecare utilizator. In chat n-a plecat nimic ce nu e deja in `index-*.js` pe live.
+
+Verificata cu exact regula aplicatiei inainte de a fi scrisa: 87 de caractere, se decodeaza in
+65 de octeti, primul e `0x04` — un punct P-256 necomprimat. Pusa in `.env` (gitignorat, verificat),
+coapta in bundle la build, livrata, si confirmata in fisierul servit de pe live: `index.html` arata
+spre `index-B3MbGGmq.js`, iar acel fisier contine cheia.
+
+**Ce NU s-a intamplat inca:** niciun token. Un dispozitiv primeste token abia cand deschide
+aplicatia si accepta permisiunea — pasul de la Andrei. Pana atunci, `notify()` scrie clopotelul si
+sare peste push, exact ca pana acum. Diagnosticul `fcm.token.web` din Health trebuie sa **inceteze**
+sa mai apara de la deploy incolo; daca mai apare o data, cheia nu s-a incarcat si e de cautat de ce.

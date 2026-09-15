@@ -764,3 +764,19 @@ Flash costa de ~9 ori mai mult per apel. **Vrei sa pun o temporizare?**
       ceva deschis peste altceva, spune-mi.
 - [ ] **Inchide o fereastra singura cu X, deschide alta, apasa Back o data.** Trebuie sa se
       inchida din prima. Inainte, prima apasare nu facea nimic.
+---
+
+## 42. Push-ul, pasul tau (15.09)
+
+Cheia VAPID e pe live. Mai lipseste un singur lucru si e la tine:
+
+- [ ] **Pe fiecare telefon** (al tau si al celorlalti din grup): deschide aplicatia o data,
+      **reincarca fortat** ca sa prinda bundle-ul nou, si accepta cererea de permisiune pentru
+      notificari cand apare.
+- [ ] **Admin -> Health:** rândul „Web push is not configured" **nu** trebuie sa mai apara
+      cu o data de dupa deploy. Daca apare, spune-mi — inseamna ca telefonul ala a prins bundle-ul
+      vechi sau ca ceva nu s-a incarcat.
+- [ ] **Dupa ce macar un telefon a acceptat:** imi spui, si verific eu ca s-a scris un token pe
+      contul respectiv (`users/{uid}.fcmTokens`) — numar, nu continut.
+- [ ] **Proba finala:** pune un memento la un eveniment cu 10 minute inainte, si vezi daca
+      notificarea ajunge pe ecranul blocat. Asta e prima data cand ar putea.
