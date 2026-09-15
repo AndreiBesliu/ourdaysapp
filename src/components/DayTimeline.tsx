@@ -13,8 +13,9 @@ import { format } from 'date-fns';
 import { Clock } from 'lucide-react';
 import { useThemeStore } from '../store';
 import { t, getDateLocale } from '../utils/i18n';
-import { displayTime, localZone } from '../utils/eventTime';
+import { localZone, daysOf, spanOf } from '../utils/eventTime';
 import { layoutDay, visibleHours } from '../utils/dayLayout';
+import { spanClockLabel } from '../utils/spanLabel';
 
 /** Row height for one hour, in pixels. The only place the grid's scale is decided. */
 const HOUR_PX = 56;
@@ -69,6 +70,15 @@ export default function DayTimeline({ date, events, onEventClick }: DayTimelineP
               className="px-2 py-1 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors max-w-full truncate"
             >
               {ev.title || t('logUntitled', language)}
+              {/* "2/3" on the second day of a three-day stay: which day of it this is. Digits, so
+                  it reads the same in all six languages. */}
+              {(() => {
+                const sp = spanOf(ev);
+                if (!sp || sp.offset === 0) return null;
+                const days = daysOf(ev);
+                const at = days.indexOf(dayKey);
+                return at >= 0 ? <span className="ml-1 opacity-60 tabular-nums">{at + 1}/{days.length}</span> : null;
+              })()}
             </button>
           ))}
         </div>
@@ -93,7 +103,8 @@ export default function DayTimeline({ date, events, onEventClick }: DayTimelineP
 
           {/* the events themselves */}
           {layout.timed.map((p, i) => {
-            const shown = displayTime(p.event, zone);
+            // Says which day of the event this block is — see spanLabel.ts for the shapes.
+            const shown = spanClockLabel(p.event, dayKey, zone);
             const topPx = ((p.startMin - gridTop) / 60) * HOUR_PX;
             const heightPx = Math.max(22, ((p.endMin - p.startMin) / 60) * HOUR_PX - 2);
             // Columns are a percentage of the track so the blocks keep lining up at any width.

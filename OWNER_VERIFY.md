@@ -812,3 +812,20 @@ Deci intai **deschide aplicatia o data**, apoi:
 - [ ] Acelasi test cu aplicatia **deschisa**: tot una singura.
 - [ ] Daca vezi tot doua, spune-mi si zi daca telefonul deschisese aplicatia dupa deploy — daca nu,
       inca ruleaza worker-ul vechi.
+---
+
+## 45. Evenimente pe mai multe zile: ce se vede (15.09)
+
+Inca nu poti CREA unul din formular — aia e felia 3. Dar randarea e livrata, deci:
+
+- [ ] **Nimic nu trebuie sa se fi schimbat** pentru evenimentele existente. Uita-te la o zi
+      aglomerata: aceleasi blocuri, aceleasi ore, aceeasi inaltime.
+- [ ] **Un eveniment recurent zilnic, in jurul lui 29 martie** (sau orice serie veche care trece
+      peste schimbarea orei): trebuie sa apara pe ziua corecta. Inainte, aparitiile de dupa
+      schimbare se puteau aseza cu o zi mai devreme — spune-mi daca vezi doua pe aceeasi zi.
+- [ ] **Grila zilei se deschide de la 00:00** pe zilele in care un eveniment continua din ziua
+      precedenta. E intentionat (evenimentul chiar incepe la miezul noptii acolo), dar face grila
+      mai inalta — spune-mi daca deranjeaza.
+- [ ] **Detaliile unui eveniment** arata acum si ora sub data. Daca data arata o zi diferita decat
+      inainte, spune-mi imediat: vestul Greenwich-ului era gresit inainte si e corectat acum, dar
+      vreau sa stiu daca se vede altceva.

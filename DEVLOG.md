@@ -4684,3 +4684,55 @@ Urmeaza: felia 2 (randarea — un singur `occursOn` in locul celor opt copii de 
 per zi in `dayLayout`) si felia 3 (formularul). Revizie adversariala inaintea lor.
 
 `npx tsc -b` verde · functions `tsc` verde · **1177 de teste** (de la 1153) · poarta verde · build.
+## 2026-09-15 - Evenimente pe mai multe zile, felia 2: randarea
+
+**Model:** Claude Opus 5 · continuare
+
+Un eveniment de mai multe zile se deseneaza cate o **felie pe zi**: ziua de inceput de la ceas pana
+la miezul noptii, zilele din mijloc intregi, ziua de sfarsit de la miezul noptii pana la ceasul de
+final. Felia stie ca e o bucata dintr-un lucru mai lung, deci blocul poate spune asta in loc sa
+tipareasca ora de start de ieri ca si cum ar fi de azi: `22:00 ▸` in prima zi, `◂ → 02:00` in a
+doua, `◂ … ▸` la mijloc. Glife, nu cuvinte — nu cer traducere in sase limbi.
+
+**Opt copii scrise de mana au devenit una.** `isSameDay(new Date(ev.date), zi)` aparea in opt locuri
+(trei in grila lunii, cinci in ecranul principal); acum e `occursOn(ev, localDayKey(zi))`, singurul
+loc unde se decide „e evenimentul in ziua asta". Numarul de copii ramase: **zero**.
+
+### Probat in browser, nu doar in teste
+
+Am montat `DayTimeline`-ul ADEVARAT pe trei zile consecutive, cu cinci evenimente de test, si am
+masurat inaltimile la 56px/ora: „Dentist" fara sfarsit ramane o ora (54px, neschimbat), „Standup
+09:00–11:30" 2,5 ore (138px), conferinta de trei zile 14h / **24h** / 16h. Etichetele spuneau a cata
+zi e. Bancul s-a sters inainte de commit.
+
+### Revizia adversariala a DARAMAT afirmatia mea de compatibilitate
+
+Trei sceptici. Unul a refuzat afirmatia „un eveniment vechi se randeaza exact ca inainte" — si avea
+dreptate, cu doua constatari HIGH, rulate, nu deduse. Le-am verificat eu inainte sa repar:
+
+**1. `sliceInDay` arunca evenimente vechi din grila.** Prima mea versiune calcula instante absolute
+si le taia la miezul noptii al cititorului; vechiul `minutesInDay` **infasura** (citea ora inapoi
+prin Intl si arunca ziua). Diferenta: un eveniment de 00:30 la Bucuresti, citit din Londra, era
+desenat la 13:50 in vechiul cod si **disparea in banda „toata ziua"** in al meu — unde nu se arata
+nicio ora. O ora diferenta de fus era de ajuns. Masurat pe patru perechi de fusuri.
+
+Reparat prin intoarcerea la ceasul de perete pentru POZITIE (`wallMinutes`, corpul pe care
+`minutesInDay` il avea dintotdeauna, cu ceasul dat ca parametru ca sa-l poata folosi si sfarsitul).
+Un steag de continuare uneori generos face mai putin rau decat un eveniment pierdut.
+
+**2. Aparitiile recurente nu stau pe miezul noptii UTC.** `advanceDate` e date-fns, care paseste
+calendarul LOCAL, deci de la trecerea la ora de vara incolo instantul derapeaza la 23:00Z — iar
+documentul **se contrazicea pe sine**: `recurrenceDate` spunea 30 martie, ziua UTC a lui `date`
+spunea 29. Masurat sub Europe/Bucharest: primele cinci aparitii sunt de acord, toate de dupa nu.
+Randarea veche compara instantul local si nimerea; orice citea ZIUA din `date` — cum face `occursOn`
+— nu. Reparat la sursa: expandorul emite acum `${zi}T00:00:00.000Z`, deci aparitia e de acord cu ea
+insasi, iar clientul si serverul emit aceeasi zi (serverul paseste deja in milisecunde UTC).
+
+Plus trei constatari LOW, toate inchise: un `date` necitibil cu ceas valid se deseneaza iar la ceasul
+lui, si fereastra zilei si-a recapatat rezerva pentru o ora stocata necanonic.
+
+**Doua dintre testele mele au picat dupa reparatie** — exact cele in care fixasem comportamentul
+instant-based pe care revizia m-a convins sa-l schimb. Actualizate, cu motivul scris in ele.
+
+`npx tsc -b` verde · functions `tsc` verde · **1211 de teste** (de la 1177), verzi si sub
+`TZ=Europe/Bucharest`, nu doar UTC · poarta verde · build verde.

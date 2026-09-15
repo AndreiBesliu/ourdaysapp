@@ -53,10 +53,12 @@ exports.isValidTime = isValidTime;
 exports.isValidZone = isValidZone;
 exports.localZone = localZone;
 exports.zoneOffsetMs = zoneOffsetMs;
+exports.localDayKey = localDayKey;
 exports.dayOf = dayOf;
 exports.startInstant = startInstant;
 exports.reminderInstant = reminderInstant;
 exports.displayTime = displayTime;
+exports.displayEndTime = displayEndTime;
 exports.timeFieldsFor = timeFieldsFor;
 exports.isValidDayOffset = isValidDayOffset;
 exports.dayPlus = dayPlus;
@@ -110,6 +112,17 @@ function zoneOffsetMs(utcMs, zone) {
     // `hour` comes back as 24 for midnight in some engines under hour12:false.
     const asIfUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
     return asIfUtc - utcMs;
+}
+/**
+ * The day a LOCAL Date falls on, as `yyyy-MM-dd` — the label a calendar cell carries.
+ *
+ * This is the other half of `dayOf`: events are stored by day label (midnight UTC of the label),
+ * cells are local Dates, and the two meet on the label. Comparing the stored instant with the
+ * local cell instead (`isSameDay(new Date(ev.date), cell)`) put every event on the previous
+ * evening for anyone west of Greenwich — a skew that had been in eight places.
+ */
+function localDayKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 /** The calendar day of an event, as `yyyy-MM-dd`. Read in UTC, because that is how it is stored. */
 function dayOf(dateIso) {
@@ -173,6 +186,25 @@ function displayTime(ev, readerZone) {
     const instant = startInstant(ev, evZone);
     if (instant === null)
         return { text: ev.time, zoneNote: null };
+    const text = new Intl.DateTimeFormat('en-GB', {
+        timeZone: readerZone, hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(new Date(instant));
+    return { text, zoneNote: evZone };
+}
+/**
+ * The wall clock an event ENDS at, for a reader — the mirror of `displayTime`, same rules: shown as
+ * written unless both zones are known and differ, in which case it is converted and the zone named.
+ */
+function displayEndTime(ev, readerZone) {
+    if (!isValidTime(ev.endTime))
+        return null;
+    const evZone = isValidZone(ev.timezone) ? ev.timezone : null;
+    if (!evZone || evZone === readerZone || !isValidZone(readerZone)) {
+        return { text: ev.endTime, zoneNote: null };
+    }
+    const instant = endInstant(ev, evZone);
+    if (instant === null)
+        return { text: ev.endTime, zoneNote: null };
     const text = new Intl.DateTimeFormat('en-GB', {
         timeZone: readerZone, hour: '2-digit', minute: '2-digit', hour12: false,
     }).format(new Date(instant));

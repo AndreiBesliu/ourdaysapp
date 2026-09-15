@@ -94,6 +94,18 @@ export function zoneOffsetMs(utcMs: number, zone: string): number {
   return asIfUtc - utcMs;
 }
 
+/**
+ * The day a LOCAL Date falls on, as `yyyy-MM-dd` — the label a calendar cell carries.
+ *
+ * This is the other half of `dayOf`: events are stored by day label (midnight UTC of the label),
+ * cells are local Dates, and the two meet on the label. Comparing the stored instant with the
+ * local cell instead (`isSameDay(new Date(ev.date), cell)`) put every event on the previous
+ * evening for anyone west of Greenwich — a skew that had been in eight places.
+ */
+export function localDayKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 /** The calendar day of an event, as `yyyy-MM-dd`. Read in UTC, because that is how it is stored. */
 export function dayOf(dateIso: string): string | null {
   const ms = Date.parse(dateIso);
@@ -163,6 +175,31 @@ export function displayTime(
 
   const instant = startInstant(ev, evZone);
   if (instant === null) return { text: ev.time, zoneNote: null };
+
+  const text = new Intl.DateTimeFormat('en-GB', {
+    timeZone: readerZone, hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(instant));
+
+  return { text, zoneNote: evZone };
+}
+
+/**
+ * The wall clock an event ENDS at, for a reader — the mirror of `displayTime`, same rules: shown as
+ * written unless both zones are known and differ, in which case it is converted and the zone named.
+ */
+export function displayEndTime(
+  ev: { date?: unknown; time?: unknown; timezone?: unknown; endDayOffset?: unknown; endTime?: unknown },
+  readerZone: string,
+): { text: string; zoneNote: string | null } | null {
+  if (!isValidTime(ev.endTime)) return null;
+
+  const evZone = isValidZone(ev.timezone) ? ev.timezone : null;
+  if (!evZone || evZone === readerZone || !isValidZone(readerZone)) {
+    return { text: ev.endTime, zoneNote: null };
+  }
+
+  const instant = endInstant(ev, evZone);
+  if (instant === null) return { text: ev.endTime, zoneNote: null };
 
   const text = new Intl.DateTimeFormat('en-GB', {
     timeZone: readerZone, hour: '2-digit', minute: '2-digit', hour12: false,

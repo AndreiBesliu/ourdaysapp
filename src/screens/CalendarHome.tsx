@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { isSameDay, format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { auth, db, messaging } from '../firebase';
 import { getToken, onMessage } from 'firebase/messaging';
 import { collection, query, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
@@ -26,7 +26,7 @@ import { useThemeStore } from '../store';
 import { t, getDateLocale } from '../utils/i18n';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { acceptGroupInvite, ADMIN_BOOTSTRAP_EMAILS } from '../serverActions';
-import { displayTime, localZone } from '../utils/eventTime';
+import { displayTime, localZone, occursOn, localDayKey } from '../utils/eventTime';
 import { eventColorClass } from '../utils/eventColors';
 import { useDialog } from '../hooks/useDialog';
 
@@ -713,7 +713,7 @@ export default function CalendarHome() {
             >
               <p className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-0.5 leading-tight">{t('totalEvents', language)}</p>
               <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-none">
-                {allCalendarEvents.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date())).length}
+                {allCalendarEvents.filter(ev => occursOn(ev, localDayKey(new Date()))).length}
               </p>
             </div>
             <div 
@@ -722,7 +722,7 @@ export default function CalendarHome() {
             >
               <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-wider mb-0.5 leading-tight">{t('tasksPending', language)}</p>
               <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-none">
-                {allCalendarEvents.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date()) && ev.isTask && ev.taskStatus !== 'completed').length}
+                {allCalendarEvents.filter(ev => occursOn(ev, localDayKey(new Date())) && ev.isTask && ev.taskStatus !== 'completed').length}
               </p>
             </div>
             <div 
@@ -731,7 +731,7 @@ export default function CalendarHome() {
             >
               <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-500 uppercase tracking-wider mb-0.5 leading-tight">{t('tasksCompleted', language)}</p>
               <p className="text-lg font-bold text-zinc-900 dark:text-zinc-100 leading-none">
-                {allCalendarEvents.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date()) && ev.isTask && ev.taskStatus === 'completed').length}
+                {allCalendarEvents.filter(ev => occursOn(ev, localDayKey(new Date())) && ev.isTask && ev.taskStatus === 'completed').length}
               </p>
             </div>
           </div>
@@ -959,7 +959,7 @@ export default function CalendarHome() {
           <div className="mt-4">
             <DayTimeline
               date={selectedDate}
-              events={allCalendarEvents.filter((ev: any) => ev.date && isSameDay(new Date(ev.date), selectedDate))}
+              events={allCalendarEvents.filter((ev: any) => occursOn(ev, localDayKey(selectedDate)))}
               onEventClick={(ev) => setSelectedEvent(ev)}
             />
           </div>
@@ -1057,7 +1057,7 @@ export default function CalendarHome() {
             </div>
             <div className="p-4 overflow-y-auto flex-1 flex flex-col gap-3">
               {(() => {
-                const todayEvents = allCalendarEvents.filter(ev => ev.date && isSameDay(new Date(ev.date), new Date()));
+                const todayEvents = allCalendarEvents.filter(ev => occursOn(ev, localDayKey(new Date())));
                 let filtered = todayEvents;
                 if (overviewModalType === 'pending') {
                   filtered = todayEvents.filter(ev => ev.isTask && ev.taskStatus !== 'completed');

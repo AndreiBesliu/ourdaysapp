@@ -15,6 +15,8 @@ import { getFrequencyLabel } from '../utils/recurrence';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
+import { localZone } from '../utils/eventTime';
+import { spanRangeLabel } from '../utils/spanLabel';
 
 
 interface EventDetailsModalProps {
@@ -27,7 +29,7 @@ interface EventDetailsModalProps {
 }
 
 export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}, groups = [], onEdit }: EventDetailsModalProps) {
-  const { language } = useThemeStore();
+  const { language, timezone } = useThemeStore();
   const [loading, setLoading] = useState(false);
 
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -416,7 +418,23 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
             <div className="flex items-center gap-3 mt-1 relative">
               <p className="text-sm text-primary font-medium flex items-center gap-1">
                 <CalendarIcon className="w-4 h-4" />
-                {format(new Date(event.date), 'EEEE, MMMM d, yyyy')}
+                {(() => {
+                  // The whole extent: "Monday 15 → Wednesday 17", and the clocks beside it. Days are
+                  // parsed as LOCAL dates from their label — `new Date('…T00:00Z')` formatted locally
+                  // is the previous day west of Greenwich, which is what this line used to do.
+                  const asLocal = (day: string) => { const [y, mo, dd] = day.split('-').map(Number); return new Date(y, mo - 1, dd); };
+                  const r = spanRangeLabel(event, timezone || localZone());
+                  if (!r) return format(new Date(event.date), 'EEEE, MMMM d, yyyy');
+                  const days = r.sameDay
+                    ? format(asLocal(r.startDay), 'EEEE, MMMM d, yyyy')
+                    : `${format(asLocal(r.startDay), 'EEEE, MMMM d')} → ${format(asLocal(r.endDay), 'EEEE, MMMM d, yyyy')}`;
+                  return (
+                    <>
+                      {days}
+                      {r.clocks && <span className="ml-2 text-zinc-500 tabular-nums">{r.clocks}{r.zoneNote ? ` · ${r.zoneNote.split('/').pop()}` : ''}</span>}
+                    </>
+                  );
+                })()}
               </p>
               {(event.isRecurringInstance || event.recurrenceRule) && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-medium rounded-full">

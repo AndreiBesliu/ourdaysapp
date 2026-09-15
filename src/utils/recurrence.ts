@@ -89,7 +89,15 @@ export function expandRecurringEvents(
           result.push({
             ...event,
             id: `${event.id}_${dateStr}`,
-            date: current.toISOString(),
+            // Midnight UTC of the occurrence's OWN day label, not `current.toISOString()`.
+            //
+            // `advanceDate` is date-fns, which steps the LOCAL calendar, so from the spring DST
+            // change onward `current` drifts to 23:00Z — and the document then contradicted
+            // itself: `recurrenceDate` said 30 March while the UTC day of `date` said the 29th.
+            // Rendering that compared the raw instant locally happened to agree with the label;
+            // anything reading the day out of `date` did not. Measured under Europe/Bucharest:
+            // the first five occurrences agree, every one after the change disagrees.
+            date: `${dateStr}T00:00:00.000Z`,
             isRecurringInstance: true,
             parentEventId: event.id,
             recurrenceDate: dateStr,

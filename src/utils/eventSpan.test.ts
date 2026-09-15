@@ -179,3 +179,48 @@ describe('a recurring series with a span', () => {
     expect(occ.map((o) => o.recurrenceDate)).not.toContain('2026-09-11');
   });
 });
+
+describe('an occurrence agreeing with itself', () => {
+  // Found by an adversarial review, then measured: `advanceDate` is date-fns, which steps the LOCAL
+  // calendar, so from a spring DST change onward the walked instant drifts to 23:00Z. The expander
+  // used to emit that instant as `date` while labelling the row `recurrenceDate` from the same
+  // instant formatted LOCALLY — so the document contradicted itself. Under Europe/Bucharest the
+  // first five occurrences of a daily series from 25 March agreed and every one after did not:
+  // `recurrenceDate: '2026-03-30'` beside `date: '2026-03-29T23:00:00.000Z'`.
+  //
+  // Rendering that compared the raw instant in local time happened to agree with the label, which
+  // is why nobody saw it; anything reading the DAY out of `date` — as occursOn does — did not.
+  //
+  // NOTE ON WHERE THIS BITES: in UTC there is no drift, so on a UTC runner these assertions would
+  // also have passed before the fix. They bite where the developer sits, and they state the
+  // contract either way: an occurrence's date is midnight UTC of its own label.
+  const daily = {
+    id: 'd', title: 'Daily', date: '2026-03-25T00:00:00.000Z',
+    recurrenceRule: { frequency: 'daily' as const },
+  };
+  const occ = expandRecurringEvents(
+    [daily as never], new Date('2026-03-25T00:00:00.000Z'), new Date('2026-04-02T00:00:00.000Z'),
+  );
+
+  it('emits more than one occurrence, so the rest is not vacuous', () => {
+    expect(occ.length).toBeGreaterThan(5);
+  });
+
+  it('puts every occurrence at midnight UTC of its own day label', () => {
+    for (const o of occ) {
+      expect(o.date).toBe(`${o.recurrenceDate}T00:00:00.000Z`);
+    }
+  });
+
+  it('is on the day it says it is', () => {
+    for (const o of occ) {
+      expect(occursOn(o, o.recurrenceDate)).toBe(true);
+      expect(spanOf(o)!.startDay).toBe(o.recurrenceDate);
+    }
+  });
+
+  it('never puts two occurrences of a daily series on one day', () => {
+    const days = occ.map((o) => o.recurrenceDate);
+    expect(new Set(days).size).toBe(days.length);
+  });
+});

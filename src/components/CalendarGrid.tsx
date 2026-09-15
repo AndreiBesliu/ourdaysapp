@@ -6,8 +6,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useDialog } from '../hooks/useDialog';
 import { useThemeStore } from '../store';
 import { getDateLocale, t } from '../utils/i18n';
-import { displayTime, localZone } from '../utils/eventTime';
+import { localZone, occursOn, localDayKey } from '../utils/eventTime';
 import { eventColorClass } from '../utils/eventColors';
+import { spanClockLabel } from '../utils/spanLabel';
 
 interface CalendarGridProps {
   currentDate: Date;
@@ -204,12 +205,11 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
         const isCurrentMonth = isSameMonth(day, monthStart);
         const isToday = isSameDay(day, new Date());
         
-        // Find events for this day
-        const dayEvents = events.filter(ev => {
-          if (!ev.date) return false;
-          const evDate = new Date(ev.date);
-          return isSameDay(evDate, day);
-        });
+        // Membership by day LABEL, through the one shared predicate. It answers for every day of
+        // a multi-day event, not only its first — and it retires a skew this cell had since the
+        // beginning: comparing the stored midnight-UTC instant with a local Date put events on the
+        // previous evening for anyone west of Greenwich.
+        const dayEvents = events.filter(ev => occursOn(ev, localDayKey(day)));
 
         days.push(
           <div 
@@ -364,7 +364,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
               </button>
             </div>
             <div className="p-4 overflow-y-auto flex-1 flex flex-col gap-3">
-              {events.filter(ev => isSameDay(new Date(ev.date), modalDay)).length === 0 ? (
+              {events.filter(ev => occursOn(ev, localDayKey(modalDay))).length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-sm text-zinc-500 mb-4">{t('noEventsScheduled', language)}</p>
                   <button 
@@ -384,7 +384,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                 </div>
               ) : (
                 <>
-                  {events.filter(ev => isSameDay(new Date(ev.date), modalDay)).map((ev: any, idx: number) => {
+                  {events.filter(ev => occursOn(ev, localDayKey(modalDay))).map((ev: any, idx: number) => {
                     let Icon = Circle;
                     switch (ev.categoryId) {
                       case 'work': Icon = Briefcase; break;
@@ -432,9 +432,18 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                             {ev.isTask && ev.taskStatus === 'completed' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                           </p>
                           <div className="flex items-center gap-3 mt-1 flex-wrap">
-                            {ev.time && (
-                              <span className="text-xs text-zinc-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {displayTime(ev, timezone || localZone())?.text ?? ev.time}</span>
-                            )}
+                            {/* The clock for THIS day of the event: "◂ → 02:00" on the morning after a
+                                party, not "22:00" as if it started tonight. */}
+                            {ev.time && (() => {
+                              const clock = spanClockLabel(ev, localDayKey(modalDay), timezone || localZone());
+                              // The raw string when the stored time is not canonical `HH:mm` —
+                              // the old line had that fallback and dropping it would have shown
+                              // nothing at all for such a row.
+                              const text = clock ? `${clock.text}${clock.zoneNote ? ` · ${clock.zoneNote.split('/').pop()}` : ''}` : String(ev.time);
+                              return (
+                                <span className="text-xs text-zinc-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {text}</span>
+                              );
+                            })()}
                             {view !== 'personal' && userMap && (
                               <div className="flex items-center gap-1">
                                 <div className="flex -space-x-1 shrink-0">
