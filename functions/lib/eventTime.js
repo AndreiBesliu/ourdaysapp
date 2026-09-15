@@ -24,6 +24,18 @@
 //              the app is today.
 //   timezone — the IANA zone that wall clock is written in, captured when it was saved.
 //
+//   endDayOffset — whole days after the start day on which the event ENDS. Absent or 0 means the
+//              same day, which is every event saved before this existed. A trip is 2; a party that
+//              runs past midnight is 1.
+//   endTime  — 'HH:mm' wall clock the event ends at, in the SAME `timezone` as `time`. Only
+//              meaningful when `time` is set; an all-day span has days and no clocks.
+//
+// The end is stored RELATIVE to the start — an offset, never an absolute end date — for one
+// reason that decides everything else: a recurring occurrence is `{ ...parent, date: thatDay }`,
+// every other field copied verbatim. An absolute end would be right for the first occurrence and
+// wrong for every later one; an offset is right for all of them by construction, and moving a
+// whole series (shiftedSeriesStart) moves its end for free.
+//
 // The zone is stored ON THE EVENT rather than assumed to be the reader's. "Dinner at 19:00" means
 // 19:00 where the dinner is; a family member reading it from another country wants to know that,
 // not to see it silently shifted. Rendering says which zone when it differs from the reader's.
@@ -36,7 +48,7 @@
 //
 // Pure: no React, no Firestore. Usable unchanged on the server, which slice 2 will need.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.COMMON_ZONES = void 0;
+exports.COMMON_ZONES = exports.MAX_SPAN_DAYS = void 0;
 exports.isValidTime = isValidTime;
 exports.isValidZone = isValidZone;
 exports.localZone = localZone;
@@ -46,6 +58,14 @@ exports.startInstant = startInstant;
 exports.reminderInstant = reminderInstant;
 exports.displayTime = displayTime;
 exports.timeFieldsFor = timeFieldsFor;
+exports.isValidDayOffset = isValidDayOffset;
+exports.dayPlus = dayPlus;
+exports.spanOf = spanOf;
+exports.occursOn = occursOn;
+exports.daysOf = daysOf;
+exports.endInstant = endInstant;
+exports.spanProblem = spanProblem;
+exports.endFieldsFor = endFieldsFor;
 exports.zoneChoices = zoneChoices;
 exports.zoneLabel = zoneLabel;
 function isValidTime(t) {
@@ -169,6 +189,120 @@ function timeFieldsFor(time, zone) {
     if (!isValidTime(time))
         return { time: null, timezone: null };
     return { time, timezone: isValidZone(zone) ? zone : localZone() };
+}
+// ── Spans ────────────────────────────────────────────────────────────────────────────
+//
+// Everything below reads the two end fields and nothing else changes: `startInstant`, `dayOf`
+// and `reminderInstant` keep answering about the START, which is what a reminder is anchored to.
+// Self-contained on purpose — this file is copied verbatim to functions/src and may import nothing.
+/** The most days an event may span. Longer than any family plan; a cap, not a feature. */
+exports.MAX_SPAN_DAYS = 366;
+/** Whole days after the start day on which the event ends. 0 or absent means the same day. */
+function isValidDayOffset(n) {
+    return typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= exports.MAX_SPAN_DAYS;
+}
+/**
+ * `yyyy-MM-dd` plus `n` whole days. Calendar arithmetic in UTC, where the day strings live —
+ * no zone is involved, so no DST can move it. `Date.UTC` normalises an overflowing day-of-month.
+ */
+function dayPlus(day, n) {
+    const [y, m, d] = String(day).split('-').map(Number);
+    if (![y, m, d].every(Number.isFinite) || !Number.isInteger(n))
+        return null;
+    const ms = Date.UTC(y, m - 1, d + n);
+    if (!Number.isFinite(ms))
+        return null;
+    return new Date(ms).toISOString().slice(0, 10);
+}
+/** The days an event covers, from its stored fields. An unknown or absent span means one day. */
+function spanOf(ev) {
+    var _a;
+    if (typeof ev.date !== 'string')
+        return null;
+    const startDay = dayOf(ev.date);
+    if (!startDay)
+        return null;
+    const offset = isValidDayOffset(ev.endDayOffset) ? ev.endDayOffset : 0;
+    const endDay = (_a = dayPlus(startDay, offset)) !== null && _a !== void 0 ? _a : startDay;
+    return { startDay, endDay, offset, endTime: isValidTime(ev.endTime) ? ev.endTime : null };
+}
+/**
+ * Is `day` (yyyy-MM-dd) one of the days this event is on?
+ *
+ * This is THE membership question, and it used to be written by hand as
+ * `isSameDay(new Date(ev.date), day)` in eight places. String order is date order for this shape,
+ * so the comparison is exact and zone-free.
+ */
+function occursOn(ev, day) {
+    const span = spanOf(ev);
+    return !!span && day >= span.startDay && day <= span.endDay;
+}
+/** Every day the event is on, first to last. Empty for an event with no readable date. */
+function daysOf(ev) {
+    const span = spanOf(ev);
+    if (!span)
+        return [];
+    const out = [];
+    for (let i = 0; i <= span.offset; i++) {
+        const d = dayPlus(span.startDay, i);
+        if (d)
+            out.push(d);
+    }
+    return out;
+}
+/**
+ * The instant a timed event ends, in epoch milliseconds — or null when there is no such instant:
+ * an all-day event, or a timed one with no end time (drawn at a nominal length instead).
+ *
+ * Same two-pass DST correction as `startInstant`, on the END day. An end on a later day crosses a
+ * DST change more often than a start does — 23:00 on the last Saturday of March to 04:00 on the
+ * Sunday is four hours of clock and three of elapsed time, and this returns the three.
+ */
+function endInstant(ev, fallbackZone = 'UTC') {
+    if (!isValidTime(ev.time) || !isValidTime(ev.endTime))
+        return null;
+    const span = spanOf(ev);
+    if (!span)
+        return null;
+    const zone = isValidZone(ev.timezone) ? ev.timezone : fallbackZone;
+    const [y, m, d] = span.endDay.split('-').map(Number);
+    const [hh, mm] = ev.endTime.split(':').map(Number);
+    const naive = Date.UTC(y, m - 1, d, hh, mm, 0, 0);
+    const firstPass = naive - zoneOffsetMs(naive, zone);
+    return naive - zoneOffsetMs(firstPass, zone);
+}
+/**
+ * Why a span cannot be saved as given, or null when it can.
+ *
+ * Used by the form before writing and by the server before accepting an override, so the two
+ * cannot drift: a same-day event that ends before it starts, or an end time on an event with no
+ * start time, is refused with the same word in both places.
+ */
+function spanProblem(ev) {
+    if (ev.endDayOffset !== undefined && ev.endDayOffset !== null && !isValidDayOffset(ev.endDayOffset))
+        return 'offset';
+    const hasEnd = ev.endTime !== undefined && ev.endTime !== null && ev.endTime !== '';
+    if (hasEnd && !isValidTime(ev.endTime))
+        return 'ends-before-start';
+    if (hasEnd && !isValidTime(ev.time))
+        return 'end-without-start';
+    const offset = isValidDayOffset(ev.endDayOffset) ? ev.endDayOffset : 0;
+    if (offset === 0 && isValidTime(ev.time) && isValidTime(ev.endTime) && ev.endTime <= ev.time)
+        return 'ends-before-start';
+    return null;
+}
+/**
+ * What to write for the end of an event being saved. The sibling of `timeFieldsFor`, kept
+ * separate so that function's contract (exactly `time` and `timezone`) stays as its test pins it.
+ *
+ * A same-day end is written as null rather than 0, so an event that never had a span and one
+ * whose span was removed look identical in the database. An end time without a start time is
+ * dropped: it would describe a precision the event does not have.
+ */
+function endFieldsFor(endDayOffset, endTime, hasStartTime) {
+    const offset = isValidDayOffset(endDayOffset) && endDayOffset > 0 ? endDayOffset : null;
+    const end = hasStartTime && isValidTime(endTime) ? endTime : null;
+    return { endDayOffset: offset, endTime: end };
 }
 /**
  * A short, stable list of zones for a picker, with the viewer's own first.

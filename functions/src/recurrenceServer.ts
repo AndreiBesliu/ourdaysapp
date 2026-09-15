@@ -31,6 +31,8 @@
 // whatever the exception key says, whoever wrote it, from whatever offset. The data gives us
 // the dedupe for free, and it is the only branch here that cannot be defeated by a timezone.
 
+import { isValidDayOffset, dayPlus } from "./eventTime";
+
 export type Frequency = "daily" | "weekly" | "monthly" | "yearly";
 
 export const FREQUENCIES: readonly Frequency[] = ["daily", "weekly", "monthly", "yearly"];
@@ -129,9 +131,18 @@ export function expandInWindow(docs: readonly EventDoc[], fromDay: string, toDay
     if (typeof ev.date !== "string" || !ev.date) continue;
     const freq = frequencyOf(ev);
 
+    // The span is whole days after the start; an event is IN the window if any of its days is.
+    // Read once per document and applied to every occurrence — it is relative, so each inherits
+    // it unchanged. The window test used to be on the first day only, which hid an event that
+    // started yesterday and is still running today.
+    const spanDays = isValidDayOffset((ev as Record<string, unknown>).endDayOffset)
+      ? ((ev as Record<string, unknown>).endDayOffset as number)
+      : 0;
+    const lastDayOf = (day: string) => dayPlus(day, spanDays) ?? day;
+
     if (!freq) {
       const day = ev.date.slice(0, 10);
-      if (day >= fromDay && day <= toDay) out.push({ source: ev, day, virtual: false });
+      if (lastDayOf(day) >= fromDay && day <= toDay) out.push({ source: ev, day, virtual: false });
       continue;
     }
 
@@ -149,7 +160,7 @@ export function expandInWindow(docs: readonly EventDoc[], fromDay: string, toDay
     // already bounds this; the cap is the guard against a value that defeats the horizon.
     for (let steps = 0; steps < 4000 && cur <= end && cur <= toMs; steps++) {
       const day = dayKey(cur);
-      if (day >= fromDay) {
+      if (lastDayOf(day) >= fromDay) {
         const suppressed = freq === "daily"
           ? exceptions.has(day)
           : exceptions.has(day) ||

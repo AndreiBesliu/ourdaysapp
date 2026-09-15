@@ -29,6 +29,7 @@ const errorGrouping_1 = require("./errorGrouping");
 const errorFixes_1 = require("./errorFixes");
 const errorState_1 = require("./errorState");
 const aiProviderError_1 = require("./aiProviderError");
+const eventTime_1 = require("./eventTime");
 // Invite links live in their own module — index.ts is already long, and these four are a
 // self-contained feature. Re-exported here because Firebase deploys what index exports.
 // They call `admin.firestore()` only inside their handlers, so the initializeApp() below
@@ -712,6 +713,9 @@ const OVERRIDE_FIELDS = [
     "checklistItems", "isTask", "taskStatus",
     "categoryId", "color", "emoji", "imageUrl",
     "location", "reminderMinutes", "assetId", "time", "timezone",
+    // The span. Relative fields, so an override of one occurrence carries exactly that
+    // occurrence's length — see the header of eventTime.ts for why it is not an absolute end.
+    "endDayOffset", "endTime",
     "rsvpEnabled", "visibleTo",
 ];
 exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
@@ -750,6 +754,13 @@ exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
         // Firestore rejects `undefined` outright and would fail the whole batch over one absent field.
         if (v !== undefined)
             safe[key] = v;
+    }
+    // The span is checked with the SAME rule the form applies before writing, so the two cannot
+    // drift into accepting different things. `safe.time` rather than the parent's: an override is a
+    // whole document, and the client always sends its time fields.
+    const span = (0, eventTime_1.spanProblem)({ time: safe.time, endDayOffset: safe.endDayOffset, endTime: safe.endTime });
+    if (span) {
+        throw new https_1.HttpsError("invalid-argument", `Invalid event span: ${span}.`);
     }
     // Assignees are allowed through, but only the ones the PARENT already had, plus the caller.
     // That is exactly what materialising an occurrence needs and nothing more: adding somebody new

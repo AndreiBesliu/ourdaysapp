@@ -4640,3 +4640,47 @@ banner-ul din admin spune acum ca butonul trimite *si* push, nu doar clopotel.
 dimineata cu randuri pe modelul vechi, nu mai vreau revizii amestecate.
 
 `npx tsc -b` verde · functions `tsc` verde · 1153 de teste · poarta verde · build verde · livrat.
+## 2026-09-15 - Evenimente pe mai multe zile, felia 1: modelul
+
+**Model:** Claude Fable 5.1 · „ar trebui sa putem avea un eveniment care se poate intinde pe mai multe zile"
+
+Andrei a cerut un interval orar; clarificat, e mai mult: **un eveniment se poate intinde pe mai
+multe zile**, cu ore sau fara. Asta schimba proiectarea in doua locuri pe care o simpla „ora de
+sfarsit" nu le-ar fi atins: apartenenta la o zi (un eveniment de luni pana miercuri e pe TREI zile)
+si fereastra vizibila (cel inceput pe 30 august si terminat pe 2 septembrie trebuie sa apara in
+septembrie).
+
+### Harta intai, apoi decizia
+
+Sase cititori in paralel, 179 de situri cu numar de linie, inainte de orice cod. Harta a luat
+decizia de model in locul meu: **sfarsitul se stocheaza RELATIV** — `endDayOffset` (zile intregi
+dupa ziua de inceput, absent = 0) + `endTime` (ora de perete in ACELASI `timezone`) — nu ca data
+absoluta. Motivul e o linie din `recurrence.ts`: o aparitie e `{ ...event, date: ziua }`, orice alt
+camp copiat ad litteram. Un sfarsit absolut ar fi corect pentru prima aparitie si gresit pentru
+toate celelalte; un decalaj e corect pentru toate prin constructie, iar mutarea unei serii intregi
+(`shiftedSeriesStart`) isi muta sfarsitul gratis.
+
+Compatibil inapoi prin definitie: un eveniment fara campurile noi e exact evenimentul de ieri.
+Un sfarsit in aceeasi zi se scrie `null`, nu `0`, ca sa arate identic cu unul care n-a avut niciodata.
+
+### Ce s-a livrat (nimic vizibil inca)
+
+- `eventTime.ts`: `spanOf`, `occursOn`, `daysOf`, `dayPlus`, `endInstant` (aceeasi corectie DST in
+  doua treceri ca `startInstant`, pe ziua de SFARSIT), `spanProblem` (o singura regula de refuz,
+  folosita si de formular si de server, ca sa nu poata diverge), `endFieldsFor` — frate al lui
+  `timeFieldsFor`, nu extindere, fiindca testul aceluia fixeaza cheile exact. Copiat octet cu octet
+  in `functions/src/eventTime.ts`; garda de copie confirma.
+- `recurrence.ts` (client) si `recurrenceServer.ts` (server): poarta ferestrei se uita la ULTIMA zi
+  a aparitiei, nu la prima. Aparitiile mostenesc decalajul prin `...event`.
+- `OVERRIDE_FIELDS` admite cele doua campuri — lista e inchisa, iar un camp nou era aruncat tacut la
+  editarea unei singure aparitii — si `createEventOverride` refuza cu `spanProblem`.
+- Mementourile raman ancorate pe inceput. Nimic de schimbat acolo.
+
+24 de teste noi, printre care noaptea DST din martie la Bucuresti (23:00 -> 04:00 = patru ore, nu
+cinci) si aparitia care a inceput inaintea ferestrei dar e inca in desfasurare. **Mutatie:** poarta
+intoarsa la „doar prima zi" pica exact acel test si numai pe el; restaurat dupa hash.
+
+Urmeaza: felia 2 (randarea — un singur `occursOn` in locul celor opt copii de `isSameDay`, felii
+per zi in `dayLayout`) si felia 3 (formularul). Revizie adversariala inaintea lor.
+
+`npx tsc -b` verde · functions `tsc` verde · **1177 de teste** (de la 1153) · poarta verde · build.

@@ -19,6 +19,7 @@ import {
   ERROR_STATUSES, STATUS_RANK, groupDocId, isErrorStatus, joinState,
 } from "./errorState";
 import { AI_QUOTA_CODE, isProviderQuotaError } from "./aiProviderError";
+import { spanProblem } from "./eventTime";
 
 // Invite links live in their own module — index.ts is already long, and these four are a
 // self-contained feature. Re-exported here because Firebase deploys what index exports.
@@ -797,6 +798,9 @@ const OVERRIDE_FIELDS = [
   "checklistItems", "isTask", "taskStatus",
   "categoryId", "color", "emoji", "imageUrl",
   "location", "reminderMinutes", "assetId", "time", "timezone",
+  // The span. Relative fields, so an override of one occurrence carries exactly that
+  // occurrence's length — see the header of eventTime.ts for why it is not an absolute end.
+  "endDayOffset", "endTime",
   "rsvpEnabled", "visibleTo",
 ] as const;
 
@@ -838,6 +842,14 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
     const v = (data as Record<string, unknown>)[key];
     // Firestore rejects `undefined` outright and would fail the whole batch over one absent field.
     if (v !== undefined) safe[key] = v;
+  }
+
+  // The span is checked with the SAME rule the form applies before writing, so the two cannot
+  // drift into accepting different things. `safe.time` rather than the parent's: an override is a
+  // whole document, and the client always sends its time fields.
+  const span = spanProblem({ time: safe.time, endDayOffset: safe.endDayOffset, endTime: safe.endTime });
+  if (span) {
+    throw new HttpsError("invalid-argument", `Invalid event span: ${span}.`);
   }
 
   // Assignees are allowed through, but only the ones the PARENT already had, plus the caller.

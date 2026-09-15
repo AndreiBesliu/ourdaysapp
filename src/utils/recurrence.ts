@@ -1,4 +1,5 @@
 import { addDays, addWeeks, addMonths, addYears, format, isBefore, isAfter } from 'date-fns';
+import { isValidDayOffset } from './eventTime';
 
 export interface RecurrenceRule {
   frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
@@ -67,13 +68,20 @@ export function expandRecurringEvents(
     const exceptions: string[] = event.recurrenceExceptions || [];
     const seriesStart = new Date(event.date);
     const seriesEnd = getRecurrenceEndDate(seriesStart, frequency);
+    // The span is RELATIVE (whole days after each occurrence's start), so every occurrence below
+    // inherits it verbatim through `...event` and is right by construction. An absolute end date
+    // on the parent would have been copied unchanged too — and been wrong for every occurrence but
+    // the first. In UTC milliseconds because `current` is a UTC-midnight instant; no DST here.
+    const spanMs = (isValidDayOffset(event.endDayOffset) ? event.endDayOffset : 0) * 86_400_000;
 
     // Walk from the series start, stepping by frequency
     let current = new Date(seriesStart);
 
     while (!isAfter(current, seriesEnd) && !isAfter(current, windowEnd)) {
-      // Only emit if within the visible window
-      if (!isBefore(current, windowStart)) {
+      // Emit if any day of the occurrence is inside the window — not only its first day. A
+      // two-day occurrence starting the day before the window used to vanish from the window's
+      // first day entirely.
+      if (!isBefore(new Date(current.getTime() + spanMs), windowStart)) {
         const dateStr = format(current, 'yyyy-MM-dd');
 
         // Skip exceptions (deleted or overridden occurrences)

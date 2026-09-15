@@ -36,6 +36,7 @@ exports.SHORT_FREQUENCIES = exports.FREQUENCIES = void 0;
 exports.frequencyOf = frequencyOf;
 exports.lookbackMsFor = lookbackMsFor;
 exports.expandInWindow = expandInWindow;
+const eventTime_1 = require("./eventTime");
 exports.FREQUENCIES = ["daily", "weekly", "monthly", "yearly"];
 /** Frequencies whose whole horizon fits inside 400 days back. */
 exports.SHORT_FREQUENCIES = ["daily", "weekly", "monthly"];
@@ -102,9 +103,17 @@ function expandInWindow(docs, fromDay, toDay) {
         if (typeof ev.date !== "string" || !ev.date)
             continue;
         const freq = frequencyOf(ev);
+        // The span is whole days after the start; an event is IN the window if any of its days is.
+        // Read once per document and applied to every occurrence — it is relative, so each inherits
+        // it unchanged. The window test used to be on the first day only, which hid an event that
+        // started yesterday and is still running today.
+        const spanDays = (0, eventTime_1.isValidDayOffset)(ev.endDayOffset)
+            ? ev.endDayOffset
+            : 0;
+        const lastDayOf = (day) => { var _a; return (_a = (0, eventTime_1.dayPlus)(day, spanDays)) !== null && _a !== void 0 ? _a : day; };
         if (!freq) {
             const day = ev.date.slice(0, 10);
-            if (day >= fromDay && day <= toDay)
+            if (lastDayOf(day) >= fromDay && day <= toDay)
                 out.push({ source: ev, day, virtual: false });
             continue;
         }
@@ -120,7 +129,7 @@ function expandInWindow(docs, fromDay, toDay) {
         // already bounds this; the cap is the guard against a value that defeats the horizon.
         for (let steps = 0; steps < 4000 && cur <= end && cur <= toMs; steps++) {
             const day = dayKey(cur);
-            if (day >= fromDay) {
+            if (lastDayOf(day) >= fromDay) {
                 const suppressed = freq === "daily"
                     ? exceptions.has(day)
                     : exceptions.has(day) ||
