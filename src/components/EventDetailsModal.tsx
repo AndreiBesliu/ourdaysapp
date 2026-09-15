@@ -10,7 +10,7 @@ import QRCode from 'react-qr-code';
 import { Wallet } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { format } from 'date-fns';
-import { useModalBack } from '../hooks/useModalBack';
+import { useDialog } from '../hooks/useDialog';
 import { getFrequencyLabel } from '../utils/recurrence';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { t } from '../utils/i18n';
@@ -81,15 +81,6 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     }
   }, [event?.assetId, event?.checklistItems]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
 
   // Update local state when event changes
   React.useEffect(() => {
@@ -98,7 +89,19 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     }
   }, [event]);
 
-  useModalBack(isOpen, onClose);
+  // The lightbox is local state on a modal that CalendarHome never unmounts — it only toggles
+  // `isOpen` — so nothing ever cleared it. Open an event, tap its picture, press Escape: the modal
+  // closed with `fullScreenImage` still set, and the NEXT event you opened appeared underneath the
+  // previous event's photo. Keyed on `isOpen` alone and not on `event`, because `event` gets a new
+  // identity on every Firestore snapshot and clearing there would shut the picture while you were
+  // still looking at it.
+  useEffect(() => {
+    if (!isOpen) setFullScreenImage(null);
+  }, [isOpen]);
+
+  // Declared with the other hooks and above the early return, like everything else here —
+  // see the note below about React #310.
+  const { dialogRef, dialogProps } = useDialog(isOpen, onClose, { label: event?.title });
 
   // Held across renders so two quick taps cannot create two overrides — see resolveWriteTarget
   // below, which is the only thing that reads it.
@@ -395,7 +398,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
 
   return (
     <div onClick={onClose} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+      <div onClick={(e) => e.stopPropagation()} ref={dialogRef} {...dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]">
         
         {/* Header */}
         <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-start">

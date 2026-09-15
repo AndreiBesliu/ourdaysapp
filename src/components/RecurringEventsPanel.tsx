@@ -3,7 +3,7 @@ import { format } from 'date-fns';
 import { deleteDoc, doc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { useState } from 'react';
-import { useModalBack } from '../hooks/useModalBack';
+import { useDialog } from '../hooks/useDialog';
 import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
@@ -29,7 +29,9 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   
-  useModalBack(isOpen, onClose);
+  const { dialogRef, dialogProps } = useDialog(isOpen, onClose, {
+    label: t('recurring', language),
+  });
 
   if (!isOpen) return null;
 
@@ -86,7 +88,7 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
 
   return (
     <div onClick={onClose} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[80vh]">
+      <div onClick={(e) => e.stopPropagation()} ref={dialogRef} {...dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[80vh]">
         
         {/* Header */}
         <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">

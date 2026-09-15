@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, Users, AlertCircle } from 'lucide-react';
 import { db, auth } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
-import { useModalBack } from '../hooks/useModalBack';
+import { useDialog } from '../hooks/useDialog';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
 
@@ -17,15 +17,9 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useModalBack(isOpen, onClose);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  const { dialogRef, dialogProps } = useDialog(isOpen, onClose, {
+    label: t('createGroupTitle', language),
+  });
 
   if (!isOpen) return null;
 
@@ -55,7 +49,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
 
   return (
     <div onClick={onClose} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm flex flex-col max-h-[90vh] shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div onClick={(e) => e.stopPropagation()} ref={dialogRef} {...dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm flex flex-col max-h-[90vh] shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
         
         <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
           <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">

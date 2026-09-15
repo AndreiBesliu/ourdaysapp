@@ -4147,3 +4147,76 @@ impus. Nu iau singur decizia asta; e in OWNER_VERIFY.
 
 *A treia oara azi cand o copie de margine mi-a raportat ca livrarea n-a prins. Verificarea unui
 fisier proaspat livrat cere reincercare, nu o singura citire — parametrul anti-cache nu ajunge.*
+## 2026-09-15 - Un singur loc care stie ce fereastra e deasupra
+
+**Model:** Claude Opus 5 · „continua tu singur"
+
+Intai: `logErrorDigest` **merge**. Banuisem ca programarea lui e stricata fiindca nu rulase; de
+fapt nu-i venise inca prima bataie. A scris la 20:09 si la 02:09 UTC, la exact sase ore. Deci pot
+citi starea erorilor fara screenshot, si singura eroare vie e chiar diagnosticul meu care spune ca
+lipseste cheia VAPID.
+
+### Ce era stricat
+
+Cincisprezece fisiere randeaza ferestre suprapuse. **Zero** aveau `role="dialog"`, **zero**
+`aria-modal`. Un inventar facut fisier cu fisier a gasit nu 15 ci **29 de dialoguri distincte** —
+lightbox-uri, selectoare, foi de confirmare ascunse in ecrane mari.
+
+Dar problema serioasa nu era eticheta, ci ca **fiecare fereastra raspundea in numele tuturor**.
+Fiecare isi punea propriul ascultator de `keydown` pe `window`, si `useModalBack` acelasi lucru pe
+`popstate`. Un ascultator pe `window` nu are cum sa stie ca nu e singurul.
+
+Masurat la sursa: butonul de Edit din detaliile unui eveniment deschide formularul **fara sa inchida
+detaliile** — deci doua ferestre chiar sunt deschise simultan. Un Escape le inchidea pe amandoua si
+arunca ce scrisesesi. Pe Android era mai rau: o apasare pe Back scotea o intrare din istoric, ambele
+handler-e se executau, ambele se inchideau, iar apoi curatenia celei de dedesubt gasea propria
+intrare inca deasupra si mai chema o data `history.back()` — **aplicatia iesea din calendar**.
+
+### Ce am facut
+
+`src/utils/dialogStack.ts` — un teanc, fara React si fara DOM, care raspunde la o singura intrebare:
+**cine e deasupra**. Numai aceluia i se adreseaza Escape si Back. Scoaterea se face **dupa
+identitate, nu de la coada**, fiindca React nu promite ca efectele se curata in ordine inversa.
+
+`src/hooks/useDialog.ts` — restul: `role="dialog"`, `aria-modal`, eticheta tradusa, focusul intra in
+panou la deschidere si **se intoarce de unde a plecat** la inchidere, Tab e prins inauntru, pagina
+din spate nu mai defileaza. `useModalBack` a disparut; opt ferestre trec acum prin hook.
+
+### Proba, fiindca ferestrele sunt in spatele autentificarii
+
+Nu pot intra in cont, deci nu pot vedea niciun modal real din aplicatie. Am construit un **banc de
+proba temporar** — doua ferestre suprapuse pe hook-ul ADEVARAT — si l-am condus in browser.
+
+**Si bine ca am facut-o: prima versiune tot le inchidea pe amandoua.** Regula „doar cel de deasupra"
+era pusa, dar fereastra de sus, inchizandu-se, isi derula inapoi intrarea din istoric — iar acel
+`history.back()` produce un `popstate` **adevarat**, pe care cea de dedesubt il primea ca pe un gest
+al utilizatorului. Propria mea derulare se dadea drept apasare pe Back.
+
+Deci derularea se anunta dinainte si `popstate`-ul pe care-l provoaca se consuma. Contorizat, nu
+pus pe un fanion: doua ferestre pot disparea in aceeasi clipa. Si tinut minte **per eveniment**,
+fiindca toate ferestrele deschise vad acelasi obiect si doar prima are voie sa cheltuiasca creditul.
+
+Dupa reparatie, masurat in browser: primul Escape inchide doar fereastra de sus si da focusul inapoi
+panoului de dedesubt; al doilea o inchide si pe aia si duce focusul inapoi pe butonul care o
+deschisese; o apasare pe Back inchide exact o fereastra si pagina **nu** navigheaza nicaieri; Tab se
+invarte inauntru si nu ajunge la momeala de afara.
+
+Testul care prinde regresia e scris asa incat sa **muste**: inlocuit cu varianta naiva, pica exact
+el si numai el.
+
+### Trei lucruri gasite pe drum
+
+- **Escape in campul de redenumire** din setarile grupului anula redenumirea *si* inchidea tot
+  ecranul. Acum se opreste acolo, si textul abandonat nu mai ramane sa fie scris la urmatorul OK.
+- **Titlul ferestrei de stergere/parasire a grupului era in engleza**, singurul sir netradus din
+  fisier, in aplicatia cu sase limbi.
+- **Lightbox-ul din detaliile evenimentului nu se stergea niciodata.** Modalul nu se demonteaza,
+  doar se ascunde — deci inchideai cu poza deschisa si **urmatorul eveniment aparea sub poza
+  evenimentului precedent**.
+
+`npx tsc -b` verde · **1100 de teste** (de la 1095) · poarta verde · build verde · livrat pe live.
+
+*Doua note de metoda. `sed -i` pe un fisier sursa mi-a rescris toate sfarsiturile de linie si a
+transformat o schimbare de noua randuri intr-una de 196 — refacut pe octeti. Si `git stash` intr-un
+arbore sincronizat cu Drive n-a putut sterge fisierele, deci `pop` a refuzat; nimic pierdut, dar nu
+mai fac asta aici.*

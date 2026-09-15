@@ -4,7 +4,7 @@ import { db, auth } from '../firebase';
 import { doc, updateDoc, arrayRemove, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { deleteGroupCascade } from '../serverActions';
 import { reportError } from '../reportError';
-import { useModalBack } from '../hooks/useModalBack';
+import { useDialog } from '../hooks/useDialog';
 import { format } from 'date-fns';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
@@ -30,7 +30,9 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
   // live — with an empty keep-set, which means "delete all of mine".
   const [eventsLoaded, setEventsLoaded] = useState(false);
 
-  useModalBack(isOpen, onClose);
+  const { dialogRef, dialogProps } = useDialog(isOpen, onClose, {
+    label: isOwner ? t('deleteGroup', language) : t('leaveGroup', language),
+  });
 
   useEffect(() => {
     if (isOpen && groupId && auth.currentUser) {
@@ -142,12 +144,12 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
 
   return (
     <div onClick={onClose} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-      <div onClick={e => e.stopPropagation()} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div onClick={e => e.stopPropagation()} ref={dialogRef} {...dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
         
         <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50">
           <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
             {isOwner ? <Trash2 className="w-5 h-5 text-red-500" /> : <LogOut className="w-5 h-5 text-amber-500" />}
-            {isOwner ? 'Delete Group' : 'Leave Group'}
+            {isOwner ? t('deleteGroup', language) : t('leaveGroup', language)}
           </h3>
           <button onClick={onClose} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors">
             <X className="w-4 h-4" />

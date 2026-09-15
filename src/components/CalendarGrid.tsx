@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Briefcase, Heart, Wrench, Calendar as Calend
 import { useState, useEffect } from 'react';
 import { auth } from '../firebase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useModalBack } from '../hooks/useModalBack';
+import { useDialog } from '../hooks/useDialog';
 import { useThemeStore } from '../store';
 import { getDateLocale, t } from '../utils/i18n';
 import { displayTime, localZone } from '../utils/eventTime';
@@ -28,7 +28,9 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
   const { language, timezone } = useThemeStore();
   const dateLocale = getDateLocale(language);
 
-  useModalBack(isDayModalOpen, () => setIsDayModalOpen(false));
+  const { dialogRef, dialogProps } = useDialog(isDayModalOpen, () => setIsDayModalOpen(false), {
+    label: modalDay ? format(modalDay, 'EEEE, d MMMM', { locale: dateLocale }) : undefined,
+  });
 
   const [direction, setDirection] = useState<number>(0);
   const swipeConfidenceThreshold = 10000;
@@ -352,7 +354,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
       {/* Day Events Modal */}
       {isDayModalOpen && modalDay && (
         <div onClick={() => setIsDayModalOpen(false)} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm max-h-[80vh] flex flex-col shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div onClick={(e) => e.stopPropagation()} ref={dialogRef} {...dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm max-h-[80vh] flex flex-col shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
               <h3 className="text-xl font-bold text-zinc-900 dark:text-white">
                 {modalDay && format(modalDay, 'EEEE, d MMMM', { locale: dateLocale })}

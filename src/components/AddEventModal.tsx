@@ -11,7 +11,7 @@ import { notifyUsers } from '../notifications';
 import { createEventOverride } from '../serverActions';
 import { format } from 'date-fns';
 import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
-import { useModalBack } from '../hooks/useModalBack';
+import { useDialog } from '../hooks/useDialog';
 import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
@@ -139,17 +139,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const [assetSearchQuery, setAssetSearchQuery] = useState('');
   const [saveUploadsToWallet, setSaveUploadsToWallet] = useState(false);
 
-  useModalBack(isOpen, onClose);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  const { dialogRef, dialogProps } = useDialog(isOpen, onClose, {
+    label: editEvent ? t('edit', language) : t('addNewEvent', language),
+  });
 
   useEffect(() => {
     if (!isOpen || !auth.currentUser) return;
@@ -758,7 +750,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
   return (
     <div onClick={onClose} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-      <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div onClick={(e) => e.stopPropagation()} ref={dialogRef} {...dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
         
         <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center shrink-0">
           <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">

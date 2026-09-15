@@ -5,7 +5,7 @@ import { doc, updateDoc, arrayRemove, collection, addDoc } from 'firebase/firest
 import { deleteGroupCascade } from '../serverActions';
 import { reportError } from '../reportError';
 import { liveDoc } from '../utils/liveQuery';
-import { useModalBack } from '../hooks/useModalBack';
+import { useDialog } from '../hooks/useDialog';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
 
@@ -33,7 +33,9 @@ export default function GroupSettingsModal({
   const [friendUids, setFriendUids] = useState<Set<string>>(new Set());
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
 
-  useModalBack(isOpen, onClose);
+  const { dialogRef, dialogProps } = useDialog(isOpen, onClose, {
+    label: t('groupSettings', language),
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -141,7 +143,7 @@ export default function GroupSettingsModal({
 
   return (
     <div onClick={onClose} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-      <div onClick={e => e.stopPropagation()} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div onClick={e => e.stopPropagation()} ref={dialogRef} {...dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200">
 
         {/* Header */}
         <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50">
@@ -166,7 +168,7 @@ export default function GroupSettingsModal({
                     autoFocus
                     value={editedName}
                     onChange={e => setEditedName(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setIsEditingName(false); }}
+                    onKeyDown={e => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') { e.stopPropagation(); setIsEditingName(false); setEditedName(groupName); } }}
                     className="flex-1 px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 outline-none focus:border-primary"
                   />
                   <button onClick={handleRename} disabled={loading} className="p-2 bg-primary text-white rounded-lg hover:opacity-90 transition-opacity">

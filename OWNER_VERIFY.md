@@ -643,3 +643,31 @@ Toate notificarile push trimise vreodata au sarit fiecare destinatar.
       butonul „Termina jocul" apare doar intre runde. Vrei sa fie disponibil si **in timpul**
       jocului? Atentie la ce inseamna: poti incheia unilateral un joc in care celalalt e la mutare.
       Alternativa: sa expire singure dupa N zile.
+---
+
+## 34. Ferestrele: Escape, Back si focus (15.09)
+
+Am schimbat felul in care se inchid ferestrele in opt locuri. **Nu pot intra in cont**, deci
+niciuna n-a fost vazuta de mine in aplicatia reala — am probat hook-ul pe un banc de proba in
+browser, nu fiecare fereastra in parte. Astea sunt lucrurile de verificat:
+
+- [ ] **Proba principala, pe desktop:** deschide un eveniment, apasa **Edit**, scrie ceva in titlu,
+      apoi **Escape**. Trebuie sa se inchida **doar formularul de editare**, iar detaliile
+      evenimentului sa ramana pe ecran. Inainte se inchideau amandoua si pierdeai ce scrisesesi.
+- [ ] **Aceeasi proba pe telefon, cu butonul Back.** O apasare = o fereastra inchisa. Doua apasari
+      te intorc in calendar. **Nu** trebuie sa iasa din calendar sau sa schimbe pagina.
+- [ ] **Defilarea:** cu o fereastra deschisa, incearca sa tragi de fundal. Pagina din spate nu
+      trebuie sa se mai miste.
+- [ ] **Setarile grupului → redenumeste grupul**, scrie ceva, apasa **Escape**. Trebuie sa anuleze
+      **doar redenumirea**, nu sa inchida setarile — si daca redeschizi redenumirea, campul nu
+      trebuie sa pastreze textul abandonat.
+- [ ] **Titlul ferestrei de stergere/parasire a grupului** trebuie sa fie acum in limba aplicatiei,
+      nu „Delete Group" / „Leave Group" in engleza.
+- [ ] **Poza ramasa:** deschide un eveniment cu imagine, apasa pe imagine ca sa se faca mare,
+      inchide cu Escape, apoi deschide **alt** eveniment. Nu trebuie sa apara poza evenimentului
+      dinainte peste el.
+- [ ] Oriunde vezi o fereastra care **nu** se mai inchide cum trebuie, sau un ecran care ramane
+      blocat si nu mai defileaza, **spune-mi imediat** — asta ar fi semnul ca am gresit undeva.
+
+**Ce NU e facut inca:** din 29 de ferestre gasite in aplicatie, opt trec prin sistemul nou.
+Restul (lightbox-uri, selectoare, meniul din portofel, arcade) se comporta ca inainte.
