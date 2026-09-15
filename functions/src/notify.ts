@@ -85,6 +85,9 @@ interface Recipient {
 
 const CAP = 200;
 
+/** Where a tapped push opens. The project is fixed in .firebaserc; there is no runtime lookup for it. */
+const APP_ORIGIN = "https://our-days-2a939.web.app";
+
 /**
  * Tell people something, in their own language, through both channels.
  *
@@ -155,6 +158,14 @@ export async function notify(spec: NotifySpec): Promise<NotifyResult> {
     byLang.set(r.lang, bucket);
   }
 
+  // One tag per call: the same notification reaching two subscriptions on one device collapses
+  // into one entry instead of showing twice. Distinct calls get distinct tags, so two broadcasts a
+  // minute apart both show. A tap opens the app at the route the caller asked for; before this,
+  // a tap did nothing — the payload carried no link and the worker set none.
+  const tag = `${spec.type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const route = spec.data?.route;
+  const link = APP_ORIGIN + (typeof route === "string" && route.startsWith("/") ? route : "/");
+
   let pushed = 0;
   const deadByUser = new Map<string, string[]>();
 
@@ -168,7 +179,12 @@ export async function notify(spec: NotifySpec): Promise<NotifyResult> {
           title: spec.titleText || renderNotify(spec.titleKey, lang, spec.titleParam),
           body: spec.bodyText || (spec.bodyKey ? renderNotify(spec.bodyKey, lang, spec.param) : ""),
         },
-        ...(spec.data ? { data: spec.data } : {}),
+        // `tag` also rides in data so the page's foreground handler can use the same one.
+        data: { ...(spec.data || {}), tag },
+        webpush: {
+          notification: { icon: "/icons.svg", tag },
+          fcmOptions: { link },
+        },
       });
       pushed += res.successCount;
 

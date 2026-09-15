@@ -799,3 +799,16 @@ Cheia e pusa, tokenurile exista, si acum si drumurile sunt deschise. Trei probe,
       azi (opt de la broadcast-ul de dimineata, plus ce mai trimiti).
 - [ ] Randul VAPID: eticheta trebuie sa zica acum ca s-a repetat *dupa ce a fost vazut, nu de la
       reparatie*, nu „still happening".
+---
+
+## 44. O singura notificare, si atingerea ei (15.09)
+
+Worker-ul e un fisier static; browserul il actualizeaza la urmatoarea deschidere a aplicatiei.
+Deci intai **deschide aplicatia o data**, apoi:
+
+- [ ] **Send broadcast** (cu aplicatia in fundal sau telefonul blocat). Trebuie sa apara **o
+      singura** notificare, cu icon-ul aplicatiei. Inainte apareau doua.
+- [ ] **Atinge notificarea.** Trebuie sa se deschida aplicatia. Inainte nu facea nimic.
+- [ ] Acelasi test cu aplicatia **deschisa**: tot una singura.
+- [ ] Daca vezi tot doua, spune-mi si zi daca telefonul deschisese aplicatia dupa deploy — daca nu,
+      inca ruleaza worker-ul vechi.

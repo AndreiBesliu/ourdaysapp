@@ -939,7 +939,7 @@ export default function Admin() {
         {tab === 'broadcast' && (
           <div className="flex flex-col gap-4 max-w-xl">
             <div className="bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs rounded-lg p-3 flex items-start gap-2">
-              <Megaphone className="w-4 h-4 shrink-0 mt-0.5" /> Sends an in-app notification to every recipient. Use sparingly — this reaches real users.
+              <Megaphone className="w-4 h-4 shrink-0 mt-0.5" /> Sends a bell notification AND a push to every recipient's phone. Use sparingly — this reaches real users.
             </div>
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex flex-col gap-4">
               <div>

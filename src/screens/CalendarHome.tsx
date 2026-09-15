@@ -299,8 +299,12 @@ export default function CalendarHome() {
           const reg = sw
             ? (await sw.getRegistration('/firebase-cloud-messaging-push-scope')) || (await sw.ready)
             : null;
-          if (reg) await reg.showNotification(title, { body, data: payload.data });
-          else new Notification(title, { body });
+          // Same icon and the same collapsing `tag` the server puts on the background copy, so a
+          // device holding two subscriptions shows one notification, not one per subscription.
+          const tag = payload.data?.tag;
+          const options: NotificationOptions = { body, icon: '/icons.svg', data: payload.data, ...(tag ? { tag } : {}) };
+          if (reg) await reg.showNotification(title, options);
+          else new Notification(title, options);
         } catch (err) {
           reportError(err instanceof Error ? err.message : String(err), { context: 'fcm.foreground' });
         }

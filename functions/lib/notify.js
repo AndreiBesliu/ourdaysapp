@@ -31,6 +31,8 @@ const admin = require("firebase-admin");
 const notifyStrings_1 = require("./notifyStrings");
 Object.defineProperty(exports, "DEFAULT_LANG", { enumerable: true, get: function () { return notifyStrings_1.DEFAULT_LANG; } });
 const CAP = 200;
+/** Where a tapped push opens. The project is fixed in .firebaserc; there is no runtime lookup for it. */
+const APP_ORIGIN = "https://our-days-2a939.web.app";
 /**
  * Tell people something, in their own language, through both channels.
  *
@@ -39,7 +41,7 @@ const CAP = 200;
  * roll that back. Call it after the transaction commits.
  */
 async function notify(spec) {
-    var _a;
+    var _a, _b;
     const db = admin.firestore();
     const targets = [...new Set(spec.userIds)]
         .filter((u) => typeof u === "string" && u && (spec.includeActor || u !== spec.createdBy))
@@ -85,6 +87,13 @@ async function notify(spec) {
         }
         byLang.set(r.lang, bucket);
     }
+    // One tag per call: the same notification reaching two subscriptions on one device collapses
+    // into one entry instead of showing twice. Distinct calls get distinct tags, so two broadcasts a
+    // minute apart both show. A tap opens the app at the route the caller asked for; before this,
+    // a tap did nothing — the payload carried no link and the worker set none.
+    const tag = `${spec.type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const route = (_b = spec.data) === null || _b === void 0 ? void 0 : _b.route;
+    const link = APP_ORIGIN + (typeof route === "string" && route.startsWith("/") ? route : "/");
     let pushed = 0;
     const deadByUser = new Map();
     for (const [lang, bucket] of byLang) {
@@ -92,10 +101,19 @@ async function notify(spec) {
         if (tokens.length === 0)
             continue;
         try {
-            const res = await admin.messaging().sendEachForMulticast(Object.assign({ tokens, notification: {
+            const res = await admin.messaging().sendEachForMulticast({
+                tokens,
+                notification: {
                     title: spec.titleText || (0, notifyStrings_1.renderNotify)(spec.titleKey, lang, spec.titleParam),
                     body: spec.bodyText || (spec.bodyKey ? (0, notifyStrings_1.renderNotify)(spec.bodyKey, lang, spec.param) : ""),
-                } }, (spec.data ? { data: spec.data } : {})));
+                },
+                // `tag` also rides in data so the page's foreground handler can use the same one.
+                data: Object.assign(Object.assign({}, (spec.data || {})), { tag }),
+                webpush: {
+                    notification: { icon: "/icons.svg", tag },
+                    fcmOptions: { link },
+                },
+            });
             pushed += res.successCount;
             // The report every previous sender threw away.
             res.responses.forEach((r, i) => {

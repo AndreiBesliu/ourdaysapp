@@ -13,13 +13,17 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// Deliberately NO showNotification here.
+//
+// When a push carrying a `notification` block arrives in the background, the Firebase SDK's own
+// push handler displays it first and THEN calls this hook (onPush in @firebase/messaging's SW
+// build: `if (internalPayload.notification) await showNotification(...)`, then
+// `onBackgroundMessageHandler(payload)`). A handler that called showNotification too produced
+// two notifications from one delivery — measured on 15 Sept 2026: the panel reported "pushed to
+// 1 device" and the lock screen showed the same message twice.
+//
+// The icon this handler used to add now travels in the server payload (webpush.notification in
+// functions/src/notify.ts), where the SDK's display honours it, along with a tag and a link.
 messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] Received background message ', payload);
-  const notificationTitle = payload.notification.title;
-  const notificationOptions = {
-    body: payload.notification.body,
-    icon: '/icons.svg'
-  };
-
-  self.registration.showNotification(notificationTitle, notificationOptions);
+  console.log('[firebase-messaging-sw.js] background message displayed by the SDK', payload && payload.data);
 });

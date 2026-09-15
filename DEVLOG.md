@@ -4602,3 +4602,41 @@ telefoane reale. Doua afirmatii au rezistat, una cu o corectie, **una a cazut** 
 
 `npx tsc -b` verde · functions `tsc` verde (cu cod de iesire REAL — `$?` dupa un `| head` era al lui
 `head`) · 1153 de teste · poarta verde · build verde · livrat functions -> hosting.
+## 2026-09-15 - Primul push in patru luni, si de ce a aparut de doua ori
+
+**Model:** Claude Fable 5.1 · captura lui Andrei de pe ecranul blocat
+
+**A ajuns.** „memento 2", 5:49 PM, pe ecranul blocat — prima notificare push livrata vreodata de
+aplicatie. Dar de **doua** ori.
+
+Doua ipoteze, amandoua plauzibile: (1) doua tokenuri pe acelasi telefon, fiecare abonament
+primeste si afiseaza; (2) service worker-ul afiseaza de doua ori. Numarul singur nu le deosebea.
+Le-a deosebit a doua captura: **„pushed to 1 device"** — FCM acceptase UN token, o singura livrare,
+doua notificari. Tokenurile nu pot explica asta. Si datele au inchis ipoteza 1 de tot: al doilea
+token era mort, `notify()` l-a curatat singur, 2 -> 1.
+
+Cauza, citita cuvant cu cuvant din SDK-ul instalat (`@firebase/messaging`, `onPush`): in fundal,
+daca mesajul are bloc `notification`, SDK-ul **il afiseaza el** si *apoi* cheama
+`onBackgroundMessage` — unde `firebase-messaging-sw.js` al nostru chema `showNotification` inca o
+data. O capcana documentata, in care intrasera si altii.
+
+### Reparatia
+
+Worker-ul **nu mai afiseaza** — comentariul explica de ce, cu citatul din SDK, ca urmatorul cititor
+sa nu puna la loc `showNotification` fiindca „pare ca lipseste". Ce punea el (icon-ul) se muta in
+payload-ul serverului, `webpush.notification`, unde afisarea SDK-ului il respecta. Si doua lucruri
+pe care push-ul nu le-a avut niciodata:
+
+- **`tag`**, unul per apel `notify()`: aceeasi notificare ajunsa pe doua abonamente ale aceluiasi
+  telefon se contopeste intr-una; doua broadcast-uri diferite raman doua. Merge si in `data`, ca
+  handler-ul de prim-plan sa foloseasca acelasi.
+- **`fcmOptions.link`**: o atingere pe notificare deschide aplicatia la ruta ceruta. Pana acum o
+  atingere nu facea nimic — payload-ul n-avea link si worker-ul nu punea niciunul.
+
+Handler-ul de prim-plan foloseste aceleasi optiuni, ca cele doua drumuri sa arate identic. Si
+banner-ul din admin spune acum ca butonul trimite *si* push, nu doar clopotel.
+
+`notify.ts` e comun celor noua apelanti, deci s-au livrat **toate** functiile, nu o selectie — dupa
+dimineata cu randuri pe modelul vechi, nu mai vreau revizii amestecate.
+
+`npx tsc -b` verde · functions `tsc` verde · 1153 de teste · poarta verde · build verde · livrat.
