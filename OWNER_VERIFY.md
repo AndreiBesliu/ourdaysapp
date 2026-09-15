@@ -671,3 +671,20 @@ browser, nu fiecare fereastra in parte. Astea sunt lucrurile de verificat:
 
 **Ce NU e facut inca:** din 29 de ferestre gasite in aplicatie, opt trec prin sistemul nou.
 Restul (lightbox-uri, selectoare, meniul din portofel, arcade) se comporta ca inainte.
+---
+
+## 35. Inca noua ferestre (15.09)
+
+Tot fara sa le pot vedea — sunt in spatele contului. De verificat:
+
+- [ ] **Portofel:** deschide formularul de adaugare asset, completeaza ceva, apoi deschide
+      **selectorul de poze vechi** peste el si apasa **Escape**. Trebuie sa se inchida **doar
+      selectorul**, iar formularul sa ramana completat. Inainte plecau amandoua.
+- [ ] **Portofel → scanner de coduri:** apasa **Escape**. Trebuie sa se inchida. (Pana acum se
+      inchidea printr-un noroc; daca nu se mai inchide, spune-mi — e singurul loc unde reparatia
+      putea strica ceva ce mergea.)
+- [ ] **Portofel → Gestionează filtre:** incepe sa redenumesti o categorie, apasa Escape, apoi
+      redeschide. Categoria **nu** trebuie sa fie inca in modul editare cu textul vechi.
+- [ ] **Titlul formularului de asset** trebuie sa fie tradus, nu „Add New Asset" / „Edit Asset".
+- [ ] **Arcadă:** intra intr-un joc, deschide **Reguli**, apasa **Escape**. Trebuie sa se inchida
+      **doar regulile**, nu toata arcada. La fel pentru alegerea temei la Memory Match.

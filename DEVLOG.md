@@ -4220,3 +4220,60 @@ el si numai el.
 transformat o schimbare de noua randuri intr-una de 196 — refacut pe octeti. Si `git stash` intr-un
 arbore sincronizat cu Drive n-a putut sterge fisierele, deci `pop` a refuzat; nimic pierdut, dar nu
 mai fac asta aici.*
+## 2026-09-15 - Inca noua ferestre, si scannerul care ar fi ramas fara Escape
+
+**Model:** Claude Opus 5 · „Continua"
+
+Din 29 de ferestre, opt treceau prin sistemul nou. Acum sunt **saptesprezece**.
+
+### Portofelul: cinci ferestre, un singur Escape
+
+`Wallet.tsx` avea **un** ascultator de Escape care reseta **sapte** lucruri deodata: formularul de
+asset, filtrele, asset-ul editat, imaginea privita, codul de bare, scannerul si selectorul de poze.
+Deci inchideai vizualizatorul de poza deschis PESTE un formular pe jumatate completat — si pleca si
+formularul. Acum sunt cinci ferestre cu identitati separate.
+
+### Scannerul ar fi ramas mut
+
+`BarcodeScanner` **nu avea Escape propriu**. Se bizuia pe acel `setIsScanning(false)` din handler-ul
+colectiv al portofelului. Daca sterg handler-ul si nu observ asta, scannerul ramane o fereastra pe
+tot ecranul din care nu mai iesi cu tastatura — o regresie introdusa chiar de reparatie. Acum si-l
+poarta pe al lui.
+
+### Arcada: autorul stia
+
+Handler-ul de acolo avea comentariul lui, lasat in cod: *„If playing a game, don't close the whole
+modal, just exit game view? Actually, let's just close the modal."* Exact problema — Escape peste
+foaia de reguli inchidea **toata** arcada de dedesubt, si lasa foaia armata pentru data viitoare.
+Trei ferestre, trei identitati.
+
+### Conditia hook-ului trebuie sa fie EXACT conditia de randare
+
+`useDialog(viewingImage !== null, ...)` langa un JSX pazit de `{viewingImage && ...}` nu e acelasi
+lucru: un sir gol ar fi pus o intrare **fantoma** in teanc, iar o fantoma deasupra inghite Escape-ul
+ferestrei pe care omul chiar o vede. Toate cinci folosesc acum aceeasi expresie ca randarea.
+
+### Inca un titlu in engleza
+
+`{editingAsset ? 'Edit Asset' : 'Add New Asset'}` — al doilea gasit azi, dupa cel din fereastra de
+stergere a grupului. Doua chei noi in sase limbi; suita de i18n verifica singura ca nicio limba nu
+ramane in urma si ca nu e o copie a englezei.
+
+Si filtrul pe jumatate redenumit se sterge acum odata cu fereastra, nu mai asteapta acolo.
+
+`npx tsc -b` verde · 1100 de teste · poarta verde · build verde · livrat pe live.
+
+### Nota despre sfarsituri de linie — o cauza gasita, nu doar un simptom
+
+Ieri un `sed -i` mi-a facut dintr-o schimbare de noua randuri una de 196. Azi am aflat **de ce
+existau** randurile stricate: tiparul meu de inserare potrivea pana la `$`, care pe un fisier CRLF
+sta **intre `\r` si `\n`** — deci textul nou ateriza in mijlocul terminatorului si lasa in urma
+`\r\r\n` plus un rand cu LF gol. Asa au ajuns asa `CreateGroupModal` si `BarcodeScanner`.
+
+Tiparele consuma acum terminatorul, si fiecare scriere refuza sa salveze daca a aparut `\r\r\n`
+sau daca numarul de randuri cu LF gol s-a schimbat. In `BarcodeScanner` **doua ancore vecine aveau
+terminatori diferiti** — se detecteaza, nu se presupun.
+
+**N-am normalizat fisierele stricate.** Blob-urile din repo sunt CRLF, deci normalizarea le rescrie
+integral: 429 de randuri de diferenta pura de terminatori, in care schimbarea adevarata dispare.
+Masurat, nu presupus. Ramane de facut separat, daca merita.

@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { reportError } from '../reportError';
+import { useDialog } from '../hooks/useDialog';
 
 interface BarcodeScannerProps {
   onScan: (result: string, format: string) => void;
@@ -17,6 +18,14 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
   // Always the latest callback, without making the camera effect depend on its identity.
   const onScanRef = useRef(onScan);
   onScanRef.current = onScan;
+
+  // Open for as long as it is mounted — the parent renders it conditionally, so there is
+  // no isOpen prop to pass. This had no Escape handling of its own until now: it leaned on
+  // the wallet's single catch-all handler, which also reset six other things. That handler
+  // is gone, so the scanner carries its own.
+  const { dialogRef, dialogProps } = useDialog(true, onClose, {
+    label: t('scanBarcodeTitle', language),
+  });
 
   useEffect(() => {
     scannerRef.current = new Html5Qrcode("reader", {
@@ -95,7 +104,7 @@ export default function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps)
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black flex flex-col">
+    <div ref={dialogRef} {...dialogProps} className="fixed inset-0 z-[100] bg-black flex flex-col">
       <div className="p-4 flex justify-between items-center bg-black/50 absolute top-0 left-0 right-0 z-10">
         <h3 className="text-white font-medium">{t('scanBarcodeTitle', language)}</h3>
         <button onClick={onClose} className="p-2 text-white bg-white/20 rounded-full">

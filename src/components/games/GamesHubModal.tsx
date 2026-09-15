@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../../store';
 import { t } from '../../utils/i18n';
 import { getSessionWinner, finalizeGameUpdate } from './gameResult';
+import { useDialog } from '../../hooks/useDialog';
 
 
 interface GamesHubModalProps {
@@ -475,19 +476,22 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
     }
   };
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        // If playing a game, don't close the whole modal, just exit game view? 
-        // Actually, let's just close the modal.
-        onClose();
-      }
-    };
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-    }
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  // Three dialogs here, and the old single handler answered for all of them: Escape while the
+  // rules sheet or the theme picker was open closed the WHOLE arcade underneath instead of the
+  // sheet on top, and left that sheet's state set so it sprang open again next time. The comment
+  // that used to sit here ("just exit game view? Actually, let's just close the modal") was the
+  // author noticing the same thing and having no way to express it.
+  const hub = useDialog(isOpen, onClose, {
+    label: playingGameId ? t('playingGame', language) : `${groupName} ${t('arcade', language)}`,
+  });
+
+  const rulesDialog = useDialog(Boolean(showRulesFor && gameRules[showRulesFor]), () => setShowRulesFor(null), {
+    label: showRulesFor && gameRules[showRulesFor] ? gameRules[showRulesFor].title : undefined,
+  });
+
+  const themeDialog = useDialog(showThemePicker, () => setShowThemePicker(false), {
+    label: t('chooseTheme', language),
+  });
 
   if (!isOpen) return null;
 
@@ -499,6 +503,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
       onClick={onClose}
     >
       <div 
+        ref={hub.dialogRef} {...hub.dialogProps}
         className="bg-white dark:bg-zinc-900 rounded-none sm:rounded-2xl w-full max-w-2xl shadow-xl flex flex-col h-full sm:h-[80vh] overflow-hidden border border-zinc-200 dark:border-zinc-800 relative"
         onClick={(e) => e.stopPropagation()}
       >
@@ -778,7 +783,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
       {/* Rules Modal Overlay */}
       {showRulesFor && gameRules[showRulesFor] && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200" onClick={() => setShowRulesFor(null)}>
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-2xl flex flex-col border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
+          <div ref={rulesDialog.dialogRef} {...rulesDialog.dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-2xl flex flex-col border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-blue-50 dark:bg-blue-900/20 rounded-t-2xl">
               <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
                 <Info className="w-5 h-5" />
@@ -808,7 +813,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
       {/* Memory Match — theme picker (choose an icon pack before starting) */}
       {showThemePicker && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200" onClick={() => setShowThemePicker(false)}>
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
+          <div ref={themeDialog.dialogRef} {...themeDialog.dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm shadow-2xl flex flex-col border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-amber-50 dark:bg-amber-900/20 rounded-t-2xl">
               <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
                 <Gamepad2 className="w-5 h-5" />

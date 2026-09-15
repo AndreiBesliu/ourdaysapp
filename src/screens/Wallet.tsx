@@ -7,6 +7,7 @@ import { ref, uploadBytes, getDownloadURL, listAll } from 'firebase/storage';
 import { Wallet as WalletIcon, Plus, Image as ImageIcon, Trash2, Users, User, HeartPulse, Home, Car, DollarSign, Settings2, Folder, Edit2, Check, X, ScanLine, QrCode } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import BarcodeScanner from '../components/BarcodeScanner';
+import { useDialog } from '../hooks/useDialog';
 import Barcode from 'react-barcode';
 import QRCode from 'react-qr-code';
 import ExpensesTab from '../components/ExpensesTab';
@@ -161,21 +162,29 @@ export default function Wallet() {
     return () => unsubs.forEach((u) => u());
   }, [groupIdsKey]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsAdding(false);
-        setIsManagingFilters(false);
-        setEditingAsset(null);
-        setViewingImage(null);
-        setViewingAssetCode(null);
-        setIsScanning(false);
-        setShowPastImages(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  // Five dialogs, five identities. This used to be ONE Escape handler that reset all seven
+  // pieces of state at once, so dismissing the picture viewer stacked above a half-filled asset
+  // form threw the form away with it. Each one now answers only while it is the dialog on top.
+  const assetForm = useDialog(Boolean(isAdding || editingAsset), () => {
+    setIsAdding(false);
+    setEditingAsset(null);
+  }, { label: editingAsset ? t('editAsset', language) : t('addNewAsset', language) });
+
+  const filtersDialog = useDialog(isManagingFilters, () => {
+    setIsManagingFilters(false);
+    // Cleared with the dialog: an abandoned half-typed rename used to survive, so reopening
+    // Manage Filters found that category still in edit mode with the old text in it.
+    setEditingFilter(null);
+  }, { label: t('walletManageFilters', language) });
+
+  const pastImagesDialog = useDialog(showPastImages, () => setShowPastImages(false),
+    { label: t('selectPastUpload', language) });
+
+  const codeDialog = useDialog(Boolean(viewingAssetCode), () => setViewingAssetCode(null),
+    { label: viewingAssetCode?.name });
+
+  const imageDialog = useDialog(Boolean(viewingImage), () => setViewingImage(null),
+    { label: t('walletImageViewer', language) });
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -692,10 +701,10 @@ export default function Wallet() {
       {/* Add/Edit Asset Modal */}
       {(isAdding || editingAsset) && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm shadow-xl p-6">
+          <div ref={assetForm.dialogRef} {...assetForm.dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm shadow-xl p-6">
             <h3 className="font-bold text-lg mb-4 text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
               {editingAsset ? <Edit2 className="w-5 h-5 text-emerald-500" /> : <Plus className="w-5 h-5 text-emerald-500" />} 
-              {editingAsset ? 'Edit Asset' : 'Add New Asset'}
+              {editingAsset ? t('editAsset', language) : t('addNewAsset', language)}
             </h3>
             
             <form onSubmit={handleUpload} className="space-y-4">
@@ -845,7 +854,7 @@ export default function Wallet() {
       {/* Manage Filters Modal */}
       {isManagingFilters && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[80vh]">
+          <div ref={filtersDialog.dialogRef} {...filtersDialog.dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[80vh]">
             <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
               <h3 className="font-bold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                 {/* One key for the whole phrase. Splitting it rendered "Gestionează Filters" —
@@ -917,7 +926,7 @@ export default function Wallet() {
       {/* Past Images Modal */}
       {showPastImages && (
         <div onClick={() => setShowPastImages(false)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-          <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div onClick={(e) => e.stopPropagation()} ref={pastImagesDialog.dialogRef} {...pastImagesDialog.dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50">
               <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                 <Folder className="w-5 h-5 text-emerald-500" />
@@ -974,7 +983,7 @@ export default function Wallet() {
       {/* Generated Barcode Viewer Modal */}
       {viewingAssetCode && (
         <div onClick={() => setViewingAssetCode(null)} className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl p-8 max-w-sm w-full flex flex-col items-center shadow-2xl relative">
+          <div onClick={(e) => e.stopPropagation()} ref={codeDialog.dialogRef} {...codeDialog.dialogProps} className="bg-white rounded-2xl p-8 max-w-sm w-full flex flex-col items-center shadow-2xl relative">
             <button onClick={() => setViewingAssetCode(null)} className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-zinc-900 bg-zinc-100 rounded-full transition-colors">
               <X className="w-5 h-5" />
             </button>
@@ -1009,6 +1018,7 @@ export default function Wallet() {
       {viewingImage && (
         <div 
           onClick={() => setViewingImage(null)} 
+          ref={imageDialog.dialogRef} {...imageDialog.dialogProps}
           className="fixed inset-0 bg-black/90 backdrop-blur-md z-[60] flex items-center justify-center p-4 sm:p-8 animate-in fade-in duration-200"
         >
           <button 
