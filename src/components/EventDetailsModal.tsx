@@ -99,6 +99,12 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     if (!isOpen) setFullScreenImage(null);
   }, [isOpen]);
 
+  // The picture is its own dialog, stacked above this one. Until now Escape over an open picture
+  // closed the event details underneath it rather than the picture the user was looking at.
+  const lightbox = useDialog(Boolean(fullScreenImage), () => setFullScreenImage(null), {
+    label: t('walletImageViewer', language),
+  });
+
   // Declared with the other hooks and above the early return, like everything else here —
   // see the note below about React #310.
   const { dialogRef, dialogProps } = useDialog(isOpen, onClose, { label: event?.title });
@@ -883,7 +889,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
 
       {/* Full Screen Image Modal */}
       {fullScreenImage && (
-        <div onClick={(e) => { e.stopPropagation(); setFullScreenImage(null); }} className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-pointer">
+        <div onClick={(e) => { e.stopPropagation(); setFullScreenImage(null); }} ref={lightbox.dialogRef} {...lightbox.dialogProps} className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-pointer">
           <img src={fullScreenImage} className="max-w-full max-h-full object-contain animate-in fade-in zoom-in duration-200" alt="Full screen asset" />
           <button className="absolute top-4 right-4 text-white/50 hover:text-white bg-black/50 hover:bg-black/80 transition-all p-2 rounded-full">
             <X className="w-6 h-6" />

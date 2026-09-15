@@ -688,3 +688,19 @@ Tot fara sa le pot vedea — sunt in spatele contului. De verificat:
 - [ ] **Titlul formularului de asset** trebuie sa fie tradus, nu „Add New Asset" / „Edit Asset".
 - [ ] **Arcadă:** intra intr-un joc, deschide **Reguli**, apasa **Escape**. Trebuie sa se inchida
       **doar regulile**, nu toata arcada. La fel pentru alegerea temei la Memory Match.
+---
+
+## 36. Ultimele cinci ferestre (15.09)
+
+- [ ] **Eveniment cu poza:** deschide evenimentul, apasa pe poza ca sa se faca mare, apoi **Escape**.
+      Trebuie sa se inchida **doar poza**, iar evenimentul sa ramana deschis.
+- [ ] **Formular de eveniment → alege din portofel:** deschide selectorul de asset peste formular si
+      apasa **Escape**. Trebuie sa se inchida **doar selectorul**, iar formularul sa ramana completat.
+- [ ] **Calendar:** apasa pe unul din numerele de sus (total / in asteptare / terminate) si inchide
+      panoul cu **Escape**.
+- [ ] **Chat → conversatie noua:** foaia de alegere trebuie sa se inchida cu Escape si cu Back.
+- [ ] **Admin → fisa unui user:** la fel.
+
+**Ce NU s-a schimbat, si e intentionat:** meniul de notificari, meniul mobil, meniul butonului
+plutitor, panoul de chat flotant si selectorul de emoji raman cum erau. Sunt meniuri, nu ferestre,
+si vor alt fel de tratament.

@@ -4277,3 +4277,40 @@ terminatori diferiti** — se detecteaza, nu se presupun.
 **N-am normalizat fisierele stricate.** Blob-urile din repo sunt CRLF, deci normalizarea le rescrie
 integral: 429 de randuri de diferenta pura de terminatori, in care schimbarea adevarata dispare.
 Masurat, nu presupus. Ramane de facut separat, daca merita.
+## 2026-09-15 - Ultimele cinci ferestre adevarate
+
+**Model:** Claude Opus 5 · „Continua"
+
+Douazeci si doua de ferestre trec acum prin hook. Astea cinci erau ultimele care sunt cu adevarat
+**ferestre**:
+
+- **poza mare din detaliile evenimentului** — Escape inchidea evenimentul de sub ea, nu poza;
+- **selectorul de asset din formularul de eveniment** — Escape arunca tot formularul de dedesubt;
+- **panoul de sumar al zilei** din calendar;
+- **foaia „incepe o conversatie"** din chat;
+- **fisa userului din admin**.
+
+### Ce am lasat INTENTIONAT pe dinafara
+
+Cele sapte ramase sunt **meniuri si popovere**, nu ferestre: notificarile, meniul mobil, meniul
+butonului plutitor, panoul de chat flotant, selectorul de emoji, cele doua popovere de profil.
+Un meniu vrea alte reguli — se inchide cand dai click in alta parte, focusul umbla cu sagetile, si
+**nu** trebuie sa fie `aria-modal`, fiindca nu blocheaza restul paginii. Sa le dau hook-ul asta ar
+fi gresit, nu incomplet. Raman asa pana cand se face primitiva potrivita pentru ele.
+
+### Doua verificari care au prins ceva
+
+**Typecheck-ul** a prins hook-ul de sumar pus deasupra declaratiei lui `language` — un `const` nu
+exista inainte sa fie declarat, deci ecranul ar fi crapat la prima randare. Mutat mai jos.
+
+**Bancul de proba**, refacut: pana acum probase doua ferestre in **componente diferite**. In
+`EventDetailsModal` si `AddEventModal` sunt acum **doua apeluri `useDialog` in ACEEASI componenta**
+— forma pe care n-o probasem. Verificat in browser: `useId()` le da identitati distincte, se aseaza
+corect una peste alta, iar Escape le desface una cate una. Nu era o presupunere sigura: exact „e
+bine definit" spusesem si despre derularea istoricului, care s-a dovedit gresita.
+
+Si o precizare ca sa nu para bug mai tarziu: la finalul probei focusul ajunge pe `BODY`, nu pe
+butonul care deschisese. E corect — `.click()` din script nu muta focusul, deci nu era unde sa-l duca
+inapoi. Cand butonul chiar are focus, focusul se intoarce la el; asta se vede in proba de dimineata.
+
+`npx tsc -b` verde · 1100 de teste · poarta verde · build verde · livrat pe live.

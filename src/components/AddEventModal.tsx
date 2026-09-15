@@ -143,6 +143,12 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     label: editEvent ? t('edit', language) : t('addNewEvent', language),
   });
 
+  // The asset picker opens on top of this form. Escape used to close the form underneath it and
+  // throw away the whole edit.
+  const assetPicker = useDialog(Boolean(showAssetPicker), () => setShowAssetPicker(null), {
+    label: t('pickFromAssets', language),
+  });
+
   useEffect(() => {
     if (!isOpen || !auth.currentUser) return;
     // Derive the assignee list from the group/family members already loaded by
@@ -1504,7 +1510,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       {/* Asset Picker Modal */}
       {showAssetPicker && (
         <div onClick={(e) => e.stopPropagation()} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-          <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div onClick={(e) => e.stopPropagation()} ref={assetPicker.dialogRef} {...assetPicker.dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50">
               <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                 <Wallet className="w-5 h-5 text-emerald-500" />

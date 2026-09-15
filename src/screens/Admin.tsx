@@ -7,6 +7,7 @@ import {
   Send, TrendingUp, Megaphone,
 } from 'lucide-react';
 import { auth } from '../firebase';
+import { useDialog } from '../hooks/useDialog';
 import {
   adminCheck, adminGetStats, adminListProfiles, adminListAdmins, adminSetAdmin,
   adminGetHealth, adminSetErrorStatus, adminGetAiLedger, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
@@ -113,6 +114,7 @@ export default function Admin() {
   const [groups, setGroups] = useState<any[]>([]);
   const [growth, setGrowth] = useState<any>(null);
   const [detail, setDetail] = useState<any>(null); // open user drill-down
+  const detailDialog = useDialog(Boolean(detail), () => setDetail(null), { label: 'User detail' });
   const [detailLoading, setDetailLoading] = useState(false);
   const [modBusy, setModBusy] = useState(false);
   const [bcTarget, setBcTarget] = useState('all');
@@ -925,7 +927,7 @@ export default function Admin() {
       {/* User detail + moderation */}
       {detail && (
         <div onClick={() => setDetail(null)} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div onClick={e => e.stopPropagation()} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-xl">
+          <div onClick={e => e.stopPropagation()} ref={detailDialog.dialogRef} {...detailDialog.dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-xl">
             <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
               <h3 className="font-bold text-lg text-zinc-900 dark:text-zinc-100">User detail</h3>
               <button onClick={() => setDetail(null)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 rounded-full"><X className="w-4 h-4" /></button>

@@ -22,6 +22,7 @@ import { openDirectChat } from '../serverActions';
 import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
 import GroupChatWidget from '../components/GroupChatWidget';
+import { useDialog } from '../hooks/useDialog';
 import {
   buildConversations, conversationKey, findConversation, personName, startableWith,
   type Conversation, type People,
@@ -286,10 +287,14 @@ function StartChatSheet({ candidates, people, language, busy, onPick, onClose }:
   onPick: (uid: string) => void;
   onClose: () => void;
 }) {
+  // Rendered only while picking, so it is open for exactly as long as it is mounted.
+  const { dialogRef, dialogProps } = useDialog(true, onClose, { label: t('chatStartWith', language) });
+
   return (
     <div onClick={onClose} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div
         onClick={(e) => e.stopPropagation()}
+        ref={dialogRef} {...dialogProps}
         className="bg-white dark:bg-zinc-900 w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[80vh] overflow-hidden"
       >
         <div className="px-5 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between shrink-0">

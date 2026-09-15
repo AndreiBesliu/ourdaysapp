@@ -28,6 +28,7 @@ import { expandRecurringEvents } from '../utils/recurrence';
 import { acceptGroupInvite, ADMIN_BOOTSTRAP_EMAILS } from '../serverActions';
 import { displayTime, localZone } from '../utils/eventTime';
 import { eventColorClass } from '../utils/eventColors';
+import { useDialog } from '../hooks/useDialog';
 
 export default function CalendarHome() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -60,6 +61,15 @@ export default function CalendarHome() {
   const [pendingFriendCount, setPendingFriendCount] = useState(0);
   const navigate = useNavigate();
   const { language, timezone } = useThemeStore();
+
+  // Placed after `language`, not beside the state it reads: the label needs the language,
+  // and a const is not in scope above its own declaration.
+  const overviewDialog = useDialog(overviewModalType !== null, () => setOverviewModalType(null), {
+    label: overviewModalType === 'total' ? t('todaysEventsTasks', language)
+      : overviewModalType === 'pending' ? t('pendingTasksToday', language)
+      : overviewModalType === 'completed' ? t('completedTasksToday', language)
+      : undefined,
+  });
   const dateLocale = getDateLocale(language);
   // Cosmetic gate for the Admin entry (the /admin screen + callables re-check server-side).
   const isAdminEmail = ADMIN_BOOTSTRAP_EMAILS.includes((auth.currentUser?.email || '').toLowerCase());
@@ -999,7 +1009,7 @@ export default function CalendarHome() {
       {/* Overview Modal */}
       {overviewModalType && (
         <div onClick={() => setOverviewModalType(null)} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div onClick={e => e.stopPropagation()} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[80vh] overflow-hidden">
+          <div onClick={e => e.stopPropagation()} ref={overviewDialog.dialogRef} {...overviewDialog.dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-xl flex flex-col max-h-[80vh] overflow-hidden">
             <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50">
               <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100">
                 {overviewModalType === 'total' && t('todaysEventsTasks', language)}
