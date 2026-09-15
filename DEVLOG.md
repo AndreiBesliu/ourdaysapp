@@ -4488,3 +4488,42 @@ Modalul **importa** programatorul, nu o copie a lui. Altfel aveam o varianta pro
 — vezi [[feedback_plasa_pe_sursa_vs_rulare]].
 
 `npx tsc -b` verde · **1149 de teste** (de la 1130) · poarta verde · build verde · livrat pe live.
+## 2026-09-15 - Predarea in acelasi tick, si un credit care se scurgea
+
+**Model:** Claude Fable 5.1 · „continua"
+
+Ultima constatare **high** din audit pe care n-o verificasem: „panoul de recurente -> Edit preda
+fara intarziere; formularul se inchide singur si lasa o intrare in istoric". Am masurat-o pe bancul de
+proba, cu forma exacta a apelantului din `CalendarHome` — `setIsRecurringPanelOpen(false);
+setIsAddModalOpen(true)` in acelasi handler — si a iesit **mai precisa decat constatarea**.
+
+**Inchis cu X: in regula.** Intrarea ramasa e una *forward*, pe care Back n-o viziteaza niciodata.
+Nicio apasare moarta.
+
+**Back cu editorul deschis: bug real.** O singura apasare inchidea editorul **si** mai ducea
+istoricul un pas inapoi — in aplicatie, iesirea din calendar. Cauza: `history.back()` e asincron,
+`pushState` nu e. Derularea panoului si push-ul editorului pleaca din acelasi tick, push-ul
+aterizeaza primul, iar derularea traverseaza *peste* el. Editorul ramane deschis cu intrarea lui
+esuata inainte, si urmatorul Back o ia pe cea de sub.
+
+**Clasa, nu situl.** `CalendarGrid` avea *trei* predari identice acoperite cu `setTimeout(..., 50)` —
+cineva lovise rasa asta inainte si o tratase cu o intarziere ghicita. Deci reparatia e in
+primitiva: cand o derulare e inca in zbor, `useDialog` **isi retine push-ul pana aterizeaza**
+pop-ul, in loc sa ghiceasca un interval. Cele trei intarzieri au disparut: erau 50 ms de lag pe
+fiecare atingere de zi, si o superstitie pe care urmatorul cititor ar fi pastrat-o.
+
+### Reparatia a scos la iveala un bug mai vechi
+
+Cu amanarea pusa, scenariul obisnuit de stivuire a inceput sa cada: pe o stiva proaspata, primul
+Back nu inchidea **nimic**. Cauza era in designul meu original de azi-dimineata: creditul „pop-ul
+asta e al nostru" era consumat de *primul ascultator care il vedea*. Cand se inchide o fereastra
+care e **singura** deschisa, derularea ei produce un popstate pe care nu-l mai vede niciun
+ascultator — creditul ramanea, si inghitea urmatoarea apasare reala pe Back a oricarei ferestre
+deschise dupa. O apasare moarta, tacuta. Bancurile de dimineata n-au prins-o fiindca fiecare
+scenariu se termina fix dupa inchidere.
+
+Acum creditul e legat de **eveniment**: la derulare se inregistreaza un ascultator o-singura-data
+care marcheaza pop-ul urmator, indiferent daca vreo fereastra mai asculta. Zece puncte de control
+in browser, toate exact cum trebuie — inclusiv secventa scurgerii, redata ca atare.
+
+`npx tsc -b` verde · **1153 de teste** (de la 1149) · poarta verde · build verde · livrat pe live.

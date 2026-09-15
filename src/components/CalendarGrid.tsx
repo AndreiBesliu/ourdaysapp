@@ -371,7 +371,10 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                     onClick={() => { 
                       setIsDayModalOpen(false); 
                       if (onAddEventClick) {
-                        setTimeout(() => onAddEventClick(), 50);
+                        // Handed off in the same tick. A 50 ms setTimeout used to sit here in three places, papering
+                        // over a race in the dialogs' history handling that useDialog now resolves itself
+                        // (measured in a browser: the delay is neither needed nor harmless, it was 50 ms of lag).
+                        onAddEventClick();
                       }
                     }}
                     className="px-4 py-2 bg-primary hover:bg-primary/90 text-white text-sm font-medium rounded-lg transition-colors inline-flex items-center gap-2"
@@ -410,7 +413,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                         onClick={() => { 
                           setIsDayModalOpen(false); 
                           if (onEventClick) {
-                            setTimeout(() => onEventClick(ev), 50);
+                            onEventClick(ev);
                           }
                         }}
                         className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors border border-zinc-200 dark:border-zinc-700"
@@ -478,7 +481,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
                     onClick={() => { 
                       setIsDayModalOpen(false); 
                       if (onAddEventClick) {
-                        setTimeout(() => onAddEventClick(), 50);
+                        onAddEventClick();
                       }
                     }}
                     className="mt-2 w-full py-2.5 border-2 border-dashed border-zinc-200 dark:border-zinc-700 text-zinc-500 hover:text-zinc-800 hover:border-zinc-300 dark:hover:text-zinc-200 dark:hover:border-zinc-600 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"

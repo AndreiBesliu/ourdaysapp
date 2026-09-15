@@ -102,6 +102,19 @@ export function isProgrammaticPop(event: Event): boolean {
   return ignoredPops.has(event);
 }
 
+/**
+ * Is one of our own rewinds still in flight?
+ *
+ * A dialog that opens in the same tick as another one closes must not push its history entry yet.
+ * `history.back()` is asynchronous and `pushState` is not, so the push lands first and the rewind
+ * then traverses over it — leaving the new dialog open with its entry stranded FORWARD, and the
+ * next Back press closing it AND stepping the app one screen further back than it should. Measured
+ * in a browser on the recurring-panel → editor handoff. The opener waits for the pop instead.
+ */
+export function hasPendingProgrammaticPop(): boolean {
+  return programmaticPops > 0;
+}
+
 /** Test seam. Module state outlives a test file otherwise, and the next test inherits a lie. */
 export function resetDialogStack(): void {
   stack = [];

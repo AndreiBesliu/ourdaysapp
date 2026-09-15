@@ -753,3 +753,14 @@ Flash costa de ~9 ori mai mult per apel. **Vrei sa pun o temporizare?**
 - [ ] **Admin → Health → AI calls**, dupa ce completezi lista: numarul de randuri `asset` trebuie sa
       fie aproximativ **cate elemente distincte ai scris + 1**, nu dublu.
 - [ ] Daca sugestia nu mai apare deloc, spune-mi — inseamna ca am strans prea mult.
+---
+
+## 41. Predarea intre ferestre (15.09)
+
+- [ ] **Recurente -> Edit -> Back o data** (pe telefon, butonul Back). Trebuie sa se inchida
+      *doar* editorul si sa ramai in calendar. Inainte te scotea din calendar.
+- [ ] **Atinge o zi in calendar, apoi un eveniment din lista zilei.** Detaliile trebuie sa se
+      deschida *instant* — am scos o intarziere de 50 ms de acolo. Daca vezi vreo clipire sau
+      ceva deschis peste altceva, spune-mi.
+- [ ] **Inchide o fereastra singura cu X, deschide alta, apasa Back o data.** Trebuie sa se
+      inchida din prima. Inainte, prima apasare nu facea nimic.

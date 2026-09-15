@@ -15,6 +15,7 @@ import {
   nextFocusIndex,
   expectProgrammaticPop,
   isProgrammaticPop,
+  hasPendingProgrammaticPop,
 } from './dialogStack';
 
 beforeEach(resetDialogStack);
@@ -197,5 +198,40 @@ describe('focus order inside a dialog', () => {
   it('keeps a single focusable element focused, in both directions', () => {
     expect(nextFocusIndex(1, 0, false)).toBe(0);
     expect(nextFocusIndex(1, 0, true)).toBe(0);
+  });
+});
+
+describe('knowing a rewind is still in flight', () => {
+  // A dialog that opens in the same tick as another one closes must hold its history push until
+  // that rewind has landed: history.back() is asynchronous and pushState is not, so the push landed
+  // first and the rewind traversed OVER it. Measured in a browser on the recurring-panel handoff:
+  // the editor was open with its entry stranded forward, and one Back press closed it AND stepped
+  // the app a screen further back. CalendarGrid had been hiding the same race behind a 50 ms timer.
+  const popstate = () => ({ type: 'popstate' }) as unknown as Event;
+
+  it('is quiet when nothing is pending', () => {
+    expect(hasPendingProgrammaticPop()).toBe(false);
+  });
+
+  it('reports a rewind from the moment it is announced until its pop is consumed', () => {
+    expectProgrammaticPop();
+    expect(hasPendingProgrammaticPop()).toBe(true);
+    isProgrammaticPop(popstate());
+    expect(hasPendingProgrammaticPop()).toBe(false);
+  });
+
+  it('stays pending while any announced rewind is still unconsumed', () => {
+    expectProgrammaticPop();
+    expectProgrammaticPop();
+    isProgrammaticPop(popstate());
+    expect(hasPendingProgrammaticPop()).toBe(true);
+    isProgrammaticPop(popstate());
+    expect(hasPendingProgrammaticPop()).toBe(false);
+  });
+
+  it('is cleared by reset, so one test cannot hand a phantom rewind to the next', () => {
+    expectProgrammaticPop();
+    resetDialogStack();
+    expect(hasPendingProgrammaticPop()).toBe(false);
   });
 });
