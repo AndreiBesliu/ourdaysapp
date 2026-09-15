@@ -4352,3 +4352,45 @@ cand chatul e deschis si nu e nimic peste el (`dialogDepth()`, acelasi teanc in 
 ferestrele).
 
 `npx tsc -b` verde · **1103 de teste** (de la 1100) · poarta verde · build verde · livrat pe live.
+## 2026-09-15 - Panoul de erori: gruparea pusa DEASUPRA gramezii nu e organizare
+
+**Model:** Claude Opus 5 · „ok, dar inca nu sunt organizate, doar avem mai multe taburi"
+
+Andrei are dreptate, si constatarea e mai utila decat pare. Gruparea exista si era corecta — cinci
+probleme distincte din 98 de randuri — dar am adaugat-o **deasupra** listei brute, fara sa ating
+lista. Trei simptome, aceeasi greseala:
+
+1. **Lista plata „Recent errors" era tot acolo**, 98 de carduri, acelasi mesaj repetat la nesfarsit,
+   ordonate dupa timp — adica exact mormanul pe care gruparea trebuia sa-l inlocuiasca. Ea domina
+   pagina; gruparea era un raft pus langa.
+2. **Filtrul implicit era fixat pe „Needs attention"**, singura stare goala. Deci ecranul te intampina
+   cu **„Nothing in this state."** exact atunci cand nu era nimic in neregula. Un panou care arata
+   cel mai gol tocmai cand totul e bine e pe dos fata de ce trebuie sa faca.
+3. **Cifra mare numara randuri**, nu probleme: „98 ERRORS LOGGED". Iar 98 de randuri erau cinci
+   lucruri, dintre care unul singur de 74 de ori.
+
+### Ce am facut
+
+**Ocurentele traiesc acum sub problema lor.** Fiecare grup poarta cateva randuri reale (`recent`,
+plafonat *per grup*, nu global — un plafon global s-ar duce tot pe cel mai galagios) si se deschid
+din card: „Show occurrences (6 of 74)". Spune si din cate, ca sa nu para ca numara gresit. Lista
+plata a disparut cu totul.
+
+**Ecranul aterizeaza unde e ceva.** Prima stare din ordinea „ce a revenit → ce n-a fost citit → ce
+se stie → ce e gata" care chiar contine ceva, cu cadere pe „All". Iar cand o stare chiar e goala,
+scrie si cate probleme sunt in total, cu un buton catre ele.
+
+**Cifra mare numara probleme**, cu randurile ca eticheta secundara.
+
+### Regula de aterizare e acum PROBABILA
+
+`/admin` e in spatele autentificarii — deci typecheck, poarta, testele si build-ul pot fi toate verzi
+cu ecranul ala mort. Regula care decide ce vezi prima data e fix aia care merita sa poata fi rulata,
+asa ca a iesit in `src/utils/errorFilterState.ts`. Primul test e chiar ecranul din captura lui
+Andrei: un `seen`, patru `resolved`, zero deschise → trebuie sa aterizeze pe „Seen", nu pe gol.
+Plus proprietatea spusa direct: **nicio combinatie de stari nu poate produce o aterizare goala.**
+
+Adminul importa modulul, nu o copie — altfel as fi avut o varianta testata si una livrata.
+
+`npx tsc -b` verde · **1116 de teste** (de la 1103) · poarta verde · functions build verde · livrat
+in ordinea functions → hosting, fiindca panoul citeste un camp nou.

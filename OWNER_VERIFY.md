@@ -713,3 +713,14 @@ si vor alt fel de tratament.
 - [ ] **Chat:** pregateste un raspuns la un mesaj (Reply), apoi **fara sa trimiti** deschide un
       eveniment si inchide-l cu Escape. Raspunsul pregatit trebuie sa fie **inca acolo**.
       Inainte se anula tacut.
+---
+
+## 38. Panoul de erori, reorganizat (15.09)
+
+- [ ] **Deschide Health.** Nu mai trebuie sa scrie „Nothing in this state." la intrare — trebuie sa
+      aterizeze pe prima stare care chiar are ceva (acum: **Seen**, cu cea cu VAPID).
+- [ ] **Cifra mare** trebuie sa fie acum **5** (probleme), cu „· 98 logged" langa eticheta.
+- [ ] **Lista lunga de la baza a disparut.** In locul ei, in fiecare card de problema e
+      **„Show occurrences (N of M)"** — apasa si vezi randurile individuale ale ACELEI probleme.
+- [ ] Daca apesi pe o stare goala, trebuie sa-ti spuna cate probleme sunt in total si sa-ti dea un
+      buton catre ele.

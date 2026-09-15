@@ -1548,6 +1548,30 @@ exports.adminGetHealth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
     // Eighty logged errors is rarely eighty problems. The list answers "what happened last"; the
     // groups answer "what is wrong", which is the question somebody opening this screen actually has.
     const grouped = (0, errorGrouping_1.groupErrors)(scanned);
+    // A few real occurrences per group, so the panel can show them UNDER the problem they belong to
+    // instead of as a flat list beside it. Capped per group rather than overall: the point is that
+    // every problem can be opened, and a global cap would spend the whole budget on the noisiest one.
+    const OCCURRENCES_PER_GROUP = 6;
+    const occurrences = new Map();
+    for (const r of scanned) {
+        if (!r.message)
+            continue;
+        const key = (0, errorGrouping_1.fingerprint)(r.message, r.context);
+        let list = occurrences.get(key);
+        if (!list) {
+            list = [];
+            occurrences.set(key, list);
+        }
+        if (list.length < OCCURRENCES_PER_GROUP) {
+            list.push({
+                id: r.id, createdAt: r.createdAt, url: r.url || null,
+                email: r.email || null, stack: r.stack || null,
+            });
+        }
+    }
+    // Still returned, though nothing renders it any more. A tab left open across this deploy is
+    // running the previous panel, which reads this field; dropping it would make that tab claim
+    // "No errors logged" — a lie, and exactly the stale-tab failure this app already has a notice for.
     const errors = scanned.slice(0, 50);
     // ── what has already been looked at ─────────────────────────────────────
     //
@@ -1568,7 +1592,7 @@ exports.adminGetHealth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
     const errorGroups = (0, errorState_1.joinState)(grouped, await readErrorStates(db, grouped.map((g) => g.key)))
         .map((g) => {
         const fix = (0, errorFixes_1.fixFor)(g.key);
-        return Object.assign(Object.assign({}, g), { fix: fix ? { kind: fix.kind, commit: fix.commit || null, since: fix.since, what: fix.what, verify: fix.verify } : null, fixVerdict: (0, errorFixes_1.fixVerdict)(fix, g.lastSeen) });
+        return Object.assign(Object.assign({}, g), { fix: fix ? { kind: fix.kind, commit: fix.commit || null, since: fix.since, what: fix.what, verify: fix.verify } : null, fixVerdict: (0, errorFixes_1.fixVerdict)(fix, g.lastSeen), recent: occurrences.get(g.key) || [] });
     });
     // Regressed first, then new, then merely known, then done — and within each, the frequent ones.
     errorGroups.sort((a, b) => errorState_1.STATUS_RANK[a.status] - errorState_1.STATUS_RANK[b.status] || b.count - a.count);

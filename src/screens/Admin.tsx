@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, ShieldCheck, ShieldAlert, RefreshCw, Users, UsersRound, CalendarDays,
   Gamepad2, Wallet, Search, Crown, Trash2, UserPlus, CheckCircle2,
-  XCircle, Mail, Loader2, Activity, AlertTriangle, Ban, MailCheck, Power, X,
+  XCircle, Mail, Loader2, Activity, Ban, MailCheck, Power, X,
   Send, TrendingUp, Megaphone,
 } from 'lucide-react';
 import { auth } from '../firebase';
 import { useDialog } from '../hooks/useDialog';
+import { errorStatusOf, inErrorState, landingErrorFilter, type ErrorFilter } from '../utils/errorFilterState';
 import {
   adminCheck, adminGetStats, adminListProfiles, adminListAdmins, adminSetAdmin,
   adminGetHealth, adminSetErrorStatus, adminGetAiLedger, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
@@ -107,7 +108,12 @@ export default function Admin() {
   // Default to the two that want attention. Somebody opening this screen is asking "what
   // needs me", not "what have I already dealt with" — and a list that opens with fifty
   // resolved rows is the same unreadable wall the grouping was built to remove.
-  const [errorFilter, setErrorFilter] = useState<'open' | 'new' | 'seen' | 'resolved' | 'all'>('open');
+  // Starts as null and is resolved once the counts arrive, because the right landing state
+  // depends on them. Hard-coding 'open' meant the screen opened on "Nothing in this state" the
+  // moment nothing needed attention — the panel looking emptiest exactly when everything is fine
+  // is the opposite of what it is for.
+  const [errorFilter, setErrorFilter] = useState<ErrorFilter | null>(null);
+  const [openOccurrences, setOpenOccurrences] = useState<Record<string, boolean>>({});
   const [errorBusy, setErrorBusy] = useState<string | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [ledger, setLedger] = useState<any>(null);
@@ -196,13 +202,14 @@ export default function Admin() {
   // that does not send it yet. Falling back to 'new' keeps such a group VISIBLE; the alternative
   // fell through the badge's ternary to the green "resolved" pill and out of the default filter —
   // a panel confidently reporting that everything was fine.
-  const visibleErrorGroups: any[] = (health?.errorGroups || [])
-    .map((g: any) => (g.status ? g : { ...g, status: 'new' }))
-    .filter((g: any) => (
-      errorFilter === 'all' ? true
-        : errorFilter === 'open' ? (g.status === 'new' || g.status === 'regressed')
-        : g.status === errorFilter
-    ));
+  // The rules live in src/utils/errorFilterState.ts, where a test can run them: this screen is
+  // behind a login, so every gate in this repo can be green while it renders nothing at all.
+  const normalisedGroups: any[] = (health?.errorGroups || [])
+    .map((g: any) => ({ ...g, status: errorStatusOf(g) }));
+
+  const activeErrorFilter: ErrorFilter = errorFilter ?? landingErrorFilter(normalisedGroups);
+
+  const visibleErrorGroups: any[] = normalisedGroups.filter((g: any) => inErrorState(g, activeErrorFilter));
 
   // Groups whose recorded fix still stands and that are not already resolved. Read from what
   // the SERVER said, never computed from the fix list here — the browser does not get a vote
@@ -581,7 +588,15 @@ export default function Admin() {
         {tab === 'health' && (
           <div className="flex flex-col gap-6">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Stat label="Errors logged" value={health?.errorTotal} accent={health?.errorTotal ? 'text-red-500' : 'text-emerald-500'} />
+              {/* The headline is the number of PROBLEMS. "98 errors logged" counted rows, and
+                  ninety-eight rows was five things — one of them seventy-four times. A tile that
+                  reports the pile rather than what is in it makes the screen look unmanageable
+                  when it is not, which is how a health panel ends up unread. */}
+              <Stat
+                label={`Problems · ${health?.errorTotal ?? 0} logged`}
+                value={health?.errorGroups?.length}
+                accent={(health?.errorCounts?.new || 0) + (health?.errorCounts?.regressed || 0) > 0 ? 'text-red-500' : 'text-emerald-500'}
+              />
               <Stat label="AI calls today" value={health?.ai?.today} accent="text-primary" />
               <Stat label="AI users today" value={health?.ai?.activeUsers} />
               <Stat label="Notifs today" value={health?.notifications?.today} />
@@ -598,10 +613,11 @@ export default function Admin() {
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 text-center text-sm text-emerald-500 flex items-center justify-center gap-2"><CheckCircle2 className="w-4 h-4" /> Nothing to group.</div>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {/* The filter. "Open" is new + regressed, and it is the default because somebody
-                      opening this screen is asking what needs them — not what they already dealt
-                      with. A counter that reads 0 is still shown: "no regressions" is information,
-                      and hiding the chip would make its absence look like a missing feature. */}
+                  {/* The filter. "Open" is new + regressed and is preferred on arrival, because
+                      somebody opening this screen is asking what needs them — but only if it holds
+                      anything; see activeErrorFilter. A counter that reads 0 is still shown: "no
+                      regressions" is information, and hiding the chip would make its absence look
+                      like a missing feature. */}
                   <div className="flex flex-wrap items-center gap-1.5 pb-1">
                     {([
                       ['open', 'Needs attention', (health.errorCounts?.new || 0) + (health.errorCounts?.regressed || 0)],
@@ -614,7 +630,7 @@ export default function Admin() {
                         key={key}
                         onClick={() => setErrorFilter(key as typeof errorFilter)}
                         className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                          errorFilter === key
+                          activeErrorFilter === key
                             ? 'bg-primary text-white'
                             : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                         }`}
@@ -650,7 +666,17 @@ export default function Admin() {
                   )}
 
                   {visibleErrorGroups.length === 0 && (
-                    <p className="text-sm text-zinc-400 text-center py-6">Nothing in this state.</p>
+                    <div className="text-center py-6">
+                      <p className="text-sm text-emerald-500 flex items-center justify-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" /> Nothing in this state.
+                      </p>
+                      {/* An empty shelf is only good news if you can see the full one from it. */}
+                      {normalisedGroups.length > 0 && activeErrorFilter !== 'all' && (
+                        <button onClick={() => setErrorFilter('all')} className="mt-2 text-xs text-primary hover:underline">
+                          Show all {normalisedGroups.length} problems
+                        </button>
+                      )}
+                    </div>
                   )}
 
                   {visibleErrorGroups.map((g: any) => (
@@ -685,6 +711,40 @@ export default function Admin() {
                           <summary className="text-[11px] text-zinc-400 cursor-pointer select-none">Newest stack</summary>
                           <pre className="mt-1 text-[10px] text-zinc-400 whitespace-pre-wrap break-words max-h-40 overflow-y-auto bg-zinc-50 dark:bg-zinc-800/50 rounded p-2">{g.sampleStack}</pre>
                         </details>
+                      )}
+
+                      {/* The individual rows, under the problem they belong to.
+                          These used to be a flat "Recent errors" list below this whole section: one
+                          card per row, ninety-eight of them, the same sentence over and over,
+                          ordered by time so no two occurrences of one problem sat together. It was
+                          the pile the grouping was supposed to replace, still sitting there. Now a
+                          problem is the unit, and an occurrence is something you open one to see. */}
+                      {Array.isArray(g.recent) && g.recent.length > 0 && (
+                        <div className="mt-2 pl-[40px]">
+                          <button
+                            onClick={() => setOpenOccurrences((o) => ({ ...o, [g.key]: !o[g.key] }))}
+                            className="text-[11px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+                          >
+                            {openOccurrences[g.key] ? 'Hide' : 'Show'} occurrences
+                            {/* Says which of the two numbers this is. The group counts every row in
+                                the scan; only a few travel to the browser, and a list that showed
+                                six while the badge said seventy-four would read as a miscount. */}
+                            <span className="opacity-70"> ({Math.min(g.recent.length, g.count)} of {g.count})</span>
+                          </button>
+                          {openOccurrences[g.key] && (
+                            <div className="mt-1.5 flex flex-col gap-1">
+                              {g.recent.map((oc: any) => (
+                                <div key={oc.id} className="text-[11px] text-zinc-500 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg px-2 py-1.5">
+                                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                    <span className="text-zinc-600 dark:text-zinc-300 tabular-nums">{fmtDate(oc.createdAt)}</span>
+                                    {oc.url && <span className="truncate">{oc.url}</span>}
+                                    {oc.email && <span className="truncate">· {oc.email}</span>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       )}
                       <div className="flex flex-wrap items-center gap-1.5 mt-2 pl-[40px]">
                         {g.status !== 'seen' && g.status !== 'resolved' && (
@@ -767,28 +827,6 @@ export default function Admin() {
               )}
             </Section>
 
-            <Section icon={<AlertTriangle className="w-4 h-4 text-red-500" />} title="Recent errors">
-              {(!health?.errors || health.errors.length === 0) ? (
-                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 text-center text-sm text-emerald-500 flex items-center justify-center gap-2"><CheckCircle2 className="w-4 h-4" /> No errors logged.</div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {health.errors.map((er: any) => (
-                    <div key={er.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 break-words">{er.message}</p>
-                        <span className="text-[10px] text-zinc-400 whitespace-nowrap shrink-0">{fmtDate(er.createdAt)}</span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-zinc-500">
-                        {er.context && <span className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded">{er.context}</span>}
-                        {er.url && <span>{er.url}</span>}
-                        {er.email && <span>· {er.email}</span>}
-                      </div>
-                      {er.stack && <pre className="mt-2 text-[10px] text-zinc-400 whitespace-pre-wrap break-words max-h-24 overflow-y-auto bg-zinc-50 dark:bg-zinc-800/50 rounded p-2">{er.stack}</pre>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Section>
 
             {/* One row per AI call, failures included. Worth its own section rather than a number
                 on a tile: a cost total tells you how much was spent, and this tells you what for —

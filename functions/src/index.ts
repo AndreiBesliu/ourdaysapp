@@ -13,7 +13,7 @@ import { dayRangePeriod, monthPeriod, periodDays, isRealDay } from "./period";
 import { charsPerToken, estimateUsdFor, usageOf, withLedger } from "./aiLedger";
 import { readFriendship } from "./friendship";
 import { notify } from "./notify";
-import { groupErrors } from "./errorGrouping";
+import { groupErrors, fingerprint } from "./errorGrouping";
 import { fixFor, fixVerdict } from "./errorFixes";
 import {
   ERROR_STATUSES, STATUS_RANK, groupDocId, isErrorStatus, joinState,
@@ -1644,6 +1644,28 @@ export const adminGetHealth = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
   // Eighty logged errors is rarely eighty problems. The list answers "what happened last"; the
   // groups answer "what is wrong", which is the question somebody opening this screen actually has.
   const grouped = groupErrors(scanned as any);
+
+  // A few real occurrences per group, so the panel can show them UNDER the problem they belong to
+  // instead of as a flat list beside it. Capped per group rather than overall: the point is that
+  // every problem can be opened, and a global cap would spend the whole budget on the noisiest one.
+  const OCCURRENCES_PER_GROUP = 6;
+  const occurrences = new Map<string, unknown[]>();
+  for (const r of scanned as any[]) {
+    if (!r.message) continue;
+    const key = fingerprint(r.message, r.context);
+    let list = occurrences.get(key);
+    if (!list) { list = []; occurrences.set(key, list); }
+    if (list.length < OCCURRENCES_PER_GROUP) {
+      list.push({
+        id: r.id, createdAt: r.createdAt, url: r.url || null,
+        email: r.email || null, stack: r.stack || null,
+      });
+    }
+  }
+
+  // Still returned, though nothing renders it any more. A tab left open across this deploy is
+  // running the previous panel, which reads this field; dropping it would make that tab claim
+  // "No errors logged" — a lie, and exactly the stale-tab failure this app already has a notice for.
   const errors = scanned.slice(0, 50);
 
   // ── what has already been looked at ─────────────────────────────────────
@@ -1669,6 +1691,7 @@ export const adminGetHealth = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
         ...g,
         fix: fix ? { kind: fix.kind, commit: fix.commit || null, since: fix.since, what: fix.what, verify: fix.verify } : null,
         fixVerdict: fixVerdict(fix, g.lastSeen),
+        recent: occurrences.get(g.key) || [],
       };
     });
 
