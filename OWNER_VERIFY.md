@@ -724,3 +724,21 @@ si vor alt fel de tratament.
       **„Show occurrences (N of M)"** — apasa si vezi randurile individuale ale ACELEI probleme.
 - [ ] Daca apesi pe o stare goala, trebuie sa-ti spuna cate probleme sunt in total si sa-ti dea un
       buton catre ele.
+---
+
+## 39. Gemini 3.8 Flash (15.09)
+
+- [ ] **Incearca fiecare din cele cinci functii AI** si confirma ca raspund:
+      sugestia automata de checklist la crearea unui eveniment · butonul de generare checklist ·
+      categoria sugerata a evenimentului · rezumatul de grup din chat · sugestia de asset.
+      Daca vreuna da eroare, spune-mi imediat — SDK-ul e nou, iar astea sunt caile reale.
+- [ ] **Admin → Health → AI calls:** dupa cateva apeluri, randurile trebuie sa scrie
+      `gemini-3.8-flash` si sa aiba un cost **diferit de zero**. Un cost 0 ar insemna ca citirea
+      jetoanelor nu potriveste forma noua — exact ce am reparat, deci merita privit.
+- [ ] Erorile de cota **nu** trebuie sa mai apara in Health. Cheia e pe plan platit acum.
+
+### Ramane decizia ta de ieri, si conteaza mai mult acum
+
+`checkForAssetSuggestionsAI` porneste la fiecare element de checklist adaugat si la fiecare iesire
+din camp, fara temporizare: o lista de 6 elemente = 7+ apeluri. Pe flash-lite era ieftin. Pe 3.8
+Flash costa de ~9 ori mai mult per apel. **Vrei sa pun o temporizare?**

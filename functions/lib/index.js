@@ -16,7 +16,7 @@ const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
-const generative_ai_1 = require("@google/generative-ai");
+const genai_1 = require("@google/genai");
 const engine_1 = require("./warlordCombat/combat/engine");
 const pvp_1 = require("./warlordCombat/combat/pvp");
 const aiScope_1 = require("./aiScope");
@@ -68,7 +68,13 @@ const AI_MAX_PERIOD_DAYS = Number(process.env.AI_MAX_PERIOD_DAYS || 400);
 // pay Firestore to fetch a corpus you are then going to throw away at the token ceiling.
 const AI_DOC_BUDGET = Number(process.env.AI_DOC_BUDGET || 600);
 // One place for the model id, so the ledger's `model` column and the call can never disagree.
-const AI_MODEL = "gemini-2.5-flash-lite";
+// Gemini 3.8 Flash: the newest STABLE model in the Gemini 3 Flash line.
+//
+// Andrei asked for "Gemini 3 Flash" after seeing `gemini-3-flash-preview` in AI Studio. That one is
+// the preview of the original 3 Flash and has since been superseded by stable releases in the same
+// family — and it is cheaper to run 3.8 than 3.5, so the newest is also not the dearest. A preview
+// model can change under you or be withdrawn; this sits on five paths a family actually uses.
+const AI_MODEL = "gemini-3.8-flash";
 const WARLORD_CHALLENGE_DAILY_LIMIT = Number(process.env.WARLORD_CHALLENGE_DAILY_LIMIT || 30);
 // A battle where the opponent simply stops playing would otherwise lock the units
 // staked in it forever (they are excluded from new deployments). After this many hours
@@ -197,8 +203,7 @@ exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)({
             console.error("GEMINI_API_KEY_LOCAL missing from environment.");
             return;
         }
-        const genAI = new generative_ai_1.GoogleGenerativeAI(key);
-        const model = genAI.getGenerativeModel({ model: AI_MODEL });
+        const ai = new genai_1.GoogleGenAI({ apiKey: key });
         const prompt = `You are a helpful AI Assistant for a family organization app. 
 The user created a task/event titled "${title}".
 ${description ? `The description is: "${description}".` : ""}
@@ -209,8 +214,8 @@ If this looks like a Grocery or Shopping list, generate a checklist grouped by s
 Otherwise, generate a checklist of 3 to 7 actionable, brief steps or items needed to complete this task.
 Return ONLY a valid JSON array of strings, nothing else. No markdown formatting.
 Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1", "Step 2"]`;
-        const result = await (0, aiLedger_1.withLedger)({ feature: 'auto-checklist', model: AI_MODEL, uid: ownerId || 'system' }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(ownerId || 'system')), () => model.generateContent(prompt), aiLedger_1.usageOf, prompt.length);
-        const text = result.response.text();
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'auto-checklist', model: AI_MODEL, uid: ownerId || 'system' }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(ownerId || 'system')), () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }), aiLedger_1.usageOf, prompt.length);
+        const text = (0, aiLedger_1.textOf)(result);
         const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
         const list = JSON.parse(cleanText);
         if (Array.isArray(list)) {
@@ -402,8 +407,7 @@ exports.generateAIChecklist = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
         if (!key) {
             throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
         }
-        const genAI = new generative_ai_1.GoogleGenerativeAI(key);
-        const model = genAI.getGenerativeModel({ model: AI_MODEL });
+        const ai = new genai_1.GoogleGenAI({ apiKey: key });
         const prompt = `You are a helpful AI Assistant for a family organization app. 
 The user is creating a task/event titled "${title}".
 ${description ? `The description is: "${description}".` : ""}
@@ -414,8 +418,8 @@ If this looks like a Grocery or Shopping list, generate a checklist grouped by s
 Otherwise, generate a checklist of 3 to 7 actionable, brief steps or items needed to complete this task.
 Return ONLY a valid JSON array of strings, nothing else. No markdown formatting.
 Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1", "Step 2"]`;
-        const result = await (0, aiLedger_1.withLedger)({ feature: 'checklist', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => model.generateContent(prompt), aiLedger_1.usageOf, prompt.length);
-        const text = result.response.text();
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'checklist', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }), aiLedger_1.usageOf, prompt.length);
+        const text = (0, aiLedger_1.textOf)(result);
         const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
         const list = JSON.parse(cleanText);
         if (Array.isArray(list)) {
@@ -447,15 +451,14 @@ exports.suggestEventCategory = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_AP
         if (!key) {
             throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
         }
-        const genAI = new generative_ai_1.GoogleGenerativeAI(key);
-        const model = genAI.getGenerativeModel({ model: AI_MODEL });
+        const ai = new genai_1.GoogleGenAI({ apiKey: key });
         const prompt = `You are a helpful AI Assistant. Given an event title and optional description, categorize it into exactly one of the following category IDs: "work", "family_time", "chores", "health", "other".
 Title: "${title}"
 ${description ? `Description: "${description}"` : ""}
 
 Return ONLY the category ID string, nothing else. No markdown formatting.`;
-        const result = await (0, aiLedger_1.withLedger)({ feature: 'category', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => model.generateContent(prompt), aiLedger_1.usageOf, prompt.length);
-        const text = result.response.text().trim().toLowerCase();
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'category', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }), aiLedger_1.usageOf, prompt.length);
+        const text = (0, aiLedger_1.textOf)(result).trim().toLowerCase();
         const validCategories = ["work", "family_time", "chores", "health", "other"];
         const matchedCategory = validCategories.find(c => text.includes(c)) || "other";
         return { categoryId: matchedCategory };
@@ -557,8 +560,7 @@ exports.generateGroupDigest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
                 upcomingEvents += `- ${d.title} on ${d.date.split('T')[0]}\n`;
             });
         }
-        const genAI = new generative_ai_1.GoogleGenerativeAI(key);
-        const model = genAI.getGenerativeModel({ model: AI_MODEL });
+        const ai = new genai_1.GoogleGenAI({ apiKey: key });
         const prompt = `You are a helpful AI Assistant for a family/group organization app.
 Summarize the recent activity and upcoming events for the group "${groupName}".
 Translate your summary to this exact locale language: "${language}".
@@ -568,8 +570,8 @@ ${chatHistory}
 ${upcomingEvents}
 
 Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highlights what happened recently and what is coming up. Keep it concise. No markdown headers.`;
-        const result = await (0, aiLedger_1.withLedger)({ feature: 'group-digest', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => model.generateContent(prompt), aiLedger_1.usageOf, prompt.length);
-        const text = result.response.text().trim();
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'group-digest', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }), aiLedger_1.usageOf, prompt.length);
+        const text = (0, aiLedger_1.textOf)(result).trim();
         // The caller is told when the window was cut, so a partial digest can say so instead of
         // reading as the whole story.
         return { digest: text, truncated: digestTruncated };
@@ -598,8 +600,7 @@ exports.suggestAssetForText = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
         if (!key) {
             throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
         }
-        const genAI = new generative_ai_1.GoogleGenerativeAI(key);
-        const model = genAI.getGenerativeModel({ model: AI_MODEL });
+        const ai = new genai_1.GoogleGenAI({ apiKey: key });
         const prompt = `You are an AI that maps text to the most relevant asset card.
 Text: "${text}"
 
@@ -613,8 +614,8 @@ Rules:
 4. Return ONLY the exact string ID of the best matching asset.
 5. If no asset matches reasonably well, return the exact string "none".
 Do not include any other text or markdown formatting.`;
-        const result = await (0, aiLedger_1.withLedger)({ feature: 'asset-suggest', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => model.generateContent(prompt), aiLedger_1.usageOf, prompt.length);
-        const resultText = result.response.text().trim();
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'asset-suggest', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }), aiLedger_1.usageOf, prompt.length);
+        const resultText = (0, aiLedger_1.textOf)(result).trim();
         // Validate that the returned ID is actually in the list, unless it's "none"
         const matchedAsset = availableAssets.find((a) => a.id === resultText);
         return { assetId: matchedAsset ? matchedAsset.id : null };

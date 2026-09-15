@@ -34,23 +34,29 @@
 // second, unregulated copy of exactly the private data the rest of this design is careful
 // about — and it would sit in a collection whose whole point is that operators read it.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AI_KILL_SWITCH = exports.MODEL_PRICING = void 0;
+exports.AI_KILL_SWITCH = exports.MODEL_PRICING = exports.textOf = exports.usageOf = void 0;
 exports.priceUsd = priceUsd;
 exports.holdBudget = holdBudget;
 exports.settleBudget = settleBudget;
 exports.charsPerToken = charsPerToken;
 exports.openLedgerRow = openLedgerRow;
-exports.usageOf = usageOf;
 exports.closeLedgerRow = closeLedgerRow;
 exports.withLedger = withLedger;
 exports.estimateUsdFor = estimateUsdFor;
 const admin = require("firebase-admin");
 const aiProviderError_1 = require("./aiProviderError");
+var aiResponse_1 = require("./aiResponse");
+Object.defineProperty(exports, "usageOf", { enumerable: true, get: function () { return aiResponse_1.usageOf; } });
+Object.defineProperty(exports, "textOf", { enumerable: true, get: function () { return aiResponse_1.textOf; } });
 const https_1 = require("firebase-functions/v2/https");
 /** USD per MILLION tokens. Kept in code so a row can be priced the moment it is written. */
 exports.MODEL_PRICING = {
     "gemini-2.5-flash-lite": { inPerM: 0.10, outPerM: 0.40 },
     "gemini-2.5-flash": { inPerM: 0.30, outPerM: 2.50 },
+    // Introductory pricing: $0.75 / $3.75 through 31 December 2026, then $1.50 / $7.50. Written as
+    // the price being charged TODAY, because the ledger prices a row the moment it is written and
+    // a future number here would misprice every row until that date.
+    "gemini-3.8-flash": { inPerM: 0.75, outPerM: 3.75 },
 };
 const DEFAULT_PRICING = { inPerM: 0.30, outPerM: 2.50 };
 function priceUsd(model, inTokens, outTokens) {
@@ -150,16 +156,6 @@ async function openLedgerRow(entry) {
     const ref = admin.firestore().collection("aiLedger").doc();
     await ref.set(Object.assign(Object.assign({}, entry), { date: today(), at: admin.firestore.FieldValue.serverTimestamp(), ok: null, promptTokens: 0, completionTokens: 0, costUsd: 0 }));
     return { id: ref.id, startedAt: Date.now(), entry };
-}
-/** Pull usage out of whatever shape the SDK returned, without trusting any of it. */
-function usageOf(result) {
-    var _a;
-    const meta = (_a = result === null || result === void 0 ? void 0 : result.response) === null || _a === void 0 ? void 0 : _a.usageMetadata;
-    const n = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
-    return {
-        promptTokens: n(meta === null || meta === void 0 ? void 0 : meta.promptTokenCount),
-        completionTokens: n(meta === null || meta === void 0 ? void 0 : meta.candidatesTokenCount),
-    };
 }
 /** Close the row with what actually happened, and roll it up. `errorCode` is stable text. */
 async function closeLedgerRow(handle, outcome) {

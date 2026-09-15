@@ -94,3 +94,38 @@ describe('the code the client translates', () => {
     expect(AI_QUOTA_CODE).toBe('ai-budget/global-budget');
   });
 });
+
+describe('surviving the SDK change', () => {
+  // The app moved from `@google/generative-ai` to `@google/genai`. That matters here more than
+  // anywhere: this predicate is the reason a quota refusal goes to the AI ledger instead of the
+  // error log, and it is why 74 rows of "GoogleGenerativeAI Error" once buried every real defect.
+  //
+  // The new SDK throws `ApiError extends Error` carrying `status: number` — checked against the
+  // shipped type declaration, not assumed. These cases state that the detector still bites.
+  class ApiError extends Error {
+    status: number;
+    constructor(status: number, message: string) {
+      super(message);
+      this.name = 'ApiError';
+      this.status = status;
+    }
+  }
+
+  it('still recognises a quota refusal from the current SDK', () => {
+    const err = new ApiError(429, 'got status: 429 RESOURCE_EXHAUSTED');
+    expect(isProviderQuotaError(err)).toBe(true);
+    expect(providerErrorCode(err)).toBe('http-429');
+  });
+
+  it('still refuses to call an overload or a bad request a quota problem', () => {
+    // The whole point of the predicate being narrow: these are things somebody should look at.
+    expect(isProviderQuotaError(new ApiError(503, 'model overloaded'))).toBe(false);
+    expect(isProviderQuotaError(new ApiError(400, 'invalid argument'))).toBe(false);
+    expect(providerErrorCode(new ApiError(503, 'x'))).toBe('http-503');
+  });
+
+  it('recognises the retired SDK shape too, so nothing in flight is misfiled', () => {
+    const legacy = Object.assign(new Error('[GoogleGenerativeAI Error]: [429 Too Many Requests]'), { status: 429 });
+    expect(isProviderQuotaError(legacy)).toBe(true);
+  });
+});

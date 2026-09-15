@@ -35,12 +35,18 @@
 
 import * as admin from "firebase-admin";
 import { providerErrorCode } from "./aiProviderError";
+export { usageOf, textOf, type Usage } from "./aiResponse";
+import type { Usage } from "./aiResponse";
 import { HttpsError } from "firebase-functions/v2/https";
 
 /** USD per MILLION tokens. Kept in code so a row can be priced the moment it is written. */
 export const MODEL_PRICING: Record<string, { inPerM: number; outPerM: number }> = {
   "gemini-2.5-flash-lite": { inPerM: 0.10, outPerM: 0.40 },
   "gemini-2.5-flash": { inPerM: 0.30, outPerM: 2.50 },
+  // Introductory pricing: $0.75 / $3.75 through 31 December 2026, then $1.50 / $7.50. Written as
+  // the price being charged TODAY, because the ledger prices a row the moment it is written and
+  // a future number here would misprice every row until that date.
+  "gemini-3.8-flash": { inPerM: 0.75, outPerM: 3.75 },
 };
 
 const DEFAULT_PRICING = { inPerM: 0.30, outPerM: 2.50 };
@@ -177,18 +183,6 @@ export async function openLedgerRow(entry: LedgerEntry): Promise<LedgerHandle> {
     costUsd: 0,
   });
   return { id: ref.id, startedAt: Date.now(), entry };
-}
-
-export interface Usage { promptTokens: number; completionTokens: number }
-
-/** Pull usage out of whatever shape the SDK returned, without trusting any of it. */
-export function usageOf(result: unknown): Usage {
-  const meta = (result as { response?: { usageMetadata?: Record<string, unknown> } })?.response?.usageMetadata;
-  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
-  return {
-    promptTokens: n(meta?.promptTokenCount),
-    completionTokens: n(meta?.candidatesTokenCount),
-  };
 }
 
 /** Close the row with what actually happened, and roll it up. `errorCode` is stable text. */

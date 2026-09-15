@@ -4394,3 +4394,57 @@ Adminul importa modulul, nu o copie — altfel as fi avut o varianta testata si 
 
 `npx tsc -b` verde · **1116 de teste** (de la 1103) · poarta verde · functions build verde · livrat
 in ordinea functions → hosting, fiindca panoul citeste un camp nou.
+## 2026-09-15 - Gemini 3.8 Flash, si SDK-ul care era retras de zece luni
+
+**Model:** Claude Opus 5 · „vreau sa folosim un AI mai bun" -> „vreau Gemini 3 Flash"
+
+### Trei lucruri gasite inainte de a schimba ceva
+
+**1. Cheia e deja pe plan platit.** Se vede in captura din AI Studio. Deci plafonul de 20 de cereri
+pe zi al nivelului gratuit — cel care a produs cele 74 de erori din log — **nu se mai aplica**, si
+n-avea legatura cu modelul. Calitatea si cota sunt doua probleme diferite; a doua era deja rezolvata.
+
+**2. Modelul din captura e depasit.** `gemini-3-flash-preview` e preview-ul lui Gemini 3 Flash
+original; intre timp linia are stabile pana la **3.8**. Si, neasteptat, **3.8 e mai ieftin decat
+3.5**: 0,75$/3,75$ per milion fata de 1,50$/9,00$. Am pus `gemini-3.8-flash` — cel mai nou, stabil,
+si nu cel mai scump. Un model preview poate fi schimbat sub tine sau retras, iar asta sta pe cinci
+cai pe care le foloseste o familie.
+
+**3. SDK-ul instalat era retras.** `@google/generative-ai@0.11.5`, **depreciat din 30 noiembrie
+2025**, „not actively maintained", si documentatia spune explicit ca bibliotecile vechi „nu dau acces
+la functiile recente". Deci nu era o constanta de schimbat, ci o migrare la `@google/genai`.
+
+### Doua capcane, amandoua tacute
+
+**Jetoanele de gandire.** Gemini 3 gandeste inainte sa raspunda si raporteaza asta separat, in
+`thoughtsTokenCount`. Ledger-ul citea doar `candidatesTokenCount`. Ar fi facturat o fractiune din
+iesirea reala si ar fi raportat un cost pur si simplu gresit — in directia in care nimeni nu verifica
+o nota de plata. Acum jetoanele de gandire se numara ca iesire, fiindca asa se si platesc.
+
+**`text` din metoda a devenit proprietate.** Vechiul SDK dadea `result.response.text()`, noul da
+`result.text`, un getter care poate fi `undefined` cand modelul n-a produs text (refuz, oprire de
+siguranta). Codul facea `.text().trim()` imediat — pe forma noua asta arunca „text is not a
+function", si numai pe caile pe care cineva chiar le foloseste. Un typecheck pe `unknown` nu prinde
+niciuna din cele doua.
+
+Ambele citiri au iesit intr-un modul **pur**, `functions/src/aiResponse.ts`, ca sa poata fi probate
+din suita aplicatiei — `aiLedger.ts` importa `firebase-admin`, iar CI-ul instaleaza doar radacina,
+deci un test care ajungea acolo trecea local si pica in CI. Garda de puritate confirma.
+
+### Ce a supravietuit neatins
+
+Detectia refuzului pe cota. `ApiError` din SDK-ul nou poarta `status: number`, iar predicatul verifica
+deja `e.status === 429` — verificat in declaratia de tipuri livrata, nu presupus, si fixat acum cu
+teste pentru ambele forme. Conteaza mai mult decat pare: ala e mecanismul din cauza caruia un refuz
+pe cota ajunge in ledger si nu in jurnalul de erori.
+
+### Pretul
+
+Per jeton, fata de flash-lite: **7,5x la intrare, 9,4x la iesire**. Suna mult; la volumul asta —
+opt conturi, zero apeluri azi — sunt centi. Si preturile introductive se dubleaza pe 1 ianuarie 2027,
+scris in tabel ca atare.
+
+Am scos si `@google/generative-ai` din `package.json`-ul RADACINA: aplicatia nu-l importa nicaieri si
+nu era in bundle. Dependenta moarta.
+
+`npx tsc -b` verde · **1130 de teste** (de la 1116) · poarta verde · functions build verde.

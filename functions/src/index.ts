@@ -3,14 +3,14 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { applyCommand } from "./warlordCombat/combat/engine";
 import { sanitizeDeploy, createPvpBattle } from "./warlordCombat/combat/pvp";
 import type { BattleState, Command } from "./warlordCombat/combat/types";
 import { deriveScope } from "./aiScope";
 import { fetchAssets, fetchChat, fetchEvents, fetchExpenses } from "./aiSources";
 import { dayRangePeriod, monthPeriod, periodDays, isRealDay } from "./period";
-import { charsPerToken, estimateUsdFor, usageOf, withLedger } from "./aiLedger";
+import { charsPerToken, estimateUsdFor, usageOf, withLedger, textOf } from "./aiLedger";
 import { readFriendship } from "./friendship";
 import { notify } from "./notify";
 import { groupErrors, fingerprint } from "./errorGrouping";
@@ -56,7 +56,13 @@ const AI_MAX_PERIOD_DAYS = Number(process.env.AI_MAX_PERIOD_DAYS || 400);
 // pay Firestore to fetch a corpus you are then going to throw away at the token ceiling.
 const AI_DOC_BUDGET = Number(process.env.AI_DOC_BUDGET || 600);
 // One place for the model id, so the ledger's `model` column and the call can never disagree.
-const AI_MODEL = "gemini-2.5-flash-lite";
+// Gemini 3.8 Flash: the newest STABLE model in the Gemini 3 Flash line.
+//
+// Andrei asked for "Gemini 3 Flash" after seeing `gemini-3-flash-preview` in AI Studio. That one is
+// the preview of the original 3 Flash and has since been superseded by stable releases in the same
+// family — and it is cheaper to run 3.8 than 3.5, so the newest is also not the dearest. A preview
+// model can change under you or be withdrawn; this sits on five paths a family actually uses.
+const AI_MODEL = "gemini-3.8-flash";
 const WARLORD_CHALLENGE_DAILY_LIMIT = Number(process.env.WARLORD_CHALLENGE_DAILY_LIMIT || 30);
 // A battle where the opponent simply stops playing would otherwise lock the units
 // staked in it forever (they are excluded from new deployments). After this many hours
@@ -195,8 +201,7 @@ export const autoSuggestChecklist = onDocumentCreated({
       console.error("GEMINI_API_KEY_LOCAL missing from environment.");
       return;
     }
-    const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({ model: AI_MODEL });
+    const ai = new GoogleGenAI({ apiKey: key });
 
     const prompt = `You are a helpful AI Assistant for a family organization app. 
 The user created a task/event titled "${title}".
@@ -212,11 +217,11 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
     const result = await withLedger(
       { feature: 'auto-checklist', model: AI_MODEL, uid: ownerId || 'system' },
       estimateUsdFor(AI_MODEL, prompt.length, await charsPerToken(ownerId || 'system')),
-      () => model.generateContent(prompt),
+      () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }),
       usageOf,
       prompt.length,
     );
-    const text = result.response.text();
+    const text = textOf(result);
     const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
     const list = JSON.parse(cleanText);
 
@@ -423,8 +428,7 @@ export const generateAIChecklist = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
     if (!key) {
       throw new HttpsError('failed-precondition', 'AI is not configured on the server.');
     }
-    const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({ model: AI_MODEL });
+    const ai = new GoogleGenAI({ apiKey: key });
 
     const prompt = `You are a helpful AI Assistant for a family organization app. 
 The user is creating a task/event titled "${title}".
@@ -440,11 +444,11 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
     const result = await withLedger(
       { feature: 'checklist', model: AI_MODEL, uid: callerUid },
       estimateUsdFor(AI_MODEL, prompt.length, await charsPerToken(callerUid)),
-      () => model.generateContent(prompt),
+      () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }),
       usageOf,
       prompt.length,
     );
-    const text = result.response.text();
+    const text = textOf(result);
     const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
     const list = JSON.parse(cleanText);
 
@@ -477,8 +481,7 @@ export const suggestEventCategory = onCall({ enforceAppCheck: ENFORCE_APP_CHECK 
     if (!key) {
       throw new HttpsError('failed-precondition', 'AI is not configured on the server.');
     }
-    const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({ model: AI_MODEL });
+    const ai = new GoogleGenAI({ apiKey: key });
 
     const prompt = `You are a helpful AI Assistant. Given an event title and optional description, categorize it into exactly one of the following category IDs: "work", "family_time", "chores", "health", "other".
 Title: "${title}"
@@ -489,11 +492,11 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
     const result = await withLedger(
       { feature: 'category', model: AI_MODEL, uid: callerUid },
       estimateUsdFor(AI_MODEL, prompt.length, await charsPerToken(callerUid)),
-      () => model.generateContent(prompt),
+      () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }),
       usageOf,
       prompt.length,
     );
-    const text = result.response.text().trim().toLowerCase();
+    const text = textOf(result).trim().toLowerCase();
     
     const validCategories = ["work", "family_time", "chores", "health", "other"];
     const matchedCategory = validCategories.find(c => text.includes(c)) || "other";
@@ -605,8 +608,7 @@ export const generateGroupDigest = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
       });
     }
 
-    const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({ model: AI_MODEL });
+    const ai = new GoogleGenAI({ apiKey: key });
 
     const prompt = `You are a helpful AI Assistant for a family/group organization app.
 Summarize the recent activity and upcoming events for the group "${groupName}".
@@ -621,11 +623,11 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
     const result = await withLedger(
       { feature: 'group-digest', model: AI_MODEL, uid: callerUid },
       estimateUsdFor(AI_MODEL, prompt.length, await charsPerToken(callerUid)),
-      () => model.generateContent(prompt),
+      () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }),
       usageOf,
       prompt.length,
     );
-    const text = result.response.text().trim();
+    const text = textOf(result).trim();
     
     // The caller is told when the window was cut, so a partial digest can say so instead of
     // reading as the whole story.
@@ -656,8 +658,7 @@ export const suggestAssetForText = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
       throw new HttpsError('failed-precondition', 'AI is not configured on the server.');
     }
 
-    const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({ model: AI_MODEL });
+    const ai = new GoogleGenAI({ apiKey: key });
 
     const prompt = `You are an AI that maps text to the most relevant asset card.
 Text: "${text}"
@@ -676,11 +677,11 @@ Do not include any other text or markdown formatting.`;
     const result = await withLedger(
       { feature: 'asset-suggest', model: AI_MODEL, uid: callerUid },
       estimateUsdFor(AI_MODEL, prompt.length, await charsPerToken(callerUid)),
-      () => model.generateContent(prompt),
+      () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }),
       usageOf,
       prompt.length,
     );
-    const resultText = result.response.text().trim();
+    const resultText = textOf(result).trim();
     
     // Validate that the returned ID is actually in the list, unless it's "none"
     const matchedAsset = availableAssets.find((a: any) => a.id === resultText);
