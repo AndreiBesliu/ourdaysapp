@@ -5086,3 +5086,95 @@ fisierului — aceeasi capcana ca la poarta de overlay-uri de dimineata. Cu muta
 trebuie (stampila **mutata**, nu duplicata) si numarand doar codul, musca.
 
 `npx tsc -b` verde · poarta de lint verde · **1326 teste** (de la 1320).
+## 2026-09-16 - Portofelul si cheltuielile, revizuite pentru prima data
+
+**Model:** Claude Opus 5 · „continua tu singur"
+
+Zona asta n-avusese niciodata o a doua pereche de ochi, si are un istoric care spune totul: **trei
+luni in care regulile refuzau fiecare citire si scriere pe `expenses`, fara ca cineva sa afle**,
+fiindca ambele cai de esec erau tacute. Am pus patru recenzori adversariali pe ea: aritmetica
+banilor, cine ce poate scrie, esecurile invizibile, si codurile de bare. **26 de constatari
+confirmate, 18 respinse.**
+
+Inainte de orice, am masurat ce foloseste lumea de fapt: **18 carduri in portofel (10 cu cod de
+bare), 24 de evenimente, 3 cheltuieli.** Portofelul e functia principala a aplicatiei, nu
+calendarul.
+
+### Banii erau gresiti, si gresiti tacut
+
+**Cel mai grav.** Impartirea se facea la membrii de ACUM, dar totalul cuprindea fiecare cheltuiala
+inregistrata vreodata. Cele doua nu mai sunt de acord din clipa in care pleaca cineva:
+
+    Ana, Bogdan si Cristina. Cristina plateste 300 de cumparaturi. Cristina pleaca.
+    Totalul ramane 300 — cheltuiala ei nu se atinge. Impartitorul devine 2.
+    Ana vede -150, Bogdan -150, si NIMENI nu e pe plus. Coloanele dau -300.
+
+Cristina are de primit 300 si nu apare nicaieri. Verificatorul n-a rationat: **a rulat componenta
+livrata** cu `react-dom/server` si a citit exact `-150.00` si `-150.00` de pe ecran.
+
+Iar codul stia deja: `functions/src/index.ts` sterge cheltuielile cuiva la **stergerea contului**, si
+comentariul de acolo descrie fix aceasta aritmetica. Celelalte doua feluri de a iesi dintr-un grup —
+sa pleci, sa fii scos — n-au primit niciodata acelasi tratament.
+
+**Reparatia:** cine a PLATIT intr-un registru face parte din el, membru sau nu. Asta reface
+promisiunea implicita a ecranului — coloanele dau zero — fara sa stearga dovada ca omul a platit.
+Socoteala a iesit din componenta in `src/utils/ledger.ts`, ca sa poata fi **rulata**: erau
+unsprezece randuri in spatele unui login, si tocmai de-aia a supravietuit defectul luni de zile.
+
+Plus, in aceeasi mutare: o suma care nu e numar nu mai otraveste tot registrul; restul de rotunjire
+cade pe **cine datoreaza**, nu pe cine a platit (omul care a scos banii se face intreg); si un sold
+de -0,004 nu se mai scrie „-0.00", fiindca pragul de culoare si cel de tiparire sunt acum acelasi.
+
+### O gaura in reguli
+
+`create` fixa trei lucruri: proprietarul, platitorul, si ca grupul e unul din care faci parte.
+**`update` nu fixa niciunul.** Deci tot ce era interzis la creare se putea face in doi pasi — creezi
+o cheltuiala personala banala, apoi o editezi. Cea care conta:
+
+> imi mut cheltuiala in registrul unui grup **din care nu fac parte** — toate balantele lor se
+> misca, iar ei n-o pot sterge, fiindca doar proprietarul poate.
+
+Sase probe noi pe emulatorul real, inclusiv cele care trebuie sa TREACA: o regula care blocheaza si
+corectarea unei greseli de tipar e inlocuita intr-o saptamana cu una mai laxa. **Probat prin
+mutatie: cu regula veche pusa la loc, pica exact cele trei.**
+
+### Codul de bare: real, dar dormant
+
+Scanerul accepta **17** formate. Randarea mapa **patru**; restul cadeau pe `CODE128` — inclusiv
+UPC-E, care e un UPC-A comprimat: aceleasi opt cifre desenate ca Code 128 se citesc ca opt cifre,
+in timp ce simbolul din care au venit se extinde la douasprezece. **Alt numar, acelasi card, niciun
+avertisment.**
+
+Masurat inainte de reparatie: toate cele 10 coduri din baza sunt EAN-13 si UPC-A, adica exact cele
+doua mapate corect. **Nimeni nu era afectat** — ar fi fost primul om care adauga un card in alt
+format.
+
+Acum sase formate in plus se deseneaza corect, iar cele care **nu pot** fi desenate ca bare (2D,
+GS1 DataBar, add-on-uri EAN) arata NUMARUL, mare, cu un rand care spune de ce. Un numar se poate
+tasta la casa; un cod de bare gresit nu poate fi observat de omul care tine telefonul.
+
+Typecheck-ul a prins ca tipurile lui `react-barcode` sunt invechite (n-au CODE93, desi JsBarcode
+3.12.3 pe care il foloseste chiar il are). N-am trecut peste tip pe incredere: exista un test care
+incarca encoderele REALE si refuza orice format pe care modulul il poate numi iar biblioteca nu-l
+poate desena.
+
+### Un steag de eroare pentru doua ascultatoare
+
+Ambele reusite scriau `setLoadError(false)`, deci cea care reusea ultima **stergea esecul
+celeilalte**: o interogare refuzata pe registrul de grup lasa ecranul fara nicio eroare si balantele
+se calculau tacut din jumatate de registru. Acum fiecare ascultator are steagul lui, iar daca a picat
+exact cel al registrului, balantele **nu se mai arata deloc** — cifre gresite pe un ecran curat sunt
+mai rele decat o lipsa anuntata.
+
+### Ce am lasat, si de ce
+
+- **Un membru nou re-imparte istoria.** Cine intra azi ajunge sa plateasca si cina de saptamana
+  trecuta, fiindca nimic din document nu retine cine era de fata. Se repara cu un camp nou
+  (`splitAmong`), dar ce ar trebui sa insemne e o decizie de produs, nu una tehnica. **Intrebare
+  pentru Andrei.**
+- **Stergerea unui grup lasa cheltuielile in urma**, in niciun total.
+- Cateva medii pe portofel (categoria veche la stergere, `sharedGroupId` la transfer, plafonul de
+  15 secunde la incarcare).
+
+`npx tsc -b` verde · poarta de lint verde · **1350 de teste** (de la 1326) · **120 de probe de
+reguli** pe emulator.

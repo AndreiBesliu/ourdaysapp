@@ -5,6 +5,7 @@ import { Plus, Trash2, Receipt, TrendingUp, AlertTriangle } from 'lucide-react';
 import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
 import { reportError } from '../reportError';
+import { ledgerFor, displayedBalances, isSettled } from '../utils/ledger';
 
 export default function ExpensesTab(
   { sharedUsers, myGroups = [] }: { sharedUsers: any[]; myGroups?: { id: string; name: string; members: string[] }[] },
@@ -21,7 +22,10 @@ export default function ExpensesTab(
   // once. It went unnoticed for three months because BOTH failure paths were silent — onSnapshot
   // had no error callback and the add was swallowed by `console.error`. Whatever the fix to the
   // data model turns out to be, a refusal has to be visible where it happened.
-  const [loadError, setLoadError] = useState(false);
+  // Two listeners, two flags: see the effect below for why one between them was a bug.
+  const [ownFailed, setOwnFailed] = useState(false);
+  const [groupsFailed, setGroupsFailed] = useState(false);
+  const loadError = ownFailed || groupsFailed;
   const [addError, setAddError] = useState(false);
   const [deleteError, setDeleteError] = useState(false);
   const { language } = useThemeStore();
@@ -41,16 +45,24 @@ export default function ExpensesTab(
         (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
       ));
     };
-    const fail = (where: string) => (err: any) => {
+    // ONE flag per listener, not one between them. Shared, the healthy listener's success
+    // callback called setLoadError(false) and ERASED the other's failure — so a denied group
+    // query left the screen with no error at all and the balances quietly computed from half
+    // the ledger. Wrong numbers with a clean screen is the worst of the three outcomes.
+    const down = { own: false, groups: false };
+    const settle = () => { setOwnFailed(down.own); setGroupsFailed(down.groups); };
+    const ok = (which: 'own' | 'groups') => { down[which] = false; settle(); };
+    const fail = (which: 'own' | 'groups') => (err: any) => {
       // An empty list and a denied list look identical on screen. They are not.
-      setLoadError(true);
-      reportError(err?.message || 'expenses snapshot failed', { context: `ExpensesTab.${where}` });
+      down[which] = true;
+      settle();
+      reportError(err?.message || 'expenses snapshot failed', { context: `ExpensesTab.${which}` });
     };
 
     const unsubs: (() => void)[] = [];
     unsubs.push(onSnapshot(
       query(collection(db, 'expenses'), where('ownerId', '==', uid)),
-      (snap) => { mine.clear(); snap.docs.forEach(d => mine.set(d.id, { id: d.id, ...d.data() })); setLoadError(false); publish(); },
+      (snap) => { mine.clear(); snap.docs.forEach(d => mine.set(d.id, { id: d.id, ...d.data() })); ok('own'); publish(); },
       fail('own'),
     ));
     // `in` takes at most 30 values; nobody here is in thirty groups, but slicing beats throwing.
@@ -58,7 +70,7 @@ export default function ExpensesTab(
     if (ids.length) {
       unsubs.push(onSnapshot(
         query(collection(db, 'expenses'), where('groupId', 'in', ids)),
-        (snap) => { theirs.clear(); snap.docs.forEach(d => theirs.set(d.id, { id: d.id, ...d.data() })); setLoadError(false); publish(); },
+        (snap) => { theirs.clear(); snap.docs.forEach(d => theirs.set(d.id, { id: d.id, ...d.data() })); ok('groups'); publish(); },
         fail('groups'),
       ));
     }
@@ -113,17 +125,21 @@ export default function ExpensesTab(
   // shared split, so private spending looked like a debt other people owed; and with more than one
   // group, a Family expense was divided among the members of every group at once, because the
   // divisor was "everyone I share any group with".
+  //
+  // The arithmetic itself now lives in `src/utils/ledger.ts`, where it can be RUN. It was
+  // eleven lines here, behind a login, and it was WRONG: the divisor was the group's CURRENT
+  // members while the total was every expense ever filed, so the moment somebody left, their
+  // spending stayed in the sum and they vanished from the division. Three people, one of whom
+  // paid 300 and then left: the other two were each told they owed 150, nobody was in credit,
+  // and the columns summed to -300 instead of 0. Silent, permanent, and the number people
+  // settle up on.
   const ledgers = myGroups
     .map(g => {
       const mine = expenses.filter(e => e.groupId === g.id);
-      const paid: Record<string, number> = {};
-      mine.forEach(e => { paid[e.paidBy] = (paid[e.paidBy] || 0) + (Number(e.amount) || 0); });
-      const total = Object.values(paid).reduce((a, b) => a + b, 0);
       const members = g.members.length ? g.members : [auth.currentUser?.uid].filter(Boolean) as string[];
-      const share = members.length > 0 ? total / members.length : 0;
-      return { group: g, members, paid, share, count: mine.length };
+      return { group: g, ledger: ledgerFor(members, mine), rows: displayedBalances(ledgerFor(members, mine)) };
     })
-    .filter(l => l.count > 0);
+    .filter(l => l.ledger.count > 0);
 
   // Never part of a balance — nobody owes anybody for these. Counted separately so the money is
   // still visible rather than silently dropped from the screen.
@@ -137,19 +153,33 @@ export default function ExpensesTab(
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-      {ledgers.map(l => (
+      {/* When the GROUP query is the one that failed, the balances would be computed from
+          whatever did load — which is not a smaller ledger, it is a wrong one. Say so
+          instead of showing numbers nobody should act on. */}
+      {groupsFailed ? (
+        <p className="text-xs text-amber-600 font-medium">{t('expenseBalancesUnavailable', language)}</p>
+      ) : ledgers.map(l => (
         <div key={l.group.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4 flex items-center gap-2">
             <TrendingUp className="w-4 h-4"/> {l.group.name}
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {l.members.map(uid => {
-              const balance = (l.paid[uid] || 0) - l.share;
+            {l.rows.map(({ uid, balance }) => {
+              const settled = isSettled(balance);
               return (
                 <div key={uid} className="p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg border border-zinc-100 dark:border-zinc-800">
-                  <p className="font-medium text-zinc-800 dark:text-zinc-200 text-sm">{getUserName(uid)}</p>
-                  <p className={`text-lg font-bold ${balance > 0.005 ? 'text-emerald-500' : balance < -0.005 ? 'text-red-500' : 'text-zinc-500'}`}>
-                    {balance > 0 ? '+' : ''}{balance.toFixed(2)}
+                  <p className="font-medium text-zinc-800 dark:text-zinc-200 text-sm">
+                    {getUserName(uid)}
+                    {/* Somebody who paid into this ledger and has since left. Saying so is the
+                        point: their money is still in the total, so they are still owed it. */}
+                    {l.ledger.departed.includes(uid) && (
+                      <span className="ml-1 text-[10px] font-normal text-zinc-400">({t('expenseFormerMember', language)})</span>
+                    )}
+                  </p>
+                  {/* One threshold for the colour AND the sign, so a balance of -0.004 can no
+                      longer be painted as settled and printed as “-0.00”. */}
+                  <p className={`text-lg font-bold ${settled ? 'text-zinc-500' : balance > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                    {settled ? '0.00' : `${balance > 0 ? '+' : ''}${balance.toFixed(2)}`}
                   </p>
                 </div>
               );

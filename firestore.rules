@@ -378,7 +378,25 @@ service cloud.firestore {
         && (request.resource.data.groupId == null || isMemberOfGroup(request.resource.data.groupId));
       // Only the owner edits or removes it — being in the group lets you SEE the ledger, not
       // rewrite what someone else recorded.
-      allow update, delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      //
+      // An UPDATE has to re-assert everything `create` asserts, because until 16.09.2026 it
+      // asserted none of it. Owning a document let you rewrite the three fields that decide
+      // whose money it is and which ledger it lands in:
+      //
+      //   groupId  — settable to ANY group, including one you are not in and cannot read.
+      //              You could file an expense in a stranger's ledger, move every balance in
+      //              it, and they could not delete it: only the owner can, and that is you.
+      //   ownerId  — settable to anyone, which plants the row in their wallet.
+      //   paidBy   — settable to anyone, which re-attributes a debt to another member.
+      //
+      // The first is the one that matters: create was guarded and update was the way around
+      // it. Found by an adversarial review of code that had shipped months earlier.
+      allow update: if isSignedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.paidBy == request.auth.uid
+        && (request.resource.data.groupId == null || isMemberOfGroup(request.resource.data.groupId));
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
 
     match /assets/{assetId} {

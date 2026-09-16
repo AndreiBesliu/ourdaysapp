@@ -19,7 +19,7 @@
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
-import { ALICE, BOB, CAROL, DAVE, EMAIL, G1, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
+import { ALICE, BOB, CAROL, DAVE, EMAIL, G1, G2, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
 
 beforeAll(async () => { await startEnv('demo-ourdays-ledger'); });
 afterAll(stopEnv);
@@ -84,6 +84,45 @@ describe('expenses — seeing the ledger is not writing in it', () => {
   it('the person who recorded it may edit and delete it', async () => {
     await assertSucceeds(updateDoc(doc(as(ALICE), 'expenses', 'x-group'), { amount: 42 }));
     await assertSucceeds(deleteDoc(doc(as(ALICE), 'expenses', 'x-group')));
+  });
+});
+
+// ── what UPDATE let through until 16.09.2026 ─────────────────────────────────────────────────
+//
+// `create` pinned ownerId, paidBy and group membership. `update` pinned NONE of them: it asked
+// only "is this yours", and everything a create was stopped from doing could be done by creating
+// a harmless personal expense and then editing it. Found by an adversarial review of code that
+// had been live for months, and the first case is the one that matters — the other two are a
+// nuisance, that one moves other people's money.
+describe('expenses — an edit cannot do what a create was refused', () => {
+  it('cannot be moved into a group the owner is not in', async () => {
+    // Alice is not in G2. Without this she files a 500 expense in Carol's ledger, every balance
+    // there moves, and Carol cannot delete it: only the owner may, and the owner is Alice.
+    await assertFails(updateDoc(doc(as(ALICE), 'expenses', 'x-personal'), { groupId: G2 }));
+    await assertFails(updateDoc(doc(as(ALICE), 'expenses', 'x-group'), { groupId: G2 }));
+  });
+
+  it('cannot be handed to somebody else', async () => {
+    await assertFails(updateDoc(doc(as(ALICE), 'expenses', 'x-personal'), { ownerId: BOB }));
+  });
+
+  it('cannot be re-attributed to another payer', async () => {
+    await assertFails(updateDoc(doc(as(ALICE), 'expenses', 'x-group'), { paidBy: BOB }));
+  });
+
+  it('but the ordinary edits still work', async () => {
+    // The point of the rule is to stop three fields moving, not to freeze the row. A guard that
+    // also blocked correcting a typo would be replaced by a looser one within the week.
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'expenses', 'x-group'), { amount: 41.5 }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'expenses', 'x-group'), { description: 'bread' }));
+  });
+
+  it('and a personal expense can still be filed into a group the owner IS in', async () => {
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'expenses', 'x-personal'), { groupId: G1 }));
+  });
+
+  it('and can still be taken back out of the group', async () => {
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'expenses', 'x-group'), { groupId: null }));
   });
 });
 

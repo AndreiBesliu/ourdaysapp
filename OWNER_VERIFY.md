@@ -863,3 +863,35 @@ de dupa pragul de gratie. Deci asta nu e o speranta, e o predictie care se poate
       gresit si vreau sa stiu.
 - [ ] **Daca joci ceva azi, acel joc NU trebuie sa fie printre cele inchise** — ala e singurul mod
       in care functia asta poate face rau.
+---
+
+## 46. Cheltuielile si portofelul, dupa prima lor revizie (16.09)
+
+Zona asta n-avusese niciodata o a doua pereche de ochi. Patru recenzori, **26 de constatari
+confirmate**. Ce am reparat si ce te uiti:
+
+- [ ] **Balantele dau zero.** Deschide Wallet → Cheltuieli. Suma coloanelor dintr-un grup trebuie
+      sa fie 0. Inainte, daca plecase cineva care platise, nu dadea — si nimeni nu era pe plus.
+- [ ] **Cineva care a plecat din grup dar platise** apare acum in lista cu eticheta „a plecat din
+      grup" si cu suma pe care o are de primit. Daca vezi pe cineva cu balanta dar fara nume
+      („Cineva"), e normal: nu-i mai putem citi profilul.
+- [ ] **Un card de fidelitate cu alt format** (nu EAN-13/UPC-A): daca scanezi unul si nu poate fi
+      desenat, trebuie sa vezi **numarul mare** plus un rand galben care explica. Nu trebuie sa
+      vezi niciodata un cod de bare pentru un card care nu e al lui.
+- [ ] **Cardurile tale de acum trebuie sa arate exact la fel.** Toate cele 10 sunt EAN-13 sau
+      UPC-A, formate care mergeau corect si inainte — daca vreunul arata altfel, spune-mi imediat.
+
+### Intrebare pentru tine (decizie de produs, nu bug)
+
+Cand intra cineva nou intr-un grup, **toate cheltuielile dinainte se re-impart si la el** — ajunge
+sa datoreze pentru o cina la care n-a fost. La fel invers: daca pleaca cineva care n-a platit
+nimic, datoriile celorlalti cresc.
+
+Nimic din document nu retine cine era de fata cand s-a inregistrat cheltuiala, deci n-am de unde
+calcula altfel fara un camp nou. Trei variante:
+
+1. **cheltuiala retine participantii** la momentul inregistrarii (corect, dar cere camp nou);
+2. **ramane cum e** — grupul imparte tot, oricand ai intrat;
+3. o data de intrare pe membru, si se imparte dupa ea (mai complicat, mai putin previzibil).
+
+Care?
