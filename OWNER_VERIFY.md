@@ -848,3 +848,18 @@ neatins se inchide maine.
 - [ ] **Un joc de Memory Match inceput INAINTE de azi** ramane pe vechea socoteala pana cand
       termina o runda noua. E intentionat: altfel un joc cu doua runde in spate ar fi raportat
       brusc „n-a castigat nimeni".
+
+### Ce trebuie sa faca maturatoarea la noapte (prezis pe datele reale, 16.09)
+
+Am rulat decizia ADEVARATA (modulul compilat) peste baza de date, cu ceasul pus la prima rulare
+de dupa pragul de gratie. Deci asta nu e o speranta, e o predictie care se poate INFIRMA:
+
+- **se inchid toate cele 18** — 6 Rummy, 8 X-si-0, 3 Connect 4, 1 Memory Match;
+- **doar 3 dintre ele au un castigator de sesiune**, deci clasamentul creste cu exact **3
+  victorii** (doua la o persoana, una la alta). Restul de 15 nu dau nimic nimanui.
+
+- [ ] Maine, in Arcade: jocurile vechi apar „Inchis dupa o zi fara miscare".
+- [ ] In Leaderboard: **exact 3 victorii in plus**, nu mai multe. Daca sare cineva cu 10, ceva e
+      gresit si vreau sa stiu.
+- [ ] **Daca joci ceva azi, acel joc NU trebuie sa fie printre cele inchise** — ala e singurul mod
+      in care functia asta poate face rau.
