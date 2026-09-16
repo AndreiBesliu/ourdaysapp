@@ -1,5 +1,8 @@
 {
   "hosting": {
+    "predeploy": [
+      "node scripts/check-bundle.mjs"
+    ],
     "public": "dist",
     "ignore": [
       "firebase.json",

@@ -4910,3 +4910,50 @@ popovere, cu Back-ul pe telefon si Escape pe cautarea din chat.
 
 Cele doua arce sunt inchise: `f354616` / `eafb032` / `6d8efb6` pentru intervale, `f9b96ac` pentru
 overlay-uri.
+## 2026-09-16 - Nu se mai poate livra un pachet fara configurare
+
+**Model:** Claude Opus 5 · dupa verificarea lui Andrei, m-am uitat ce lovea oamenii pe live
+
+Jurnalul de erori e curat: **5 probleme distincte, 4 rezolvate, 0 noi, 0 regresate**. Singura
+ramasa era „Web push is not configured: no VAPID key" — de 10 ori, 2 oameni, 14→15.09. Cheia a
+fost pusa in `.env` in timpul sesiunii de ieri si livrarea de aseara a reparat-o (am verificat:
+pachetul de pe live **contine** cheia). Deci nu mai era nimic de reparat acolo.
+
+Dar de ce a fost posibil e inca acolo, si e mai rau decat push-ul.
+
+**Toate cheile Firebase traiesc intr-un singur `.env`, pe o singura masina, fara niciun
+`.env.example`.** Vite inlocuieste fiecare `import.meta.env.VITE_*` la build; una lipsa devine
+literalmente `undefined` — **tacut**. Deci `npm run build` reuseste, pachetul se incarca, si
+aplicatia care ajunge in fata oamenilor n-are niciun proiect cu care sa vorbeasca. Nimic nu se face
+rosu: **CI-ul construieste fara `.env` deloc si raporteaza verde**, fiindca treaba lui e typecheck
+si teste, nu configurare. Push-ul lipsa a fost varianta blanda — aceeasi forma poate scoate din
+functiune **toata** aplicatia si ar arata exact la fel de verde.
+
+Deci: `scripts/check-bundle.mjs`, agatat ca `predeploy` pe hosting. Nu mai poti publica un pachet
+caruia ii lipseste configurarea.
+
+### Gardea COMPARA, nu adulmeca — si prima versiune a mea adulmeca
+
+Prima varianta cauta **forme**: un sir `AIza…`, o cheie base64url de 87 de caractere. Am construit
+fara `.env` ca s-o probez, si a raportat senin **„ok Web push VAPID key"** si „ok App Check" —
+regexul nimerise altceva intr-un pachet de doua megaocteti, iar cuvantul „recaptcha" e in SDK
+indiferent daca ai cheie sau nu. **O garda care recunoaste o FORMA nu spune nimic despre valoarea
+TA.**
+
+Acum compara doua lucruri pe care le poate vedea pe amandoua: ce a configurat masina asta si ce e
+in artefact. Fiecare valoare configurata trebuie sa apara **verbatim** in pachet.
+
+Probat prin mutatie, de doua ori, cu `.env` restaurat prin checksum:
+- **fara `.env`** → refuza, cu un singur mesaj clar (inainte: trecea cu doua „ok" false);
+- **cheia configurata dar pachetul construit inainte** → „configured but does NOT appear in the
+  built bundle" — exact situatia care a pus cele 10 erori in jurnal.
+
+Nu tipareste niciodata o valoare, doar numele. Doua dintre ele sunt publice prin natura lor, dar o
+verificare care obisnuieste sa scuipe configurare e la un copy-paste distanta de a face asta cu una
+care nu e.
+
+`.env.example` spune de unde vine fiecare valoare. App Check ramane **optional prin proiectare**:
+absenta lui e avertisment, niciodata deploy blocat.
+
+`npx tsc -b` verde · poarta de lint verde · **1278 de teste** (de la 1268) · build verde · poarta
+de livrare probata pe drumul REAL (`firebase deploy` o ruleaza, nu doar eu de mana).
