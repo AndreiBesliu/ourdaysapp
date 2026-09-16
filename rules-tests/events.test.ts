@@ -125,6 +125,21 @@ describe('creating — the injection path', () => {
     }));
   });
 
+  it('and the same clause refuses an innocent move to the personal calendar', async () => {
+    // Not an injection this time: YOUR event, moved off a group onto your own calendar with
+    // somebody still assigned. The rule cannot tell the two apart and refuses both, so the person
+    // got a failure about a field whose chip had stopped being drawn the moment they switched
+    // calendars. `src/utils/eventTargeting.ts` re-derives the list on that switch rather than
+    // letting the form offer a state the database rejects.
+    await assertFails(setDoc(doc(as(ALICE), 'events', 'retarget-1'), {
+      ownerId: ALICE, title: 'Shopping', groupId: null, assigneeIds: [BOB], assigneeId: BOB,
+    }));
+    // Re-derived, the same move is accepted.
+    await assertSucceeds(setDoc(doc(as(ALICE), 'events', 'retarget-2'), {
+      ownerId: ALICE, title: 'Shopping', groupId: null, assigneeIds: [ALICE], assigneeId: ALICE,
+    }));
+  });
+
   it('inside a group you belong to, naming other members is allowed', async () => {
     await assertSucceeds(setDoc(doc(as(BOB), 'events', 'new-group'), {
       ownerId: BOB, title: 'Shopping', groupId: G1, assigneeIds: [ALICE],

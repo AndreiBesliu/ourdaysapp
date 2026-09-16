@@ -5,6 +5,7 @@ import { liveQuery } from '../utils/liveQuery';
 import { mergeAssets, shareFieldsFor } from '../utils/assetSharing';
 import { localZone, timeFieldsFor, endFieldsFor, spanOf, dayOf, dayPlus, dayOffsetBetween } from '../utils/eventTime';
 import { formSpan, SPAN_MESSAGE_KEY } from '../utils/eventForm';
+import { keepAssignees, audienceFor } from '../utils/eventTargeting';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
@@ -1430,7 +1431,24 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('targetCalendar', language)}</label>
               <select 
                 value={selectedGroupId}
-                onChange={(e) => setSelectedGroupId(e.target.value)}
+                // Moving the event to another calendar re-derives the two lists that only mean
+                // anything inside a group. Without this they were left alone while the form
+                // below renders them FILTERED to the group now selected — so somebody not in
+                // the new group vanished from the screen and stayed in the document: unseen by
+                // you, unseeable by them (the event is filed on a calendar they do not have),
+                // and still sent a reminder, because reminders go to assignees regardless of
+                // the group. Retargeting to Personal was worse still: firestore.rules lets a
+                // non-group event name only its own author, so the write was refused outright.
+                onChange={(e) => {
+                  const next = e.target.value;
+                  const members = next === 'personal'
+                    ? null
+                    : (groups.find(g => g.id === next)?.members || []);
+                  const uid = auth.currentUser?.uid || '';
+                  setSelectedGroupId(next);
+                  setAssigneeIds(prev => keepAssignees(members, uid, prev));
+                  setVisibleTo(audienceFor(members, uid));
+                }}
                 className="w-full px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
               >
                 <option value="personal">{t('personalCalendar', language)}</option>

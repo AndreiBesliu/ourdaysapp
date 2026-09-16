@@ -5315,3 +5315,56 @@ Trei mutatii distincte pe modul, fiecare prinsa (6, 2 si 1 teste cazute); replay
 documente reale prin functia livrata, in ambele versiuni: **strain 11/9/9/7 -> 0 peste tot, si
 nimic care apartinea unui tab nu a disparut**. `npx tsc -b` verde · **1382 de teste** · build verde.
 
+---
+
+## 2026-09-16 · Schimbarea calendarului tinta lasa in urma oameni pe care nu-i mai vezi
+
+**Prompt (Andrei):** „care este problema aici, de ce ar trebui sa incepem o sesiune noua?”,
+apoi „da-i drumul”. **Model:** Claude Opus 5.
+
+Gasit de revizia adversariala de mai devreme, lasat pe chip fiindca era in afara a ce ceruse.
+Nu era nevoie de sesiune noua — chip-ul e doar un bilet, nu o cerinta.
+
+### Ce facea
+
+Selectul de calendar tinta facea exact un lucru: `setSelectedGroupId(e.target.value)`. Doua liste
+care au inteles doar INAUNTRUL unui grup ramaneau neatinse — `assigneeIds` si `visibleTo` — in
+timp ce formularul le deseneaza filtrate la grupul NOU. Deci cine nu e in grupul nou disparea de
+pe ecran si ramanea in document.
+
+Trei consecinte, si a treia e cea care face reparatia obligatorie, nu cosmetica:
+
+1. crezi ca l-ai scos — nu l-ai scos, doar nu i se mai deseneaza bulina;
+2. el nu vede evenimentul (e depus pe un calendar pe care nu-l are, dupa regula de azi
+   dimineata) dar **primeste memento**, fiindca `remindersCore.ts` trimite celor asignati fara
+   sa se uite la grup;
+3. mutat pe **Personal**, scrierea e **refuzata** de reguli: un eveniment fara grup poate numi
+   doar propriul autor. Formularul oferea o stare pe care baza de date o respinge.
+
+### Bancul, in ambele sensuri
+
+Am montat AddEventModal-ul ADEVARAT cu scrierile interceptate, ca sa citesc ce se SALVEAZA, nu ce
+se deseneaza. Scenariu: eveniment in Family, Emilia asignata, mutat pe Gym.
+
+| | pe codul livrat | cu reparatia |
+|---|---|---|
+| pe ecran dupa mutare | Emilia nicaieri | Emilia nicaieri |
+| **salvat** | `assigneeIds:['u5']`, `visibleTo:['u5','u2']` | `assigneeIds:[]`, `visibleTo:['u2']` |
+| mutat pe Personal, salvat | `assigneeIds:['u5']` → **refuzat de reguli** | `assigneeIds:[]` |
+
+Ecranul arata la fel in ambele. Diferenta e intreaga in document — exact felul de defect pe care
+nici typecheck-ul, nici testele, nici o captura nu-l pot vedea.
+
+### Reparatia
+
+`src/utils/eventTargeting.ts` (12 teste, 3 mutatii prinse): mutarea re-deriva ambele liste.
+Persoanele asignate sunt o **intersectie** (cine e si in grupul nou a fost ales deliberat; tu si
+asistentul AI supravietuiesc mereu), audienta e un **reset** la membrii grupului nou fara tine —
+o audienta carata din alt grup nu e o alegere mai ingusta, e o lista de alti oameni, si poate
+sfarsi numind pe nimeni din grupul pe care evenimentul tocmai a ajuns.
+
+Plus un test de reguli (al 128-lea) care numeste cazul NEVINOVAT: nu injectia, ci mutarea
+propriului eveniment pe calendarul propriu cu altcineva inca asignat. Aceeasi clauza il refuza.
+
+`npx tsc -b` verde · **1394 de teste** · **128 de teste de reguli** · build verde.
+

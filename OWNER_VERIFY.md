@@ -929,7 +929,21 @@ TINE, nu de tabul deschis.
       ta:** un membru care intra mai tarziu ar trebui sa vada evenimentele dinainte? (Eu as zice
       da, dar inseamna ca lista de audienta inceteaza sa mai fie o lista si devine „cine a fost
       exclus anume” — alta forma, alta scriere.)
-- [ ] **Cand schimbi „calendarul tinta” intr-un eveniment,** persoanele asignate NU se refiltreaza
-      dupa grupul nou: bulinele lor dispar din formular, dar raman salvate pe eveniment. De
-      reparat separat, spune-mi daca vrei acum.
+- [x] ~~Cand schimbi „calendarul tinta”, persoanele asignate nu se refiltreaza~~ — **reparat**,
+      vezi sectiunea de mai jos.
+
+### Mutarea unui eveniment pe alt calendar (reparat 16.09, dupa ce ai zis „da-i drumul”)
+
+- [ ] **Fa un eveniment intr-un grup, bifeaza pe cineva, apoi schimba „calendarul tinta” pe alt
+      grup.** Persoana care nu e in grupul nou trebuie sa dispara si din ce se SALVEAZA, nu doar
+      de pe ecran. (Inainte ramanea pe eveniment: n-o vedeai, ea nu vedea evenimentul, dar
+      primea memento pentru el.)
+- [ ] **Cine e in AMANDOUA grupurile trebuie sa ramana bifat** — alegerea ta se pastreaza acolo
+      unde poate.
+- [ ] **Muta un eveniment de grup pe Personal cu altcineva bifat.** Trebuie sa se salveze normal.
+      Inainte **esua** — regulile nu lasa un eveniment fara grup sa numeasca pe altcineva decat
+      autorul lui.
+- [ ] **Bifele de vizibilitate** trebuie sa se refaca la membrii grupului nou cand schimbi
+      calendarul. Daca restrangi vizibilitatea si apoi schimbi grupul, restrangerea se pierde —
+      e intentionat, la fel ca la selectorul de participanti de la cheltuieli.
 
