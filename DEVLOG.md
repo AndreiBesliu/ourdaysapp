@@ -5044,3 +5044,45 @@ In joc, sub punctele fiecarui jucator apare acum un 🏆 cu numarul de runde —
 castigat una, deci prima partida arata exact ca inainte.
 
 `npx tsc -b` verde · poarta de lint verde · **1320 teste** (de la 1310).
+## 2026-09-16 - Un audit pe date reale, si golul pe care l-a aratat
+
+**Model:** Claude Opus 5 · „continua tu singur"
+
+Dupa patru livrari intr-o zi, m-am uitat ce se vede pe live. Panoul de erori: **0 noi, 0
+regresate**. Apoi am verificat pe datele reale invariantele promise, cu modulele COMPILATE (acelasi
+cod pe care-l ruleaza serverul), fara sa reimplementez nicio regula.
+
+Ce a iesit e mai interesant decat un verde:
+
+    evenimente cu interval pe mai multe zile   0 din 24
+    jocuri cu stampila de mutare               0 din 18
+    Memory Match cu contor de runde            0
+
+Trei functii livrate azi, **neatinse inca de nimeni**. Deci „invariantul se respecta" e adevarat pe
+o multime GOALA — nu e o dovada, e o absenta. Singurul lucru pe care auditul chiar l-a confirmat:
+36 de notificari, 8 destinatari, **niciun duplicat in aceeasi minuta**, si doua de tip `reminder`
+— deci programatorul livreaza cu adevarat.
+
+### Golul, si cum l-am inchis
+
+Toata expirarea sta pe `writeGame`, iar ea avea doar o plasa pe SURSA: „nimeni n-o ocoleste" si
+„stampila e scrisa dupa campurile apelantului". Amandoua sunt verificari de TEXT. Auditul le-a
+aratat limita: optsprezece jocuri, niciunul cu `lastMoveAt`, fiindca nimeni n-a jucat de la
+livrare. Nicio dovada ca functia face ce scrie — doar ca fisierul arata bine.
+
+Acum modulul e incarcat pe bune, cu SDK-ul mocuit, si se inspecteaza ce ajunge la Firestore: caile
+cu punct raman cu punct (altfel s-ar inlocui tot `state` si ar lua tabla cu el), o scriere goala tot
+se stampileaza, o eroare ajunge la apelant in loc sa fie inghitita, si — asertiunea care conteaza —
+**un apelant care isi trimite propriul `lastMoveAt` e suprascris**. Aia era regula pe care plasa pe
+sursa o putea doar aproxima prin pozitia in fisier.
+
+### Proba negativa a fost ea insasi stricata, de doua ori
+
+Prima mutatie („scoate stampila") a muscat. A doua („pune stampila INAINTE de campuri") a raportat
+ca testul doarme — **dar probemea era gresita**: adaugasem o stampila la inceput fara s-o scot pe
+cea de la final, deci ultima tot castiga si codul se comporta corect. A treia incercare a picat pe
+altceva: numaram aparitiile lui `lastMoveAt: serverTimestamp()` inclusiv pe cea din COMENTARIUL
+fisierului — aceeasi capcana ca la poarta de overlay-uri de dimineata. Cu mutatia facuta cum
+trebuie (stampila **mutata**, nu duplicata) si numarand doar codul, musca.
+
+`npx tsc -b` verde · poarta de lint verde · **1326 teste** (de la 1320).
