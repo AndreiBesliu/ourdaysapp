@@ -159,3 +159,37 @@ export function displayedBalances(ledger: Ledger): { uid: string; balance: numbe
 export function isSettled(balance: number): boolean {
   return Math.abs(balance) < 0.005;
 }
+// ── Choosing who an expense falls on ─────────────────────────────────────────────────────────
+//
+// The picker in the form. Recording the whole group automatically was the first half; letting
+// somebody say "this one was just me and Bogdan" is the second.
+
+/**
+ * The selection to actually use, given the group's members and whatever is ticked.
+ *
+ * Two things it guards, and both have bitten this app in other forms:
+ *   * a name that is no longer in the group — the roster can change while the form is open, and
+ *     the rules refuse a split naming somebody outside it, so the write would fail with a message
+ *     about a field the person never saw;
+ *   * an empty tick list — the rules refuse that too, and dividing a cost by nobody means nothing.
+ *     It is reported rather than silently turned back into everyone, because quietly charging the
+ *     whole group to a person who has just deselected them all is the opposite of what they asked.
+ */
+export function usableSplit(
+  members: readonly string[],
+  selected: readonly string[],
+): { split: string[]; ok: boolean } {
+  const inGroup = members.filter((m) => typeof m === 'string' && m);
+  const split = [...new Set(selected.filter((uid) => inGroup.includes(uid)))];
+  return { split, ok: split.length > 0 };
+}
+
+/**
+ * What a change of group does to the selection: everyone in the new group, ticked.
+ *
+ * Carrying the old ticks across would either name people who are not in the new group (refused by
+ * the rules) or silently narrow the split to whoever happens to be in both.
+ */
+export function splitForGroup(members: readonly string[]): string[] {
+  return members.filter((m) => typeof m === 'string' && m);
+}

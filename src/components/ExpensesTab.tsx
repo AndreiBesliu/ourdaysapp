@@ -5,7 +5,7 @@ import { Plus, Trash2, Receipt, TrendingUp, AlertTriangle } from 'lucide-react';
 import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
 import { reportError } from '../reportError';
-import { ledgerFor, displayedBalances, isSettled } from '../utils/ledger';
+import { ledgerFor, displayedBalances, isSettled, usableSplit, splitForGroup } from '../utils/ledger';
 
 export default function ExpensesTab(
   { sharedUsers, myGroups = [] }: { sharedUsers: any[]; myGroups?: { id: string; name: string; members: string[] }[] },
@@ -15,6 +15,9 @@ export default function ExpensesTab(
   const [description, setDescription] = useState('');
   // '' means personal: mine alone, wherever I am. Anything else is a group ledger.
   const [groupId, setGroupId] = useState('');
+  // Who this particular cost falls on. Everyone in the group by default, which is what it
+  // has always meant; the picker exists so “this one was just me and Bogdan” can be said.
+  const [split, setSplit] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   // Every read and write on `expenses` has been denied since the Firestore rules landed on
   // 2026-05-22: the collection has no `match` block, and Firestore denies what is not explicitly
@@ -94,6 +97,9 @@ export default function ExpensesTab(
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth.currentUser || !amount || !description) return;
+    // The rules refuse an empty split and dividing a cost by nobody means nothing; the button
+    // is disabled too, but a form can still be submitted with Enter.
+    if (groupId && !splitOk) return;
     setLoading(true);
     setAddError(false);
     try {
@@ -113,9 +119,7 @@ export default function ExpensesTab(
         // Everyone in the group at this moment, which is what the split has always meant —
         // the change is that it is now FIXED at that meaning instead of following the roster.
         // Personal expenses carry none: nobody shares them.
-        ...(groupId
-          ? { splitAmong: (myGroups.find(g => g.id === groupId)?.members || [auth.currentUser.uid]) }
-          : {}),
+        ...(groupId ? { splitAmong: usable } : {}),
         createdAt: serverTimestamp()
       });
       setAmount('');
@@ -156,6 +160,12 @@ export default function ExpensesTab(
   // still visible rather than silently dropped from the screen.
   const personal = expenses.filter(e => !e.groupId);
   const personalTotal = personal.reduce((a, e) => a + (Number(e.amount) || 0), 0);
+
+  // What will actually be stored, and whether the form may be submitted at all.
+  const { split: usable, ok: splitOk } = usableSplit(
+    myGroups.find(g => g.id === groupId)?.members || [],
+    split,
+  );
 
   const getUserName = (uid: string) => {
     if (uid === auth.currentUser?.uid) return t('expenseYou', language);
@@ -209,7 +219,13 @@ export default function ExpensesTab(
         {myGroups.length > 0 && (
           <select
             value={groupId}
-            onChange={(e) => setGroupId(e.target.value)}
+            onChange={(e) => {
+              setGroupId(e.target.value);
+              // Everyone in the NEW group, ticked. Carrying the old ticks across would name
+              // people who are not in it — which the rules refuse, so the write would fail
+              // with a message about a field nobody had seen.
+              setSplit(splitForGroup(myGroups.find(g => g.id === e.target.value)?.members || []));
+            }}
             aria-label={t('expenseLedgerLabel', language)}
             className="px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-sm"
           >
@@ -237,9 +253,37 @@ export default function ExpensesTab(
           step="0.01" 
           className="w-24 px-3 py-2 border rounded-lg bg-white dark:bg-zinc-900 dark:border-zinc-800 outline-none focus:border-emerald-500" 
         />
-        <button aria-label={t('addExpenseAction', language)} type="submit" disabled={loading} className="px-4 bg-emerald-500 text-white rounded-lg font-bold hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center justify-center">
+        <button aria-label={t('addExpenseAction', language)} type="submit" disabled={loading || (!!groupId && !splitOk)} className="px-4 bg-emerald-500 text-white rounded-lg font-bold hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center justify-center">
           <Plus className="w-5 h-5"/>
         </button>
+        {/* The picker. Only for a group expense — nobody shares a personal one. */}
+        {groupId && (
+          <div className="w-full flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-xs text-zinc-500 mr-1">{t('expenseSplitBetween', language)}</span>
+            {(myGroups.find(g => g.id === groupId)?.members || []).map(uid => {
+              const on = split.includes(uid);
+              return (
+                <button
+                  key={uid}
+                  type="button"
+                  aria-pressed={on}
+                  // Functional update: two taps inside one React batch both read the same
+                  // captured `split` otherwise, and the second silently undoes the first.
+                  // The bench caught exactly that — two chips tapped quickly, one toggle lost.
+                  onClick={() => setSplit(prev => prev.includes(uid) ? prev.filter(x => x !== uid) : [...prev, uid])}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${on
+                    ? 'bg-emerald-500 text-white border-emerald-500'
+                    : 'bg-white dark:bg-zinc-900 text-zinc-500 border-zinc-200 dark:border-zinc-700'}`}
+                >
+                  {getUserName(uid)}
+                </button>
+              );
+            })}
+            {/* Said out loud rather than silently turning “nobody” back into “everyone”, which
+                is the opposite of what the person just asked for. */}
+            {!splitOk && <span className="text-xs text-amber-600">{t('expenseSplitNobody', language)}</span>}
+          </div>
+        )}
       </form>
 
       {/* At the control that refused, not in a console nobody opens. */}

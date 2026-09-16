@@ -5206,3 +5206,36 @@ Sapte probe noi pe emulator, si **probate prin mutatie**: cu garda scoasa din `c
 pica exact cinci dintre ele. Total **127 de probe de reguli**.
 
 `npx tsc -b` verde · poarta de lint verde · **1357 de teste** (de la 1350) · build verde.
+## 2026-09-16 - Selectorul de participanti, si doua bug-uri prinse doar de bancul de proba
+
+**Model:** Claude Opus 5 · „da, vreau selectorul de participanti"
+
+Cheltuiala isi retinea deja participantii — tot grupul, automat. Acum se poate si ALEGE: sub
+formular apar membrii ca niste buline comutabile, toti bifati implicit, si `splitAmong` pastreaza
+exact ce ai lasat bifat. „Asta a fost doar a mea si a lui Bogdan" se poate spune.
+
+Decizia e in `ledger.ts` ca sa poata fi rulata: scoate pe cine nu mai e in grup (rosterul se poate
+schimba cu formularul deschis, iar regulile refuza un split care numeste un nestrain), si **spune**
+cand nu mai e nimeni bifat in loc sa transforme tacut „nimeni" in „toata lumea" — care ar fi exact
+pe dos fata de ce tocmai a cerut omul.
+
+### Bancul a prins doua lucruri pe care nimic altceva nu le vedea
+
+Typecheck verde, 1363 de teste verzi, build verde — si interfata gresita in doua feluri. Ecranul e
+in spatele unui login, deci am montat componenta ADEVARATA si am condus-o.
+
+**1. O cheltuiala personala nu putea fi adaugata deloc.** Butonul era
+`disabled={loading || !splitOk}`, iar fara grup nu exista membri, deci `splitOk` era fals —
+**implicit, si pentru cazul cel mai obisnuit din toata pagina**. Nicio unitate de test n-avea cum
+s-o vada: functia pura e corecta, greseala e in cine o intreaba.
+
+**2. Doua buline apasate repede pierdeau una.** `onClick` citea `split` din inchiderea randarii,
+deci doua apasari in ACELASI lot React citeau amandoua aceeasi valoare si a doua o suprascria pe
+prima. Bancul le-a apasat fara pauza intre ele si a aratat Ana inca bifata dupa ce fusese debifata.
+Reparat cu actualizare functionala (`setSplit(prev => ...)`).
+
+Probat pe componenta livrata: bulinele apar doar la o cheltuiala de grup, doua apasari in acelasi
+lot raman amandoua, debifarea tuturor blocheaza butonul si spune de ce, schimbarea grupului reseteaza
+bifele la membrii grupului NOU, iar intoarcerea la „personal" face butonul disponibil din nou.
+
+`npx tsc -b` verde · poarta de lint verde · **1363 de teste** · build verde.

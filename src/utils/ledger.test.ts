@@ -7,9 +7,10 @@
 // nobody in credit. This file is that scenario, as something that runs in a second.
 
 import { describe, it, expect } from 'vitest';
-import { ledgerFor, balanceOf, displayedBalances, isSettled } from './ledger';
+import { ledgerFor, balanceOf, displayedBalances, isSettled, usableSplit, splitForGroup } from './ledger';
 
 const ANA = 'ana', BOGDAN = 'bogdan', CRISTINA = 'cristina';
+const DAVE_NOT_IN_GROUP = 'dave';
 const sum = (rows: { balance: number }[]) => Math.round(rows.reduce((a, r) => a + r.balance, 0) * 100) / 100;
 
 describe('the defect: somebody leaves and their money is counted but they are not', () => {
@@ -183,6 +184,43 @@ describe('each expense remembers who it was split among', () => {
       { groupId: 'f', paidBy: CRISTINA, amount: 7.77, splitAmong: [ANA] },
       { groupId: 'f', paidBy: BOGDAN, amount: 0.05 },
     ]);
+    expect(sum(displayedBalances(l))).toBe(0);
+  });
+});
+describe('choosing who an expense falls on', () => {
+  const GROUP = [ANA, BOGDAN, CRISTINA];
+
+  it('keeps what was ticked', () => {
+    expect(usableSplit(GROUP, [ANA, BOGDAN])).toEqual({ split: [ANA, BOGDAN], ok: true });
+  });
+
+  it('drops somebody who left while the form was open', () => {
+    // The roster can change under an open form, and the rules refuse a split naming a
+    // non-member — so the write would fail with a message about a field nobody had seen.
+    expect(usableSplit([ANA, BOGDAN], [ANA, BOGDAN, CRISTINA])).toEqual({ split: [ANA, BOGDAN], ok: true });
+  });
+
+  it('reports an empty tick list instead of quietly charging everyone', () => {
+    // Turning "nobody" back into "the whole group" would be the opposite of what was asked.
+    expect(usableSplit(GROUP, [])).toEqual({ split: [], ok: false });
+    expect(usableSplit(GROUP, [DAVE_NOT_IN_GROUP])).toEqual({ split: [], ok: false });
+  });
+
+  it('does not let one person be counted twice', () => {
+    expect(usableSplit(GROUP, [ANA, ANA]).split).toEqual([ANA]);
+  });
+
+  it('starts a new group with everyone ticked', () => {
+    expect(splitForGroup(GROUP)).toEqual(GROUP);
+    expect(splitForGroup([])).toEqual([]);
+  });
+
+  it('a split of one person puts the whole cost on them', () => {
+    const { split } = usableSplit(GROUP, [BOGDAN]);
+    const l = ledgerFor(GROUP, [{ groupId: 'f', paidBy: ANA, amount: 40, splitAmong: split }]);
+    expect(balanceOf(l, ANA)).toBe(40);
+    expect(balanceOf(l, BOGDAN)).toBe(-40);
+    expect(balanceOf(l, CRISTINA)).toBe(0);
     expect(sum(displayedBalances(l))).toBe(0);
   });
 });

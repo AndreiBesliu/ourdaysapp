@@ -891,3 +891,13 @@ confirmate**. Ce am reparat si ce te uiti:
 - [ ] **Cheltuielile de dinainte de azi** raman pe vechea socoteala (se impart la membrii de
       acum). E intentionat: altfel s-ar fi miscat cifre pe care le-ai vazut deja.
 - [ ] **Coloanele dau zero** in orice combinatie.
+
+### Selectorul de participanti (livrat 16.09)
+
+- [ ] **Alege un grup la o cheltuiala noua:** sub formular apar membrii ca bulinute, toti bifati.
+      Debifeaza pe cineva — cheltuiala trebuie sa se imparta doar la cei ramasi.
+- [ ] **Debifeaza-i pe toti:** butonul de adaugare trebuie sa se blocheze si sa scrie „Alege cel
+      putin o persoana". NU trebuie sa adauge tacut pe toata lumea.
+- [ ] **Schimba grupul:** bifele trebuie sa se reseteze la membrii grupului NOU.
+- [ ] **O cheltuiala PERSONALA** (fara grup) nu arata bulinute si trebuie sa se poata adauga
+      normal — asta era stricat si l-a prins abia bancul de proba.
