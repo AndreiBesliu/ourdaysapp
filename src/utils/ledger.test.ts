@@ -97,8 +97,12 @@ describe('an amount that is not a number', () => {
 describe('an empty or one-person ledger', () => {
   it('divides by nobody without producing Infinity', () => {
     const l = ledgerFor([], []);
-    expect(l.share).toBe(0);
+    expect(l.total).toBe(0);
     expect(displayedBalances(l)).toEqual([]);
+    // An expense with a payer but nobody to share it with keeps the money with the payer
+    // rather than dividing by zero.
+    const lone = ledgerFor([], [{ groupId: 'f', paidBy: ANA, amount: 20, splitAmong: [] }]);
+    expect(Number.isFinite(balanceOf(lone, ANA))).toBe(true);
   });
 
   it('leaves one person owing themselves nothing', () => {
@@ -114,5 +118,71 @@ describe('settled means settled', () => {
     expect(isSettled(-0.004)).toBe(true);
     expect(isSettled(0)).toBe(true);
     expect(isSettled(0.01)).toBe(false);
+  });
+});
+describe('each expense remembers who it was split among', () => {
+  // Andrei, 16.09.2026: "fiecare cheltuiala sa-si retina participantii". Before this, the split
+  // used TODAY'S membership for the whole history — somebody who joined on Friday shared Tuesday's
+  // dinner, and somebody leaving made everybody else's debts grow overnight with nothing recorded.
+  const dinner = { groupId: 'f', paidBy: ANA, amount: 100, splitAmong: [ANA, BOGDAN] };
+
+  it('does not charge a newcomer for a dinner that predates them', () => {
+    // Cristina joins after the fact. The expense still divides between the two who were there.
+    const l = ledgerFor([ANA, BOGDAN, CRISTINA], [dinner]);
+    expect(balanceOf(l, ANA)).toBe(50);
+    expect(balanceOf(l, BOGDAN)).toBe(-50);
+    expect(balanceOf(l, CRISTINA)).toBe(0);
+    expect(sum(displayedBalances(l))).toBe(0);
+  });
+
+  it('and does not let somebody leaving change what the others owe', () => {
+    const l = ledgerFor([ANA], [dinner]);
+    expect(balanceOf(l, ANA)).toBe(50);
+    expect(balanceOf(l, BOGDAN)).toBe(-50);
+    expect(sum(displayedBalances(l))).toBe(0);
+  });
+
+  it('splits each expense by its OWN participants, not by one divisor for the ledger', () => {
+    const l = ledgerFor([ANA, BOGDAN, CRISTINA], [
+      dinner,                                                              // 100 between two
+      { groupId: 'f', paidBy: CRISTINA, amount: 90, splitAmong: [ANA, BOGDAN, CRISTINA] }, // 90 between three
+    ]);
+    expect(balanceOf(l, ANA)).toBe(50 - 30);      // paid 100, owes 50 + 30
+    expect(balanceOf(l, BOGDAN)).toBe(-50 - 30);
+    expect(balanceOf(l, CRISTINA)).toBe(90 - 30);
+    expect(sum(displayedBalances(l))).toBe(0);
+  });
+
+  it('charges a person who was in the split but paid nothing', () => {
+    const l = ledgerFor([ANA, BOGDAN], [{ groupId: 'f', paidBy: ANA, amount: 30, splitAmong: [BOGDAN] }]);
+    // Ana paid for something only Bogdan consumed: he owes all of it.
+    expect(balanceOf(l, ANA)).toBe(30);
+    expect(balanceOf(l, BOGDAN)).toBe(-30);
+  });
+
+  it('falls back to the old behaviour for expenses written before the field existed', () => {
+    // Nothing anybody has already looked at moves under them.
+    const old = { groupId: 'f', paidBy: ANA, amount: 90 };
+    const l = ledgerFor([ANA, BOGDAN, CRISTINA], [old]);
+    expect(balanceOf(l, ANA)).toBe(60);
+    expect(balanceOf(l, BOGDAN)).toBe(-30);
+    expect(balanceOf(l, CRISTINA)).toBe(-30);
+  });
+
+  it('ignores a split that is empty or malformed rather than dividing by nothing', () => {
+    for (const bad of [[], null, 'ana', [123], [''], {}]) {
+      const l = ledgerFor([ANA, BOGDAN], [{ groupId: 'f', paidBy: ANA, amount: 50, splitAmong: bad as unknown }]);
+      expect(sum(displayedBalances(l)), JSON.stringify(bad)).toBe(0);
+      expect(balanceOf(l, ANA)).toBe(25);
+    }
+  });
+
+  it('keeps the columns at zero however the splits are mixed', () => {
+    const l = ledgerFor([ANA, BOGDAN], [
+      { groupId: 'f', paidBy: ANA, amount: 10, splitAmong: [ANA, BOGDAN, CRISTINA] },
+      { groupId: 'f', paidBy: CRISTINA, amount: 7.77, splitAmong: [ANA] },
+      { groupId: 'f', paidBy: BOGDAN, amount: 0.05 },
+    ]);
+    expect(sum(displayedBalances(l))).toBe(0);
   });
 });

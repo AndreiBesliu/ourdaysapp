@@ -5178,3 +5178,31 @@ mai rele decat o lipsa anuntata.
 
 `npx tsc -b` verde · poarta de lint verde · **1350 de teste** (de la 1326) · **120 de probe de
 reguli** pe emulator.
+## 2026-09-16 - Fiecare cheltuiala isi retine participantii
+
+**Model:** Claude Opus 5 · „fiecare cheltuiala sa-si retina participantii"
+
+Raspunsul la intrebarea din §46. Pana acum, impartirea folosea membrii de ASTAZI pentru toata
+istoria: cine intra vineri platea si cina de marti, iar cine pleca facea datoriile celorlalti sa
+creasca peste noapte, fara sa se inregistreze nimic nicaieri.
+
+Acum fiecare cheltuiala poarta `splitAmong` — cine erau participantii in clipa in care a fost
+inregistrata — si **socoteala se face per cheltuiala**, nu cu un divizor comun pe registru. Asta
+face si invariantul „coloanele dau zero" **structural** in loc de norocos: fiecare cheltuiala isi
+distribuie intreaga suma intre proprii participanti, deci cat s-a platit si cat se datoreaza sunt
+acelasi numar prin constructie.
+
+**Randurile scrise inainte de azi n-au campul si cad inapoi pe vechea socoteala** — deci nimic din
+ce a vazut deja cineva nu se misca sub el.
+
+### Campul e constrans in reguli, nu doar scris de client
+
+`splitAmong` decide cat datoreaza CEILALTI. Fara regula, un membru putea scrie
+`splitAmong: [altcineva]` si punea toata nota pe balanta unui singur om. Regula cere: sa fie
+lista adevarata, nevida, de cel mult 50, si **toti sa fie chiar in grupul acela** (`difference`
+peste multimea membrilor). Pe o cheltuiala personala e refuzat — n-o imparte nimeni.
+
+Sapte probe noi pe emulator, si **probate prin mutatie**: cu garda scoasa din `create` si `update`,
+pica exact cinci dintre ele. Total **127 de probe de reguli**.
+
+`npx tsc -b` verde · poarta de lint verde · **1357 de teste** (de la 1350) · build verde.

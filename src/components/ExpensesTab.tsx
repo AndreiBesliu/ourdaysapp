@@ -105,6 +105,17 @@ export default function ExpensesTab(
         // file an expense in a group ledger under someone else's name.
         ownerId: auth.currentUser.uid,
         groupId: groupId || null,
+        // WHO this is split among, recorded now rather than inferred later. Without it the
+        // whole history was re-divided by today's membership: somebody joining on Friday
+        // shared Tuesday's dinner, and somebody leaving made everyone else's debts grow
+        // overnight with nothing recorded anywhere. Andrei's call, 16.09.2026.
+        //
+        // Everyone in the group at this moment, which is what the split has always meant —
+        // the change is that it is now FIXED at that meaning instead of following the roster.
+        // Personal expenses carry none: nobody shares them.
+        ...(groupId
+          ? { splitAmong: (myGroups.find(g => g.id === groupId)?.members || [auth.currentUser.uid]) }
+          : {}),
         createdAt: serverTimestamp()
       });
       setAmount('');

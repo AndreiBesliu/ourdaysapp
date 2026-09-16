@@ -881,17 +881,13 @@ confirmate**. Ce am reparat si ce te uiti:
 - [ ] **Cardurile tale de acum trebuie sa arate exact la fel.** Toate cele 10 sunt EAN-13 sau
       UPC-A, formate care mergeau corect si inainte — daca vreunul arata altfel, spune-mi imediat.
 
-### Intrebare pentru tine (decizie de produs, nu bug)
+### Fiecare cheltuiala isi retine participantii (livrat 16.09, ai ales varianta 1)
 
-Cand intra cineva nou intr-un grup, **toate cheltuielile dinainte se re-impart si la el** — ajunge
-sa datoreze pentru o cina la care n-a fost. La fel invers: daca pleaca cineva care n-a platit
-nimic, datoriile celorlalti cresc.
-
-Nimic din document nu retine cine era de fata cand s-a inregistrat cheltuiala, deci n-am de unde
-calcula altfel fara un camp nou. Trei variante:
-
-1. **cheltuiala retine participantii** la momentul inregistrarii (corect, dar cere camp nou);
-2. **ramane cum e** — grupul imparte tot, oricand ai intrat;
-3. o data de intrare pe membru, si se imparte dupa ea (mai complicat, mai putin previzibil).
-
-Care?
+- [ ] **Inregistreaza o cheltuiala intr-un grup, apoi adauga pe cineva nou in grup.** Cheltuiala
+      dinainte trebuie sa ramana impartita la cati erau atunci — omul nou NU trebuie sa apara
+      dator pentru ea.
+- [ ] **La fel invers:** daca pleaca cineva, datoriile celorlalti pentru cheltuielile vechi NU
+      trebuie sa se schimbe.
+- [ ] **Cheltuielile de dinainte de azi** raman pe vechea socoteala (se impart la membrii de
+      acum). E intentionat: altfel s-ar fi miscat cifre pe care le-ai vazut deja.
+- [ ] **Coloanele dau zero** in orice combinatie.

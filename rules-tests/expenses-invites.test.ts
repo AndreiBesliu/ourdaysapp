@@ -126,6 +126,54 @@ describe('expenses — an edit cannot do what a create was refused', () => {
   });
 });
 
+// ── splitAmong: who a cost is divided between ────────────────────────────────────────────────
+//
+// It decides what everybody ELSE owes, so it is not the client's to state freely: without a rule,
+// one member could write `splitAmong: [somebody-else]` and put a whole bill on one person.
+describe('expenses — the split list has to be people who are actually in the group', () => {
+  it('records a split among real members', async () => {
+    await assertSucceeds(setDoc(doc(as(BOB), 'expenses', 'x-split'), {
+      ownerId: BOB, paidBy: BOB, groupId: G1, amount: 30, splitAmong: [ALICE, BOB],
+    }));
+  });
+
+  it('refuses a split naming somebody outside the group', async () => {
+    await assertFails(setDoc(doc(as(BOB), 'expenses', 'x-outsider'), {
+      ownerId: BOB, paidBy: BOB, groupId: G1, amount: 30, splitAmong: [BOB, DAVE],
+    }));
+  });
+
+  it('refuses an empty split, which would divide by nobody', async () => {
+    await assertFails(setDoc(doc(as(BOB), 'expenses', 'x-empty'), {
+      ownerId: BOB, paidBy: BOB, groupId: G1, amount: 30, splitAmong: [],
+    }));
+  });
+
+  it('refuses a split that is not a list at all', async () => {
+    await assertFails(setDoc(doc(as(BOB), 'expenses', 'x-string'), {
+      ownerId: BOB, paidBy: BOB, groupId: G1, amount: 30, splitAmong: BOB,
+    }));
+  });
+
+  it('refuses a split on a PERSONAL expense, which nobody shares', async () => {
+    await assertFails(setDoc(doc(as(BOB), 'expenses', 'x-personal-split'), {
+      ownerId: BOB, paidBy: BOB, groupId: null, amount: 30, splitAmong: [BOB],
+    }));
+  });
+
+  it('still accepts an expense with no split at all', async () => {
+    // Every row written before 16.09.2026 has none, and they must keep working.
+    await assertSucceeds(setDoc(doc(as(BOB), 'expenses', 'x-nosplit'), {
+      ownerId: BOB, paidBy: BOB, groupId: G1, amount: 30,
+    }));
+  });
+
+  it('and an edit cannot smuggle a dishonest split in later', async () => {
+    await assertFails(updateDoc(doc(as(ALICE), 'expenses', 'x-group'), { splitAmong: [DAVE] }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'expenses', 'x-group'), { splitAmong: [ALICE] }));
+  });
+});
+
 describe('group invites', () => {
   it('the invitee reads the invite addressed to their email', async () => {
     await assertSucceeds(getDoc(doc(as(DAVE), 'group_invites', 'i-to-dave')));

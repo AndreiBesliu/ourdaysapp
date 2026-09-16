@@ -372,10 +372,28 @@ service cloud.firestore {
       // `paidBy` is pinned to the caller for the same reason `assigneeIds` is on events: the read
       // rule grants access to a group, so an unpinned author field would let anyone put an expense
       // in a group ledger under someone else's name. A null groupId is a personal expense.
+      // `splitAmong` says who a cost is divided between, and it decides what everybody else
+      // owes — so it is constrained here rather than trusted. Without this, one client could
+      // write `splitAmong: [someone-else]` and put the whole bill on one person's balance.
+      // It must be a real list, it must be people who are actually in the group, and the
+      // payer must be allowed to be in it. Absent is fine: rows written before 16.09.2026
+      // have none and fall back to the group-wide split.
+      function splitIsHonest(groupId) {
+        return !('splitAmong' in request.resource.data) || (
+          request.resource.data.splitAmong is list &&
+          request.resource.data.splitAmong.size() > 0 &&
+          request.resource.data.splitAmong.size() <= 50 &&
+          groupId != null &&
+          request.resource.data.splitAmong.toSet().difference(
+            get(/databases/$(database)/documents/groups/$(groupId)).data.members.toSet()
+          ).size() == 0
+        );
+      }
       allow create: if isSignedIn()
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.paidBy == request.auth.uid
-        && (request.resource.data.groupId == null || isMemberOfGroup(request.resource.data.groupId));
+        && (request.resource.data.groupId == null || isMemberOfGroup(request.resource.data.groupId))
+        && splitIsHonest(request.resource.data.groupId);
       // Only the owner edits or removes it — being in the group lets you SEE the ledger, not
       // rewrite what someone else recorded.
       //
@@ -395,7 +413,8 @@ service cloud.firestore {
         && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.paidBy == request.auth.uid
-        && (request.resource.data.groupId == null || isMemberOfGroup(request.resource.data.groupId));
+        && (request.resource.data.groupId == null || isMemberOfGroup(request.resource.data.groupId))
+        && splitIsHonest(request.resource.data.groupId);
       allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
 
