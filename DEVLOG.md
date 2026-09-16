@@ -5239,3 +5239,79 @@ lot raman amandoua, debifarea tuturor blocheaza butonul si spune de ce, schimbar
 bifele la membrii grupului NOU, iar intoarcerea la „personal" face butonul disponibil din nou.
 
 `npx tsc -b` verde · poarta de lint verde · **1363 de teste** · build verde.
+
+---
+
+## 2026-09-16 · Un tab de grup arata calendarul altui grup
+
+**Prompt (Andrei):** „am niste evenimente din grupul de familie in grupul de gym” (cu capturi:
+aceleasi doua evenimente, 26 iulie si 5 august, in Gym, Family SI B&D).
+**Model:** Claude Opus 5.
+
+### Nu era un eveniment ratacit, era tiparul
+
+Masurat pe baza LIVE cu cheia read-only: tabul Gym ii arata 12 evenimente din care **9 erau ale
+altui calendar** (4 din B&D, 3 din Family, 1 personal). Family: 9 straine din 13. B&D: 7 din 12.
+Tabul Personal: 11 straine din 23. Cu alte cuvinte, taburile erau in mare aceeasi grila cu alt
+antet si alte avataruri.
+
+**Cauza:** calendarul e alimentat de TREI ascultatori contopiti intr-o lista:
+
+```
+main      where('groupId','==',activeGroup)          <- legat de TAB
+assigned  where('assigneeIds','array-contains',uid)  <- legat de OM
+invited   where('inviteeId','==',uid)                <- legat de OM
+```
+
+Doar primul filtra dupa tab. Ultimii doi exista dintr-un motiv real — cineva iti poate pune o
+sarcina pe calendarul TAU fara sa fie un eveniment de grup (cinci astfel de randuri pe live) —
+dar nimic nu le ingusta la calendarul din fata ta.
+
+### Regula, intr-o propozitie
+
+Un eveniment sta pe calendarul pe care a fost DEPUS: tabul grupului lui, sau Personal daca n-are
+grup. `src/utils/eventScope.ts` (+ 19 teste) decide asta pentru toate cele trei galeti, fiindca o
+regula scrisa intr-un singur callback e o regula pe care celelalte doua o pot uita — exact asa a
+aparut defectul.
+
+### Bancul de proba a reprodus INTAI bug-ul
+
+CalendarHome e in spatele unui login, deci am montat ecranul ADEVARAT cu un firebase fals in
+spate (obiectele de interogare sunt construite de codul real si evaluate de banc, deci se probeaza
+cablajul, nu o repovestire a lui) si cele 24 de documente de pe live, anonimizate.
+
+* pe codul livrat (`458ab59`), august 2026: **Gym, Family si B&D aratau IDENTIC** aceleasi sase
+  evenimente, printre care „Cumparaturi” si „De cumparat” — fix capturile lui Andrei;
+* cu reparatia: Gym **0**, Family exact cele doua care sunt ale ei, B&D 0.
+
+### Revizia adversariala a gasit o gaura in reparatia MEA
+
+19 agenti, 15 acuzatii, 9 au trecut de respingere. Cea HIGH: pusesem verificarea audientei
+(`visibleTo`) INAINTE de decizia de tab, iar un eveniment de grup unde esti asignat dar audienta
+nu te numeste ajungea sa nu apara NICAIERI — desi serverul (`remindersCore.ts`) ii trimite
+notificare celui asignat fara sa se uite la `visibleTo`. Forma nu e ipotetica: `AddEventModal`
+ingheata `visibleTo` la creare si nu-l mai revizuieste, deci a adauga un asignat mai tarziu o
+produce singur.
+
+A doua: prima versiune re-muta pe Personal evenimentele unui grup din care ai iesit — ceea ce se
+ciocnea cu `LeaveGroupModal`, care deja te intreaba ce pastrezi si face COPII personale. Ar fi
+pus copia si originalul unul langa altul si ar fi inviat exact ce alesesei sa nu pastrezi.
+
+**Amandoua au disparut prin simplificare:** fara re-mutare, si cu „a fi NUMIT pe eveniment bate
+lista de audienta”. Modulul a scazut de la 195 la 139 de randuri si nu mai are nevoie nici de
+lista grupurilor, nici de un steag de incarcare — cinci din cele noua constatari au disparut
+odata cu ele.
+
+### Acelasi defect, alte doua panouri (o linie fiecare)
+
+`GroupChatWidget` si `GamesHubModal` erau montate fara `key`, deci schimbarea tabului redirecta
+ascultatorul spre alta conversatie/alt grup in timp ce mesajele, digestul AI, ciorna si
+clasamentul ramaneau ale grupului dinainte. `Chat.tsx` facea deja asta corect, cu un comentariu
+care spune de ce. Acum o fac si astea doua.
+
+### Probe
+
+Trei mutatii distincte pe modul, fiecare prinsa (6, 2 si 1 teste cazute); replay al celor 24 de
+documente reale prin functia livrata, in ambele versiuni: **strain 11/9/9/7 -> 0 peste tot, si
+nimic care apartinea unui tab nu a disparut**. `npx tsc -b` verde · **1382 de teste** · build verde.
+

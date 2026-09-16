@@ -901,3 +901,35 @@ confirmate**. Ce am reparat si ce te uiti:
 - [ ] **Schimba grupul:** bifele trebuie sa se reseteze la membrii grupului NOU.
 - [ ] **O cheltuiala PERSONALA** (fara grup) nu arata bulinute si trebuie sa se poata adauga
       normal — asta era stricat si l-a prins abia bancul de proba.
+
+### Taburile de grup isi arata doar evenimentele LOR (reparat 16.09, dupa raportul tau)
+
+Ai avut dreptate si era mai rau decat parea: pe datele tale reale, tabul **Gym** iti arata 12
+evenimente din care **9 erau ale altui calendar**, Family 9 straine din 13, B&D 7 din 12, iar
+**Personal 11 straine din 23**. Doua dintre cele trei ascultatoare de evenimente erau legate de
+TINE, nu de tabul deschis.
+
+- [ ] **Deschide Gym, apoi Family, apoi B&D.** Fiecare trebuie sa arate ALT continut. Daca doua
+      taburi arata aceeasi grila cu alt antet, reparatia n-a ajuns la tine (reincarca pagina).
+- [ ] **Cele doua din capturi** (26 iulie „Cumparaturi” si 5 august „De cumparat”) trebuie sa
+      apara **numai** in Family.
+- [ ] **Tabul Personal** nu mai trebuie sa arate evenimente de grup. Trebuie sa ramana insa
+      **sarcinile pe care ti le-a pus Emilia direct pe calendarul tau** (fara grup) — sunt cinci
+      pe live, prin mai. Daca alea au disparut, spune-mi imediat: ala e singurul lucru pe care
+      reparatia asta l-ar putea rupe.
+- [ ] **Chatul de grup:** deschide chatul in Family, apoi comuta pe Gym si deschide-l iar.
+      Trebuie sa fie gol / al lui Gym — nu mesajele si rezumatul AI din Family.
+- [ ] **Arcade:** acelasi lucru pentru jocuri si clasament, cand comuti grupul.
+
+### Doua lucruri pe care le-am gasit si NU le-am atins — sunt decizii de-ale tale
+
+- [ ] **Doi din cei patru membri B&D vad un calendar GOL acolo.** Toate cele 5 evenimente din
+      B&D au lista de audienta (`visibleTo`) scrisa cand grupul avea alti membri, deci nu-i
+      numeste. Nu e de la reparatia de azi — e asa de cand au intrat in grup. **Intrebarea e a
+      ta:** un membru care intra mai tarziu ar trebui sa vada evenimentele dinainte? (Eu as zice
+      da, dar inseamna ca lista de audienta inceteaza sa mai fie o lista si devine „cine a fost
+      exclus anume” — alta forma, alta scriere.)
+- [ ] **Cand schimbi „calendarul tinta” intr-un eveniment,** persoanele asignate NU se refiltreaza
+      dupa grupul nou: bulinele lor dispar din formular, dar raman salvate pe eveniment. De
+      reparat separat, spune-mi daca vrei acum.
+

@@ -4,6 +4,7 @@ import { auth, db, messaging } from '../firebase';
 import { getToken, onMessage } from 'firebase/messaging';
 import { collection, query, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
 import { liveQuery, liveDoc } from '../utils/liveQuery';
+import { eventsForTab, pendingInvitesFor } from '../utils/eventScope';
 import { reportError } from '../reportError';
 import { vapidKeyProblem } from '../utils/webPush';
 import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu, ShieldCheck, Swords, ClipboardList, MessageCircle } from 'lucide-react';
@@ -46,7 +47,9 @@ export default function CalendarHome() {
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
   const [eventToEdit, setEventToEdit] = useState<any | null>(null);
   const [initialTemplate, setInitialTemplate] = useState<any | null>(null);
-  const [events, setEvents] = useState<any[]>([]);
+  // Everything the three listeners can see, BEFORE it is narrowed to the tab on screen.
+  // Which tab an event belongs on is decided in one place: src/utils/eventScope.ts.
+  const [allEvents, setAllEvents] = useState<any[]>([]);
   // A calendar that could not be READ must not look like a calendar with nothing in it.
   const [eventsLoadError, setEventsLoadError] = useState(false);
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
@@ -334,27 +337,17 @@ export default function CalendarHome() {
       Object.values(eventBuckets).forEach(bucket => {
         Object.values(bucket).forEach(ev => merged.set(ev.id, ev));
       });
-      const allEvents = Array.from(merged.values());
+      const rows = Array.from(merged.values());
 
-      // Client-side post-filter for visibility and pending invites
-      const filteredEvents = allEvents.filter((ev: any) => {
-        if (ev.inviteeId === uid && ev.inviteStatus === 'pending') return false;
-        if (activeGroupId !== 'personal' && ev.ownerId !== uid && ev.visibleTo && Array.isArray(ev.visibleTo)) {
-          return ev.visibleTo.includes(uid);
-        }
-        return true;
-      });
-
-      setEvents(filteredEvents);
-
-      const invites = allEvents.filter((ev: any) =>
-        ev.inviteeId === uid && ev.inviteStatus === 'pending'
-      );
-      setPendingInvites(invites);
+      // Narrowing to the tab does NOT happen here. It happens once, in the memo below, because a
+      // rule written inside a listener is a rule the other two listeners can forget — which is
+      // exactly how this screen came to show one group's events under another group's name.
+      setAllEvents(rows);
+      setPendingInvites(pendingInvitesFor(rows, uid));
 
       setSelectedEvent((prev: any) => {
         if (!prev) return null;
-        return filteredEvents.find((e: any) => e.id === prev.id) || prev;
+        return rows.find((e: any) => e.id === prev.id) || prev;
       });
     };
 
@@ -371,11 +364,9 @@ export default function CalendarHome() {
     unsubs.push(liveQuery<any>(mainQuery, 'CalendarHome.events.main', (docs) => {
       setEventsLoadError(false);
       eventBuckets.main = {};
-      docs.forEach(ev => {
-        // For personal view, exclude group events from the owner query
-        if (activeGroupId === 'personal' && (ev.groupId || ev.sharedWithFamily)) return;
-        eventBuckets.main[ev.id] = ev;
-      });
+      // No tab filtering here either — this listener used to be the only one that did any, which
+      // is precisely why the other two leaked.
+      docs.forEach(ev => { eventBuckets.main[ev.id] = ev; });
       mergeAndSet();
     }, () => setEventsLoadError(true)));
 
@@ -397,6 +388,15 @@ export default function CalendarHome() {
 
     return () => unsubs.forEach(u => u());
   }, [activeGroupId]);
+
+  // The one question asked of every row, whichever listener brought it: is this event filed on the
+  // calendar currently in front of me? Andrei, 16.09.2026: "am niste evenimente din grupul de
+  // familie in grupul de gym" — measured on live, the Gym tab was showing him nine foreign events
+  // out of twelve, because two of the three listeners are scoped to the PERSON, not the tab.
+  const events = useMemo(
+    () => eventsForTab(allEvents, { uid: auth.currentUser?.uid || '', tab: activeGroupId }),
+    [allEvents, activeGroupId],
+  );
 
   // Reminders are sent by the server now — `functions/src/reminders.ts`, on a schedule.
   //
@@ -1045,6 +1045,11 @@ export default function CalendarHome() {
       {/* Group Chat Widget */}
       {activeGroupId !== 'personal' && (
         <GroupChatWidget
+          // Remounted per group, for the same reason Chat.tsx does it: the pane holds a message
+          // list, an AI digest, a draft and a reply target, and without a key a tab switch points
+          // the listener at another conversation while all of that survives — one group's chat
+          // under another group's name, which is the defect this screen was just fixed for.
+          key={activeGroupId}
           convId={activeGroupId}
           convKind="group"
           title={`${t('groupChatTitle', language)} · ${groups.find(g => g.id === activeGroupId)?.name || t('group', language)}`}
@@ -1217,6 +1222,9 @@ export default function CalendarHome() {
       />
 
       <GamesHubModal
+        // Same again: the hub is hidden rather than unmounted, and its active games, leaderboard
+        // and in-progress game are per GROUP.
+        key={activeGroupId}
         isOpen={isGamesHubOpen}
         onClose={() => setIsGamesHubOpen(false)}
         groupId={activeGroupId !== 'personal' ? activeGroupId : ''}
