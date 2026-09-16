@@ -11,6 +11,7 @@ import {
   IDLE_MS,
   SERVER_OWNED_GAME,
   getSessionWinner,
+  nextRoundsWon,
   activityMs,
   lastActivityMs,
   STAMPED_FROM_MS,
@@ -168,6 +169,40 @@ describe('who gets credited when a session is closed', () => {
   });
 });
 
+describe('counting a round to whoever won it', () => {
+  const state = (over: Record<string, unknown> = {}) => ({
+    players: { P1: 'ana', P2: 'bob' }, ...over,
+  });
+
+  it('starts a tally on a game that has none', () => {
+    expect(nextRoundsWon(state(), 'ana')).toEqual({ P1: 1, P2: 0 });
+  });
+
+  it('adds to one that does', () => {
+    expect(nextRoundsWon(state({ roundsWon: { P1: 2, P2: 1 } }), 'bob')).toEqual({ P1: 2, P2: 2 });
+  });
+
+  it('counts nothing for a draw', () => {
+    expect(nextRoundsWon(state({ roundsWon: { P1: 1, P2: 0 } }), null)).toBeNull();
+  });
+
+  it('counts nothing for a uid that is neither player', () => {
+    // The bug the extraction exposed: written inline as `winner === players.P1 ? 'P1' : 'P2'`,
+    // ANY unrecognised winner was credited to P2.
+    expect(nextRoundsWon(state({ roundsWon: { P1: 0, P2: 0 } }), 'carol')).toBeNull();
+  });
+
+  it('survives a half-written document', () => {
+    expect(nextRoundsWon(null, 'ana')).toBeNull();
+    expect(nextRoundsWon({}, 'ana')).toBeNull();
+  });
+
+  it('leaves the other player alone', () => {
+    const after = nextRoundsWon(state({ roundsWon: { P1: 3, P2: 5 } }), 'ana')!;
+    expect(after.P2).toBe(5);
+  });
+});
+
 describe('the session winner, per game', () => {
   const winnerOf = (gameType: string, state: Record<string, unknown>, winner: string | null = null) =>
     getSessionWinner({ gameType, state, winner });
@@ -177,10 +212,43 @@ describe('the session winner, per game', () => {
     expect(winnerOf('tic-tac-toe', { players: { X: 'ana', O: 'bob' }, scores: { X: 1, O: 1 } })).toBeNull();
   });
 
-  it('reads them for connect-4 and memory-match', () => {
-    for (const type of ['connect-4', 'memory-match']) {
-      expect(winnerOf(type, { players: { P1: 'ana', P2: 'bob' }, scores: { P1: 0, P2: 4 } })).toBe('bob');
-    }
+  it('reads round wins off the score for connect-4, which never resets them', () => {
+    expect(winnerOf('connect-4', { players: { P1: 'ana', P2: 'bob' }, scores: { P1: 0, P2: 4 } })).toBe('bob');
+  });
+
+  describe('memory-match counts ROUNDS, because its points reset every round', () => {
+    const P = { P1: 'ana', P2: 'bob' };
+
+    it('credits the player who won more rounds, whatever the current round says', () => {
+      // The case Andrei asked to fix: ana takes two rounds, somebody presses Next Round (points
+      // back to 0-0), bob matches one pair, and they stop. Reading the points credited bob.
+      expect(winnerOf('memory-match', {
+        players: P, roundsWon: { P1: 2, P2: 0 }, scores: { P1: 0, P2: 1 },
+      })).toBe('ana');
+    });
+
+    it('calls an even number of rounds a draw, however the last one went', () => {
+      expect(winnerOf('memory-match', {
+        players: P, roundsWon: { P1: 1, P2: 1 }, scores: { P1: 12, P2: 3 },
+      })).toBeNull();
+    });
+
+    it('falls back to the points while no round has been counted yet', () => {
+      // Two reasons, not one: documents written before 16.09.2026 have no counter at all, AND a
+      // session already in progress only starts counting from the next round it finishes.
+      // Reporting "nobody" for a game with rounds behind it would be worse than the imprecise
+      // answer it gave yesterday.
+      expect(winnerOf('memory-match', { players: P, scores: { P1: 0, P2: 4 } })).toBe('bob');
+      expect(winnerOf('memory-match', {
+        players: P, roundsWon: { P1: 0, P2: 0 }, scores: { P1: 0, P2: 4 },
+      })).toBe('bob');
+    });
+
+    it('stops falling back the moment one round is recorded', () => {
+      expect(winnerOf('memory-match', {
+        players: P, roundsWon: { P1: 1, P2: 0 }, scores: { P1: 0, P2: 99 },
+      })).toBe('ana');
+    });
   });
 
   it('picks the least-penalised player at rummy, penalties being negative', () => {

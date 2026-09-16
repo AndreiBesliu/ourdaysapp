@@ -839,9 +839,12 @@ neatins se inchide maine.
 - [ ] **O sesiune inchisa nu se mai continua** — nici la Rummy, unde pana acum butonul „Mana
       urmatoare" ramanea acolo. Daca vrei sa se poata redeschide, spune si se face.
 
-### Intrebare pentru tine (nu e bug, e o decizie)
+### Memory Match: contorul de runde (livrat 16.09, ai zis „adauga contorul")
 
-La **Memory Match**, scorul se reseteaza la fiecare runda — sunt puncte pe runda, nu runde
-castigate. Deci „castigatorul sesiunii", si in clasament, si la butonul End, e de fapt **al
-ultimei runde jucate**. Asa e de cand exista jocul; nimic din document nu retine cine a castigat
-mai multe runde, deci n-am de unde calcula altceva fara sa adaug un contor nou. Il adaug?
+- [ ] **Joaca doua runde la Memory Match si pierde-o pe a doua intentionat.** Sub punctele
+      fiecaruia apare un 🏆 cu numarul de runde castigate. La final, castigatorul sesiunii
+      trebuie sa fie cel cu **mai multe runde**, nu cel care a luat ultima.
+- [ ] **Prima partida arata exact ca inainte** — 🏆 apare abia dupa ce s-a castigat o runda.
+- [ ] **Un joc de Memory Match inceput INAINTE de azi** ramane pe vechea socoteala pana cand
+      termina o runda noua. E intentionat: altfel un joc cu doua runde in spate ar fi raportat
+      brusc „n-a castigat nimeni".

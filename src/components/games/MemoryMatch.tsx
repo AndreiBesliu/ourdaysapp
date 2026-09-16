@@ -16,6 +16,7 @@ import { t } from '../../utils/i18n';
 import { finalizeGameUpdate } from './gameResult';
 import { buildMemoryBoard, DEFAULT_THEME, THEME_PACKS } from './memoryThemes';
 import { writeGame } from './gameWrite';
+import { nextRoundsWon } from '../../utils/gameSession';
 
 interface MemoryMatchProps {
   game: any;
@@ -147,6 +148,14 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
           else winner = null; // draw
           updates['state.finishedAt'] = Date.now();
 
+          // ROUNDS won, counted separately from the points above — because the points are
+          // per round and `handleNextRound` zeroes them, so by themselves they can only ever
+          // say who led the last round. A draw increments neither, the same rule the other
+          // round-loop games follow. Absent on sessions started before 16.09.2026; see
+          // getSessionWinner for what happens to those.
+          const tally = nextRoundsWon(game.state, winner);
+          if (tally) updates['state.roundsWon'] = tally;
+
           if (winner === auth.currentUser?.uid) {
             playTone('success');
           } else {
@@ -212,6 +221,10 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
   };
 
   const { players, p1IsNext, board, flippedIndices, scores } = game.state;
+  // Points are per round; these are not. Shown only once a round has been won, so a first
+  // game looks exactly as it always did.
+  const roundsWon = { P1: 0, P2: 0, ...(game.state.roundsWon || {}) };
+  const roundsPlayed = roundsWon.P1 + roundsWon.P2;
   const p1 = userMap[players.P1];
   const p2 = players.P2 ? userMap[players.P2] : null;
 
@@ -255,6 +268,11 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
             <div className="text-center">
               <span className="text-[10px] font-bold uppercase text-zinc-500 block">{p1?.name?.split(' ')[0] || t('player1', language)}</span>
               <span className="text-lg font-bold text-primary">{scores?.P1 || 0}</span>
+              {roundsPlayed > 0 && (
+                <span className="block text-[10px] font-bold text-zinc-400" title={t('roundsWonLabel', language)}>
+                  🏆 {roundsWon.P1}
+                </span>
+              )}
             </div>
           </div>
 
@@ -276,6 +294,11 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
                 <div className="text-center">
                   <span className="text-[10px] font-bold uppercase text-zinc-500 block">{p2?.name?.split(' ')[0] || t('player2', language)}</span>
                   <span className="text-lg font-bold text-red-500">{scores?.P2 || 0}</span>
+                  {roundsPlayed > 0 && (
+                    <span className="block text-[10px] font-bold text-zinc-400" title={t('roundsWonLabel', language)}>
+                      🏆 {roundsWon.P2}
+                    </span>
+                  )}
                 </div>
               </>
             ) : (

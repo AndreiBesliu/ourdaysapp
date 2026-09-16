@@ -430,7 +430,12 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
           flippedIndices: [],
           p1IsNext: true,
           players: { P1: auth.currentUser.uid, P2: null },
+          // Points inside the current round, zeroed by every Next Round...
           scores: { P1: 0, P2: 0 },
+          // ...and rounds won across the session, which are not. Two different questions;
+          // one field answering both is what made the leaderboard credit the winner of the
+          // last round instead of the winner of the game.
+          roundsWon: { P1: 0, P2: 0 },
           moves: 0,
           streak: 0
         };

@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.STAMPED_FROM_MS = exports.SERVER_OWNED_GAME = exports.IDLE_MS = void 0;
 exports.getSessionWinner = getSessionWinner;
 exports.activityMs = activityMs;
+exports.nextRoundsWon = nextRoundsWon;
 exports.lastActivityMs = lastActivityMs;
 exports.expiryRefusal = expiryRefusal;
 exports.shouldExpire = shouldExpire;
@@ -54,16 +55,31 @@ function getSessionWinner(game) {
                 return null; // tie or no rounds won
             return (x > o ? players.X : players.O) || null;
         }
-        case 'connect-4':
+        case 'connect-4': {
+            // `scores` here ARE rounds won: Connect4 increments them once per round and never resets.
+            const p1 = scores.P1 || 0, p2 = scores.P2 || 0;
+            if (p1 === p2)
+                return null;
+            return (p1 > p2 ? players.P1 : players.P2) || null;
+        }
         case 'memory-match': {
-            // ⚠ These two do NOT mean the same thing, and this has been true since long before the
-            // sweep existed. Connect 4 counts ROUNDS WON, so its leader really is the session's. Memory
-            // Match counts PAIRS AND STREAK BONUSES for the current round only — `handleNextRound`
-            // resets both to zero — so what comes out here is the leader of the last round played, not
-            // of the session. Nothing in the document records the latter, so nothing can compute it.
-            // Left as it is rather than quietly changed: the leaderboard and the End button have always
-            // read it this way, and a clock that closed a game differently from the person pressing the
-            // button would be a worse problem than an imprecise one. Flagged to Andrei separately.
+            // Memory Match is the exception, and it needed a field of its own. Its `scores` are PAIRS
+            // AND STREAK BONUSES for the current round — `handleNextRound` resets both to zero — so
+            // reading them as a session result credited whoever led the LAST round, however the rest
+            // had gone. Andrei asked for the counter, 16.09.2026.
+            const won = s.roundsWon || {};
+            const r1 = won.P1 || 0, r2 = won.P2 || 0;
+            if (r1 + r2 > 0) {
+                if (r1 === r2)
+                    return null;
+                return (r1 > r2 ? players.P1 : players.P2) || null;
+            }
+            // Nothing counted yet, so fall back to the per-round points — which is what this function
+            // has always returned for this game. Deliberate, and not merely for old documents: a
+            // session already in progress starts counting rounds only from the next one it finishes,
+            // and reporting "nobody won" for a game with two rounds behind it would be a worse answer
+            // than the imprecise one it gave yesterday. Every session started from here counts properly
+            // from its first round.
             const p1 = scores.P1 || 0, p2 = scores.P2 || 0;
             if (p1 === p2)
                 return null;
@@ -119,6 +135,27 @@ function activityMs(value) {
     }
     const seconds = typeof v.seconds === 'number' ? v.seconds : v._seconds;
     return typeof seconds === 'number' && Number.isFinite(seconds) ? seconds * 1000 : null;
+}
+/**
+ * The rounds-won tally after a round ends, or null when nothing should change.
+ *
+ * Here rather than inline in the component for the usual reason — a decision that can be RUN gets
+ * run — and the move earned its keep immediately. The inline version read
+ * `winner === players.P1 ? 'P1' : 'P2'`, which credits P2 for ANY winner that is not P1, including
+ * one that is neither player. This returns null instead, so a uid nobody recognises changes
+ * nothing rather than handing a round to the wrong person.
+ *
+ * A draw increments neither, the same rule the other round-loop games follow.
+ */
+function nextRoundsWon(state, winnerUid) {
+    if (!winnerUid)
+        return null;
+    const players = (state === null || state === void 0 ? void 0 : state.players) || {};
+    const key = winnerUid === players.P1 ? 'P1' : winnerUid === players.P2 ? 'P2' : null;
+    if (!key)
+        return null;
+    const base = Object.assign({ P1: 0, P2: 0 }, ((state === null || state === void 0 ? void 0 : state.roundsWon) || {}));
+    return Object.assign(Object.assign({}, base), { [key]: (base[key] || 0) + 1 });
 }
 /**
  * The end of the calendar day a game was created FOR, if it has one.

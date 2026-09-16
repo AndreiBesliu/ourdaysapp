@@ -5009,3 +5009,38 @@ ceas care ar inchide un joc altfel decat omul care apasa butonul ar fi o problem
 una imprecisa. **Intrebare separata pentru Andrei.**
 
 `npx tsc -b` verde · functions `tsc` verde · poarta de lint verde · **1310 teste** (de la 1278).
+## 2026-09-16 - Memory Match numara acum RUNDELE, nu punctele ultimei runde
+
+**Model:** Claude Opus 5 · „adauga contorul de runde"
+
+Intrebarea pe care am pus-o dupa felia de expirare avea un raspuns: da. La Memory Match `scores`
+sunt puncte in runda curenta — perechi plus bonus de serie — si `handleNextRound` le pune pe zero.
+Deci „castigatorul sesiunii", si in clasament, si la butonul End, era de fapt al **ultimei runde
+jucate**, oricum ar fi decurs restul.
+
+Acum sesiunea are contorul ei, `state.roundsWon`, care nu se reseteaza. Celelalte doua jocuri pe
+runde nu aveau nevoie de nimic: la ele `scores` CHIAR sunt runde castigate.
+
+### Migrarea e partea usor de gresit, si are doua motive, nu unul
+
+`getSessionWinner` foloseste contorul doar **daca a numarat deja ceva**; altfel cade inapoi pe
+puncte, exact ce raspundea si ieri. Nu e doar pentru documentele vechi: o **sesiune aflata in curs**
+incepe sa numere abia de la runda urmatoare, si sa raportezi „n-a castigat nimeni" pentru un joc cu
+doua runde in spate ar fi un raspuns mai prost decat cel imprecis. Orice sesiune inceputa de acum
+numara corect din prima runda.
+
+### Mutarea deciziei a scos la iveala un bug al meu
+
+Prima varianta scria incrementarea in componenta:
+
+    const roundKey = winner === players.P1 ? 'P1' : 'P2';
+
+Adica **orice** castigator care nu e P1 era creditat lui P2 — inclusiv un uid care nu e niciunul
+dintre jucatori. Mutata in `gameSession.ts` ca `nextRoundsWon`, ca sa poata fi **rulata**, s-a
+vazut in trei linii de test: acum un uid nerecunoscut nu schimba nimic. Aceeasi regula ca la
+celelalte: egalitatea nu da runda nimanui.
+
+In joc, sub punctele fiecarui jucator apare acum un 🏆 cu numarul de runde — dar numai dupa ce s-a
+castigat una, deci prima partida arata exact ca inainte.
+
+`npx tsc -b` verde · poarta de lint verde · **1320 teste** (de la 1310).
