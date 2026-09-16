@@ -4899,3 +4899,14 @@ daca gasea un `.fixed.inset-0` in pagina. Un meniu nu e asa — deci o sageata t
 spate. Acum intreaba stiva (`modalDepth`) si unde e focusul, nu clasele CSS.
 
 `npx tsc -b` verde · poarta de lint verde · **1268 de teste** (de la 1239) · build verde.
+## 2026-09-16 - Verificat de Andrei: evenimentele pe mai multe zile si cele sapte overlay-uri
+
+„da, se verifica toate ok".
+
+Bifate si scoase din `OWNER_VERIFY.md` (§45-§47): randarea evenimentelor pe mai multe zile,
+crearea lor din formular — inclusiv proba care conta cel mai mult, **deschis si inchis fara nicio
+schimbare, durata neschimbata**, defectul pe care revizia il prinsese — si cele sapte meniuri si
+popovere, cu Back-ul pe telefon si Escape pe cautarea din chat.
+
+Cele doua arce sunt inchise: `f354616` / `eafb032` / `6d8efb6` pentru intervale, `f9b96ac` pentru
+overlay-uri.
