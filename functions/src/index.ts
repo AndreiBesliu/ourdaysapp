@@ -34,6 +34,10 @@ export { sendDueReminders } from "./reminders";
 // A daily copy of the health panel into the function logs, which the CLI can read without a
 // key — see functions/src/errorDigest.ts for why that gap was worth closing.
 export { logErrorDigest } from "./errorDigest";
+// Closes arcade sessions nobody came back to. The 24-hour rule is Andrei's, 16.09.2026; the
+// decision itself lives in gameSession.ts, byte-identical to the copy the app uses for its End
+// button, so a person and the clock close a game the same way.
+export { expireIdleGames } from "./games";
 
 admin.initializeApp();
 

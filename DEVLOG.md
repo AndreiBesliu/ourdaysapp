@@ -4957,3 +4957,55 @@ absenta lui e avertisment, niciodata deploy blocat.
 
 `npx tsc -b` verde · poarta de lint verde · **1278 de teste** (de la 1268) · build verde · poarta
 de livrare probata pe drumul REAL (`firebase deploy` o ruleaza, nu doar eu de mana).
+## 2026-09-16 - Arcade: sesiunile abandonate se inchid singure
+
+**Model:** Claude Opus 5 · „3, buton de end game, sesiune abandonata dupa 24 de ore de inactivitate"
+
+Amandoua, nu una. Butonul exista deja — inclusiv in timpul jocului, cu confirmare in doi pasi. Deci
+munca reala era a doua jumatate, si acolo era o problema de fond: **niciuna dintre cele 26 de
+scrieri ale arcade-ului nu inregistra cand s-a intamplat.** Singurul timp de pe un joc era
+`createdAt`. „24 de ore de inactivitate" nu era o regula pe care s-o poata aplica cineva — n-aveai
+cum sa deosebesti un joc abandonat luna trecuta de unul in care tocmai s-a mutat.
+
+- **O singura cale de scriere** (`gameWrite.ts`), care stampileaza momentul. Toate cele 26 de
+  apeluri trec prin ea, si `arcadeWrites.test.ts` refuza orice ocolire — **probat prin mutatie**.
+- **Decizia** (cine a castigat sesiunea, cand e abandonata) in `src/utils/gameSession.ts`, copiat
+  **byte-identic** in `functions/src/`, ca omul care apasa End si ceasul care inchide singur sa
+  raspunda identic. Acelasi tipar ca `eventTime.ts`, cu aceeasi plasa.
+- **Maturatoarea** (`expireIdleGames`) ruleaza din ora in ora, sare peste bataliile Warlord, **nu
+  sterge nimic**, si scrie un rand pe rulare (`GAMES_EXPIRY_RUN`) cu motivele fiecarui refuz.
+
+### Revizia a gasit 16 lucruri, si doua schimbau proiectarea
+
+**HIGH — `status: 'finished'` inseamna RUNDA terminata, nu sesiunea.** Cele trei jocuri pe runde
+scriu asta de fiecare data cand cineva castiga o runda, iar „Runda urmatoare" il pune inapoi pe
+`playing`. Interogarea mea selecta doar `waiting`/`playing`, iar decizia trata `finished` ca „deja
+inchis" — deci **maturatoarea rata exact modul cel mai obisnuit in care se abandoneaza un joc**:
+cineva castiga o runda si nimeni nu se mai intoarce. Verificat pe date: dintre cele 18 jocuri de pe
+live, **unul era fix in starea aia**. Acum singurul steag care inseamna „sesiune incheiata" e
+`finalized`, si se scaneaza toata colectia (18 documente — filtrarea in cod e mai ieftina decat o
+interogare care minte).
+
+**HIGH — `createdAt` nu poate deosebi „neatins niciodata" de „jucat, dar neinregistrat".** Toate
+cele 18 jocuri sunt facute acum luni de zile si niciunul n-are stampila. Judecate dupa creare, prima
+rulare ar fi inchis si ce se juca in ziua livrarii. Acum un joc fara `lastMoveAt` se masoara de la
+un **prag** (`STAMPED_FROM_MS`), deci fiecare joc existent primeste o zi intreaga in care o mutare
+adevarata il stampileaza si lamureste intrebarea. **Masurat dupa reparatie: prima rulare inchide
+ZERO**; cele ramase neatinse se inchid maine.
+
+Si restul, toate reale: un joc facut pentru o data VIITOARE era inchis a doua zi, inainte de seara
+pentru care exista (acum se masoara de la sfarsitul zilei lui); `counts.closed` numara si jocurile
+pe care tranzactia le refuza (acum tranzactia intoarce daca a scris); Rummy oferea „Mana urmatoare"
+pe o sesiune inchisa, fara poarta pe `finalized` ca la celelalte trei — deci se putea relua un joc
+etichetat permanent „inchis", fara cale de a-l mai incheia; inchiderea unui lobby la care nu intrase
+nimeni ii lua creatorului singurul buton de stergere si il punea in clasament pe un rand de zerouri;
+iar plasa pe sursa recunostea o singura ortografie a ocolirii pe care pretindea c-o interzice.
+
+**Una confirmata si LASATA asa, cu comentariul scris in cod:** la Memory Match, `scores` sunt
+puncte pe runda si se reseteaza — deci „castigatorul sesiunii" e de fapt al ultimei runde. E
+preexistent (clasamentul si butonul End citesc asa de cand exista), si nimic din document nu
+retine cine a castigat sesiunea, deci nimic nu poate calcula altceva. N-am schimbat-o tacut: un
+ceas care ar inchide un joc altfel decat omul care apasa butonul ar fi o problema mai mare decat
+una imprecisa. **Intrebare separata pentru Andrei.**
+
+`npx tsc -b` verde · functions `tsc` verde · poarta de lint verde · **1310 teste** (de la 1278).

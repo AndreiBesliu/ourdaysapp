@@ -1,9 +1,9 @@
-import { doc, updateDoc } from 'firebase/firestore';
-import { db, auth } from '../../firebase';
+import { auth } from '../../firebase';
 import { ArrowLeft } from 'lucide-react';
 import { useThemeStore } from '../../store';
 import { t } from '../../utils/i18n';
 import { finalizeGameUpdate } from './gameResult';
+import { writeGame } from './gameWrite';
 
 interface TicTacToeProps {
   game: any;
@@ -26,7 +26,7 @@ export default function TicTacToe({ game, userMap, onBack }: TicTacToeProps) {
     if (game.state.players.O || game.state.players.X === auth.currentUser.uid) return;
     
     // Join as player O
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       'state.players.O': auth.currentUser.uid,
       status: 'playing'
     });
@@ -53,7 +53,7 @@ export default function TicTacToe({ game, userMap, onBack }: TicTacToeProps) {
       newStatus = 'finished'; // Draw
     }
 
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       'state.board': newBoard,
       'state.xIsNext': !game.state.xIsNext,
       'state.scores': newScores,
@@ -64,7 +64,7 @@ export default function TicTacToe({ game, userMap, onBack }: TicTacToeProps) {
 
   const handleNextRound = async () => {
     if (!auth.currentUser) return;
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       'state.board': Array(9).fill(null),
       status: 'playing',
       winner: null
@@ -73,7 +73,7 @@ export default function TicTacToe({ game, userMap, onBack }: TicTacToeProps) {
 
   const handleEndGame = async () => {
     if (!auth.currentUser) return;
-    await updateDoc(doc(db, 'games', game.id), finalizeGameUpdate(game));
+    await writeGame(game.id, finalizeGameUpdate(game));
   };
 
   const calculateWinner = (squares: (string | null)[]) => {

@@ -812,3 +812,36 @@ Deci intai **deschide aplicatia o data**, apoi:
 - [ ] Acelasi test cu aplicatia **deschisa**: tot una singura.
 - [ ] Daca vezi tot doua, spune-mi si zi daca telefonul deschisese aplicatia dupa deploy — daca nu,
       inca ruleaza worker-ul vechi.
+---
+
+## 45. Arcade: sesiunile abandonate se inchid singure (16.09)
+
+Ai cerut amandoua: butonul de End (exista deja, si in timpul jocului) **si** inchiderea automata
+dupa 24 de ore fara nicio mutare. A doua e noua.
+
+**Ce am masurat pe live inainte** (cu cheia read-only): 18 jocuri in total, **niciunul stampilat**,
+si unul parcat intre runde. **Dupa reparatii, prima rulare inchide ZERO** — fiecare joc existent
+primeste o zi intreaga de gratie, in care o mutare adevarata il marcheaza ca viu. Ce ramane
+neatins se inchide maine.
+
+- [ ] **Primul lucru, si cel mai important:** joaca ceva azi. Maine, acel joc **NU** trebuie sa fie
+      inchis. Daca il gasesti inchis desi mutasesi, spune-mi imediat si zi cand.
+- [ ] **Jocurile vechi** vor aparea maine ca „Inchis dupa o zi fara miscare". Daca vreunul avea
+      runde castigate, numele castigatorului apare dupa text.
+- [ ] **Clasamentul** va creste o singura data, cu sesiunile vechi care chiar aveau runde
+      castigate. Cele fara castigator nu dau nimic nimanui si nici nu mai apar pe lista. Daca
+      cineva sare cu multe victorii deodata, vreau sa stiu.
+- [ ] **Un joc facut pentru o data viitoare** (deschizi arcade-ul de pe o zi de saptamana viitoare)
+      NU trebuie sa se inchida inainte sa treaca ziua aia.
+- [ ] **Batalia Warlord NU se atinge.** Daca vezi una inchisa de ceas, ala e un bug.
+- [ ] **Nimic nu se sterge.** O sesiune inchisa isi pastreaza tabla si se poate citi; iar daca era
+      un joc la care nu intrase nimeni, tot il poti sterge tu.
+- [ ] **O sesiune inchisa nu se mai continua** — nici la Rummy, unde pana acum butonul „Mana
+      urmatoare" ramanea acolo. Daca vrei sa se poata redeschide, spune si se face.
+
+### Intrebare pentru tine (nu e bug, e o decizie)
+
+La **Memory Match**, scorul se reseteaza la fiecare runda — sunt puncte pe runda, nu runde
+castigate. Deci „castigatorul sesiunii", si in clasament, si la butonul End, e de fapt **al
+ultimei runde jucate**. Asa e de cand exista jocul; nimic din document nu retine cine a castigat
+mai multe runde, deci n-am de unde calcula altceva fara sa adaug un contor nou. Il adaug?

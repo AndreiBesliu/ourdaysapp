@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Gamepad2, Play, Clock, Trash2, Info, Flag, Cat, Apple, Plane, Sun } from 'lucide-react';
-import { collection, query, where, addDoc, serverTimestamp, deleteDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
 import { liveQuery } from '../../utils/liveQuery';
 import { db, auth } from '../../firebase';
 import { THEME_IDS, THEME_PACKS, buildMemoryBoard, DEFAULT_THEME } from './memoryThemes';
@@ -14,6 +14,7 @@ import { useThemeStore } from '../../store';
 import { t } from '../../utils/i18n';
 import { getSessionWinner, finalizeGameUpdate } from './gameResult';
 import { useDialog } from '../../hooks/useDialog';
+import { writeGame } from './gameWrite';
 
 
 interface GamesHubModalProps {
@@ -354,6 +355,10 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
         // Credit the SESSION winner (leader across all rounds), not just the
         // last round's `winner` field.
         const sessionWinner = getSessionWinner(g);
+        // A session the clock closed with nobody ahead has nothing to contribute to
+        // anyone's record. Without this, an unjoined lobby that timed out put its creator
+        // in the standings on a row of zeros — a player who never played a hand.
+        if (g.abandoned && !sessionWinner) return;
         if (sessionWinner) {
           if (!statsMap[sessionWinner]) statsMap[sessionWinner] = { wins: 0, points: 0 };
           statsMap[sessionWinner].wins += 1;
@@ -437,6 +442,10 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
         gameType,
         status: 'waiting', // waiting, playing, finished
         createdAt: serverTimestamp(),
+        // Written here as well as on every move, so the idle sweep measures from the same
+        // field for a game nobody has joined yet as for one mid-play. `createdAt` is only a
+        // fallback, and only for documents made before 16.09.2026.
+        lastMoveAt: serverTimestamp(),
         createdBy: auth.currentUser.uid,
         state: initialState,
         winner: null
@@ -470,7 +479,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
     }
     setConfirmingEndId(null);
     try {
-      await updateDoc(doc(db, 'games', game.id), finalizeGameUpdate(game));
+      await writeGame(game.id, finalizeGameUpdate(game));
     } catch (err) {
       console.error("Error ending game:", err);
     }
@@ -673,7 +682,12 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                                   {gameTypeName(game.gameType)}
                                 </p>
                                 <p className="text-xs text-zinc-500 flex items-center gap-1">
-                                  {game.status === 'finished' ? (
+                                  {/* An abandoned session says so instead of announcing a
+                                      “winner” nobody played for: after a day of silence the
+                                      sweep banks whoever was ahead, which is often nobody. */}
+                                  {game.abandoned ? (
+                                    <><Clock className="w-3 h-3" /> {t('gameClosedIdle', language)}{game.winner ? ` · ${userMap[game.winner]?.name}` : ''}</>
+                                  ) : game.status === 'finished' ? (
                                     <>{t('winnerLabel', language)}: {game.winner ? userMap[game.winner]?.name : t('draw', language)}</>
                                   ) : (
                                     <><Clock className="w-3 h-3" /> {game.status === 'waiting' ? t('waitingForOpponent', language) : t('inProgressLabel', language)}</>
@@ -685,7 +699,11 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                               {/* Warlord battles are server-owned: a client delete is denied by
                                   the rules and would fail silently. They are cancelled from the
                                   Warlord PvP panel (which routes through the forfeit callable). */}
-                              {game.status === 'waiting' && game.createdBy === auth.currentUser?.uid && game.gameType !== 'warlord-battle' && (
+                              {/* Also for a game the clock closed: the sweep turns a waiting
+                                  game into a finished one, and the delete used to be gated on
+                                  `waiting` alone — so closing it took away the creator's only
+                                  way of getting rid of a game nobody ever joined. */}
+                              {(game.status === 'waiting' || game.abandoned) && game.createdBy === auth.currentUser?.uid && game.gameType !== 'warlord-battle' && (
                                 <button
                                   onClick={(e) => handleCancelGame(game.id, e)}
                                   className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"

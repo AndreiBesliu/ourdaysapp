@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db, auth } from '../../firebase';
+import { auth } from '../../firebase';
 import {
   ArrowLeft, Trophy, Clock, Footprints, Flame,
   Gamepad2, Rocket, Star, Heart, Zap, Camera, Music,
@@ -16,6 +15,7 @@ import { useThemeStore } from '../../store';
 import { t } from '../../utils/i18n';
 import { finalizeGameUpdate } from './gameResult';
 import { buildMemoryBoard, DEFAULT_THEME, THEME_PACKS } from './memoryThemes';
+import { writeGame } from './gameWrite';
 
 interface MemoryMatchProps {
   game: any;
@@ -66,7 +66,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
 
   const handleJoin = async () => {
     if (!auth.currentUser || game.state.players.P2) return;
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       'state.players.P2': auth.currentUser.uid,
       'state.startedAt': Date.now(), // start the clock when the 2nd player joins
       status: 'playing'
@@ -92,7 +92,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
       // on it) and is reset ONLY here and at the end of the flip timeout. A rejected write left it
       // stuck true and froze the board with no way back except reopening the game.
       try {
-        await updateDoc(doc(db, 'games', game.id), {
+        await writeGame(game.id, {
           'state.flippedIndices': newFlipped
         });
       } catch (e) {
@@ -111,7 +111,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
     const isMatch = board[idx1].iconName === board[idx2].iconName;
 
     // Show the flip to the user temporarily before evaluating
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       'state.flippedIndices': newFlipped
     });
 
@@ -161,7 +161,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
         triggerHaptic('medium');
       }
 
-        await updateDoc(doc(db, 'games', game.id), {
+        await writeGame(game.id, {
         ...updates,
         'state.board': newBoard,
         'state.flippedIndices': [],
@@ -180,7 +180,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
         // best effort, since the same outage may still be in progress.
         reportError(e instanceof Error ? e.message : String(e), { context: 'MemoryMatch.resolveTurn' });
         try {
-          await updateDoc(doc(db, 'games', game.id), { 'state.flippedIndices': [] });
+          await writeGame(game.id, { 'state.flippedIndices': [] });
         } catch {
           // Already reported above; the turn is replayable once the connection returns.
         }
@@ -192,7 +192,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
 
   const handleNextRound = async () => {
     if (!auth.currentUser) return;
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       'state.board': buildMemoryBoard(game.state.theme || DEFAULT_THEME),
       'state.flippedIndices': [],
       'state.scores': { P1: 0, P2: 0 },
@@ -208,7 +208,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
 
   const handleEndGame = async () => {
     if (!auth.currentUser) return;
-    await updateDoc(doc(db, 'games', game.id), finalizeGameUpdate(game));
+    await writeGame(game.id, finalizeGameUpdate(game));
   };
 
   const { players, p1IsNext, board, flippedIndices, scores } = game.state;

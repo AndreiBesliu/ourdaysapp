@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db, auth } from '../../../firebase';
+import { auth } from '../../../firebase';
 import { ArrowLeft, Play } from 'lucide-react';
 import { initializeGame } from './RummyEngine';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -14,6 +13,7 @@ interface RummyGameProps {
 }
 
 import { validateMeld, canAttachToMeld, calculatePenaltyPoints, canSwapJoker, VALUE_ORDER } from './RummyEngine';
+import { writeGame } from '../gameWrite';
 
 export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
   const { language } = useThemeStore();
@@ -46,7 +46,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       [auth.currentUser.uid]: { uid: auth.currentUser.uid, hand: [], hasMelded: false, score: 0 }
     };
 
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       'state.playerIds': newPlayerIds,
       'state.players': newPlayers
     });
@@ -58,7 +58,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     // Initialize game with shuffled deck and dealt hands
     const newGameState = initializeGame(game.state.playerIds);
     
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       state: newGameState,
       status: 'playing'
     });
@@ -87,7 +87,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       const handScore = game.state.players[uid]?.score || 0;
       players[uid] = { ...players[uid], totalScore: prevTotal + handScore };
     });
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       state: { ...fresh, players, round: (game.state.round || 1) + 1 },
       status: 'playing',
       winner: null,
@@ -122,7 +122,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     }
 
     setLocalHand(newHand);
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       [`state.players.${auth.currentUser.uid}.hand`]: newHand
     });
   };
@@ -164,7 +164,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       reordered.forEach((c, i) => { items[i] = c; });
 
       setLocalHand(items);
-      await updateDoc(doc(db, 'games', game.id), {
+      await writeGame(game.id, {
         [`state.players.${auth.currentUser.uid}.hand`]: items
       });
       return;
@@ -205,7 +205,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
         updates['state.turnPhase'] = 'draw';
       }
 
-      await updateDoc(doc(db, 'games', game.id), updates);
+      await writeGame(game.id, updates);
       return;
     }
 
@@ -274,7 +274,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
         'state.melds': updatedMelds
       };
 
-      await updateDoc(doc(db, 'games', game.id), updates);
+      await writeGame(game.id, updates);
       return;
     }
   };
@@ -295,7 +295,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     if (emptyIdx !== -1) newHand[emptyIdx] = drawnCard;
     setLocalHand(newHand); // Optimistic UI
 
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       'state.deck': deck,
       [`state.players.${auth.currentUser.uid}.hand`]: newHand,
       'state.turnPhase': 'play'
@@ -318,7 +318,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
     if (emptyIdx !== -1) newHand[emptyIdx] = drawnCard;
     setLocalHand(newHand); // Optimistic UI
 
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       'state.discardPile': discardPile,
       [`state.players.${auth.currentUser.uid}.hand`]: newHand,
       'state.turnPhase': 'play'
@@ -394,7 +394,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
       Object.assign(updates, buildPenaltyUpdates(auth.currentUser.uid));
     }
 
-    await updateDoc(doc(db, 'games', game.id), updates);
+    await writeGame(game.id, updates);
     setStagedMelds([]);
     setErrorMsg(null);
   };
@@ -727,10 +727,21 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
             </div>
 
             <div className="flex gap-2">
-              {isOwner && (
+              {/* `finalized` means the SESSION is over — pressed End, or closed by the clock
+                  after a day of silence. The other three games have always hidden their
+                  next-round button on it; this one did not, so a closed session still offered
+                  another hand. Taking it would have resumed play on a document permanently
+                  labelled “closed after a day idle”, with no way to end it again: the End
+                  button is itself hidden once `finalized` is set. */}
+              {isOwner && !game.finalized && (
                 <button onClick={handleNextHand} className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded-xl transition-colors">
                   {t('nextHand', language)}
                 </button>
+              )}
+              {game.finalized && (
+                <span className="flex-1 py-3 text-sm font-bold text-emerald-300/70 flex items-center justify-center gap-1">
+                  🏁 {t('gameEnded', language)}
+                </span>
               )}
               <button onClick={onBack} className="flex-1 py-3 bg-emerald-700/60 hover:bg-emerald-600 text-white font-bold rounded-xl transition-colors">
                 {t('backToArcade', language)}

@@ -1,58 +1,28 @@
+// src/components/games/gameResult.ts
+//
+// The client half of closing a game session.
+//
+// The DECISION — who won, and whether a session counts as abandoned — moved to
+// `src/utils/gameSession.ts`, which is copied byte-for-byte into the functions build so the
+// scheduled sweep that closes forgotten games answers exactly as the End button does. What is
+// left here is the one thing that cannot be shared: `serverTimestamp()` is a different function
+// in the web SDK and in the Admin SDK.
+
 import { serverTimestamp } from 'firebase/firestore';
+import { closedSessionFields } from '../../utils/gameSession';
 
-// Determine the WINNER OF THE SESSION (not just the last round). Round-loop
-// games (Tic-Tac-Toe, Connect 4, Memory Match) accumulate per-round wins in
-// `state.scores`, so the session leader is whoever has the higher score — the
-// `winner` field on the doc only reflects the most recent round. Rummy is a
-// single hand, so its `winner` is already the session result.
-export function getSessionWinner(game: any): string | null {
-  const s = game?.state || {};
-  const players = s.players || {};
-  const scores = s.scores || {};
+export { getSessionWinner } from '../../utils/gameSession';
 
-  switch (game?.gameType) {
-    case 'tic-tac-toe': {
-      const x = scores.X || 0, o = scores.O || 0;
-      if (x === o) return null; // tie or no rounds won
-      return (x > o ? players.X : players.O) || null;
-    }
-    case 'connect-4':
-    case 'memory-match': {
-      const p1 = scores.P1 || 0, p2 = scores.P2 || 0;
-      if (p1 === p2) return null;
-      return (p1 > p2 ? players.P1 : players.P2) || null;
-    }
-    case 'rummy-45': {
-      // Multi-round: the session winner is the LEAST-penalised player. Penalties
-      // are stored NEGATIVE (calculatePenaltyPoints), so the least penalty is the
-      // HIGHEST cumulative (closest to 0) → pick the max. If no multi-round totals
-      // exist (single hand), fall back to the hand winner.
-      const ids: string[] = s.playerIds || [];
-      const multiRound = ids.some((id) => players[id]?.totalScore !== undefined);
-      if (multiRound && ids.length > 0) {
-        let best: string | null = null;
-        let bestTotal = -Infinity;
-        ids.forEach((id) => {
-          const total = (players[id]?.totalScore || 0) + (players[id]?.score || 0);
-          if (total > bestTotal) { bestTotal = total; best = id; }
-        });
-        return best;
-      }
-      return game?.winner || null;
-    }
-    default:
-      return game?.winner || null;
-  }
-}
-
-// Firestore update payload that formally ENDS and LOCKS a game session: marks it
-// finished, banks the session winner, and flags `finalized` so the round-loop
-// games hide "Next Round" and the leaderboard treats it as a completed session.
+/**
+ * Firestore update payload that formally ENDS and LOCKS a game session: marks it finished, banks
+ * the session winner, and flags `finalized` so the round-loop games hide "Next Round" and the
+ * leaderboard treats it as a completed session.
+ *
+ * No `abandoned` flag: a person pressed the button. The sweep passes true for that.
+ */
 export function finalizeGameUpdate(game: any) {
   return {
-    status: 'finished',
-    winner: getSessionWinner(game),
-    finalized: true,
+    ...closedSessionFields(game, false),
     endedAt: serverTimestamp(),
   };
 }

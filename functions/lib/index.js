@@ -11,7 +11,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.logErrorDigest = exports.sendDueReminders = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
+exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -49,6 +49,11 @@ Object.defineProperty(exports, "sendDueReminders", { enumerable: true, get: func
 // key — see functions/src/errorDigest.ts for why that gap was worth closing.
 var errorDigest_1 = require("./errorDigest");
 Object.defineProperty(exports, "logErrorDigest", { enumerable: true, get: function () { return errorDigest_1.logErrorDigest; } });
+// Closes arcade sessions nobody came back to. The 24-hour rule is Andrei's, 16.09.2026; the
+// decision itself lives in gameSession.ts, byte-identical to the copy the app uses for its End
+// button, so a person and the clock close a game the same way.
+var games_1 = require("./games");
+Object.defineProperty(exports, "expireIdleGames", { enumerable: true, get: function () { return games_1.expireIdleGames; } });
 admin.initializeApp();
 // App Check enforcement is toggled via env so it can be switched on AFTER the
 // reCAPTCHA key is registered and verified in monitor mode in the Firebase

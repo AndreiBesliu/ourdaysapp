@@ -1,11 +1,11 @@
-import { doc, updateDoc } from 'firebase/firestore';
-import { db, auth } from '../../firebase';
+import { auth } from '../../firebase';
 import { ArrowLeft } from 'lucide-react';
 import { playTone } from '../../utils/sounds';
 import { triggerHaptic } from '../../utils/haptics';
 import { useThemeStore } from '../../store';
 import { t } from '../../utils/i18n';
 import { finalizeGameUpdate } from './gameResult';
+import { writeGame } from './gameWrite';
 
 interface Connect4Props {
   game: any;
@@ -52,7 +52,7 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
     if (game.state.players.P2 || game.state.players.P1 === auth.currentUser.uid) return;
     
     // Join as player 2
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       'state.players.P2': auth.currentUser.uid,
       status: 'playing'
     });
@@ -104,7 +104,7 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
       newStatus = 'finished';
     }
 
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       'state.board': boardToMap(newBoard),
       'state.p1IsNext': !game.state.p1IsNext,
       'state.scores': newScores,
@@ -130,7 +130,7 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
   const handleNextRound = async () => {
     if (!auth.currentUser) return;
     const emptyBoard = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
-    await updateDoc(doc(db, 'games', game.id), {
+    await writeGame(game.id, {
       'state.board': boardToMap(emptyBoard),
       'state.p1IsNext': true,
       'state.winningCells': null,
@@ -141,7 +141,7 @@ export default function Connect4({ game, userMap, onBack }: Connect4Props) {
 
   const handleEndGame = async () => {
     if (!auth.currentUser) return;
-    await updateDoc(doc(db, 'games', game.id), finalizeGameUpdate(game));
+    await writeGame(game.id, finalizeGameUpdate(game));
   };
 
   const calculateWinner = (board: (string | null)[][]) => {
