@@ -5615,3 +5615,49 @@ afișat a fost cel nou, iar formularul a rămas deschis pentru o nouă încercar
 
 `npx tsc -b` verde · poarta de lint verde · **1436 de teste** · build verde.
 
+---
+
+## 2026-09-19 · O treime din eșecuri nu ieșeau niciodată de pe telefon
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+### Cum am ajuns aici
+
+Am verificat întâi că livrările de ieri n-au stricat nimic (jurnalul de erori n-a crescut) și că
+SDK-ul Gemini care moare pe 30.11.25 e deja înlocuit — amndouă curate, deci n-aveam ce repara.
+
+Atunci am întors întrebarea spre **instrumentul** pe care m-am bazat toată ziua. Panoul de
+sănătate e cum am găsit bug-ul cu cardul de pe lista de cumpărături, la două zile după ce
+începuse. Un instrument valorează cât ce ajunge la el.
+
+### Ce am măsurat
+
+Din **143 de blocuri `catch`** din `src/`, **49 scriau în consolă și nu raportau nimic**. O treime
+din toate căile de eșec ale aplicației se terminau pe dispozitiv, în timp ce panoul arăta curat.
+
+Două dintre cele 49 le găsisem pe calea grea cu o zi înainte: încărcarea din portofel raporta doar
+în `console.error`, iar `AddEventModal` nici măcar nu importa raportorul — `reportError` acolo se
+lega la **funcția globală din DOM**, care ia un singur argument și scrie în consolă. Apelul
+compila, rula, și nu raporta nimic; obiectul de context cădea pe jos.
+
+### Ce s-a făcut
+
+Toate cele 49 trec acum prin `reportError`, cu un context derivat din numele funcției care le
+conține (`Settings.handleNameSave`, `Friends.respond`, `GamesHubModal.handleEndGame`…). Trei
+contexte le-am scris de mână: euristica „cel mai apropiat nume” nimerea un ajutor vecin, iar un
+context greșit e mai rău decât unul vag — panoul grupează după el și te trimite la alt cod.
+
+Blocurile au fost găsite prin **potrivire de acolade**, nu prin regex: un regex nu poate spune
+unde se termină un bloc, și m-a indus în eroare de două ori în două zile.
+
+`errorReporting.test.ts` refuză a cincizecea înghițire, și refuză separat un fișier care cheamă
+`reportError` fără să-l importe — capcana din ziua dinainte.
+
+### De știut
+
+**Panoul o să se aprindă mai tare de-acum.** Nu fiindcă s-a stricat ceva, ci fiindcă lucruri care
+se întâmplau în tăcere încep să se vadă. Raportorul are deja deduplicare (30s) și plafon de rată
+(10/10s), deci nu se poate inunda.
+
+`npx tsc -b` verde · poarta de lint verde · **1439 de teste** · build verde · 17 fișiere, +73/-5.
+

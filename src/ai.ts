@@ -1,4 +1,5 @@
 import { getFunctions, httpsCallable } from "firebase/functions";
+import { reportError } from './reportError';
 import { app } from "./firebase";
 import { useThemeStore } from "./store";
 import { t } from "./utils/i18n";
@@ -25,6 +26,7 @@ export async function generateChecklistForTask(title: string, description: strin
     const data = result.data as { suggestions: string[] };
     return data.suggestions || [];
   } catch (error: any) {
+    reportError(error instanceof Error ? error.message : String(error), { context: 'ai.generateChecklistForTask' });
     console.error("AI Generation Error", error);
     throw new Error(aiErrorMessage(error));
   }
@@ -39,6 +41,7 @@ export async function suggestEventCategoryAI(title: string, description: string 
     const data = result.data as { categoryId: string };
     return data.categoryId || 'other';
   } catch (error: any) {
+    reportError(error instanceof Error ? error.message : String(error), { context: 'ai.suggestEventCategoryAI' });
     console.error("AI Category Suggestion Error", error);
     return 'other';
   }
@@ -59,6 +62,7 @@ export async function generateGroupDigestAI(groupId: string): Promise<{ digest: 
     const data = result.data as { digest?: string; truncated?: boolean };
     return { digest: data.digest || '', truncated: data.truncated === true };
   } catch (error: any) {
+    reportError(error instanceof Error ? error.message : String(error), { context: 'ai.generateGroupDigestAI' });
     console.error("AI Group Digest Error", error);
     throw new Error(aiErrorMessage(error));
   }
@@ -76,6 +80,7 @@ export async function suggestAssetForTextAI(text: string, assets: any[]): Promis
     const data = result.data as { assetId: string | null };
     return data.assetId;
   } catch (error: any) {
+    reportError(error instanceof Error ? error.message : String(error), { context: 'ai.suggestAssetForTextAI' });
     console.error("AI Asset Suggestion Error", error);
     return null;
   }

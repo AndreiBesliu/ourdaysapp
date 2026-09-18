@@ -453,6 +453,7 @@ export default function CalendarHome() {
     try {
       await updateDoc(doc(db, 'users', auth.currentUser.uid), { hideBirthdayPrompt: true });
     } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'CalendarHome.handleDismissBirthdayPrompt' });
       console.error(err);
     }
   };

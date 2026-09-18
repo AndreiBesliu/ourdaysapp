@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { reportError } from '../reportError';
 import { Moon, Sun, Palette, LogOut, Settings as SettingsIcon, Camera, Home, Image as ImageIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { t } from '../utils/i18n';
@@ -98,6 +99,7 @@ export default function Settings() {
       await setDoc(doc(db, 'profiles', auth.currentUser.uid), { name: trimmed }, { merge: true });
       await updateProfile(auth.currentUser, { displayName: trimmed });
     } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'Settings.handleNameSave' });
       console.error('Failed to save name:', err);
     }
   };
@@ -121,6 +123,7 @@ export default function Settings() {
       await setDoc(doc(db, 'profiles', auth.currentUser.uid), { photoURL: url }, { merge: true });
       setPhotoURL(url);
     } catch (error) {
+      reportError(error instanceof Error ? error.message : String(error), { context: 'Settings.handleProfileImageUpload' });
       console.error("Failed to upload profile picture:", error);
       alert(t('imageUploadFailed', language));
     } finally {
@@ -138,6 +141,7 @@ export default function Settings() {
         });
         await setDoc(doc(db, 'profiles', auth.currentUser.uid), { birthday: val || null }, { merge: true });
       } catch (err) {
+        reportError(err instanceof Error ? err.message : String(err), { context: 'Settings.handleBirthdayChange' });
         console.error("Failed to update birthday", err);
       }
     }
@@ -152,6 +156,7 @@ export default function Settings() {
           isDarkMode: newIsDark
         });
       } catch (error) {
+        reportError(error instanceof Error ? error.message : String(error), { context: 'Settings.handleThemeChange' });
         console.error("Failed to save theme preference:", error);
       }
     }
@@ -163,6 +168,7 @@ export default function Settings() {
       try {
         await updateDoc(doc(db, 'users', auth.currentUser.uid), updates);
       } catch (error) {
+        reportError(error instanceof Error ? error.message : String(error), { context: 'Settings.handleAdvancedThemeUpdate' });
         console.error("Failed to save advanced theme preference:", error);
       }
     }
@@ -183,6 +189,7 @@ export default function Settings() {
       
       await handleAdvancedThemeUpdate({ backgroundImage: url });
     } catch (error) {
+      reportError(error instanceof Error ? error.message : String(error), { context: 'Settings.handleBgImageUpload' });
       console.error("Failed to upload background:", error);
       alert(t('imageUploadFailed', language));
     } finally {

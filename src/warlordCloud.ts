@@ -11,6 +11,7 @@
 // IndexedDB cache when offline, and without a rev an old cached blob would be adopted
 // and then written back over newer cloud progress.
 import { doc, getDocFromServer, setDoc, serverTimestamp } from 'firebase/firestore';
+import { reportError } from './reportError';
 import { inspectSave } from '@warlord/logic/saveSchema';
 import { db } from './firebase';
 
@@ -46,6 +47,7 @@ export async function loadWarlordDomain(uid: string): Promise<void> {
       cloudRev = Number(snap.data()?.rev ?? 0);
     }
   } catch (e) {
+    reportError(e instanceof Error ? e.message : String(e), { context: 'warlordCloud.loadWarlordDomain' });
     // Offline (or blocked): play from the local cache and do NOT touch the cloud —
     // the local rev stays ahead, so this device's progress is promoted once online.
     console.error('Warlord cloud load unavailable (using local cache):', e);
@@ -101,6 +103,7 @@ export async function saveWarlordDomain(uid: string, blob: unknown): Promise<voi
   try {
     await setDoc(domainRef(uid), { save: blob, rev, updatedAt: serverTimestamp() }, { merge: true });
   } catch (e) {
+    reportError(e instanceof Error ? e.message : String(e), { context: 'warlordCloud.saveWarlordDomain' });
     console.error('Warlord cloud save failed (kept locally, will retry):', e);
   }
 }

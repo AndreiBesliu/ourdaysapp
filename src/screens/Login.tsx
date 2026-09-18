@@ -44,6 +44,7 @@ export default function Login() {
         try {
           await sendEmailVerification(userCredential.user);
         } catch (verErr) {
+          reportError(verErr instanceof Error ? verErr.message : String(verErr), { context: 'Login.handleSubmit' });
           console.error('Failed to send verification email:', verErr);
         }
         try {
@@ -54,6 +55,7 @@ export default function Login() {
             createdAt: new Date()
           });
         } catch (dbErr) {
+          reportError(dbErr instanceof Error ? dbErr.message : String(dbErr), { context: 'Login.handleSubmit' });
           console.error("Failed to create user doc:", dbErr);
         }
       }
@@ -94,6 +96,7 @@ export default function Login() {
           });
         }
       } catch (dbErr) {
+        reportError(dbErr instanceof Error ? dbErr.message : String(dbErr), { context: 'Login.handleGoogleSignIn' });
         console.error("Failed to handle google user doc:", dbErr);
       }
     } catch (err: any) {

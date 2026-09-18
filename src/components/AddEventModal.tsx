@@ -511,6 +511,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           // rather than seeing a row with no code (EventDetailsModal).
           setAutoSaveStatus('saved');
         } catch (e) {
+          reportError(e instanceof Error ? e.message : String(e), { context: 'AddEventModal.autosave' });
           console.error('Autosave error', e);
           setAutoSaveStatus('error');
         }
@@ -559,6 +560,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         }
       }
     } catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'AddEventModal.runAssetSuggestion' });
       console.error(e);
     }
   };
@@ -640,6 +642,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       }
       checkForAssetSuggestionsAI(title);
     } catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'AddEventModal.handleTitleBlur' });
       console.error(e);
     } finally {
       setIsSuggestingCategory(false);
@@ -951,6 +954,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setRsvpEnabled(false);
       onClose();
     } catch (error) {
+      reportError(error instanceof Error ? error.message : String(error), { context: 'AddEventModal.handleSubmit' });
       console.error("Error adding event: ", error);
       alert(t('eventAddFailed', language));
     } finally {

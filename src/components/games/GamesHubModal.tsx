@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { reportError } from '../../reportError';
 import { X, Gamepad2, Play, Clock, Trash2, Info, Flag, Cat, Apple, Plane, Sun } from 'lucide-react';
 import { collection, query, where, addDoc, serverTimestamp, deleteDoc, doc } from 'firebase/firestore';
 import { liveQuery } from '../../utils/liveQuery';
@@ -459,6 +460,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
       setView('arcade');
       setPlayingGameId(docRef.id);
     } catch (error) {
+      reportError(error instanceof Error ? error.message : String(error), { context: 'GamesHubModal.handleCreateGame' });
       console.error("Error creating game:", error);
     }
   };
@@ -469,6 +471,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
       await deleteDoc(doc(db, 'games', gameId));
       if (playingGameId === gameId) setPlayingGameId(null);
     } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'GamesHubModal.handleCancelGame' });
       console.error("Error deleting game:", err);
     }
   };
@@ -486,6 +489,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
     try {
       await writeGame(game.id, finalizeGameUpdate(game));
     } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'GamesHubModal.handleEndGame' });
       console.error("Error ending game:", err);
     }
   };

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { reportError } from '../reportError';
 import { X, Users, AlertCircle } from 'lucide-react';
 import { db, auth } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
@@ -40,6 +41,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
       setName('');
       onClose();
     } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'CreateGroupModal.handleCreate' });
       console.error(err);
       setError(t('createGroupFailed', language));
     } finally {

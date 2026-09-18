@@ -416,6 +416,7 @@ export default function GroupChatWidget({
       deleteDoc(doc(db, `${basePath}/typing`, auth.currentUser.uid)).catch(console.error);
       
     } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'GroupChatWidget.handleSend' });
       console.error('Failed to send message:', err);
     } finally {
       setUploading(false);
@@ -612,6 +613,7 @@ export default function GroupChatWidget({
         });
       }, 1000);
     } catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'GroupChatWidget.startRecording' });
       console.error('Microphone access denied', e);
       alert(t('microphoneNeeded', language));
     }

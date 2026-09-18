@@ -4,6 +4,7 @@
 // authority; this file only creates inert challenge docs and reads.
 
 import { doc, query, collection, where, getDoc, getDocs, setDoc, orderBy, limit, serverTimestamp } from 'firebase/firestore';
+import { reportError } from '../reportError';
 import { liveQuery, liveDoc } from '../utils/liveQuery';
 import { db } from '../firebase';
 import type { Unit } from '@warlord/logic/types';
@@ -219,6 +220,7 @@ export async function upsertWarlordPlayer(uid: string, name: string, photoURL: s
       lastActive: serverTimestamp(),
     }, { merge: true });
   } catch (e) {
+    reportError(e instanceof Error ? e.message : String(e), { context: 'pvpApi.upsertWarlordPlayer' });
     console.error('Warlord roster upsert failed:', e);
   }
 }
@@ -233,6 +235,7 @@ export async function fetchRecentPlayers(excludeUid: string, max = 24): Promise<
     const snap = await getDocs(query(collection(db, 'warlordPlayers'), orderBy('lastActive', 'desc'), limit(max)));
     return snap.docs.map((d) => toPlayer(d.id, d.data())).filter((p) => p.uid !== excludeUid);
   } catch (e) {
+    reportError(e instanceof Error ? e.message : String(e), { context: 'pvpApi.fetchRecentPlayers' });
     console.error('Warlord roster fetch failed:', e);
     return [];
   }
@@ -252,6 +255,7 @@ export async function searchPlayers(term: string, excludeUid: string, max = 20):
     ));
     return snap.docs.map((d) => toPlayer(d.id, d.data())).filter((p) => p.uid !== excludeUid);
   } catch (e) {
+    reportError(e instanceof Error ? e.message : String(e), { context: 'pvpApi.searchPlayers' });
     console.error('Warlord roster search failed:', e);
     return [];
   }

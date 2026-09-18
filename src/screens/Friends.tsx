@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { reportError } from '../reportError';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, doc, addDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { liveQuery, liveDoc } from '../utils/liveQuery';
@@ -133,6 +134,7 @@ export default function Friends() {
       setSuccess(t('friendRequestSent', language));
       setEmail('');
     } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'Friends.sendRequest' });
       console.error('Friend request failed', err);
       setError(t('requestAlreadyPending', language));
     } finally {
@@ -144,6 +146,7 @@ export default function Friends() {
     setBusy(true);
     try { await respondToFriendRequest({ requestId: id, accept }); }
     catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'Friends.respond' });
       console.error('Respond failed', err);
       if (accept && !auth.currentUser?.emailVerified) { setError(t('verifyEmailDesc', language)); setSuccess(''); }
     }
@@ -152,13 +155,19 @@ export default function Friends() {
 
   const cancelOutgoing = async (id: string) => {
     try { await deleteDoc(doc(db, 'friend_requests', id)); }
-    catch (err) { console.error('Cancel failed', err); }
+    catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'Friends.cancelOutgoing' });
+      console.error('Cancel failed', err);
+    }
   };
 
   const unfriend = async (uid: string) => {
     setBusy(true);
     try { await removeFriend(uid); }
-    catch (err) { console.error('Unfriend failed', err); }
+    catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'Friends.unfriend' });
+      console.error('Unfriend failed', err);
+    }
     finally { setBusy(false); }
   };
 

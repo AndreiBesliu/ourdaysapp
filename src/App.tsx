@@ -252,6 +252,7 @@ function App() {
             await updateDoc(userDocRef, { familyMembers: [] }).catch(() => {});
           }
         } catch (error) {
+          reportError(error instanceof Error ? error.message : String(error), { context: 'App.userDocSetup' });
           console.error("Failed to update user doc:", error);
         }
         
@@ -286,6 +287,7 @@ function App() {
               });
             }
           } catch (e) {
+            reportError(e instanceof Error ? e.message : String(e), { context: 'App.pushSetup' });
             console.error("Push notification setup failed:", e);
           }
         }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { reportError } from '../reportError';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, ShieldCheck, ShieldAlert, RefreshCw, Users, UsersRound, CalendarDays,
@@ -257,7 +258,10 @@ export default function Admin() {
   const openUser = async (uid: string) => {
     setDetail({ uid }); setDetailLoading(true);
     try { setDetail(await adminGetUser(uid)); }
-    catch (e) { console.error('User detail failed', e); setDetail(null); }
+    catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'Admin.openUser' });
+      console.error('User detail failed', e); setDetail(null);
+    }
     finally { setDetailLoading(false); }
   };
 

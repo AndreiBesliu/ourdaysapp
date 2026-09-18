@@ -1016,3 +1016,13 @@ unul e un card, unul o poză din chat. Sunt urma bug-ului ăstuia. **Nu le-am ș
 doar de citire, și oricum e o ștergere pe producție). Dacă vrei curățate, spune-mi și îți dau
 exact căile.
 
+### Panoul de erori vede acum și restul (19.09)
+
+Din 143 de blocuri `catch` din aplicație, **49 scriau doar în consola telefonului** și nu
+ajungeau niciodată la tine. Acum ajung toate.
+
+- [ ] **Așteaptă-te ca panoul să arate MAI MULTE lucruri**, nu mai puține. Nu s-a stricat nimic —
+      se vede ce se întâmpla în tăcere. Dacă apare ceva ce se repetă des, spune-mi și mă uit.
+- [ ] **Nu poate inunda:** același mesaj se trimite o dată la 30 de secunde, și cel mult 10 erori
+      la 10 secunde, de dinainte.
+

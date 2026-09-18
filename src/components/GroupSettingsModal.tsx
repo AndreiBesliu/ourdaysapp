@@ -73,6 +73,7 @@ export default function GroupSettingsModal({
       });
       setSentTo(prev => new Set(prev).add(memberId));
     } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'GroupSettingsModal.handleAddFriend' });
       console.error('Add friend failed', err);
     }
   };

@@ -269,6 +269,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     try {
       await updateDoc(doc(db, 'events', await resolveWriteTarget()), { checklistItems: newChecklist });
     } catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.handleEditChecklistText' });
       console.error(e);
       setChecklist(event.checklistItems || []);
     }
@@ -284,6 +285,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     try {
       await updateDoc(doc(db, 'events', await resolveWriteTarget()), { checklistItems: newItems });
     } catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.handleDragEnd' });
       console.error(e);
       setChecklist(event.checklistItems || []);
     }
@@ -304,6 +306,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     try {
       await updateDoc(doc(db, 'events', await resolveWriteTarget()), { checklistItems: newChecklist });
     } catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.handleToggleChecklistItem' });
       console.error("Failed to update checklist item:", e);
       // Revert on failure
       setChecklist(event.checklistItems || []);
@@ -403,6 +406,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
         await deleteDoc(doc(db, 'events', event.id));
         onClose();
       } catch (e) {
+        reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.handleDelete' });
         console.error(e);
       } finally {
         setLoading(false);
@@ -432,6 +436,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
         await updateDoc(doc(db, 'events', docId), { rsvps: newRsvps });
       }
     } catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.handleRsvp' });
       console.error('Failed to update RSVP', e);
     }
   };

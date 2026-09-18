@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { reportError } from '../reportError';
 import { sendEmailVerification } from 'firebase/auth';
 import { MailWarning, X } from 'lucide-react';
 import { auth } from '../firebase';
@@ -24,6 +25,7 @@ export default function VerifyEmailBanner() {
       setResent(true);
       setStillNot(false);
     } catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'VerifyEmailBanner.resend' });
       console.error('Resend verification failed', e);
     }
   };
@@ -39,6 +41,7 @@ export default function VerifyEmailBanner() {
       setVerified(ok);
       if (!ok) setStillNot(true); // tell the user the recheck found them still unverified
     } catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'VerifyEmailBanner.recheck' });
       console.error('Recheck verification failed', e);
     } finally {
       setChecking(false);

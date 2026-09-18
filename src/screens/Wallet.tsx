@@ -276,6 +276,7 @@ export default function Wallet() {
     try {
       await deleteDoc(doc(db, 'assets', id));
     } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'Wallet.handleDelete' });
       console.error(err);
     }
   };
@@ -326,7 +327,10 @@ export default function Wallet() {
       const newCats = [...categories, newFilterValue.trim()];
       await updateDoc(doc(db, 'users', auth.currentUser.uid), { walletCategories: newCats });
       setNewFilterValue('');
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'Wallet.handleCreateCategory' });
+      console.error(e);
+    }
     setLoading(false);
   };
 
@@ -353,6 +357,7 @@ export default function Wallet() {
           // Recursively search subdirectories
           await Promise.all(res.prefixes.map(prefixRef => fetchAllFromRef(prefixRef)));
         } catch (e) {
+          reportError(e instanceof Error ? e.message : String(e), { context: 'Wallet.fetchAllFromRef' });
           console.warn("Could not list directory", folderRef.fullPath, e);
         }
       };
@@ -368,6 +373,7 @@ export default function Wallet() {
       setPastImages(Array.from(urls));
       setShowPastImages(true);
     } catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'Wallet.fetchAllFromRef' });
       console.error('Failed to fetch past images', e);
     }
     setLoading(false);
@@ -431,7 +437,10 @@ export default function Wallet() {
       if (activeFilters.includes(catName)) {
         setActiveFilters(prev => prev.filter(f => f !== catName));
       }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      reportError(e instanceof Error ? e.message : String(e), { context: 'Wallet.handleRemoveCategory' });
+      console.error(e);
+    }
     setLoading(false);
   };
 
