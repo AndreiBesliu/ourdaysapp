@@ -948,8 +948,9 @@ TINE, nu de tabul deschis.
 Ai zis „da-i drumul”. Campul nu mai spune cine ARE VOIE sa vada (lista aia imbatranea de
 fiecare data cand intra cineva in grup), ci **cine a fost lasat afara dinadins**.
 
-- [ ] **Intreaba-i pe cei doi din B&D ce vad acum in grupul ala.** Trebuie sa fie 5 evenimente,
-      nu zero. Asta e toata schimbarea, si e singurul loc unde se vede pe datele tale.
+- [x] ~~Intreaba-i pe cei doi din B&D ce vad acum in grupul ala~~ — **confirmat de Andrei,
+      18.09.** Grupul nu mai e gol pentru ei. Asta era toata schimbarea, si singurul loc unde
+      se vedea pe date reale.
 - [ ] **Fa un eveniment nou intr-un grup si nu atinge bifele de vizibilitate.** Toti membrii
       trebuie sa-l vada — inclusiv cineva pe care il adaugi in grup DUPA aceea.
 - [ ] **Debifeaza pe cineva la un eveniment nou.** Doar acela nu trebuie sa-l vada. Ceilalti,
