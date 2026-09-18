@@ -4,8 +4,8 @@ import { format, isSameDay, isToday, isYesterday } from 'date-fns';
 import { collection, query, orderBy, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { liveQuery } from '../utils/liveQuery';
 import { reportError } from '../reportError';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, auth, storage } from '../firebase';
+import { uploadFile } from '../utils/uploadFile';
+import { db, auth } from '../firebase';
 import { playTone } from '../utils/sounds';
 import { triggerHaptic } from '../utils/haptics';
 import { generateGroupDigestAI } from '../ai';
@@ -362,9 +362,10 @@ export default function GroupChatWidget({
     try {
       let imageUrl: string | null = null;
       if (imageFile) {
-        const fileRef = ref(storage, `chat-images/${convId}/${Date.now()}_${imageFile.name}`);
-        await uploadBytes(fileRef, imageFile);
-        imageUrl = await getDownloadURL(fileRef);
+        imageUrl = await uploadFile(
+          `chat-images/${convId}/${Date.now()}_${imageFile.name}`,
+          imageFile,
+        );
       }
 
       // Also mark all prior messages as seen when user sends (they clearly saw them)
@@ -543,9 +544,10 @@ export default function GroupChatWidget({
     setUploading(true);
     setVoiceSendFailed(false);
     try {
-      const fileRef = ref(storage, `chat-audio/${convId}/${Date.now()}.webm`);
-      await uploadBytes(fileRef, audioBlob);
-      const audioUrl = await getDownloadURL(fileRef);
+      const audioUrl = await uploadFile(
+        `chat-audio/${convId}/${Date.now()}.webm`,
+        audioBlob,
+      );
 
       await addDoc(collection(db, `${basePath}/messages`), {
         text: null,

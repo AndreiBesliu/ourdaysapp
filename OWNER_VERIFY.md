@@ -1001,3 +1001,18 @@ oprit doar partajarea lui; reparația scrierii e separată.
 - [ ] **Cardul trebuie să fie întreg:** nume, poză, cod de bare, categorii. Doar partajarea se
       pierde la transfer.
 
+### Încărcarea pozelor (reparat 18.09)
+
+- [ ] **Adaugă un card cu o poză MARE** (2–10 MB). Butonul trebuie să arate procente — 25%, 60%,
+      90% — nu să stea înghețat. Înainte se dădea bătut la 15 secunde fix.
+- [ ] **Încearcă cu net oprit** (mod avion după ce apeși Salvează). După ~20 de secunde trebuie
+      să scrie că încărcarea s-a oprit și să te lase să reîncerci. Nu mai scrie „Storage might be
+      blocked” — aia era o ghiceală.
+- [ ] **La fel pentru poza de profil, fundal, poza din chat și mesajul vocal** — toate șapte
+      locurile trec acum prin același încărcător.
+
+**De știut:** în bucket sunt **2 fișiere orfane (3,34 MB)** pe care nu le arată niciun document —
+unul e un card, unul o poză din chat. Sunt urma bug-ului ăstuia. **Nu le-am șters** (cheia mea e
+doar de citire, și oricum e o ștergere pe producție). Dacă vrei curățate, spune-mi și îți dau
+exact căile.
+

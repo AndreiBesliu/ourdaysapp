@@ -3,7 +3,8 @@ import { auth, db, storage } from '../firebase';
 import { collection, query, addDoc, updateDoc, deleteDoc, doc, getDoc, where } from 'firebase/firestore';
 import { reportError } from '../reportError';
 import { liveQuery, liveDoc } from '../utils/liveQuery';
-import { ref, uploadBytes, getDownloadURL, listAll } from 'firebase/storage';
+import { ref, getDownloadURL, listAll } from 'firebase/storage';
+import { uploadFile, UploadStalled } from '../utils/uploadFile';
 import { Wallet as WalletIcon, Plus, Image as ImageIcon, Trash2, Users, User, HeartPulse, Home, Car, DollarSign, Settings2, Folder, Edit2, Check, X, ScanLine, QrCode } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import BarcodeScanner from '../components/BarcodeScanner';
@@ -61,6 +62,9 @@ export default function Wallet() {
   const [barcodeValue, setBarcodeValue] = useState('');
   const [barcodeFormat, setBarcodeFormat] = useState('');
   const [loading, setLoading] = useState(false);
+  // Null while nothing is uploading, and while the total size is not known yet. A 10 MB photo
+  // used to be fifteen seconds of a button that did nothing and then an error.
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [transferToUserId, setTransferToUserId] = useState('');
   const [keepCopy, setKeepCopy] = useState(true);
   const [sharedUsers, setSharedUsers] = useState<any[]>([]);
@@ -196,12 +200,15 @@ export default function Wallet() {
     try {
       let url = editingAsset ? editingAsset.imageUrl : null;
       if (file) {
-        const fileRef = ref(storage, `assets/${auth.currentUser.uid}/${Date.now()}_${file.name}`);
-        const buffer = await file.arrayBuffer();
-        const uploadTask = uploadBytes(fileRef, buffer, { contentType: file.type });
-        const timeoutTask = new Promise((_, reject) => setTimeout(() => reject(new Error('Upload timed out. Storage might be blocked.')), 15000));
-        await Promise.race([uploadTask, timeoutTask]);
-        url = await getDownloadURL(fileRef);
+        // This raced a fifteen-second timer against an upload that could not be cancelled, so a
+        // slow photo reported failure and then finished, leaving a file nobody points at. One of
+        // the two orphans measured in the live bucket is under `assets/`, which is this line.
+        // See src/utils/uploadWatch.ts for what replaced the duration.
+        url = await uploadFile(
+          `assets/${auth.currentUser.uid}/${Date.now()}_${file.name}`,
+          await file.arrayBuffer(),
+          { contentType: file.type, onProgress: setUploadPercent },
+        );
       } else if (selectedPastImageUrl) {
         url = selectedPastImageUrl;
       }
@@ -252,9 +259,13 @@ export default function Wallet() {
       setBarcodeFormat('');
       setShareGroupId(null);
     } catch (err: any) {
-      console.error(err);
-      alert(t('assetSaveFailed', language));
+      // A stalled upload is its own thing, and worth saying out loud: the old message blamed
+      // Storage being blocked, which the code had no way to know and which was almost never the
+      // cause. It also only reached console.error, so nothing about it ever left the device.
+      reportError(err instanceof Error ? err.message : String(err), { context: 'Wallet.upload' });
+      alert(t(err instanceof UploadStalled ? 'uploadStalled' : 'assetSaveFailed', language));
     } finally {
+      setUploadPercent(null);
       setLoading(false);
     }
   };
@@ -845,7 +856,7 @@ export default function Wallet() {
 
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => { setIsAdding(false); setEditingAsset(null); }} className="flex-1 py-2 text-zinc-600 dark:text-zinc-400 font-medium bg-zinc-100 dark:bg-zinc-800 rounded-lg">{t('walletCancel', language)}</button>
-                <button type="submit" disabled={loading} className="flex-1 py-2 text-white font-medium bg-emerald-500 hover:bg-emerald-600 rounded-lg disabled:opacity-50">{t('save', language)}</button>
+                <button type="submit" disabled={loading} className="flex-1 py-2 text-white font-medium bg-emerald-500 hover:bg-emerald-600 rounded-lg disabled:opacity-50">{uploadPercent === null ? t('save', language) : `${uploadPercent}%`}</button>
               </div>
             </form>
           </div>
@@ -916,7 +927,7 @@ export default function Wallet() {
                 className="flex-1 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-zinc-800 dark:border-zinc-700 outline-none focus:border-emerald-500" 
               />
               <button type="submit" disabled={loading} className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-medium hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center gap-1">
-                <Plus className="w-4 h-4" /> {t('addAction', language)}
+                <Plus className="w-4 h-4" /> {uploadPercent === null ? t('addAction', language) : `${uploadPercent}%`}
               </button>
             </form>
           </div>

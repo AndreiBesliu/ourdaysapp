@@ -5548,3 +5548,70 @@ probă, și un roșu la fel.
 
 `npx tsc -b` verde · poarta de lint verde · **1416 teste** · build verde · functions build verde.
 
+---
+
+## 2026-09-18 · Încărcarea care raporta eșec și apoi reușea
+
+**Prompt (Andrei):** „da-i drumul”, fără propunere pe masă — ales de mine.
+**Model:** Claude Opus 5.
+
+### Cum a fost ales, și ce am măsurat greșit pe drum
+
+Primul candidat (un `assetId` rămas pe eveniment după ce înlocuiești poza) a picat la
+măsurătoare: **zero** pe live. Al doilea era plafonul de 15 secunde la încărcare, de pe lista de
+știute-și-nereparate.
+
+Ca să văd dacă a lăsat urme, am numărat orfanii din bucket. **Instrumentul a mințit de două
+ori:** prima dată a zis 14 orfani (20 MB) fiindcă scanam doar `assets` și `events`; a doua oară
+10, fiindcă ghiceam numele subcolecțiilor — iar mesajele de grup stau la `groups/{id}/messages`.
+Abia a treia versiune, care **enumeră** subcolecțiile, dă cifra onestă: **2 orfani, 3,34 MB** din
+44 de obiecte. Unul e sub `assets/`, adică exact linia asta.
+
+### Ce făcea
+
+```js
+const uploadTask = uploadBytes(fileRef, buffer, { contentType: file.type });
+const timeoutTask = new Promise((_, reject) => setTimeout(() => reject(
+  new Error('Upload timed out. Storage might be blocked.')), 15000));
+await Promise.race([uploadTask, timeoutTask]);
+```
+
+Trei lucruri greșite, în ordinea costului:
+
+1. **`Promise.race` nu anulează perdantul**, iar `uploadBytes` n-are anulare deloc. Deci la 15
+   secunde omul află că a eșuat, încărcarea continuă și reușește, și rămâne un fișier pe care
+   niciun document nu-l arată. Îl plătești, nu-l vezi, nu-l poți șterge.
+2. **15 secunde e o durată, iar întrebarea nu e despre durată.** Regulile permit 10 MB; patru
+   fișiere de pe live trec de 2 MB. Pe telefon, pe semnal prost, aia e o încărcare sănătoasă.
+3. **„Storage might be blocked” e un diagnostic, nu o observație** — numește o cauză pe care codul
+   n-are cum s-o știe, și nu pe cea probabilă.
+
+### Ce s-a făcut
+
+Erau **șapte** locuri de încărcare în patru fișiere, toate cu `uploadBytes`. Șase fără nicio
+limită (o rotocoală care nu se mai întorcea niciodată), al șaptelea cu cursa de mai sus.
+
+* `uploadWatch.ts` — Întrebarea devine una la care se poate răspunde: **s-a mișcat ceva de
+  curând?** O încărcare care transferă e sănătoasă oricât ar dura; una care n-a transferat nimic
+  de 20 de secunde și-a pierdut legătura, și asta se poate spune ca observație.
+* `uploadFile.ts` — un singur loc cu SDK-ul: reluabilă (deci raportează octeți și **se poate
+  anula**), renunță doar la blocaj, și **anulează înainte să respingă** — anularea e miezul, nu
+  eroarea.
+* `uploadAdoption.test.ts` — refuză un al optulea loc, și refuză forma cu `Promise.race`.
+* mesaj onest + raportare în `errorLogs` (înainte mergea doar la `console.error`).
+
+### Poarta care și-a pierdut polaritatea
+
+Poarta a picat și pe codul REPARAT — fiindcă antetul lui `uploadWatch.ts` **citează** codul vechi
+ca să-l explice, iar scanerul citea proza ca și cod. Acum taie comentariile înainte să caute:
+blocurile întregi, iar comentariile de linie doar când încep rândul, ca un `//` dintr-un URL să nu
+înghită cod real de pe aceeași linie.
+
+### Probe
+
+4 mutații prinse. Pe banc, cu Wallet-ul ADEVĂRAT și o încărcare pe care o conduc eu: butonul arată
+**25%**, apoi **90%**; lăsată blocată 22 de secunde, `cancel()` a fost chemat **o dată**, mesajul
+afișat a fost cel nou, iar formularul a rămas deschis pentru o nouă încercare.
+
+`npx tsc -b` verde · poarta de lint verde · **1436 de teste** · build verde.
+

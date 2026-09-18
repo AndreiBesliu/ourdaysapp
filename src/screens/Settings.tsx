@@ -4,11 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { t } from '../utils/i18n';
 import { shouldUseLightText, isUnreadableBackground, effectiveTextContrast } from '../utils/themeContrast';
 import { useThemeStore } from '../store';
-import { auth, db, storage } from '../firebase';
+import { auth, db } from '../firebase';
 import { signOut, updateProfile } from 'firebase/auth';
 import { doc, updateDoc, setDoc } from 'firebase/firestore';
 import { liveDoc } from '../utils/liveQuery';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadFile } from '../utils/uploadFile';
 import { localZone, zoneChoices, zoneLabel } from '../utils/eventTime';
 
 const THEME_COLORS = [
@@ -109,9 +109,11 @@ export default function Settings() {
     setUploadingImage(true);
     try {
       const buffer = await file.arrayBuffer();
-      const fileRef = ref(storage, `profiles/${auth.currentUser.uid}_${Date.now()}`);
-      await uploadBytes(fileRef, buffer, { contentType: file.type });
-      const url = await getDownloadURL(fileRef);
+      const url = await uploadFile(
+        `profiles/${auth.currentUser.uid}_${Date.now()}`,
+        buffer,
+        { contentType: file.type },
+      );
       
       await updateDoc(doc(db, 'users', auth.currentUser.uid), {
         photoURL: url
@@ -173,9 +175,11 @@ export default function Settings() {
     setUploadingBg(true);
     try {
       const buffer = await file.arrayBuffer();
-      const fileRef = ref(storage, `backgrounds/${auth.currentUser.uid}_${Date.now()}`);
-      await uploadBytes(fileRef, buffer, { contentType: file.type });
-      const url = await getDownloadURL(fileRef);
+      const url = await uploadFile(
+        `backgrounds/${auth.currentUser.uid}_${Date.now()}`,
+        buffer,
+        { contentType: file.type },
+      );
       
       await handleAdvancedThemeUpdate({ backgroundImage: url });
     } catch (error) {

@@ -11,8 +11,8 @@ import { groupNameOf } from '../utils/assetSharing';
 // Not imported before: `reportError` here resolved to the DOM global, which takes one argument
 // and reports to the console instead of to errorLogs. TypeScript caught it; nothing else would.
 import { reportError } from '../reportError';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, auth, storage } from '../firebase';
+import { uploadFile } from '../utils/uploadFile';
+import { db, auth } from '../firebase';
 import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
 import { notifyUsers } from '../notifications';
 import { createEventOverride } from '../serverActions';
@@ -766,9 +766,10 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     try {
       let imageUrl = null;
       if (imageFile) {
-        const fileRef = ref(storage, `events/${auth.currentUser?.uid}/${Date.now()}_${imageFile.name}`);
-        await uploadBytes(fileRef, imageFile);
-        imageUrl = await getDownloadURL(fileRef);
+        imageUrl = await uploadFile(
+          `events/${auth.currentUser?.uid}/${Date.now()}_${imageFile.name}`,
+          imageFile,
+        );
 
         if (saveUploadsToWallet) {
           await addDoc(collection(db, 'assets'), {
@@ -789,9 +790,10 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       const uploadedChecklistItems = await Promise.all(checklistItems.map(async (item) => {
         let finalItemUrl = item.assetUrl || null;
         if (item.assetFile) {
-          const itemRef = ref(storage, `checklists/${auth.currentUser?.uid}/${Date.now()}_${item.assetFile.name}`);
-          await uploadBytes(itemRef, item.assetFile);
-          finalItemUrl = await getDownloadURL(itemRef);
+          finalItemUrl = await uploadFile(
+            `checklists/${auth.currentUser?.uid}/${Date.now()}_${item.assetFile.name}`,
+            item.assetFile,
+          );
 
           if (saveUploadsToWallet) {
             await addDoc(collection(db, 'assets'), {
