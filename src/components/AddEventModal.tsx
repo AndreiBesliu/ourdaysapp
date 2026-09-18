@@ -6,6 +6,11 @@ import { mergeAssets, shareFieldsFor } from '../utils/assetSharing';
 import { localZone, timeFieldsFor, endFieldsFor, spanOf, dayOf, dayPlus, dayOffsetBetween } from '../utils/eventTime';
 import { formSpan, SPAN_MESSAGE_KEY } from '../utils/eventForm';
 import { keepAssignees } from '../utils/eventTargeting';
+import { sharesForAttachments } from '../utils/assetAttach';
+import { groupNameOf } from '../utils/assetSharing';
+// Not imported before: `reportError` here resolved to the DOM global, which takes one argument
+// and reports to the console instead of to errorLogs. TypeScript caught it; nothing else would.
+import { reportError } from '../reportError';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
@@ -279,6 +284,13 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       // written, and one named two people who were not even in its group.
       setHiddenFrom(Array.isArray(editEvent.hiddenFrom) ? editEvent.hiddenFrom : []);
       setRemoveMainImage(false);
+      // These three were reset only on the NEW-event branch. The modal is mounted once and
+      // never unmounted, so a card picked in an add-form that was closed without saving stayed
+      // selected and was written onto the next event EDITED — and, since sharing was added
+      // today, shared with that event's group as well. Found by review, not by anybody noticing.
+      setImageFile(null);
+      setSelectedAssetUrl(null);
+      setSelectedAssetId(null);
       setSelectedGroupId(editEvent.groupId || 'personal');
       setRsvpEnabled(!!editEvent.rsvpEnabled);
       setLocation(editEvent.location || '');
@@ -389,6 +401,54 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     // field this feature added was the one it would not have saved.
   }, [title, eventDate, eventTime, endDate, endTime, showEnd, description, checklistItems, category, color, emoji, isTask, assigneeIds, hiddenFrom, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes, isOpen, editEvent]);
 
+  //
+  // The ids the event will actually STORE. Built from the same expression as `assetId` on the
+  // write (`removeMainImage ? null : selectedAssetId || editEvent.assetId`), because a review
+  // found the two disagreeing: on an EDIT `selectedAssetId` is null unless the picker was
+  // reopened, so the main card — the biggest barcode on the other person's screen — was written
+  // onto a group event and never shared, and the notice below stayed silent about it.
+  const attachedAssetIds = React.useCallback(
+    (items: any[]) => [
+      // `imageFile` first: choosing a photo REPLACES the card as the event's image, and without
+      // this the expression falls through to `editEvent.assetId` and shares the card you just
+      // swapped out. (The event document still stores that stale assetId — a separate,
+      // pre-existing bug, recorded in OWNER_VERIFY rather than widened into here.)
+      imageFile || removeMainImage ? null : (selectedAssetId || (editEvent ? editEvent.assetId : null)),
+      ...items.map((i: any) => i && i.assetId),
+    ],
+    [imageFile, removeMainImage, selectedAssetId, editEvent],
+  );
+
+  const cardsToShare = React.useMemo(
+    () => sharesForAttachments(
+      assets,
+      attachedAssetIds(checklistItems),
+      selectedGroupId !== 'personal' ? selectedGroupId : null,
+      auth.currentUser?.uid || '',
+    ),
+    [assets, attachedAssetIds, checklistItems, selectedGroupId],
+  );
+
+  // Called after the event is written, on the two paths a PERSON can take: saving an edit and
+  // creating. Never from the autosave — see the note there.
+  const shareAttachedCards = React.useCallback(async (items: any[]) => {
+    const shares = sharesForAttachments(
+      assets,
+      attachedAssetIds(items),
+      selectedGroupId !== 'personal' ? selectedGroupId : null,
+      auth.currentUser?.uid || '',
+    );
+    for (const { assetId, sharedGroupId } of shares) {
+      try {
+        await updateDoc(doc(db, 'assets', assetId), shareFieldsFor(sharedGroupId));
+      } catch (err) {
+        // The event is already saved; the card simply stays private. Reported rather than
+        // swallowed, because the only symptom on the other person's screen is a missing barcode.
+        reportError(err instanceof Error ? err.message : String(err), { context: 'AddEventModal.shareAttachedCard' });
+      }
+    }
+  }, [assets, attachedAssetIds, selectedGroupId]);
+
   // Auto-save edits to Firestore
   useEffect(() => {
     if (isOpen && editEvent) {
@@ -440,6 +500,15 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           };
 
           await updateDoc(doc(db, 'events', editEvent.id), baseEventData);
+          // No sharing here, deliberately, and it was here for one round of review. Autosave is
+          // a draft-keeper: it runs a second after the form is POPULATED, before you have done
+          // anything, so sharing from it widened access with no gesture behind it — it shared
+          // with the group you were moving AWAY from, and `other-group` then refused to re-point
+          // it at the real one. Closing the window could not call it back either.
+          //
+          // So the widening waits for Save, next to the line that warns about it. An edit that
+          // is only autosaved leaves the card private, and the other person is now TOLD that
+          // rather than seeing a row with no code (EventDetailsModal).
           setAutoSaveStatus('saved');
         } catch (e) {
           console.error('Autosave error', e);
@@ -468,6 +537,10 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     );
   };
 
+  // Attaching one of your wallet cards to a GROUP event makes it readable by that group, which
+  // is the point — but it is still a widening of who can see something in your wallet, and the
+  // card only says so afterwards, on another screen. Said here, before the save, using exactly
+  // the decision the save will make.
   const toggleAssignee = (userId: string) => {
     setAssigneeIds(prev => 
       prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
@@ -825,6 +898,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           // Normal (non-recurring) edit
           await updateDoc(doc(db, 'events', editEvent.id), { ...baseEventData, date: new Date(eventDate).toISOString() });
         }
+        await shareAttachedCards(uploadedChecklistItems);
         onClose();
         return; // Early return for edit
       } else {
@@ -839,6 +913,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           rsvps: rsvpEnabled && auth.currentUser ? { [auth.currentUser.uid]: 'yes' } : {}
         });
         
+        await shareAttachedCards(uploadedChecklistItems);
+
         // Notify assignees (server-side via the notifyUsers Cloud Function —
         // clients can't write the notifications collection directly).
         const otherAssignees = assigneeIds.filter(id => id !== auth.currentUser?.uid);
@@ -1645,7 +1721,10 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
                       setImageFile(e.target.files[0]);
-                      setSelectedAssetUrl(null); // Clear wallet selection if new file picked
+                      // BOTH halves of the wallet selection. Clearing only the URL left the id
+                      // behind, so the discarded card was still stored on the event — and shared.
+                      setSelectedAssetUrl(null);
+                      setSelectedAssetId(null);
                       setRemoveMainImage(false);
                     }
                   }}
@@ -1683,6 +1762,15 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                    </button>
                  </div>
                </div>
+            )}
+
+            {cardsToShare.length > 0 && (
+              <p className="mt-2 text-xs text-amber-600 font-medium">
+                {t('cardWillBeSharedWith', language).replace(
+                  '{group}',
+                  groupNameOf(groups || [], selectedGroupId) || t('group', language),
+                )}
+              </p>
             )}
 
             {/* Save to Wallet Toggle */}

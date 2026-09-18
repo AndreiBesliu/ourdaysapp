@@ -5,8 +5,7 @@ import { reportError } from '../reportError';
 import { planEventWrite } from '../utils/eventWriteTarget';
 import { createEventOverride } from '../serverActions';
 import { db, auth } from '../firebase';
-import Barcode from 'react-barcode';
-import QRCode from 'react-qr-code';
+import AssetBarcode from './AssetBarcode';
 import { Wallet } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { format } from 'date-fns';
@@ -40,17 +39,37 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   const [showOwnerProfile, setShowOwnerProfile] = useState(false);
   const [linkedAsset, setLinkedAsset] = useState<any | null>(null);
   const [linkedChecklistAssets, setLinkedChecklistAssets] = useState<Record<string, any>>({});
+  // Reads that failed. An asset is readable by its owner or by the group named in its
+  // `sharedGroupId`, and until 18.09 attaching a card to a group event shared it with nobody —
+  // so everybody else got a refusal, the catch swallowed it, and the row rendered without the
+  // one thing it is for. Attaching shares it now (assetAttach.ts), including on re-save.
+  //
+  // The failure is NOT narrowed to "not shared": a reviewer proved on the emulator that reading
+  // an asset that does not EXIST is refused in the same way, because the rule dereferences a
+  // null `resource`. So the message says both possibilities rather than asserting the one we
+  // cannot tell apart.
+  const [deniedChecklistAssets, setDeniedChecklistAssets] = useState<Set<string>>(new Set());
+  const [mainAssetDenied, setMainAssetDenied] = useState(false);
 
   useEffect(() => {
     if (event?.assetId) {
+      const startedFor = event.id;
+      setMainAssetDenied(false);
       const fetchAsset = async () => {
         try {
           const docRef = doc(db, 'assets', event.assetId);
           const docSnap = await getDoc(docRef);
+          if (startedFor !== event?.id) return;
           if (docSnap.exists()) {
             setLinkedAsset({ id: docSnap.id, ...docSnap.data() });
+          } else {
+            setMainAssetDenied(true);
           }
         } catch (e) {
+          // The same refusal the checklist rows get, and it used to leave the whole block
+          // unrendered: no heading, no code, no reason. The biggest barcode on the screen
+          // simply was not there.
+          if (startedFor === event?.id) setMainAssetDenied(true);
           // Guaranteed, not hypothetical: assets are owner-only to read, while the EVENT carrying
           // the assetId is group-readable — so for every member but the linker this is denied
           // every time. Widening that read is a deferred decision; being quiet about it was not.
@@ -64,8 +83,10 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     
     // Fetch checklist assets
     if (event?.checklistItems) {
+      const startedFor = event?.id;
       const fetchChecklistAssets = async () => {
         const newMap: Record<string, any> = {};
+        const refused = new Set<string>();
         for (const item of event.checklistItems) {
           if (item.assetId) {
             try {
@@ -74,11 +95,16 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                 newMap[item.assetId] = { id: docSnap.id, ...docSnap.data() };
               }
             } catch (e) {
+              refused.add(item.assetId);
               reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.checklistAssets' });
             }
           }
         }
+        // The modal is never unmounted — CalendarHome only toggles `isOpen` — so a slower run
+        // for the PREVIOUS event would otherwise land on top of the current one.
+        if (startedFor !== event?.id) return;
         setLinkedChecklistAssets(newMap);
+        setDeniedChecklistAssets(refused);
       };
       fetchChecklistAssets();
     }
@@ -815,25 +841,22 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                                   <img src={item.assetUrl} alt={item.text} className="w-full h-auto" />
                                 </div>
                               )}
+                              {item.assetId && !item.isCompleted && deniedChecklistAssets.has(item.assetId) && (
+                                <p className="ml-8 mt-2 text-xs text-amber-600 font-medium self-start max-w-[220px]">
+                                  {t(event.groupId ? 'cardNotSharedWithGroup' : 'cardUnavailable', language)}
+                                </p>
+                              )}
+                              {/* The copy people actually hold up at the till: it sits next to
+                                  "buy milk". It carried the old four-format chain until 18.09. */}
                               {item.assetId && !item.isCompleted && linkedChecklistAssets[item.assetId]?.barcodeValue && (
                                 <div className="ml-8 mt-2 bg-white p-3 rounded-xl flex flex-col items-center justify-center border border-zinc-200 dark:border-zinc-700 self-start">
                                   <p className="font-semibold text-zinc-900 mb-2 text-xs">{linkedChecklistAssets[item.assetId].name}</p>
-                                  {linkedChecklistAssets[item.assetId].barcodeFormat?.includes('QR') ? (
-                                    <QRCode value={linkedChecklistAssets[item.assetId].barcodeValue} size={100} />
-                                  ) : (
-                                    <div className="w-full flex justify-center overflow-hidden">
-                                      <Barcode 
-                                        value={linkedChecklistAssets[item.assetId].barcodeValue} 
-                                        format={linkedChecklistAssets[item.assetId].barcodeFormat === 'EAN_13' ? 'EAN13' : linkedChecklistAssets[item.assetId].barcodeFormat === 'EAN_8' ? 'EAN8' : linkedChecklistAssets[item.assetId].barcodeFormat === 'UPC_A' ? 'UPC' : linkedChecklistAssets[item.assetId].barcodeFormat === 'CODE_39' ? 'CODE39' : 'CODE128'}
-                                        width={1.5}
-                                        height={50}
-                                        displayValue={true}
-                                        background="#ffffff"
-                                        lineColor="#000000"
-                                        fontSize={12}
-                                      />
-                                    </div>
-                                  )}
+                                  <AssetBarcode
+                                    value={linkedChecklistAssets[item.assetId].barcodeValue}
+                                    format={linkedChecklistAssets[item.assetId].barcodeFormat}
+                                    size="sm"
+                                    language={language}
+                                  />
                                 </div>
                               )}
                             </div>
@@ -866,6 +889,20 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           )}
 
           {/* Linked Asset Barcode / Details */}
+          {/* The card was attached but cannot be read. Saying so where it would have been, rather
+              than rendering nothing: the person is standing at a till looking for it. The wording
+              covers both causes because the rules cannot tell them apart — see the state above. */}
+          {event.assetId && mainAssetDenied && (
+            <div>
+              <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-1.5">
+                <Wallet className="w-4 h-4" /> {t('linkedAssetCode', language)}
+              </p>
+              <p className="text-xs text-amber-600 font-medium">
+                {t(event.groupId ? 'cardNotSharedWithGroup' : 'cardUnavailable', language)}
+              </p>
+            </div>
+          )}
+
           {linkedAsset && linkedAsset.barcodeValue && (
             <div>
               <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-1.5">
@@ -873,21 +910,12 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
               </p>
               <div className="bg-white p-4 rounded-xl flex flex-col items-center justify-center w-full min-h-[150px] border border-zinc-200 dark:border-zinc-700">
                 <p className="font-semibold text-zinc-900 mb-4 text-center">{linkedAsset.name}</p>
-                {linkedAsset.barcodeFormat?.includes('QR') ? (
-                  <QRCode value={linkedAsset.barcodeValue} size={150} />
-                ) : (
-                  <div className="w-full flex justify-center overflow-hidden">
-                    <Barcode 
-                      value={linkedAsset.barcodeValue} 
-                      format={linkedAsset.barcodeFormat === 'EAN_13' ? 'EAN13' : linkedAsset.barcodeFormat === 'EAN_8' ? 'EAN8' : linkedAsset.barcodeFormat === 'UPC_A' ? 'UPC' : linkedAsset.barcodeFormat === 'CODE_39' ? 'CODE39' : 'CODE128'}
-                      width={2}
-                      height={80}
-                      displayValue={true}
-                      background="#ffffff"
-                      lineColor="#000000"
-                    />
-                  </div>
-                )}
+                <AssetBarcode
+                  value={linkedAsset.barcodeValue}
+                  format={linkedAsset.barcodeFormat}
+                  size="md"
+                  language={language}
+                />
               </div>
             </div>
           )}

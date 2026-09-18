@@ -54,7 +54,14 @@ normalizează sfârșiturile de linie tocmai ca să nu ajungi să-l ignori. `arm
 `enemies.ts` **nu** fac parte din copia server.
 
 ## Reguli de lucru (hard)
-- **Sync workflow:** după FIECARE task: `npx tsc -b` verde → `npm test` verde → `npm run build` verde → intrare în DEVLOG.md → commit → push
+- **Sync workflow:** după FIECARE task: `npx tsc -b` verde → **`node scripts/lint-gate.mjs` verde** →
+  `npm test` verde → `npm run build` verde → intrare în DEVLOG.md → commit → push
+  - **Poarta de lint NU e opțională și NU e `npm run lint`** (ăla e roșu permanent, 520 de constatări
+    vechi). `scripts/lint-gate.mjs` rulează lista de reguli ținute la ZERO, între care
+    `react-hooks/rules-of-hooks`. Pe 18.09 am pus trei hook-uri sub `if (!isOpen) return null` în
+    `AddEventModal`: typecheck verde, 1407 teste verzi, build verde, bancul verde — și fereastra de
+    adăugat evenimente ar fi murit la prima deschidere, cu calendarul pe ErrorBoundary. Poarta o
+    prindea în două secunde. **A doua oară când aplicația asta livrează React #310.**
 - **DEVLOG.md** (append-only): Task Started + Task Completed cu prompt-ul exact și modelul
 - **i18n:** TOT textul vizibil din aplicație trece prin `t()` (6 limbi). **Excepție decisă de Andrei:** interfața Warlord rămâne doar în engleză.
 - **Save/load Warlord:** orice stare nouă adăugată în joc trebuie pusă în 4 locuri din `src/warlord/state/useGameState.tsx` — obiectul de save, dependency array-ul efectului de persistență, `loadSave` și `resetAll`.

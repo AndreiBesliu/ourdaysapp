@@ -8,9 +8,7 @@ import { Wallet as WalletIcon, Plus, Image as ImageIcon, Trash2, Users, User, He
 import { useNavigate } from 'react-router-dom';
 import BarcodeScanner from '../components/BarcodeScanner';
 import { useDialog } from '../hooks/useDialog';
-import Barcode from 'react-barcode';
-import { renderFor } from '../utils/barcodeFormat';
-import QRCode from 'react-qr-code';
+import AssetBarcode from '../components/AssetBarcode';
 import ExpensesTab from '../components/ExpensesTab';
 import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
@@ -992,44 +990,13 @@ export default function Wallet() {
             <h3 className="text-lg font-bold text-zinc-900 mb-6 text-center">{viewingAssetCode.name}</h3>
             
             <div className="bg-white p-4 rounded-xl flex items-center justify-center w-full min-h-[150px]">
-              {/* How to draw it is decided in `barcodeFormat.ts`, where it can be tested.
-                  The old chain here mapped FOUR of the seventeen formats the scanner can
-                  report and sent the rest to CODE128 — including UPC_E, a compressed UPC-A,
-                  which a till then reads as a different number than the card holds. */}
-              {(() => {
-                const how = renderFor(viewingAssetCode.barcodeFormat, viewingAssetCode.barcodeValue);
-                if (how.kind === 'qr') return <QRCode value={viewingAssetCode.barcodeValue} size={200} />;
-                if (how.kind === 'barcode') return (
-                  <div className="w-full flex justify-center overflow-hidden">
-                    <Barcode
-                      value={viewingAssetCode.barcodeValue}
-                      // Cast because react-barcode's typings are STALE: they omit CODE93,
-                      // which the JsBarcode 3.12.3 it actually bundles supports. Backed by a
-                      // test — barcodeFormat.test.ts loads the real encoders and refuses any
-                      // format this module can name that the installed library cannot draw.
-                      format={how.format as React.ComponentProps<typeof Barcode>['format']}
-                      width={2}
-                      height={100}
-                      displayValue={true}
-                      background="#ffffff"
-                      lineColor="#000000"
-                    />
-                  </div>
-                );
-                // Not drawable as the code it really is. The NUMBER is shown instead, large
-                // enough to read out or type in, with a line saying why — a wrong barcode is
-                // the one failure the person holding the phone cannot see.
-                return (
-                  <div className="w-full text-center py-4">
-                    <p className="text-2xl font-mono font-bold tracking-wider text-zinc-900 break-all">
-                      {viewingAssetCode.barcodeValue || '—'}
-                    </p>
-                    <p className="mt-3 text-xs text-amber-600 font-medium">
-                      {t(how.reason === 'value-mismatch' ? 'walletCodeMismatch' : 'walletCodeNotDrawable', language)}
-                    </p>
-                  </div>
-                );
-              })()}
+              {/* How to draw it is decided in `barcodeFormat.ts` and drawn by one component,
+                  so the three places a saved code appears cannot drift apart. */}
+              <AssetBarcode
+                value={viewingAssetCode.barcodeValue}
+                format={viewingAssetCode.barcodeFormat}
+                language={language}
+              />
             </div>
             
             <p className="mt-6 text-sm text-zinc-500 text-center">

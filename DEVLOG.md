@@ -5428,3 +5428,76 @@ ordinea de livrare: **functions inainte de hosting**.
 
 `npx tsc -b` verde · **1391 de teste** · **128 de teste de reguli** · build verde · functions build verde.
 
+---
+
+## 2026-09-18 · Cardul de pe lista de cumpărături, pe care doar tu îl vedeai
+
+**Prompt (Andrei):** „da-i drumul”, fără o propunere pe masă — deci ales de mine.
+**Model:** Claude Opus 5.
+
+### Cum a fost ales
+
+Prima idee (rânduri al căror container nu mai există) a picat la măsurătoare: **zero** pe live.
+Am întrebat atunci jurnalul de erori, care avea o intrare NOUĂ, de azi:
+`Missing or insufficient permissions.` în `EventDetailsModal.checklistAssets`.
+
+### Ce era
+
+Un card din portofel atașat la un eveniment de grup nu era partajat cu grupul. Regula zice
+„proprietarul, sau grupul din `sharedGroupId`”, iar toate cele 18 active aveau câmpul gol. Ce se
+pierde e jumătatea utilă: **poza** stă pe eveniment și se vede, **codul** stă pe activ și nu. Omul
+de la casă vede fotografia cardului, nu ce se scanează. Măsurat: **2 din 2** atașamente de pe
+evenimente de grup, necitibile de celălalt membru.
+
+Decizia era deja luată în cod, pe cealaltă ramură: o poză încărcată se salvează cu
+`...shareFieldsFor(selectedGroupId)`; una aleasă din portofel, cu nimic.
+
+### Al doilea lucru, cu miză mai mare
+
+Reparația de simbologie din 16.09 ajunsese **într-un loc din trei**. `EventDetailsModal` păstra
+vechiul lanț de două ori, inclusiv pe copia de lângă „cumpără lapte”. Pe banc, același număr:
+**23 de bare ca Code 128 pe codul livrat, 18 ca UPC-E cu reparația.**
+
+### Ce s-a făcut
+
+* `AssetBarcode` — UN randator pentru toate cele trei locuri (74 de linii scoase, 23 puse), cu
+  mărimile fiecărui loc păstrate;
+* `barcodeAdoption.test.ts` — poarta care refuză a patra copie (probată: 3 din 5 pică pe codul
+  livrat);
+* `assetAttach.ts` — partajarea la atașare: doar un card **privat, al tău**; refuză cardul altcuiva
+  și unul deja partajat cu alt grup (l-ar fura de-acolo);
+* refuzurile rămase se **spun** pe ecran, și la lista de bifat și la cardul evenimentului;
+* formularul anunță lărgirea de acces **înainte** de salvare.
+
+### Două runde de revizie adversarială, 13 constatări confirmate
+
+**Runda 1 (17 agenți, 1,8M):** trei HIGH în cod scris azi. Lista de partajat o construiam din
+`selectedAssetId`, care la o EDITARE e mereu gol — deci cardul-imagine principală ajungea pe un
+eveniment de grup nepartajat, iar notificarea mea tăcea exact acolo. Din cele două atașamente
+stricate de pe live, reparația mea repara unul. Plus: un reviewer a probat pe emulator că
+**citirea unui card șters e refuzată la fel** ca una nepermisă — deci mesajul nu poate pretinde
+cauza. Reformulat, cu variantă separată pentru evenimente fără grup. Și o regresie de mărime:
+dădusem `fontSize=14` unde biblioteca punea 20 — cifrele de sub cod, cu o treime mai mici.
+
+**Runda 2 (6 agenți, 0,7M):** un HIGH care ar fi omorât aplicația. Trei hook-uri sub
+`if (!isOpen) return null` → React #310 la prima deschidere a ferestrei, cu calendarul pe
+ErrorBoundary. **A doua oară când aplicația asta livrează #310**, și există deja o poartă scrisă
+după prima dată (`scripts/lint-gate.mjs`) care o prinde în două secunde. N-am rulat-o. Acum e în
+regula de lucru din CLAUDE.md.
+
+Tot runda 2: partajarea din autosalvare era greșită din principiu — un cronometru nu e o intenție.
+Pornea la o secundă după ce formularul se popula, deci partaja cu grupul din care tocmai plecai,
+iar `other-group` refuza apoi să-l repună pe cel adevărat; și închiderea ferestrei n-o putea
+anula. **Acum lărgirea urmează un gest** (Save/Done), iar cazul nepartajat e explicat pe ecranul
+celuilalt în loc să fie tăcut.
+
+### Ce m-a învățat bancul despre bancuri
+
+Primul banc monta fereastra **deja deschisă**. De-aia cele trei hook-uri au trecut prin el: numărul
+de hook-uri nu se schimba niciodată. Ecranul real o montează închisă și o deschide. **Reproducerea
+ecranului nu e de ajuns — condițiile de montare fac parte din caz.** Refacut așa: zero erori.
+Și a doua oară: „dovada” că reparația HIGH merge venea de fapt din autosalvare, fiindcă butonul la
+editare se cheamă **Done**, nu „Save Event”, și clicul meu nu nimerea nimic.
+
+`npx tsc -b` verde · **poarta de lint verde** · **1407 teste** · build verde · 8 mutații prinse.
+
