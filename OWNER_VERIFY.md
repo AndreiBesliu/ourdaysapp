@@ -993,3 +993,11 @@ un membru al grupului poate citi cardul partajat oricând, nu doar din eveniment
 document rămâne `assetId`-ul cardului vechi — deci sub poza nouă se poate desena codul vechi. Am
 oprit doar partajarea lui; reparația scrierii e separată.
 
+### Cardul dat mai departe (reparat 18.09)
+
+- [ ] **Partajează un card cu un grup** (pune-l pe un eveniment de grup), **apoi dă-l cuiva** din
+      portofel. În portofelul lui trebuie să apară **„Privat”**, nu „Partajat”. Dacă scrie
+      „Partajat” fără numele unui grup de-al lui, spune-mi — ăla e exact bug-ul.
+- [ ] **Cardul trebuie să fie întreg:** nume, poză, cod de bare, categorii. Doar partajarea se
+      pierde la transfer.
+

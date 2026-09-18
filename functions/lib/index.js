@@ -1,15 +1,4 @@
 "use strict";
-var __rest = (this && this.__rest) || function (s, e) {
-    var t = {};
-    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
-        t[p] = s[p];
-    if (s != null && typeof Object.getOwnPropertySymbols === "function")
-        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
-            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
-                t[p[i]] = s[p[i]];
-        }
-    return t;
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
@@ -30,6 +19,7 @@ const errorFixes_1 = require("./errorFixes");
 const errorState_1 = require("./errorState");
 const aiProviderError_1 = require("./aiProviderError");
 const eventTime_1 = require("./eventTime");
+const assetTransfer_1 = require("./assetTransfer");
 // Invite links live in their own module — index.ts is already long, and these four are a
 // self-contained feature. Re-exported here because Firebase deploys what index exports.
 // They call `admin.firestore()` only inside their handlers, so the initializeApp() below
@@ -902,13 +892,13 @@ exports.transferAssetCopy = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
     if (!(await usersShareGroup(uid, recipientId))) {
         throw new https_1.HttpsError("permission-denied", "You can only transfer to members of your groups.");
     }
-    // Drop the source owner/timestamp; copy everything else to the recipient.
-    const { ownerId, createdAt } = a, rest = __rest(a, ["ownerId", "createdAt"]);
-    void ownerId;
-    void createdAt;
+    // What the copy should be is decided in assetTransfer.ts, where it can be RUN. The shape that
+    // was here copied `sharedGroupId` across with everything else, so the SENDER's group could read
+    // a card in the RECIPIENT's wallet — harmless while no card was ever shared, and armed the day
+    // attaching one to a group event started sharing it.
     const copyRef = db.collection("assets").doc();
     const batch = db.batch();
-    batch.set(copyRef, Object.assign(Object.assign({}, rest), { ownerId: recipientId, createdAt: new Date().toISOString(), transferredFrom: uid }));
+    batch.set(copyRef, (0, assetTransfer_1.transferredCopy)(a, uid, recipientId, new Date().toISOString()));
     // A move is the copy plus removing the source, in ONE batch — a half-done transfer would either
     // duplicate the asset or lose it. The recipient also gets `transferredFrom`, which the old
     // client-side ownerId flip never wrote, so a wallet entry that appeared out of nowhere had

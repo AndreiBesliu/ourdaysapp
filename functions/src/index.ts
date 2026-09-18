@@ -20,6 +20,7 @@ import {
 } from "./errorState";
 import { AI_QUOTA_CODE, isProviderQuotaError } from "./aiProviderError";
 import { spanProblem } from "./eventTime";
+import { transferredCopy } from "./assetTransfer";
 
 // Invite links live in their own module — index.ts is already long, and these four are a
 // self-contained feature. Re-exported here because Firebase deploys what index exports.
@@ -1007,17 +1008,13 @@ export const transferAssetCopy = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
     throw new HttpsError("permission-denied", "You can only transfer to members of your groups.");
   }
 
-  // Drop the source owner/timestamp; copy everything else to the recipient.
-  const { ownerId, createdAt, ...rest } = a;
-  void ownerId; void createdAt;
+  // What the copy should be is decided in assetTransfer.ts, where it can be RUN. The shape that
+  // was here copied `sharedGroupId` across with everything else, so the SENDER's group could read
+  // a card in the RECIPIENT's wallet — harmless while no card was ever shared, and armed the day
+  // attaching one to a group event started sharing it.
   const copyRef = db.collection("assets").doc();
   const batch = db.batch();
-  batch.set(copyRef, {
-    ...rest,
-    ownerId: recipientId,
-    createdAt: new Date().toISOString(),
-    transferredFrom: uid,
-  });
+  batch.set(copyRef, transferredCopy(a, uid, recipientId, new Date().toISOString()));
   // A move is the copy plus removing the source, in ONE batch — a half-done transfer would either
   // duplicate the asset or lose it. The recipient also gets `transferredFrom`, which the old
   // client-side ownerId flip never wrote, so a wallet entry that appeared out of nowhere had

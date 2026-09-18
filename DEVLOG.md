@@ -5501,3 +5501,50 @@ editare se cheamă **Done**, nu „Save Event”, și clicul meu nu nimerea nimi
 
 `npx tsc -b` verde · **poarta de lint verde** · **1407 teste** · build verde · 8 mutații prinse.
 
+---
+
+## 2026-09-18 · Cardul dat mai departe purta grupul expeditorului
+
+**Prompt (Andrei):** „da-i drumul”, fără propunere pe masă — ales de mine.
+**Model:** Claude Opus 5.
+
+### De ce ăsta, și de ce ACUM
+
+Era pe lista de „știute și nereparate” de la revizia portofelului din 16.09, cu prioritate mică.
+Prioritatea s-a schimbat ieri seară, prin schimbarea mea: până azi `sharedGroupId` era **null pe
+toate cele 18 active** — partajarea nu funcționa, deci nu avea ce să se scurgă. De azi, atașarea
+unui card la un eveniment de grup chiar îl setează. **Reparația de ieri armează bug-ul ăsta.**
+
+### Ce făcea
+
+`transferAssetCopy` construia copia ca `{ ...rest, ownerId: recipientId }`, unde `rest` era tot
+documentul minus `ownerId` și `createdAt`. Deci `sharedGroupId` călătorea cu cardul — iar regula
+îl rezolvă **la citire**:
+
+```
+allow read: ... || ('sharedGroupId' in d && d.sharedGroupId is string && isMemberOfGroup(...))
+```
+
+Deci din clipa în care dai cuiva un card partajat, tot grupul TĂU poate citi cardul din portofelul
+LUI — un grup în care poate nu e, și pe care nici măcar nu-l vede numit pe card (portofelul poate
+tipări doar numele unui grup pe care îl cunoaște, deci cade pe un „Partajat” gol).
+
+### Regula
+
+**Un card transferat pornește PRIVAT.** Partajarea e o afirmație pe care proprietarul o face
+despre cardul LUI; un proprietar nou n-a făcut-o. O poate face singur, cu un grup de-al lui, dintr-o
+apăsare — singura versiune a afirmației care înseamnă ceva.
+
+`functions/src/assetTransfer.ts` (pur, fără importuri) + 9 teste din `src/`, ca la aiProviderError.
+Copia e o listă NEAGRĂ, intenționat: un câmp nou pe un card face parte din card până decide cineva
+altfel; doar cele două care hotărăsc CINE-L POATE CITI sunt reținute.
+
+### Probe
+
+Prima mutatie a picat toate cele 9 teste — adică spărsese compilarea, nu fusese prinsă de
+aserțiuni. Refacută într-o formă care **compilează** și restaurează exact defectul: **pică un
+singur test**, fix cel care trebuie. Un verde care vine din alt motiv decât cel pretins nu e o
+probă, și un roșu la fel.
+
+`npx tsc -b` verde · poarta de lint verde · **1416 teste** · build verde · functions build verde.
+
