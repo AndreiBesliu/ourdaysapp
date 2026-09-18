@@ -805,7 +805,10 @@ const OVERRIDE_FIELDS = [
   // The span. Relative fields, so an override of one occurrence carries exactly that
   // occurrence's length — see the header of eventTime.ts for why it is not an absolute end.
   "endDayOffset", "endTime",
-  "rsvpEnabled", "visibleTo",
+  // `hiddenFrom` replaced `visibleTo` on 18.09: the audience is stored as the EXCLUSION now, so
+  // it cannot go stale when somebody joins the group. `visibleTo` stays on the list because
+  // documents written before that still carry it and an override copies what it is given.
+  "rsvpEnabled", "visibleTo", "hiddenFrom",
 ] as const;
 
 export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {

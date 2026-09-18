@@ -923,12 +923,8 @@ TINE, nu de tabul deschis.
 
 ### Doua lucruri pe care le-am gasit si NU le-am atins — sunt decizii de-ale tale
 
-- [ ] **Doi din cei patru membri B&D vad un calendar GOL acolo.** Toate cele 5 evenimente din
-      B&D au lista de audienta (`visibleTo`) scrisa cand grupul avea alti membri, deci nu-i
-      numeste. Nu e de la reparatia de azi — e asa de cand au intrat in grup. **Intrebarea e a
-      ta:** un membru care intra mai tarziu ar trebui sa vada evenimentele dinainte? (Eu as zice
-      da, dar inseamna ca lista de audienta inceteaza sa mai fie o lista si devine „cine a fost
-      exclus anume” — alta forma, alta scriere.)
+- [x] ~~Doi din cei patru membri B&D vad un calendar GOL acolo~~ — **reparat 18.09**, vezi
+      sectiunea de mai jos.
 - [x] ~~Cand schimbi „calendarul tinta”, persoanele asignate nu se refiltreaza~~ — **reparat**,
       vezi sectiunea de mai jos.
 
@@ -946,4 +942,26 @@ TINE, nu de tabul deschis.
 - [ ] **Bifele de vizibilitate** trebuie sa se refaca la membrii grupului nou cand schimbi
       calendarul. Daca restrangi vizibilitatea si apoi schimbi grupul, restrangerea se pierde —
       e intentionat, la fel ca la selectorul de participanti de la cheltuieli.
+
+### Membrii care intra mai tarziu vad evenimentele de dinainte (reparat 18.09)
+
+Ai zis „da-i drumul”. Campul nu mai spune cine ARE VOIE sa vada (lista aia imbatranea de
+fiecare data cand intra cineva in grup), ci **cine a fost lasat afara dinadins**.
+
+- [ ] **Intreaba-i pe cei doi din B&D ce vad acum in grupul ala.** Trebuie sa fie 5 evenimente,
+      nu zero. Asta e toata schimbarea, si e singurul loc unde se vede pe datele tale.
+- [ ] **Fa un eveniment nou intr-un grup si nu atinge bifele de vizibilitate.** Toti membrii
+      trebuie sa-l vada — inclusiv cineva pe care il adaugi in grup DUPA aceea.
+- [ ] **Debifeaza pe cineva la un eveniment nou.** Doar acela nu trebuie sa-l vada. Ceilalti,
+      si cei care vin mai tarziu, da.
+- [ ] **Deschide un eveniment VECHI si salveaza-l fara sa schimbi nimic.** Bifele pornesc toate
+      pe „vede” — intentionat: nicio audienta de pe live nu fusese ingustata vreodata, toate
+      erau doar instantaneul de la creare (una numea chiar doi oameni din alt grup).
+- [ ] **Editeaza o singura aparitie dintr-o serie care se repeta**, la un eveniment unde ai
+      debifat pe cineva. Excluderea trebuie sa ramana. (Aici era capcana: lista alba de pe
+      server arunca in tacere orice camp nou.)
+
+**De stiut, ca sa nu te bazezi gresit pe el:** bifa asta nu e o masura de securitate. Nici
+vechiul camp, nici cel nou nu apar in regulile bazei de date — orice membru al grupului POATE
+citi orice eveniment al grupului daca sapa. Calendarul doar refuza sa-l deseneze.
 

@@ -5,7 +5,7 @@ import { liveQuery } from '../utils/liveQuery';
 import { mergeAssets, shareFieldsFor } from '../utils/assetSharing';
 import { localZone, timeFieldsFor, endFieldsFor, spanOf, dayOf, dayPlus, dayOffsetBetween } from '../utils/eventTime';
 import { formSpan, SPAN_MESSAGE_KEY } from '../utils/eventForm';
-import { keepAssignees, audienceFor } from '../utils/eventTargeting';
+import { keepAssignees } from '../utils/eventTargeting';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from '../firebase';
 import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI } from '../ai';
@@ -94,7 +94,10 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('none');
   const [editScope, setEditScope] = useState<'this' | 'all' | null>(null);
-  const [visibleTo, setVisibleTo] = useState<string[]>([]);
+  // Who is deliberately left OUT. The field used to be `visibleTo` — who may see it,
+  // snapshotted when the event was written — and an allow-list cannot tell "excluded" from
+  // "was not here yet", so it aged into a lie whenever somebody joined. See eventScope.ts.
+  const [hiddenFrom, setHiddenFrom] = useState<string[]>([]);
   const [rsvpEnabled, setRsvpEnabled] = useState(false);
   const [location, setLocation] = useState('');
   const [reminderMinutes, setReminderMinutes] = useState<number | null>(null);
@@ -271,7 +274,10 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setEmoji(editEvent.emoji || null);
       setIsTask(editEvent.isTask || false);
       setAssigneeIds(editEvent.assigneeIds || (editEvent.assigneeId ? [editEvent.assigneeId] : []));
-      setVisibleTo(editEvent.visibleTo || (userMap ? Object.values(userMap).filter((u: any) => u.id !== auth.currentUser?.uid).map((u: any) => u.id) : []));
+      // `editEvent.visibleTo` is deliberately NOT read. Measured on live before dropping it:
+      // not one group event carried an audience narrower than the snapshot taken when it was
+      // written, and one named two people who were not even in its group.
+      setHiddenFrom(Array.isArray(editEvent.hiddenFrom) ? editEvent.hiddenFrom : []);
       setRemoveMainImage(false);
       setSelectedGroupId(editEvent.groupId || 'personal');
       setRsvpEnabled(!!editEvent.rsvpEnabled);
@@ -316,7 +322,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             if (parsed.emoji !== undefined) setEmoji(parsed.emoji);
             if (parsed.isTask !== undefined) setIsTask(parsed.isTask);
             if (parsed.assigneeIds) setAssigneeIds(parsed.assigneeIds);
-            if (parsed.visibleTo) setVisibleTo(parsed.visibleTo);
+            if (parsed.hiddenFrom) setHiddenFrom(parsed.hiddenFrom);
             if (parsed.selectedGroupId) setSelectedGroupId(parsed.selectedGroupId);
             if (parsed.repeat) setRepeat(parsed.repeat);
             if (parsed.rsvpEnabled !== undefined) setRsvpEnabled(parsed.rsvpEnabled);
@@ -352,7 +358,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         setIsTask(initialTemplate?.isTask || false);
         setAssigneeIds(initialTemplate?.assigneeIds || []);
         setRepeat('none');
-        setVisibleTo(userMap ? Object.values(userMap).filter((u: any) => u.id !== auth.currentUser?.uid).map((u: any) => u.id) : []);
+        setHiddenFrom([]);  // a new event is the whole group's until somebody is unticked
         setSelectedGroupId(activeGroupId);
         setRsvpEnabled(false);
         setLocation('');
@@ -370,7 +376,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   useEffect(() => {
     if (isOpen && !editEvent) {
       const draft = {
-        title, eventDate, eventTime, endDate, endTime, description, checklistItems, categoryId: category.id, color, emoji, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes
+        title, eventDate, eventTime, endDate, endTime, description, checklistItems, categoryId: category.id, color, emoji, isTask, assigneeIds, hiddenFrom, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes
       };
       if (title || description || checklistItems.length > 0) {
         localStorage.setItem('ourDays_draftEvent', JSON.stringify(draft));
@@ -381,7 +387,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     // `eventTime` was missing here before spans existed, so an end-only change would have
     // inherited the same silence: the draft is what survives the app being killed, and the one
     // field this feature added was the one it would not have saved.
-  }, [title, eventDate, eventTime, endDate, endTime, showEnd, description, checklistItems, category, color, emoji, isTask, assigneeIds, visibleTo, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes, isOpen, editEvent]);
+  }, [title, eventDate, eventTime, endDate, endTime, showEnd, description, checklistItems, category, color, emoji, isTask, assigneeIds, hiddenFrom, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes, isOpen, editEvent]);
 
   // Auto-save edits to Firestore
   useEffect(() => {
@@ -419,7 +425,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             categoryId: category.id,
             color: color,
             groupId: selectedGroupId !== 'personal' ? selectedGroupId : null,
-            visibleTo: selectedGroupId !== 'personal' ? visibleTo : [],
+            hiddenFrom: selectedGroupId !== 'personal' ? hiddenFrom : [],
             imageUrl: imageUrl,
             isTask,
             assigneeIds,
@@ -446,7 +452,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     // `eventTime` was already missing here before spans existed — a time-only change was not
     // re-saved until something else changed — so the end fields are added alongside it rather than
     // inheriting the same quirk.
-  }, [title, eventDate, eventTime, endDate, endTime, showEnd, spanIssue, description, checklistItems, category, color, isTask, assigneeIds, visibleTo, selectedGroupId, removeMainImage, selectedAssetId, selectedAssetUrl, rsvpEnabled, location, reminderMinutes, isOpen, editEvent]);
+  }, [title, eventDate, eventTime, endDate, endTime, showEnd, spanIssue, description, checklistItems, category, color, isTask, assigneeIds, hiddenFrom, selectedGroupId, removeMainImage, selectedAssetId, selectedAssetUrl, rsvpEnabled, location, reminderMinutes, isOpen, editEvent]);
 
   if (!isOpen) return null;
 
@@ -454,8 +460,10 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     setCategory(cat);
   };
 
+  // The checkbox still reads "this person can see it" — only what gets STORED is the
+  // complement, so unticking is what leaves a trace and joining the group later leaves none.
   const toggleVisibility = (userId: string) => {
-    setVisibleTo(prev => 
+    setHiddenFrom(prev =>
       prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
     );
   };
@@ -745,7 +753,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         ownerId: editEvent ? editEvent.ownerId : auth.currentUser.uid,
         groupId: selectedGroupId !== 'personal' ? selectedGroupId : null,
         sharedWithFamily: editEvent ? editEvent.sharedWithFamily : false, // Legacy fallback
-        visibleTo: selectedGroupId !== 'personal' ? visibleTo : [],
+        hiddenFrom: selectedGroupId !== 'personal' ? hiddenFrom : [],
         imageUrl: removeMainImage ? null : (imageUrl || (editEvent ? editEvent.imageUrl : null)),
         isTask: isTask,
         taskStatus: editEvent ? editEvent.taskStatus : (isTask ? 'not-started' : 'none'),
@@ -1447,7 +1455,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   const uid = auth.currentUser?.uid || '';
                   setSelectedGroupId(next);
                   setAssigneeIds(prev => keepAssignees(members, uid, prev));
-                  setVisibleTo(audienceFor(members, uid));
+                  // Exclusions do not travel: somebody left out of the old group is a
+                  // stranger to the new one, not a decision about it.
+                  setHiddenFrom([]);
                 }}
                 className="w-full px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
               >
@@ -1614,7 +1624,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                       <label key={u.id} className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={visibleTo.includes(u.id)}
+                          checked={!hiddenFrom.includes(u.id)}
                           onChange={() => toggleVisibility(u.id)}
                           className="w-4 h-4 text-primary bg-zinc-100 border-zinc-300 rounded focus:ring-primary dark:focus:ring-primary dark:ring-offset-zinc-800 focus:ring-2 dark:bg-zinc-700 dark:border-zinc-600"
                         />

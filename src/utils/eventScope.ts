@@ -1,8 +1,8 @@
 // src/utils/eventScope.ts
 //
-// Which calendar tab does an event belong on?
+// Which calendar tab does an event belong on, and who on that calendar sees it?
 //
-// ── The defect this was pulled out of ────────────────────────────────────────────────
+// ── Part one: the tab ────────────────────────────────────────────────────────────────
 //
 // Andrei, 16.09.2026: "am niste evenimente din grupul de familie in grupul de gym". He was right,
 // and it was not one stray row — measured against live data, the Gym tab was showing him twelve
@@ -18,15 +18,38 @@
 // The last two exist for a real reason: somebody can put a task on YOUR calendar without it being
 // a group event at all (five such events exist on live, all filed by one person against another's
 // personal calendar). But nothing narrowed their results to the tab being looked at, so every
-// event anybody had ever assigned to you appeared under every group you are in. Switching tabs
-// changed the header and the member avatars and left most of the grid identical — which is exactly
-// what the screenshots showed.
+// event anybody had ever assigned to you appeared under every group you are in.
 //
-// ── The rule, in one sentence ────────────────────────────────────────────────────────
+// The rule, in one sentence: an event belongs on the calendar it was FILED on — its group's tab,
+// or Personal when it has no group. Nothing re-homes an event onto a different calendar; the note
+// at the foot of this file says what the version that tried to do so broke.
 //
-// An event belongs on the calendar it was FILED on: its group's tab, or Personal when it has no
-// group. Nothing re-homes an event onto a different calendar — see the note at the foot of this
-// file for the version that tried to, and what it broke.
+// ── Part two: the audience, and why it had to be turned inside out ───────────────────
+//
+// Andrei, 18.09.2026, on being shown that two of B&D's four members saw an EMPTY calendar there.
+//
+// The old field was `visibleTo`: a list of who MAY see the event, written once when the event was
+// created and never revised. An allow-list cannot tell "deliberately left out" from "was not here
+// yet", so it ages into a lie the moment somebody joins the group. Measured on live before the
+// change, and every number here is a count, not an impression:
+//
+//   * FIVE events — every single one B&D has — named neither of the two members who joined after
+//     they were written. Those two people opened a real group and saw nothing at all.
+//   * one Family event named two people who are not in Family, which is what gives the field's
+//     true origin away: it was seeded from everybody the AUTHOR shared any group with, not from
+//     the group the event was on.
+//   * NOT ONE of the twelve group events had an audience narrower than that snapshot. The feature
+//     the field exists for had never once been used.
+//
+// So what is stored is now the OPPOSITE: `hiddenFrom`, the people deliberately left out. The group
+// roster is read at display time and cannot go stale; the only thing recorded is the exception,
+// and an exception that names nobody is the empty list it looks like. `visibleTo` is no longer
+// read anywhere — justified by that third measurement, not by hope.
+//
+// Worth knowing what this is NOT: `visibleTo` never appeared in firestore.rules or in any Cloud
+// Function, and neither does `hiddenFrom`. Any member of a group can READ every one of its events;
+// this is the calendar declining to draw one. It is a courtesy, not a privacy boundary, and a
+// screen that treats it as the latter would be making a promise the database does not keep.
 //
 // ── Why this is a module and not three lines in the listener ─────────────────────────
 //
@@ -41,7 +64,8 @@ export interface ScopedEvent {
   assigneeId?: unknown;
   inviteeId?: unknown;
   inviteStatus?: unknown;
-  visibleTo?: unknown;
+  /** Who was deliberately left out. Absent or empty means the whole group. */
+  hiddenFrom?: unknown;
 }
 
 export interface Viewer {
@@ -80,28 +104,21 @@ export function homeTabFor(ev: ScopedEvent): string {
 /**
  * Whether this person may see the event at all.
  *
- * `visibleTo` is a per-event audience inside a group, snapshotted from the member list when the
- * event is written. Being NAMED on the event overrides it, and that is not a loophole — it is the
- * only reading that survives the way the two fields are actually written:
+ * A group event is the group's until somebody says otherwise, and `hiddenFrom` is that somebody
+ * saying otherwise. Nothing here consults the roster: "everyone except these people" stays true as
+ * the roster changes, which is the whole reason the field was turned around.
  *
- *   AddEventModal seeds `visibleTo` from the members present when the event is created and never
- *   revises it. Adding an assignee later (EventDetailsModal, or a second pass through the form)
- *   changes `assigneeIds` and writes `visibleTo` back exactly as it was. So "assigned to somebody
- *   the audience does not name" is a shape this app produces by itself, not a corrupt document.
- *
- * The server already treats assignment as the stronger statement: `functions/src/remindersCore.ts`
- * builds a reminder's recipients from the owner and the assignees, with no reference to
- * `visibleTo`. Without this override that person is sent a push notification for a task that
- * appears on no screen in the app — which is exactly what an adversarial reviewer demonstrated
- * against the first version of this module.
- *
- * Somebody deliberately left out of the audience is not NAMED on the event, so nothing here shows
- * them anything they were meant not to see.
+ * Being NAMED on the event overrides the exclusion, and that is not a loophole — it is the only
+ * reading that survives how the fields are written. Adding an assignee does not touch the
+ * exclusion list, and `functions/src/remindersCore.ts` builds a reminder's recipients from the
+ * owner and the assignees without consulting either field. Without this line, somebody could be
+ * sent a push notification for a task that appears on no screen in the app — which is exactly what
+ * an adversarial reviewer demonstrated against an earlier version of this module.
  */
 export function maySee(ev: ScopedEvent, uid: string): boolean {
   if (isNamed(ev, uid)) return true;
   if (!groupOf(ev)) return true;
-  return !Array.isArray(ev.visibleTo) || ev.visibleTo.includes(uid);
+  return !(Array.isArray(ev.hiddenFrom) && ev.hiddenFrom.includes(uid));
 }
 
 /** Whether the event should appear on the tab the viewer is looking at. */

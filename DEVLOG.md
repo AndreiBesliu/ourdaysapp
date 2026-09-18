@@ -5368,3 +5368,63 @@ propriului eveniment pe calendarul propriu cu altcineva inca asignat. Aceeasi cl
 
 `npx tsc -b` verde · **1394 de teste** · **128 de teste de reguli** · build verde.
 
+---
+
+## 2026-09-18 · Audienta unui eveniment, intoarsa pe dos
+
+**Prompt (Andrei):** „da-i drumul” — la intrebarea lasata deschisa pe 16.09: ar trebui ca
+membrii care intra mai tarziu intr-un grup sa vada evenimentele de dinainte?
+**Model:** Claude Opus 5.
+
+### Ce masurasem
+
+Campul se numea `visibleTo`: lista celor care AU VOIE sa vada evenimentul, scrisa o data la
+creare si nerevizuita niciodata. O lista de permisiuni nu poate deosebi „lasat afara dinadins”
+de „nu era inca aici”, deci imbatraneste in minciuna din clipa in care intra cineva in grup.
+Trei masuratori pe live, toate numarate, niciuna impresie:
+
+* **CINCI evenimente** — adica toate cate are B&D — nu-i numeau pe niciunul dintre cei doi
+  membri intrati dupa ce fusesera scrise. Doi oameni deschideau un grup real si nu vedeau nimic.
+* **un eveniment din Family numea doi oameni care nu sunt in Family** — asta ii da originea pe
+  fata: lista era semanata din toti cu care imparti ORICE grup, nu din grupul evenimentului.
+* **niciunul din cele 12 evenimente de grup** n-avea audienta mai ingusta decat instantaneul ala.
+  Functia pentru care exista campul nu fusese folosita niciodata.
+
+A treia masuratoare e cea care a decis migrarea: nu exista nimic deliberat de pastrat.
+
+### Ce s-a schimbat
+
+Nu citirea — **ce se scrie**. Campul e acum `hiddenFrom`: cine a fost lasat afara dinadins.
+Rosterul se citeste la afisare si nu poate ramiîne in urma; singurul lucru inregistrat e
+exceptia, iar o exceptie care nu numeste pe nimeni e lista goala care pare.
+
+Interfata NU s-a schimbat: tot o bifa per membru, „omul asta vede”, toate bifate implicit. Doar
+ce se stocheaza e complementul. `visibleTo` nu mai e citit nicaieri.
+
+**Ce nu e:** nici `visibleTo`, nici `hiddenFrom` n-au aparut vreodata in `firestore.rules` sau
+in vreo Cloud Function. Orice membru al unui grup POATE citi orice eveniment al lui; asta e
+calendarul care refuza sa deseneze unul. E o politete, nu o granita de securitate.
+
+### Probe
+
+Replay al celor 24 de documente reale prin ambele versiuni:
+
+| tab | privitor | inainte | dupa |
+|---|---|---|---|
+| B&D | u7 | 0 | **5** |
+| B&D | u8 | 0 | **5** |
+| toate celelalte 17 combinatii | | neschimbate | neschimbate |
+
+Coloana „pierdut” goala peste tot — nimeni nu pierde nimic.
+
+Pe banc, cu scrierile interceptate: formularul salveaza `hiddenFrom: []` implicit,
+`hiddenFrom: ['u5']` dupa ce debifezi o persoana, si **nu mai scrie deloc `visibleTo`**.
+Patru mutatii pe modul, fiecare prinsa (5, 2, 3 si 1 teste cazute).
+
+**Capcana din memorie care s-a activat:** `OVERRIDE_FIELDS` din `functions/src/index.ts` e o
+lista alba — un camp care lipseste de acolo e aruncat TACUT. Fara `hiddenFrom` in ea, editarea
+unei singure aparitii dintr-o serie ar fi pierdut excluderea fara niciun semn. De aici si
+ordinea de livrare: **functions inainte de hosting**.
+
+`npx tsc -b` verde · **1391 de teste** · **128 de teste de reguli** · build verde · functions build verde.
+

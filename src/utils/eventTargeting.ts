@@ -22,18 +22,17 @@
 //      outright: `firestore.rules` allows a non-group event to name only its own author
 //      (`assigneeIds.hasOnly([request.auth.uid])`). The form offers a state the database rejects.
 //
-// `visibleTo` has the mirror problem. It is seeded from everybody you share any group with, and on
-// an edit it is loaded verbatim from the stored document — so retargeting an old event into a
-// newer group can carry an audience that names nobody in it, and then nobody in that group sees
-// the event at all.
+// The audience had the mirror problem, and it was fixed by removing the concept rather than by
+// re-deriving it here: what an event stores now is `hiddenFrom`, the people deliberately left
+// out, so a move simply clears it — somebody excluded from the old group is a stranger to the
+// new one, not a decision about it. See the second half of src/utils/eventScope.ts.
 //
 // ── The rule ─────────────────────────────────────────────────────────────────────────
 //
-// Changing the target calendar re-derives both lists from the group you have just chosen. What can
-// survive the move survives it; what cannot is dropped rather than saved invisibly. It is the same
-// answer Andrei chose for the expenses participant picker on the same day — switching the group
-// resets the ticks to the new group's members — and it is here as two functions rather than two
-// lines in an event handler so that it can be RUN.
+// Changing the target calendar re-derives who is on the event. What can survive the move survives
+// it; what cannot is dropped rather than saved invisibly. It is the same answer Andrei chose for
+// the expenses participant picker — switching the group resets the ticks — and it is here as a
+// function rather than a line in an event handler so that it can be RUN.
 
 /** Not a member of anything; a valid assignee everywhere. */
 export const AI_ASSISTANT = 'ai_assistant';
@@ -54,19 +53,4 @@ export function keepAssignees(
 ): string[] {
   const keepable = new Set<string>([uid, AI_ASSISTANT, ...(groupMembers || []).filter(real)]);
   return [...new Set(assignees.filter(real).filter((id) => keepable.has(id)))];
-}
-
-/**
- * The audience for an event on `groupMembers` — everybody in the group but you.
- *
- * You are left out because the list answers "who ELSE may see this"; the form's checkboxes are
- * drawn the same way, and the event's own owner is never filtered by it.
- *
- * A reset rather than an intersection, unlike the assignees: an audience carried over from another
- * group is not a narrower choice, it is a list of the wrong people — and one that can easily name
- * nobody in the group the event is now on, which hides it from everyone.
- */
-export function audienceFor(groupMembers: readonly string[] | null, uid: string): string[] {
-  if (!groupMembers) return [];
-  return [...new Set(groupMembers.filter(real).filter((id) => id !== uid))];
 }
