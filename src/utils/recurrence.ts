@@ -20,12 +20,20 @@ export function getRecurrenceEndDate(startDate: Date, frequency: RecurrenceRule[
 /**
  * Returns a human-readable label for the recurrence frequency.
  */
-export function getFrequencyLabel(frequency: RecurrenceRule['frequency']): string {
+/**
+ * The i18n KEY for a frequency, not the word.
+ *
+ * It returned 'Daily' / 'Weekly' / 'Monthly' / 'Yearly' until 19.09 — English, from inside a pure
+ * module that cannot know the language, printed in three places including the repeat dropdown of
+ * the busiest form in the app. A function that returns a word decides the language for every
+ * caller; one that returns a key leaves that where the language is known.
+ */
+export function getFrequencyKey(frequency: RecurrenceRule['frequency']): string {
   switch (frequency) {
-    case 'daily':   return 'Daily';
-    case 'weekly':  return 'Weekly';
-    case 'monthly': return 'Monthly';
-    case 'yearly':  return 'Yearly';
+    case 'daily':   return 'freqDaily';
+    case 'weekly':  return 'freqWeekly';
+    case 'monthly': return 'freqMonthly';
+    case 'yearly':  return 'freqYearly';
   }
 }
 

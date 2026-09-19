@@ -4,7 +4,7 @@ import { deleteDoc, doc, collection, query, where, getDocs } from 'firebase/fire
 import { db, auth } from '../firebase';
 import { useState } from 'react';
 import { useDialog } from '../hooks/useDialog';
-import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
+import { getRecurrenceEndDate, getFrequencyKey } from '../utils/recurrence';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { reportError } from '../reportError';
@@ -120,7 +120,7 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
                 <div key={freq}>
                   <div className="flex items-center gap-2 mb-2">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${FREQ_COLORS[freq] || 'bg-zinc-100 text-zinc-500'}`}>
-                      {getFrequencyLabel(freq as any)}
+                      {t(getFrequencyKey(freq as any), language)}
                     </span>
                     <span className="text-xs text-zinc-400">{items.length} {t('seriesCount', language)}</span>
                   </div>

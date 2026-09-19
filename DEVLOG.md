@@ -5742,3 +5742,61 @@ pornește cu ele.
 
 `npx tsc -b` verde · arbore curat · nimic de comis în `src/`.
 
+---
+
+## 2026-09-19 · Poarta care păzea traducerile era oarbă de 24 de zile
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+### Ce căutam
+
+Văzusem în treacăt un buton scris în engleză — „Remove Attached Asset” — într-o aplicație care
+e românească în primul rând. Am scris un scaner ca să văd câte sunt.
+
+### Scanerul a cerut patru încercări
+
+1. Decupajul de comentarii bloc a înghițit **18.529 de caractere** din `AddEventModal`, fiindcă
+   `accept="image/*"` conține un `/*` într-un ȘIR.
+2. Tiparul `>…<` prindea generice TypeScript — 196 de „constatări”, aproape toate false.
+3. Numerele de linie se calculau după scoaterea comentariilor, deci erau toate greșite.
+4. Canarul era un defect REAL, deci a încetat să funcționeze exact când l-am reparat.
+
+### Și apoi am descoperit că exista deja o poartă
+
+`src/utils/i18nCoverage.test.ts`, scrisă pe **26.08**, al cărei antet e chiar despre un „totul e
+curat” fals. Am suprascris-o din greșeală, am văzut-o în `git status` și am restaurat-o.
+
+Întrebarea a devenit atunci mult mai bună: **de ce a lăsat ea 17 șiruri să treacă?** Trei motive:
+
+* **aceeași capcană cu `/*`** — măsurat: 18.592 de caractere oarbe în `AddEventModal`, 7.202 în
+  `Wallet`, 3.148 în `Settings`. Aproape **36.000 de caractere** din cele mai mari trei ecrane,
+  timp de 24 de zile, cu CI verde în fiecare zi;
+* **nu se uita deloc la atribute** — `alt`, `placeholder`, `title`, `aria-label`;
+* cerea ca textul să înceapă cu majusculă, deci „e.g., Buy Milk…” era invizibil oricum.
+
+**Am reparat-o, nu am înlocuit-o.** Fiecare scaner prindea ce celălalt rata: al ei masca `{…}`
+înainte de căutare, ceea ce al meu nu făcea — de-aia a găsit ea cinci lucruri pe care eu le
+ratasem, printre care **lista de repetare**.
+
+### Ce era netradus
+
+Douăzeci și două de șiruri: un buton „Remove Attached Asset”, „Change Photo”, „Link Card”,
+placeholder-e („e.g. Kroger Card”), nouă texte `alt` (citite cu voce tare de cititoarele de
+ecran), și — cel mai vizibil — **lista de repetare din formularul de evenimente**: „Daily —
+until”, „Weekly — until”…
+
+Aia din urmă avea o rădăcină mai adâncă: `getFrequencyLabel` **returna engleza din funcție**, dintr-un
+modul pur care n-are cum să știe limba. Acum returnează **cheia** (`getFrequencyKey`), iar limba
+se alege acolo unde e cunoscută. O funcție care returnează un cuvânt decide limba pentru toți
+apelanții.
+
+Și data rămăsese engleză („Sep 19, 2027”) chiar după ce cuvântul s-a tradus. Acum trece prin
+`getDateLocale`, în ordinea zi-întâi pe care o folosește deja restul aplicației.
+
+### Probat pe ecran
+
+Pe banc, cu limba pusă pe română: **„Zilnic — până pe 20 oct 2026”**, „Săptămânal — până pe 19 sep
+2027”. Înainte: „Daily — until Oct 20, 2026”.
+
+`npx tsc -b` verde · poartă de lint verde · **1442 de teste** · build verde.
+

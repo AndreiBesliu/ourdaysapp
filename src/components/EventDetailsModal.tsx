@@ -11,7 +11,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { format } from 'date-fns';
 import { useDialog } from '../hooks/useDialog';
 import { useMenu } from '../hooks/useMenu';
-import { getFrequencyLabel } from '../utils/recurrence';
+import { getFrequencyKey } from '../utils/recurrence';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
@@ -485,7 +485,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
               </p>
               {(event.isRecurringInstance || event.recurrenceRule) && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-medium rounded-full">
-                  🔁 {getFrequencyLabel(event.recurrenceRule?.frequency || event.parentFrequency || 'weekly')}
+                  🔁 {t(getFrequencyKey(event.recurrenceRule?.frequency || event.parentFrequency || 'weekly'), language)}
                 </span>
               )}
               {owner && (
@@ -932,7 +932,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                 <ImageIcon className="w-4 h-4" /> {t('attachedAsset', language)}
               </p>
               <div className="rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullScreenImage(event.imageUrl)}>
-                <img src={event.imageUrl} alt="Event attachment" className="w-full h-auto max-h-48 object-contain" />
+                <img src={event.imageUrl} alt={t('altEventAttachment', language)} className="w-full h-auto max-h-48 object-contain" />
               </div>
             </div>
           )}
@@ -957,7 +957,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       {/* Full Screen Image Modal */}
       {fullScreenImage && (
         <div onClick={(e) => { e.stopPropagation(); setFullScreenImage(null); }} ref={lightbox.dialogRef} {...lightbox.dialogProps} className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-pointer">
-          <img src={fullScreenImage} className="max-w-full max-h-full object-contain animate-in fade-in zoom-in duration-200" alt="Full screen asset" />
+          <img src={fullScreenImage} className="max-w-full max-h-full object-contain animate-in fade-in zoom-in duration-200" alt={t('altFullScreenAsset', language)} />
           <button aria-label={t('closeAction', language)} className="absolute top-4 right-4 text-white/50 hover:text-white bg-black/50 hover:bg-black/80 transition-all p-2 rounded-full">
             <X className="w-6 h-6" />
           </button>

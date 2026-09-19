@@ -230,7 +230,7 @@ export default function Settings() {
                   {uploadingImage ? (
                     <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
                   ) : photoURL ? (
-                    <img src={photoURL} alt="Profile" className="w-full h-full object-cover" />
+                    <img src={photoURL} alt={t('altProfile', language)} className="w-full h-full object-cover" />
                   ) : (
                     <span className="text-2xl font-bold text-zinc-400">{auth.currentUser?.email?.charAt(0).toUpperCase() || '?'}</span>
                   )}
@@ -254,7 +254,7 @@ export default function Settings() {
                 <p className="font-medium text-lg text-zinc-900 dark:text-zinc-100">{name || auth.currentUser?.displayName || 'My Profile'}</p>
                 <p className="text-sm text-zinc-500">{auth.currentUser?.email}</p>
                 <label htmlFor="profile-upload" className="text-xs font-medium text-primary cursor-pointer hover:underline sm:hidden mt-2 inline-block">
-                  Change Photo
+                  {t('changePhoto', language)}
                 </label>
               </div>
             </div>
@@ -439,7 +439,7 @@ export default function Settings() {
 
               {!isDarkMode && (
                 <div className="p-3 mb-4 bg-primary/10 border border-primary/20 text-primary rounded-xl text-sm font-medium">
-                  Custom Theme is active! The settings below will be applied to your app.
+                  {t('customThemeActive', language)}
                 </div>
               )}
               {isDarkMode && (

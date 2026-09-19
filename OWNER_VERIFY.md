@@ -1110,3 +1110,17 @@ ajungeau niciodată la tine. Acum ajung toate.
 - [ ] **Nu poate inunda:** același mesaj se trimite o dată la 30 de secunde, și cel mult 10 erori
       la 10 secunde, de dinainte.
 
+### Text englezesc rămas prin aplicație (reparat 19.09)
+
+Douăzeci și două de șiruri vizibile erau în engleză, dintre care nouă texte `alt` (pe care le
+citește cu voce tare un cititor de ecran). Poarta care ar fi trebuit să le prindă era oarbă din
+26.08 — `accept="image/*"` îi ascundea ~36.000 de caractere din cele mai mari trei ecrane.
+
+- [ ] **Deschide formularul de eveniment nou și uită-te la lista „Se repetă”.** Trebuie să scrie
+      „Zilnic — până pe 20 oct 2026”, nu „Daily — until Oct 20, 2026”. Data trebuie să fie și ea
+      în română, cu ziua întâi.
+- [ ] **Butoanele din același formular:** „Scoate atașamentul”, „Leagă cardul”, „Ignoră”.
+- [ ] **Setări:** „Schimbă poza”, și mesajul despre tema personalizată.
+- [ ] **Dacă mai vezi ceva în engleză oriunde în aplicație, spune-mi** — acum există o poartă care
+      chiar vede, deci fiecare caz nou e o scăpare pe care o pot închide definitiv.
+

@@ -730,7 +730,7 @@ export default function Wallet() {
             <form onSubmit={handleUpload} className="space-y-4">
               <div>
                 <label className="text-xs font-medium text-zinc-500 uppercase">{t('nameLabel', language)}</label>
-                <input required value={name} onChange={e => setName(e.target.value)} type="text" placeholder="e.g. Kroger Card" className="w-full mt-1 px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 outline-none" />
+                <input required value={name} onChange={e => setName(e.target.value)} type="text" placeholder={t('assetNamePlaceholder', language)} className="w-full mt-1 px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 outline-none" />
               </div>
               
               <div className="space-y-2">
@@ -774,7 +774,7 @@ export default function Wallet() {
                     <>
                       <img 
                         src={file ? URL.createObjectURL(file) : (selectedPastImageUrl || editingAsset?.imageUrl)} 
-                        alt="Preview" 
+                        alt={t('altPreview', language)} 
                         className="w-full h-full object-cover" 
                       />
                       <label htmlFor="asset-upload" className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
@@ -975,7 +975,7 @@ export default function Wallet() {
                       }}
                       className="group cursor-pointer bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden hover:border-emerald-500 hover:shadow-md transition-all relative aspect-square"
                     >
-                      <img src={url} alt="Past upload" className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300" />
+                      <img src={url} alt={t('altPastUpload', language)} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300" />
                       <div className="absolute inset-0 bg-emerald-500/0 group-hover:bg-emerald-500/20 transition-colors flex items-center justify-center">
                         <Check className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transform scale-50 group-hover:scale-100 transition-all drop-shadow-md" />
                       </div>
@@ -1041,7 +1041,7 @@ export default function Wallet() {
           </button>
           <img 
             src={viewingImage} 
-            alt="Asset full view" 
+            alt={t('altAssetFullView', language)} 
             className="max-w-full max-h-full object-contain rounded-xl shadow-2xl animate-in zoom-in-95 duration-200" 
             onClick={(e) => e.stopPropagation()} // Prevent closing when clicking the image itself
           />

@@ -919,7 +919,7 @@ export default function GroupChatWidget({
                             {msg.imageUrl && (
                               <img
                                 src={msg.imageUrl}
-                                alt="Shared image"
+                                alt={t('altSharedImage', language)}
                                 className={`max-w-full object-cover max-h-48 w-full ${!parentMsg && 'rounded-t-2xl'}`}
                                 onClick={() => window.open(msg.imageUrl, '_blank')}
                                 style={{ cursor: 'pointer' }}
@@ -1049,7 +1049,7 @@ export default function GroupChatWidget({
           {/* Image Preview */}
           {imagePreview && (
             <div className="px-3 pt-2 shrink-0 relative w-fit ml-3">
-              <img src={imagePreview} alt="Preview" className="h-16 w-16 object-cover rounded-lg border border-zinc-200 dark:border-zinc-700" />
+              <img src={imagePreview} alt={t('altPreview', language)} className="h-16 w-16 object-cover rounded-lg border border-zinc-200 dark:border-zinc-700" />
               <button
                 type="button"
                 onClick={clearImage}

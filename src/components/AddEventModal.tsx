@@ -17,11 +17,11 @@ import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI
 import { notifyUsers } from '../notifications';
 import { createEventOverride } from '../serverActions';
 import { format } from 'date-fns';
-import { getRecurrenceEndDate, getFrequencyLabel } from '../utils/recurrence';
+import { getRecurrenceEndDate, getFrequencyKey } from '../utils/recurrence';
 import { useDialog } from '../hooks/useDialog';
 import { useMenu } from '../hooks/useMenu';
 import { useThemeStore } from '../store';
-import { t } from '../utils/i18n';
+import { t, getDateLocale } from '../utils/i18n';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import * as chrono from 'chrono-node';
@@ -1234,7 +1234,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 value={newItemText}
                 onChange={(e) => setNewItemText(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddChecklistItem())}
-                placeholder="e.g., Buy Milk, Order Cake..."
+                placeholder={t('checklistItemPlaceholder', language)}
                 className="flex-1 px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
               />
               <button 
@@ -1362,7 +1362,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                                   {(item.assetFile || item.selectedAssetUrl || item.assetUrl || (item.assetId && assets.find(a => a.id === item.assetId)?.imageUrl)) ? (
                                     <img 
                                       src={item.assetFile ? URL.createObjectURL(item.assetFile) : (item.selectedAssetUrl || item.assetUrl || assets.find(a => a.id === item.assetId)?.imageUrl || '')} 
-                                      alt="Preview" 
+                                      alt={t('altPreview', language)} 
                                       className="w-full h-auto object-contain" 
                                     />
                                   ) : (
@@ -1407,7 +1407,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                     <Wallet className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">Link {suggestedAsset.name}?</p>
+                    <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">{t('linkAssetQuestion', language).replace('{name}', suggestedAsset.name)}</p>
                     <p className="text-xs text-emerald-600 dark:text-emerald-400">{t('matchesWalletCard', language)}</p>
                   </div>
                 </div>
@@ -1417,7 +1417,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                     onClick={() => setSuggestedAsset(null)}
                     className="px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 rounded-lg transition-colors"
                   >
-                    Dismiss
+                    {t('dismissAction', language)}
                   </button>
                   <button 
                     type="button"
@@ -1428,7 +1428,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                     }}
                     className="px-3 py-1.5 text-xs font-bold bg-emerald-500 text-white rounded-lg shadow-sm hover:bg-emerald-600 transition-colors"
                   >
-                    Link Card
+                    {t('linkCardAction', language)}
                   </button>
                 </div>
               </div>
@@ -1613,10 +1613,10 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   className="w-full px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
                 >
                   <option value="none">{t('doesNotRepeat', language)}</option>
-                  <option value="daily">Daily — until {eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'daily'), 'MMM d, yyyy') : '...'}</option>
-                  <option value="weekly">Weekly — until {eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'weekly'), 'MMM d, yyyy') : '...'}</option>
-                  <option value="monthly">Monthly — until {eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'monthly'), 'MMM d, yyyy') : '...'}</option>
-                  <option value="yearly">Yearly — until {eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'yearly'), 'MMM d, yyyy') : '...'}</option>
+                  <option value="daily">{t('repeatUntil', language).replace('{freq}', t('freqDaily', language)).replace('{date}', (eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'daily'), 'd MMM yyyy', { locale: getDateLocale(language) }) : '...'))}</option>
+                  <option value="weekly">{t('repeatUntil', language).replace('{freq}', t('freqWeekly', language)).replace('{date}', (eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'weekly'), 'd MMM yyyy', { locale: getDateLocale(language) }) : '...'))}</option>
+                  <option value="monthly">{t('repeatUntil', language).replace('{freq}', t('freqMonthly', language)).replace('{date}', (eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'monthly'), 'd MMM yyyy', { locale: getDateLocale(language) }) : '...'))}</option>
+                  <option value="yearly">{t('repeatUntil', language).replace('{freq}', t('freqYearly', language)).replace('{date}', (eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'yearly'), 'd MMM yyyy', { locale: getDateLocale(language) }) : '...'))}</option>
                 </select>
                 {repeat !== 'none' && (
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
@@ -1630,7 +1630,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             {editEvent && (editEvent.isRecurringInstance || editEvent.recurrenceRule) && (
               <div className="flex flex-col gap-2 border border-indigo-200 dark:border-indigo-700/50 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-500/10">
                 <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
-                  🔁 This is a recurring event ({getFrequencyLabel(editEvent.recurrenceRule?.frequency || editEvent.parentFrequency || 'weekly')})
+                  🔁 {t('recurringEventIs', language).replace('{freq}', t(getFrequencyKey(editEvent.recurrenceRule?.frequency || editEvent.parentFrequency || 'weekly'), language))}
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -1758,13 +1758,13 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                  <div className="w-full flex justify-center bg-zinc-100 dark:bg-zinc-900 rounded-md overflow-hidden">
                    <img 
                      src={imageFile ? URL.createObjectURL(imageFile) : (selectedAssetUrl || editEvent?.imageUrl || '')}
-                     alt="Main asset preview"
+                     alt={t('altMainAsset', language)}
                      className="max-w-full max-h-48 object-contain"
                    />
                  </div>
                  <div className="flex justify-end w-full">
                    <button type="button" onClick={() => { setImageFile(null); setSelectedAssetUrl(null); setSelectedAssetId(null); setRemoveMainImage(true); }} className="text-red-500 text-xs font-medium flex items-center gap-1 hover:underline">
-                     <Trash2 className="w-3 h-3" /> Remove Attached Asset
+                     <Trash2 className="w-3 h-3" /> {t('removeAttachedAsset', language)}
                    </button>
                  </div>
                </div>

@@ -19,6 +19,27 @@
 // fixed, wired into the suite, so the claim is re-checked on every commit instead of being
 // believed. The house rule it enforces (CLAUDE.md): all user-facing text goes through `t()` in six
 // languages, with `/admin` and the Warlord UI as the two declared exemptions.
+//
+// ── 19.09.2026: this guard had been blind for twenty-four days ──────────────────────
+//
+// Seventeen hardcoded strings were found by hand — a button reading "Remove Attached Asset", a
+// placeholder "e.g. Kroger Card", nine `alt` texts — while this test passed on every commit.
+// Three reasons, all of them in here:
+//
+//   1. **`accept="image/*"`.** Blanking block comments with `/\/\*[\s\S]*?\*\//` treats the
+//      `/*` INSIDE that string as a comment opener. It blanked 18,592 characters of
+//      AddEventModal in one bite, 7,202 of Wallet and 3,148 of Settings — about 36,000
+//      characters of the app's three biggest screens, silently. Everything the scan was for
+//      was sitting inside the hole. A scanner that skips a third of a file does not return a
+//      wrong answer; it returns a clean one.
+//   2. **Props were never looked at.** `alt`, `placeholder`, `title` and `aria-label` are read
+//      out by screen readers and shown when an image fails. Nine of the seventeen were those.
+//   3. **`if (!/^[A-Z]/.test(text)) continue;`** skipped anything starting lowercase, so
+//      "e.g., Buy Milk, Order Cake..." was invisible even as text.
+//
+// The lesson is the header's own, turned on itself: a guard is a claim about the day it was
+// written unless something proves it can still SEE. Hence the two tests below that feed it the
+// exact shapes it went blind to.
 
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -42,6 +63,7 @@ const ALLOWED = new Set([
   'Warlord',    // the game's name
   'Admin',      // identical in all six languages; the entry to the exempt console
   'English', 'Română', 'Français', 'Español', 'Italiano', 'Deutsch', // language names stay native
+  'you@example.com', // an address shaped the same in every language; the field is an email field
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -75,8 +97,11 @@ function literalJsxText(src: string): { line: number; text: string }[] {
   };
 
   // Blank out comments and {expressions}, preserving length so offsets stay meaningful.
+  //
+  // Block comments are matched ONLY where `/*` opens a line, which is where a real one lives.
+  // The unanchored version swallowed `accept="image/*"` and 36,000 characters after it.
   const blank = (m: string) => ' '.repeat(m.length);
-  let masked = src.replace(/\/\*[\s\S]*?\*\//g, blank).replace(/\/\/[^\n]*/g, blank);
+  let masked = src.replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, blank).replace(/\/\/[^\n]*/g, blank);
   masked = masked.replace(/\{[^{}]*\}/g, blank);
 
   const out: { line: number; text: string }[] = [];
@@ -87,6 +112,18 @@ function literalJsxText(src: string): { line: number; text: string }[] {
     if (!/^[A-Z]/.test(text)) continue;          // prose starts with a capital; fragments do not
     if (ALLOWED.has(text) || text.startsWith('http')) continue;
     if (/[=;{}()[\]/\\]|className|=>/.test(text)) continue; // still code, not prose
+    out.push({ line: lineOf(m.index! + 1), text });
+  }
+
+  // The attributes a person actually meets: read aloud by a screen reader, shown when an image
+  // fails, or sitting in an empty field. Nine of the seventeen found on 19.09 were these, and
+  // none of them could ever have been seen by the loop above.
+  for (const m of masked.matchAll(/\b(placeholder|title|aria-label|alt)="([^"]{2,200})"/g)) {
+    const text = m[2].split(/\s+/).filter(Boolean).join(' ');
+    if (text.length < 3) continue;
+    if (!/[A-Za-z]{3}/.test(text)) continue;
+    if (ALLOWED.has(text) || text.startsWith('http')) continue;
+    if (/[=;{}()[\]\/\\]|className|=>/.test(text)) continue;
     out.push({ line: lineOf(m.index! + 1), text });
   }
   return out;
@@ -109,6 +146,24 @@ describe('no user-facing screen ships a hardcoded string', () => {
   it('does not flag text that is already translated', () => {
     const sample = `<p className="x">\n  <Wallet className="w-4 h-4" /> {t('linkedAssetCode', language)}\n</p>`;
     expect(literalJsxText(sample)).toEqual([]);
+  });
+
+  it('is not blinded by a /* inside a string, which is what accept="image/*" is', () => {
+    // The defect that hid ~36,000 characters for twenty-four days. The string after the input
+    // must still be seen.
+    const sample = `<input accept="image/*" />\n<button>Remove Attached Asset</button>`;
+    expect(literalJsxText(sample).map((h) => h.text)).toContain('Remove Attached Asset');
+  });
+
+  it('sees the attributes a person meets, not just text between tags', () => {
+    const sample = `<img alt="Profile picture" />\n<input placeholder="e.g. Kroger Card" />`;
+    const found = literalJsxText(sample).map((h) => h.text);
+    expect(found).toContain('Profile picture');
+    expect(found).toContain('e.g. Kroger Card');
+  });
+
+  it('still lets a translated attribute through', () => {
+    expect(literalJsxText(`<img alt={t('altProfile', language)} />`)).toEqual([]);
   });
 
   it('every literal is gone', () => {
