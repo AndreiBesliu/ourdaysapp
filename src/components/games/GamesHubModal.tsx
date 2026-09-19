@@ -765,7 +765,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                   ) : (
                     <div className="flex flex-col gap-3">
                       {leaderboard.map((entry, index) => {
-                        const user = userMap[entry.uid] || { name: 'Unknown' };
+                        const user = userMap[entry.uid] || { name: t('unknownPerson', language) };
                         return (
                           <div key={entry.uid} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex items-center justify-between shadow-sm">
                             <div className="flex items-center gap-4">

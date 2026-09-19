@@ -615,7 +615,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                     <div className="flex flex-wrap gap-1 mt-1">
                       {assigneeIds.map(id => (
                         <span key={id} className="inline-flex items-center gap-1 bg-zinc-200 dark:bg-zinc-700 px-2 py-1 rounded-full text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                          {userMap[id]?.name || userMap[id]?.email?.split('@')[0] || 'Member'}
+                          {userMap[id]?.name || userMap[id]?.email?.split('@')[0] || t('memberFallback', language)}
                           {(canEdit || id === auth.currentUser?.uid) && (
                             <button onClick={() => handleRemoveAssignee(id)} className="text-zinc-500 hover:text-red-500 transition-colors ml-1" title={`Remove ${id === auth.currentUser?.uid ? 'yourself' : 'member'}`}>
                               <X className="w-3 h-3" />
@@ -717,11 +717,11 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                      {event.reminderMinutes === 0 ? 'At time of event' : 
-                       event.reminderMinutes === 15 ? '15 minutes before' : 
-                       event.reminderMinutes === 60 ? '1 hour before' : 
-                       event.reminderMinutes === 1440 ? '1 day before' : 
-                       `${event.reminderMinutes} minutes before`}
+                      {event.reminderMinutes === 0 ? t('atTimeOfEvent', language) :
+                       event.reminderMinutes === 15 ? t('min15Before', language) :
+                       event.reminderMinutes === 60 ? t('hour1Before', language) :
+                       event.reminderMinutes === 1440 ? t('day1Before', language) :
+                       t('minutesBefore', language).replace('{n}', String(event.reminderMinutes))}
                     </p>
                     <p className="text-xs text-zinc-500">{t('reminderSet', language)}</p>
                   </div>
@@ -779,7 +779,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                       <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                       <span className="text-xs text-zinc-600 dark:text-zinc-400">
                         <span className="font-semibold text-emerald-600 dark:text-emerald-400">Going ({yesUsers.length})</span>{' — '}
-                        {yesUsers.map(uid => userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || 'Member').join(', ')}
+                        {yesUsers.map(uid => userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || t('memberFallback', language)).join(', ')}
                       </span>
                     </div>
                   )}
@@ -788,7 +788,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                       <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
                       <span className="text-xs text-zinc-600 dark:text-zinc-400">
                         <span className="font-semibold text-amber-600 dark:text-amber-400">Maybe ({maybeUsers.length})</span>{' — '}
-                        {maybeUsers.map(uid => userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || 'Member').join(', ')}
+                        {maybeUsers.map(uid => userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || t('memberFallback', language)).join(', ')}
                       </span>
                     </div>
                   )}
@@ -797,7 +797,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                       <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
                       <span className="text-xs text-zinc-600 dark:text-zinc-400">
                         <span className="font-semibold text-red-600 dark:text-red-400">Not going ({noUsers.length})</span>{' — '}
-                        {noUsers.map(uid => userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || 'Member').join(', ')}
+                        {noUsers.map(uid => userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || t('memberFallback', language)).join(', ')}
                       </span>
                     </div>
                   )}

@@ -1596,7 +1596,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                         : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-700'
                     }`}
                   >
-                    {u.name || 'Member'}
+                    {u.name || t('memberFallback', language)}
                     {assigneeIds.includes(u.id) && <CheckCircle2 className="w-3 h-3" />}
                   </button>
                   );
@@ -1812,7 +1812,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               disabled={loading || !title.trim() || autoSaveStatus === 'saving'}
               className={`w-full bg-primary hover:bg-primary/90 text-white font-medium py-2.5 rounded-lg transition-colors disabled:opacity-50 ${editEvent ? 'max-w-[140px] ml-auto' : ''}`}
             >
-              {loading ? (editEvent ? 'Saving...' : 'Adding...') : (editEvent ? 'Done' : 'Save Event')}
+              {loading
+                ? t(editEvent ? 'saving' : 'adding', language)
+                : t(editEvent ? 'done' : 'saveEvent', language)}
             </button>
           </div>
         </form>

@@ -479,7 +479,7 @@ export default function CalendarHome() {
         const [, month, day] = u.birthday.split('-');
         bEvents.push({
           id: `virtual-birthday-${u.id}`,
-          title: `${u.name || u.email?.split('@')[0] || 'User'} — ${t('birthday', language)} 🎂`,
+          title: `${u.name || u.email?.split('@')[0] || t('personFallback', language)} — ${t('birthday', language)} 🎂`,
           date: `${currentYear}-${month}-${day}`,
           categoryId: 'important',
           color: 'rose',

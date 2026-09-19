@@ -1161,3 +1161,22 @@ raportase curat. Datele nu conțin engleza în cod — o produce biblioteca, la 
 - [ ] **Dacă vezi o dată în engleză oriunde**, spune-mi — acum există o poartă exact pentru asta,
       deci fiecare caz nou înseamnă că mai are o gaură, și o pot închide definitiv.
 
+### Engleza din interiorul expresiilor (reparat 19.09)
+
+Textul care apare **doar când lipsește ceva** — n-are nume, n-are text, mesajul e șters. E cel
+mai greu de observat uitându-te la ecran, fiindcă de obicei nu e acolo. Printre ele era și
+**butonul principal al formularului de evenimente**.
+
+- [ ] **Deschide formularul de eveniment.** Butonul mare de jos: **„Salvează evenimentul”** la
+      unul nou, **„Gata”** când editezi. Cât se salvează: „Se adaugă…” / „Se salvează…”.
+- [ ] **Pune un memento și deschide evenimentul.** Linia de sub clopoțel trebuie să fie în
+      română („Cu 15 minute înainte”). Pune și unul personalizat, de exemplu 45 de minute:
+      trebuie să scrie „Cu 45 de minute înainte” — **dacă numărul lipsește, spune-mi**.
+- [ ] **În chat:** fixează două mesaje. Bara de sus zice „+încă 1” și „Ascunde”, iar butonul de
+      pe mesaj zice „Fixează” / „Desprinde”.
+- [ ] **Locuri unde numele cuiva lipsește** (un membru șters, un clasament de joc): trebuie să
+      scrie „Necunoscut”, nu „Unknown”.
+- [ ] **În portofel**, gruparea fără categorie se numește acum „Fără categorie”. Dacă vezi
+      **două** grupuri, unul românesc și unul „Uncategorized”, spune-mi — înseamnă că am rupt
+      cheia de grupare, nu doar eticheta.
+

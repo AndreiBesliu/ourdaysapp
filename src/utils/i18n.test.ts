@@ -34,6 +34,28 @@ describe('the six dictionaries agree', () => {
     }
   });
 
+  it('every placeholder survives translation', () => {
+    // The callers do `t(key, language).replace('{n}', String(n))`. A translation that drops
+    // `{n}` does not fail, does not warn, and does not render the number — the sentence just
+    // quietly stops saying how many. Measured on 19.09: 26 keys carry a placeholder.
+    const marks = (v: unknown) => [...String(v).matchAll(/\{[a-zA-Z]+\}/g)].map((m) => m[0]).sort();
+    const wrong: string[] = [];
+    let checked = 0;
+    for (const [key, value] of Object.entries(translations['en-US'])) {
+      const want = marks(value);
+      if (!want.length) continue;
+      checked++;
+      for (const lang of LANGS) {
+        const got = marks(translations[lang][key]);
+        if (got.join(',') !== want.join(',')) {
+          wrong.push(`${key} — en-US has ${want.join(' ')}, ${lang} has ${got.join(' ') || '(none)'}`);
+        }
+      }
+    }
+    expect(checked, 'no key carries a placeholder — the check is scanning nothing').toBeGreaterThan(20);
+    expect(wrong, `placeholders lost in translation:\n${wrong.join('\n')}`).toEqual([]);
+  });
+
   it('no value is left empty', () => {
     for (const lang of LANGS) {
       const blank = Object.entries(translations[lang]).filter(([, v]) => !String(v).trim());

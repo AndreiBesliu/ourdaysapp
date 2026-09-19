@@ -5937,3 +5937,57 @@ toate sunt vizibile omului (`'Render error'` e un mesaj de jurnal). Următorul t
 
 `npx tsc -b` verde · poartă de lint verde · **1460 de teste** · build verde.
 
+---
+
+## 2026-09-19 · Engleza stătea exact unde scanerul e construit să nu se uite
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+### Gaura
+
+`i18nCoverage.test.ts` șterge fiecare `{…}` înainte să caute, și are dreptate s-o facă: în
+acolade e cod, iar cine citește codul ca proză raportează 196 de constatări și e ignorat. Numai
+că engleza rămasă în aplicație stătea fix acolo:
+
+```
+{userMap[id]?.name || userMap[id]?.email?.split('@')[0] || 'Member'}
+{msg.isDeleted ? 'Deleted message' : (msg.text || 'Photo')}
+```
+
+Text care apare **doar când lipsește ceva** — deci și cel mai greu de văzut uitându-te la ecran.
+Măsurat: **29** de astfel de șiruri; după ce am strâns scanerul, 10 defecte reale în plus, între
+care **butonul principal al formularului de evenimente** („Save Event” / „Done” / „Saving...” /
+„Adding...”) și linia de memento din fereastra de detalii — care scria patru etichete în engleză
+**deși cheile existau deja** și erau folosite de dropdown-ul de alături.
+
+### Singurul motiv bun să lași una
+
+**Valoarea se SCRIE în baza de date.** `fromName: myName || 'Friend'` stă pe o cerere de
+prietenie și o citește **destinatarul**; trecută prin `t()`, îngheață limba expeditorului în date
+comune și i-o arată cuiva care n-a ales-o. La fel numele dat unui cont la înscriere și numele
+unui card încărcat. Nouă astfel de cazuri au rămas, fiecare cu motivul scris lângă el.
+
+### Scanerul a învățat patru forme și a dezvățat trei
+
+Învățate: `|| '…'`, ramura apropiată a unui ternar, `|| { name: '…' }` (un obiect care ține locul
+unui om lipsă, și ale cărui câmpuri se desenează), și etichete care încep cu o cifră
+(„15 minutes before”).
+
+Dezvățate, fiindcă sunt cod sau date: `name: 'Blue'` dintr-un tabel de teme (o proprietate de
+obiect, nu o ramură de ternar), un identificator cu punct (`LeaveGroupModal.leaveGroup`, contextul
+trimis jurnalului de erori), și un token CamelCase singur (`StaleChunk`). Fiecare exclusă are un
+test care o ține exclusă.
+
+**6 din 6 mutații prinse**, inclusiv două pe lista de excepții însăși: dacă ștergi o intrare,
+poarta devine roșie; dacă lași o intrare pentru o linie care nu mai există, tot roșie. **O listă
+de permisiuni care îmbătrânește e o listă în care nimeni nu mai are încredere.**
+
+### Și o a treia plasă, pentru ceva ce n-avea niciun defect
+
+Apelanții fac `t(cheie, limba).replace('{n}', String(n))`. O traducere care pierde `{n}` nu dă
+eroare, nu avertizează și **nu mai scrie numărul** — propoziția doar încetează să spună câte.
+Măsurat: 26 de chei poartă substituenți, **zero nepotriviri**. Deci nu repar nimic; pun paza,
+fiindcă eșecul e tăcut. Probată rupând o traducere românească: prinsă.
+
+`npx tsc -b` verde · poartă de lint verde · **1471 de teste** · build verde.
+

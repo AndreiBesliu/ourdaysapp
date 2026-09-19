@@ -251,7 +251,7 @@ export default function Settings() {
               </div>
 
               <div className="text-center sm:text-left">
-                <p className="font-medium text-lg text-zinc-900 dark:text-zinc-100">{name || auth.currentUser?.displayName || 'My Profile'}</p>
+                <p className="font-medium text-lg text-zinc-900 dark:text-zinc-100">{name || auth.currentUser?.displayName || t('myProfile', language)}</p>
                 <p className="text-sm text-zinc-500">{auth.currentUser?.email}</p>
                 <label htmlFor="profile-upload" className="text-xs font-medium text-primary cursor-pointer hover:underline sm:hidden mt-2 inline-block">
                   {t('changePhoto', language)}

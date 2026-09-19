@@ -212,7 +212,7 @@ export default function GroupSettingsModal({
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                        {u?.name || u?.email?.split('@')[0] || 'Unknown'} {isMe && <span className="text-xs text-zinc-400">({t('youLabel', language)})</span>}
+                        {u?.name || u?.email?.split('@')[0] || t('unknownPerson', language)} {isMe && <span className="text-xs text-zinc-400">({t('youLabel', language)})</span>}
                       </p>
                       {u?.email && <p className="text-xs text-zinc-500 truncate">{u.email}</p>}
                     </div>

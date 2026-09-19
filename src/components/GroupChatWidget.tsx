@@ -804,14 +804,14 @@ export default function GroupChatWidget({
               >
                 <Pin className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 rotate-45" />
                 <span className="text-xs text-amber-800 dark:text-amber-300 truncate flex-1 font-medium">
-                  {pinnedMessages[pinnedMessages.length - 1].text || 'Pinned message'}
+                  {pinnedMessages[pinnedMessages.length - 1].text || t('chatPinnedMessage', language)}
                 </span>
                 {pinnedMessages.length > 1 && (
                   <button
                     onClick={(e) => { e.stopPropagation(); setShowAllPinned(!showAllPinned); }}
                     className="text-[10px] text-amber-600 dark:text-amber-400 font-bold hover:underline whitespace-nowrap shrink-0"
                   >
-                    {showAllPinned ? 'Hide' : `+${pinnedMessages.length - 1} more`}
+                    {showAllPinned ? t('hide', language) : t('morePinned', language).replace('{n}', String(pinnedMessages.length - 1))}
                   </button>
                 )}
               </button>
@@ -823,7 +823,7 @@ export default function GroupChatWidget({
                       onClick={() => scrollToMessage(pm.id)}
                       className="text-xs text-amber-700 dark:text-amber-300 truncate text-left pl-5 hover:underline"
                     >
-                      {pm.text || 'Pinned message'}
+                      {pm.text || t('chatPinnedMessage', language)}
                     </button>
                   ))}
                 </div>
@@ -840,7 +840,7 @@ export default function GroupChatWidget({
             ) : (
               messages.map((msg, index) => {
                 const isMe = msg.senderId === auth.currentUser?.uid;
-                const sender = userMap[msg.senderId] || { name: 'Unknown' };
+                const sender = userMap[msg.senderId] || { name: t('unknownPerson', language) };
                 const status = getSeenStatus(msg);
                 const parentMsg = msg.replyToId ? messages.find(m => m.id === msg.replyToId) : null;
                 const msgDate = msg.createdAt ? msg.createdAt.toDate() : new Date();
@@ -886,7 +886,7 @@ export default function GroupChatWidget({
                       {isMe && status && (
                         <div 
                           className="flex items-center ml-0.5"
-                          title={status === 'seen' && msg.seenBy ? msg.seenBy.filter((id: string) => id !== auth.currentUser?.uid).map((id: string) => userMap[id]?.name || userMap[id]?.email?.split('@')[0] || 'Unknown').join(', ') : ''}
+                          title={status === 'seen' && msg.seenBy ? msg.seenBy.filter((id: string) => id !== auth.currentUser?.uid).map((id: string) => userMap[id]?.name || userMap[id]?.email?.split('@')[0] || t('unknownPerson', language)).join(', ') : ''}
                         >
                           {status === 'seen' ? (
                             <CheckCheck className="w-3.5 h-3.5 text-blue-400" />
@@ -911,8 +911,8 @@ export default function GroupChatWidget({
                             <div 
                               className={`px-3 py-2 text-xs border-b border-black/10 dark:border-white/10 opacity-80 cursor-pointer hover:opacity-100 transition-opacity ${isMe ? 'bg-black/5' : 'bg-zinc-100 dark:bg-zinc-700/50'}`}
                             >
-                              <p className="font-semibold">{parentMsg.senderId === auth.currentUser?.uid ? 'You' : (userMap[parentMsg.senderId]?.name || userMap[parentMsg.senderId]?.email?.split('@')[0] || 'Unknown')}</p>
-                              <p className="truncate line-clamp-1">{parentMsg.isDeleted ? 'Deleted message' : (parentMsg.text || 'Photo')}</p>
+                              <p className="font-semibold">{parentMsg.senderId === auth.currentUser?.uid ? t('chatYou', language) : (userMap[parentMsg.senderId]?.name || userMap[parentMsg.senderId]?.email?.split('@')[0] || t('unknownPerson', language))}</p>
+                              <p className="truncate line-clamp-1">{parentMsg.isDeleted ? t('chatDeletedPreview', language) : (parentMsg.text || t('chatPhoto', language))}</p>
                             </div>
                           )}
                           <div className="overflow-hidden rounded-b-2xl">
@@ -975,7 +975,7 @@ export default function GroupChatWidget({
                           <button
                             onClick={() => handlePin(msg.id)}
                             className={`p-1 rounded-full shrink-0 ${msg.isPinned ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10' : 'text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}
-                            title={msg.isPinned ? 'Unpin' : 'Pin'}
+                            title={t(msg.isPinned ? 'unpinMessage' : 'pinMessage', language)}
                           >
                             <Pin className="w-3.5 h-3.5 rotate-45" />
                           </button>
@@ -1014,7 +1014,7 @@ export default function GroupChatWidget({
                                 ? 'bg-primary/20 border-primary/30 text-primary' 
                                 : 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300'
                             }`}
-                            title={users.map((uid: string) => uid === auth.currentUser?.uid ? 'You' : (userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || 'Someone')).join(', ')}
+                            title={users.map((uid: string) => uid === auth.currentUser?.uid ? t('chatYou', language) : (userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || t('chatSomeone', language))).join(', ')}
                           >
                             <span>{emoji}</span>
                             <span className="font-medium">{users.length}</span>
@@ -1078,8 +1078,8 @@ export default function GroupChatWidget({
               <div className="flex items-center gap-2 overflow-hidden">
                 <Reply className="w-4 h-4 text-primary shrink-0" />
                 <div className="flex flex-col overflow-hidden">
-                  <span className="text-[10px] font-bold text-primary">{t('replyingToLabel', language)} {replyingTo.senderId === auth.currentUser?.uid ? 'You' : (userMap[replyingTo.senderId]?.name || userMap[replyingTo.senderId]?.email?.split('@')[0] || 'Unknown')}</span>
-                  <span className="text-xs text-zinc-500 truncate">{replyingTo.text || 'Photo'}</span>
+                  <span className="text-[10px] font-bold text-primary">{t('replyingToLabel', language)} {replyingTo.senderId === auth.currentUser?.uid ? t('chatYou', language) : (userMap[replyingTo.senderId]?.name || userMap[replyingTo.senderId]?.email?.split('@')[0] || t('unknownPerson', language))}</span>
+                  <span className="text-xs text-zinc-500 truncate">{replyingTo.text || t('chatPhoto', language)}</span>
                 </div>
               </div>
               <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full text-zinc-500 transition-colors">
@@ -1095,7 +1095,7 @@ export default function GroupChatWidget({
                 <Pencil className="w-4 h-4 text-primary shrink-0" />
                 <div className="flex flex-col overflow-hidden">
                   <span className="text-[10px] font-bold text-primary">{t('editingMessage', language)}</span>
-                  <span className="text-xs text-zinc-500 truncate">{editingMsg.text || 'Photo'}</span>
+                  <span className="text-xs text-zinc-500 truncate">{editingMsg.text || t('chatPhoto', language)}</span>
                 </div>
               </div>
               <button onClick={() => { setEditingMsg(null); setNewMessage(''); }} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full text-zinc-500 transition-colors">

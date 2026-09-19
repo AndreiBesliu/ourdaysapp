@@ -97,7 +97,7 @@ export default function Wallet() {
 
     const qGroups = query(collection(db, 'groups'), where('members', 'array-contains', auth.currentUser.uid));
     const unsubGroups = liveQuery<any>(qGroups, 'Wallet.groups', async (fetchedGroups) => {
-      setMyGroups(fetchedGroups.map(g => ({ id: g.id, name: g.name || 'Group', members: Array.isArray(g.members) ? g.members : [] })));
+      setMyGroups(fetchedGroups.map(g => ({ id: g.id, name: g.name || t('group', language), members: Array.isArray(g.members) ? g.members : [] })));
       const memberIds = new Set<string>();
       fetchedGroups.forEach((g: any) => g.members?.forEach((id: string) => memberIds.add(id)));
       
@@ -705,7 +705,7 @@ export default function Wallet() {
           Object.keys(groupedAssets).map(catName => (
             <div key={catName}>
               <div className="flex items-center justify-between mb-3 pl-1 border-l-4 border-emerald-500">
-                <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-200 pl-2">{catName}</h2>
+                <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-200 pl-2">{catName === 'Uncategorized' ? t('uncategorized', language) : catName}</h2>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {groupedAssets[catName].map((asset: any) => renderAssetCard(asset))}
