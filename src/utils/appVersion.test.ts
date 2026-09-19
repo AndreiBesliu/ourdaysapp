@@ -6,7 +6,9 @@
 // happy path.
 
 import { describe, it, expect } from 'vitest';
-import { entryFromHtml, runningEntry, checkForNewVersion, isStaleChunkError } from './appVersion';
+import {
+  entryFromHtml, runningEntry, checkForNewVersion, isStaleChunkError, browserIsOnline,
+} from './appVersion';
 
 const BUILT_HTML = `<!doctype html>
 <html lang="en">
@@ -85,6 +87,28 @@ describe('the comparison, and everything it refuses to claim', () => {
     expect(await checkForNewVersion(offline, RUNNING)).toBe('unknown');
   });
 
+  it('says `unknown` while offline, even when a cache answers with a DIFFERENT build', async () => {
+    // This is the failure that was live until 19.09, not a hypothetical: the service worker held
+    // a frozen entry document, so the fetch SUCCEEDED offline and named an older bundle. Without
+    // the flag the answer below is `new`, the notice appears, and taking it blanks the tab.
+    const stale = BUILT_HTML.replace('index-D1OdOYH2.js', 'index-ZZZZZZZZ.js');
+    const fromCache = ok(stale) as unknown as typeof fetch;
+    expect(await checkForNewVersion(fromCache, RUNNING, false)).toBe('unknown');
+    // ...and the same responder, online, is exactly the case that SHOULD fire. Without this the
+    // test above would still pass if the function had simply stopped working.
+    expect(await checkForNewVersion(fromCache, RUNNING, true)).toBe('new');
+  });
+
+  it('does not even ask the network when the browser says there is none', async () => {
+    let asked = false;
+    const spy = (async () => {
+      asked = true;
+      return { ok: true, text: async () => BUILT_HTML };
+    }) as unknown as typeof fetch;
+    expect(await checkForNewVersion(spy, RUNNING, false)).toBe('unknown');
+    expect(asked).toBe(false);
+  });
+
   it('says `unknown` on a non-200, even though the body might parse', async () => {
     // A 503 page from an edge cache could still contain an old <script src>. Trusting it would
     // announce a downgrade as an upgrade.
@@ -113,6 +137,22 @@ describe('the comparison, and everything it refuses to claim', () => {
     expect(seen?.cache).toBe('no-store');
   });
 });
+describe('which half of navigator.onLine is worth believing', () => {
+  it('treats an explicit false as offline', () => {
+    expect(browserIsOnline({ onLine: false })).toBe(false);
+  });
+
+  it('treats everything else as possibly online, including a missing flag', () => {
+    // `true` is not evidence of a route — a captive portal reports it — but it is not evidence
+    // of the absence of one either, and only absence is acted on.
+    expect(browserIsOnline({ onLine: true })).toBe(true);
+    expect(browserIsOnline({})).toBe(true);
+    expect(browserIsOnline(undefined)).toBe(true);
+    // Not `=== false`, so not offline. A truthy-test here would read this as no network.
+    expect(browserIsOnline({ onLine: 0 })).toBe(true);
+  });
+});
+
 describe('a tab that is older than the server', () => {
   it('recognises the wording of all three engines', () => {
     expect(isStaleChunkError('Failed to fetch dynamically imported module: https://x/assets/Admin-A1M6gDLC.js')).toBe(true);

@@ -58,6 +58,23 @@ export function entryFromHtml(html: string): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * The browser's own answer about connectivity, reduced to the half of it that is trustworthy.
+ *
+ * `onLine === true` proves nothing: a laptop joined to a café network that never let it past the
+ * captive portal still reports true. `onLine === false` is the browser stating it has no route at
+ * all, and that direction is reliable. So anything that is not an explicit `false` counts as
+ * "might be online", and only the certain case is acted on.
+ *
+ * A separate function rather than an inline read because a default argument cannot be tested —
+ * there is no `navigator` under the test runner, so the expression would always take one branch.
+ */
+export function browserIsOnline(
+  nav: { onLine?: unknown } | undefined = typeof navigator === 'undefined' ? undefined : navigator,
+): boolean {
+  return !nav || nav.onLine !== false;
+}
+
 export type VersionCheck = 'same' | 'new' | 'unknown';
 
 /**
@@ -66,13 +83,32 @@ export type VersionCheck = 'same' | 'new' | 'unknown';
  * Returns `unknown` for every ambiguity — offline, a non-200, markup we could not parse, dev mode.
  * That asymmetry is deliberate: a false "new version available" trains people to ignore the bar,
  * and the bar is only worth having if it is always true.
+ *
+ * `online` is injected so the rule can be tested without a DOM; it defaults to the browser's own
+ * answer, and to `true` where there is no `navigator` at all.
  */
 export async function checkForNewVersion(
   fetchImpl: typeof fetch = fetch,
   scripts: readonly { src: string }[] = Array.from(document.scripts),
+  online: boolean = browserIsOnline(),
 ): Promise<VersionCheck> {
   const running = runningEntry(scripts);
   if (!running) return 'unknown';
+
+  // A 200 that arrives with no network did not come from the server, so what it names is not
+  // "what is served now" — it is whatever some cache happens to hold. Until 19.09 that cache was
+  // this app's OWN service worker, which kept a frozen copy of the entry document for ever: so
+  // offline, `served !== running` was reliably true, the notice appeared, and accepting it
+  // reloaded onto a document whose hashed bundle had never been cached at all. A blank page,
+  // and whatever was half-typed gone with it.
+  //
+  // The worker no longer caches that document, so this is a second lock on a door that is
+  // already shut. It stays for two reasons: a device that installed the old worker keeps being
+  // served by it until the new one activates, and `navigator.onLine === false` is the browser
+  // stating there is no route — that direction of the flag is worth trusting even though `true`
+  // proves nothing.
+  if (!online) return 'unknown';
+
   try {
     // `cache: 'no-store'` rather than trusting the response header: this must be right even from a
     // browser that still holds the pre-fix `max-age=3600` copy of the entry document.

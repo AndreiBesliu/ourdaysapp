@@ -19,6 +19,7 @@ const errorFixes_1 = require("./errorFixes");
 const errorState_1 = require("./errorState");
 const aiProviderError_1 = require("./aiProviderError");
 const eventTime_1 = require("./eventTime");
+const digestEvents_1 = require("./digestEvents");
 const assetTransfer_1 = require("./assetTransfer");
 // Invite links live in their own module — index.ts is already long, and these four are a
 // self-contained feature. Re-exported here because Firebase deploys what index exports.
@@ -535,26 +536,54 @@ exports.generateGroupDigest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
                 chatHistory += `- ${senderName}: ${d.text || (d.imageUrl ? '[Image]' : '[Audio]')}\n`;
             }
         }
-        // Get upcoming events
-        const now = new Date();
-        const nextWeek = new Date();
-        nextWeek.setDate(nextWeek.getDate() + 7);
-        const eventsSnapshot = await db.collection('events')
-            .where('groupId', '==', groupId)
-            .where('date', '>=', now.toISOString())
-            .where('date', '<=', nextWeek.toISOString())
-            .orderBy('date', 'asc')
-            .limit(10)
-            .get();
+        // ── Upcoming events ──────────────────────────────────────────────────────────────────
+        //
+        // The window and the selection live in `digestEvents.ts`, tested from
+        // `src/utils/digestEvents.test.ts` — this section had no test at all, which is most of the
+        // reason it was wrong three ways for as long as it was. What is left here is the two reads,
+        // and the reason the second one is shaped the way it is.
+        //
+        // Measured on live on 19.09, before any of it was written: five groups, zero events anywhere
+        // in the next eight days, and ONE recurring event in the whole database — belonging to no
+        // group. So none of the three defects had a victim that day. They are deterministic all the
+        // same: the first fired for every event anybody dated today, from the moment it was saved.
+        const eventWindow = (0, digestEvents_1.digestWindow)(new Date().toISOString());
         let upcomingEvents = "Upcoming Events (Next 7 days):\n";
-        if (eventsSnapshot.empty) {
-            upcomingEvents += "(No upcoming events)\n";
+        let eventsTruncated = false;
+        if (!eventWindow) {
+            // Unreachable from a real clock, and said out loud rather than left as an empty list —
+            // "(No upcoming events)" would read as a calendar with nothing on it.
+            upcomingEvents += "(Upcoming events unavailable)\n";
         }
         else {
-            eventsSnapshot.docs.forEach(docSnap => {
-                const d = docSnap.data();
-                upcomingEvents += `- ${d.title} on ${d.date.split('T')[0]}\n`;
-            });
+            const [windowSnap, recurringSnap] = await Promise.all([
+                db.collection('events')
+                    .where('groupId', '==', groupId)
+                    .where('date', '>=', eventWindow.scanFrom)
+                    .where('date', '<=', eventWindow.scanTo)
+                    .orderBy('date', 'asc')
+                    .limit(digestEvents_1.DIGEST_EVENT_SCAN)
+                    .get(),
+                // Deliberately NOT scoped by `groupId`, and that is measured rather than assumed: on
+                // 19.09 `groupId == X` alongside `recurrenceRule != null` was refused on live with
+                // FAILED_PRECONDITION for want of a composite index. Deploying an index so that a query
+                // can be narrow — on a code path where a MISSING index throws rather than returning
+                // less — is the worse trade when the whole database holds one such document.
+                // `digestEventLines` filters by group before anything reads them.
+                db.collection('events')
+                    .where('recurrenceRule', '!=', null)
+                    .limit(digestEvents_1.DIGEST_RECURRING_SCAN)
+                    .get(),
+            ]);
+            const docs = [...windowSnap.docs, ...recurringSnap.docs]
+                .map((d) => (Object.assign({ id: d.id }, d.data())));
+            const selection = (0, digestEvents_1.digestEventLines)(docs, groupId, eventWindow);
+            eventsTruncated = selection.truncated
+                || windowSnap.size >= digestEvents_1.DIGEST_EVENT_SCAN
+                || recurringSnap.size >= digestEvents_1.DIGEST_RECURRING_SCAN;
+            upcomingEvents += selection.lines.length === 0
+                ? "(No upcoming events)\n"
+                : selection.lines.join("\n") + "\n";
         }
         const ai = new genai_1.GoogleGenAI({ apiKey: key });
         const prompt = `You are a helpful AI Assistant for a family/group organization app.
@@ -569,8 +598,10 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
         const result = await (0, aiLedger_1.withLedger)({ feature: 'group-digest', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }), aiLedger_1.usageOf, prompt.length);
         const text = (0, aiLedger_1.textOf)(result).trim();
         // The caller is told when the window was cut, so a partial digest can say so instead of
-        // reading as the whole story.
-        return { digest: text, truncated: digestTruncated };
+        // reading as the whole story. BOTH halves can cut it — the chat window and the event window
+        // each have a ceiling of their own — and a flag covering only one of them would be a promise
+        // the other half does not keep.
+        return { digest: text, truncated: digestTruncated || eventsTruncated };
     }
     catch (error) {
         console.error("AI Group Digest Error", error);

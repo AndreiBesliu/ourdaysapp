@@ -14,8 +14,7 @@
 //     an admin gate.
 //   • Be NARROWER than the rules, never wider. Where a rule is loose, mirror the intent.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.maySee = maySee;
-exports.isPendingInvite = isPendingInvite;
+exports.isPendingInvite = exports.maySee = void 0;
 exports.fetchEvents = fetchEvents;
 exports.fetchChat = fetchChat;
 exports.fetchAssets = fetchAssets;
@@ -24,30 +23,13 @@ const admin = require("firebase-admin");
 const aiScope_1 = require("./aiScope");
 const recurrenceServer_1 = require("./recurrenceServer");
 const fanOut_1 = require("./fanOut");
-/**
- * THE visibility invariant for one event, written from scratch.
- *
- * NOT ported from `CalendarHome`: the client's filter is wrapped in
- * `activeGroupId !== 'personal'`, a UI variable the server does not have. Ported literally
- * with the caller "in personal view", the condition short-circuits to false and every event a
- * member deliberately hid lands in the cross-group context.
- */
-function maySee(ev, uid) {
-    if (ev.ownerId === uid)
-        return true; // personal events carry `visibleTo: []`
-    const assignees = Array.isArray(ev.assigneeIds) ? ev.assigneeIds : [];
-    if (assignees.includes(uid))
-        return true;
-    if (ev.assigneeId === uid || ev.inviteeId === uid)
-        return true; // assignment IS a read grant
-    if (!Array.isArray(ev.visibleTo))
-        return true; // legacy / unset = unrestricted
-    return ev.visibleTo.includes(uid);
-}
-/** A pending invitation is hidden in the app until it is answered; mirror that. */
-function isPendingInvite(ev, uid) {
-    return ev.inviteeId === uid && ev.inviteStatus === "pending";
-}
+// Re-exported, not merely used: these two ARE part of this module's contract, and the
+// only reason they moved is that nothing importing `firebase-admin` can be tested from
+// the app suite. Callers keep writing `maySee`.
+var aiVisibility_1 = require("./aiVisibility");
+Object.defineProperty(exports, "maySee", { enumerable: true, get: function () { return aiVisibility_1.maySee; } });
+Object.defineProperty(exports, "isPendingInvite", { enumerable: true, get: function () { return aiVisibility_1.isPendingInvite; } });
+const aiVisibility_2 = require("./aiVisibility");
 /**
  * Events and tasks — the same collection; a task is an event with `isTask: true`.
  *
@@ -99,7 +81,7 @@ async function fetchEvents(scope, period, budget) {
             byId.set(doc.id, Object.assign({ id: doc.id }, data));
         }
     }
-    const visible = [...byId.values()].filter((ev) => maySee(ev, uid) && !isPendingInvite(ev, uid));
+    const visible = [...byId.values()].filter((ev) => (0, aiVisibility_2.maySee)(ev, uid) && !(0, aiVisibility_2.isPendingInvite)(ev, uid));
     const occurrences = (0, recurrenceServer_1.expandInWindow)(visible, period.fromDay, period.toDay);
     const items = occurrences.map((occ) => {
         const ev = occ.source;

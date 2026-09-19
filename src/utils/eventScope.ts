@@ -46,10 +46,17 @@
 // and an exception that names nobody is the empty list it looks like. `visibleTo` is no longer
 // read anywhere — justified by that third measurement, not by hope.
 //
-// Worth knowing what this is NOT: `visibleTo` never appeared in firestore.rules or in any Cloud
-// Function, and neither does `hiddenFrom`. Any member of a group can READ every one of its events;
-// this is the calendar declining to draw one. It is a courtesy, not a privacy boundary, and a
-// screen that treats it as the latter would be making a promise the database does not keep.
+// Worth knowing what this is NOT: neither field appears in firestore.rules. Any member of a
+// group can READ every one of its events; this is the calendar declining to draw one. It is a
+// courtesy, not a privacy boundary, and a screen that treats it as the latter would be making a
+// promise the database does not keep.
+//
+// This paragraph used to say `visibleTo` appeared in no Cloud Function either. That was FALSE,
+// and saying it is how the server drifted: `aiSources.maySee` went on reading the retired field
+// for a month after the client stopped, so the Period Log hid events the calendar showed. Both
+// fields do appear on the server — in `functions/src/aiSources.ts`, which now reads `hiddenFrom`,
+// and in `OVERRIDE_FIELDS` in `functions/src/index.ts`, which copies both onto an occurrence.
+// A retirement is not finished when the client stops reading a field.
 //
 // ── Why this is a module and not three lines in the listener ─────────────────────────
 //

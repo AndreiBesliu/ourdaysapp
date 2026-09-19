@@ -1370,3 +1370,34 @@ imagini refuză tot ce nu e imagine și tot ce trece de 10 MB.
       numele greșit rămânea copiat în lista celuilalt. (Tu nu aveai cum să observi: ecranele tale
       îți citesc propriul document, care era corect.)
 
+### Digestul AI din chat (reparat 19.09)
+
+- [ ] **Pune un eveniment pe ZIUA DE AZI într-un grup, apoi deschide chatul acelui grup și
+      apasă butonul „Ce s-a mai întâmplat? (AI Digest)”.** Rezumatul trebuie să pomenească
+      evenimentul de azi. Până azi nu-l pomenea niciodată: secțiunea se numea „Next 7 days” dar
+      începea de la *ceasul de acum*, iar un eveniment e ținut la miezul nopții — deci ziua
+      curentă era deja trecută, la o milisecundă după miezul nopții.
+      **Dacă tot nu-l pomenește:** nu e o chestiune de gust al modelului, e defect — spune-mi.
+- [ ] **Dacă ai un eveniment care se REPETĂ într-un grup, verifică că apare și el.** Un
+      eveniment repetitiv e un singur rând în bază, datat când a început seria, deci unul pornit
+      în primăvară nu apărea deloc în rezumatul din septembrie. *Măsurat azi: în toată baza
+      există UN singur eveniment repetitiv și nu e al niciunui grup — deci probabil n-ai ce
+      vedea până nu faci tu unul.*
+
+### Ce NU mai trebuie să verifici (fapte, nu sarcini)
+
+Trei lucruri reparate azi n-au cum să fie văzute de tine, și le scriu ca text tocmai ca să nu
+ocupe o căsuță:
+
+1. **Jurnalul de perioadă (Period Log) ascundea evenimente pe care calendarul le arată.**
+   Serverul citea o listă de „cine are voie” care a fost retrasă pe 18.09; cine s-a alăturat
+   grupului după ce s-a scris un eveniment nu figura pe ea. Acum citește excluderea, ca
+   aplicația. Între timp și invers: cine fusese debifat deliberat tot vedea evenimentul în
+   rezumat.
+2. **Service worker-ul ținea o copie înghețată a paginii de pornire.** Offline, asta făcea
+   aplicația să anunțe o „versiune nouă” care nu exista, iar dacă acceptai reload-ul ajungeai
+   pe un ecran alb. Nu mai cache-uiește pagina și nu mai răspunde la navigații. **Pe telefoanele
+   care au deja worker-ul vechi, reparația intră în vigoare la prima deschidere cu internet.**
+3. **Anunțul de versiune nouă nu mai apare când ești offline.** Nu avea cum să fie adevărat
+   acolo, și un anunț care minte o dată e ignorat pentru totdeauna.
+

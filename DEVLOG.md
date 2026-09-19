@@ -6692,3 +6692,92 @@ prinde exact ce a fost scrisă să prindă.
 **Rămase din audit:** două medii de server (digestul AI, `aiSources.maySee`), service worker-ul,
 și cele două grave.
 
+---
+
+## 2026-09-19 · O fereastră care nu putea conține ziua de azi
+
+**Prompt (Andrei):** „Incepe cu cele medii”. **Model:** Claude Opus 5.
+
+Ultimele trei medii: cele două de server și service worker-ul.
+
+### 1. Digestul AI: trei feluri de a șterge evenimente dintr-o listă
+
+Secțiunea se numește „Upcoming Events (Next 7 days)” și fiecare dintre cele trei defecte
+**scotea** evenimente din ea, tăcut. Se vede greu fiindcă rezultatul e un paragraf de proză
+generată: un eveniment care n-a ajuns la model arată exact ca un eveniment pe care nu-l avea
+nimeni.
+
+1. **Marginile erau INSTANTE.** `date` la un eveniment e miezul nopții UTC — clientul scrie
+   `new Date('2026-09-19').toISOString()` — iar marginea de jos era
+   `new Date().toISOString()`. De la o milisecundă după miezul nopții,
+   `date >= now` era deja după tot ce se întâmplă **azi**. Ziua cea mai apropiată, pe
+   care secțiunea o promitea, era singura pe care n-o putea conține.
+2. **O serie e UN document**, datat când a început. O cină săptămânală pornită în martie nu
+   potrivește nicio fereastră din septembrie, deci nu apărea deloc.
+3. **Un eveniment pe mai multe zile e tot un document**, datat pe PRIMA zi. Unul început
+   săptămâna trecută și ținut până vineri trebuia adus înainte ca ceva să poată decide că e încă
+   în curs.
+
+**Măsurat pe live înainte de a scrie ceva:** cinci grupuri, **zero** evenimente oriunde în
+următoarele opt zile, și **un singur** eveniment recurent în toată baza — care nu e al niciunui
+grup. Deci niciunul dintre cele trei n-avea victimă azi. Rămân deterministe: primul se declanșa
+la fiecare eveniment pus pe ziua curentă, din clipa salvării.
+
+**Măsurarea a schimbat proiectarea, nu doar formularea.** Voiam interogarea de părinți recurenți
+îngustată pe grup, ca restul. Live a refuzat-o: `FAILED_PRECONDITION`, lipsește indexul
+compus. Un index publicat **pentru un singur document**, pe o cale unde indexul lipsă *aruncă*
+în loc să întoarcă mai puțin, e târgul prost — deci interogare nescopată, cu filtrul pe grup în
+cod și un test care spune că o interogare lărgită dintr-un motiv de indexare **nu are voie să
+lărgească răspunsul**. Tot live a refuzat și ordinea descrescătoare, care ar fi rezolvat
+trunchierea: de-aia privirea înapoi e de 30 de zile și nu de 366 cât permite `endDayOffset`,
+și de-aia numărul e **numit**, nu îngropat într-o expresie.
+
+Fereastra și selecția au ieșit în `functions/src/digestEvents.ts` — secțiunea asta n-avea
+**niciun** test, ceea ce explică mai bine decât orice altceva de ce a fost greșită în trei feluri.
+
+### 2. Serverul citea un câmp retras de o lună
+
+Reparat în livrarea de dimineață; azi a căpătat ce-i lipsea. `aiSources.ts` importă
+`firebase-admin`, iar CI instalează **doar** rădăcina, deci un test din aplicație care l-ar
+importa ar trece pe mașină și ar cădea în CI. **Aia era toată povestea:** regula n-avea unde să-și
+țină testul, deci n-avea test, deci a putut să derive o lună fără ca nimic să cadă. Mutată în
+`functions/src/aiVisibility.ts`, pură, cu zece teste — între care unul în care câmpul vechi
+și cel nou **arată în direcții opuse**, ca orice recitire a celui mort să iasă pe dos.
+
+### 3. Service worker-ul și anunțul de versiune
+
+Worker-ul ținea `/` și `/index.html` sub un nume fix și răspundea la navigații din
+cache pentru totdeauna. Offline: `checkForNewVersion` cerea `/index.html`, primea copia
+înghețată, compara hash-ul și conchidea că există o versiune nouă. Dacă acceptai, se reîncărca pe
+documentul din cache, al cărui bundle nu era cache-uit nicăieri — ecran alb, cu tot ce era pe
+jumătate tastat.
+
+**Testat RULÂND, nu citind sursa.** Un regex pe sursa unui worker e mulțumit de apelul altcuiva;
+aici fișierul livrat e încărcat cu `new Function` peste globale false și handlerele sunt
+acționate. Și `checkForNewVersion` nu mai întreabă rețeaua când browserul spune că nu e:
+regula a ieșit într-un `browserIsOnline` tocmai fiindcă **un argument implicit nu poate fi
+testat** — sub runner nu există `navigator`, deci expresia ar fi luat mereu aceeași ramură.
+Doar `onLine === false` e crezut: `true` nu dovedește nimic pe o rețea cu portal captiv.
+
+### Probe
+
+**16 mutații din 16 prinse**, cu **control negativ** înainte — șaisprezece „prins” ies la fel
+și când runner-ul nu pornește deloc, deci suita nemutată a fost dovedită verde întâi. Fiecare
+mutație verificată că a schimbat fișierul, restaurarea verificată pe octeți, și încă o dată la
+**sfârșitul** rulării. Printre ele: exact deriva veche (serverul înapoi pe lista retrasă),
+worker-ul livrat sub numele vechi (purjarea n-ar avea ce purja), și fereastra pornită de la un
+instant.
+
+`npx tsc -b` verde · poartă de lint verde · **1556 de teste** (+36) · build verde · build de
+functions verde. Regulile n-au fost atinse, deci `test:rules` n-a rulat.
+
+### Două greșeli de proces, fiindcă amândouă se repetă
+
+* Am tăiat un bloc din `index.ts` între două rezultate de `str.index`.
+  `const ai = new GoogleGenAI` apare de **cinci** ori în fișier, prima apariție era înaintea
+  blocului, și felia a duplicat tăcut 1200 de rânduri. A prins-o `git diff --stat`, nu
+  typecheck-ul. **Ancorele se potrivesc, nu se caută global.**
+* `git checkout` a adus fișierul înapoi cu **CRLF** (`core.autocrlf=true`), deși înainte
+  era LF, și tiparele au încetat să potrivească. A șaptea oară. Scriptul își citește acum
+  terminatorul din fișier.
+
