@@ -5,7 +5,7 @@ import { db, auth } from '../firebase';
 import { useState } from 'react';
 import { useDialog } from '../hooks/useDialog';
 import { getRecurrenceEndDate, getFrequencyKey } from '../utils/recurrence';
-import { t } from '../utils/i18n';
+import { t, getDateLocale } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { reportError } from '../reportError';
 
@@ -140,11 +140,11 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
                             <div className="flex items-center gap-2 mt-1 flex-wrap">
                               <span className="text-xs text-zinc-500 flex items-center gap-1">
                                 <CalendarIcon className="w-3 h-3" />
-                                {format(startDate, 'MMM d, yyyy')}
+                                {format(startDate, 'd MMM yyyy', { locale: getDateLocale(language) })}
                               </span>
                               <span className="text-xs text-zinc-400">→</span>
                               <span className="text-xs text-zinc-500">
-                                {format(endDate, 'MMM d, yyyy')}
+                                {format(endDate, 'd MMM yyyy', { locale: getDateLocale(language) })}
                               </span>
                             </div>
                             {ev.recurrenceExceptions && ev.recurrenceExceptions.length > 0 && (

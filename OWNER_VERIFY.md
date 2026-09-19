@@ -1145,3 +1145,19 @@ card, deci codul ți se desenează perfect; ceilalți primesc scuza galbenă. A�
 - [ ] **Dacă apasă și scrie „Nu s-a putut partaja”**, spune-mi: înseamnă că regulile bazei de date
       nu sunt de acord cu butonul, iar asta e o problemă de-a mea, nu ceva ce ai greșit tu.
 
+### Date și două butoane care rămăseseră în engleză (reparat 19.09)
+
+Le-am văzut pe bancul de probă, cu limba pusă pe română, la o oră după ce poarta de i18n
+raportase curat. Datele nu conțin engleza în cod — o produce biblioteca, la rulare, dintr-un
+șablon din litere care nu sunt cuvinte. Poarta veche n-avea cum să le vadă.
+
+- [ ] **Deschide un eveniment.** Sub titlu trebuie să scrie *„duminică, 20 septembrie 2026”*, nu
+      „Sunday, September 20, 2026”. Ziua întâi, ca în rest.
+- [ ] **Lista de responsabili** din același ecran: **„+ Adaugă responsabil”**, nu „+ Assign Member”.
+- [ ] **În chat, când scrie cineva:** *„Andrei scrie…”* (sau „… scriu…” la mai mulți), nu „… is
+      typing...”. Și despărțitorul de zi dintre mesaje trebuie să fie în română.
+- [ ] **Datele din:** arcade („Jocuri pe …”), fereastra de ieșire din grup, și panoul de
+      evenimente care se repetă.
+- [ ] **Dacă vezi o dată în engleză oriunde**, spune-mi — acum există o poartă exact pentru asta,
+      deci fiecare caz nou înseamnă că mai are o gaură, și o pot închide definitiv.
+

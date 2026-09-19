@@ -12,7 +12,7 @@ import MemoryMatch from './MemoryMatch';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../../store';
-import { t } from '../../utils/i18n';
+import { t, getDateLocale } from '../../utils/i18n';
 import { getSessionWinner, finalizeGameUpdate } from './gameResult';
 import { useDialog } from '../../hooks/useDialog';
 import { writeGame } from './gameWrite';
@@ -677,7 +677,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                   {activeGames.length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-4">
-                        {t('gamesOn', language)} {selectedDate ? format(selectedDate, 'MMM d, yyyy') : t('thisDay', language)}
+                        {t('gamesOn', language)} {selectedDate ? format(selectedDate, 'd MMM yyyy', { locale: getDateLocale(language) }) : t('thisDay', language)}
                       </h4>
                       <div className="flex flex-col gap-3">
                         {activeGames.map((game) => (

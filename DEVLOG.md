@@ -5869,3 +5869,71 @@ niciun e-mail.
 
 `npx tsc -b` verde · poartă de lint verde · **1452 de teste** · build verde.
 
+---
+
+## 2026-09-19 · Reparația de dimineață fusese pe jumătate
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+### Cum le-am găsit
+
+Pe captura de ecran a bancului de la task-ul anterior. Cu limba pe română, în antetul ferestrei
+de eveniment scria **„Sunday, September 20, 2026”**, iar în lista de responsabili
+**„+ Assign Member”** — la o oră după ce poarta de i18n raportase curat.
+
+### Prima: filtrul de majusculă a fost scos dintr-un singur loc
+
+Dimineață am scris în antetul porții că una dintre cele trei orbiri era
+`if (!/^[A-Z]/.test(text)) continue;`. L-am scos din bucla de **atribute** și l-am lăsat în bucla
+de **text** — care e chiar cea despre care vorbește nota. Deci antetul spunea că orbirea a
+dispărut în timp ce jumătate din ea era tot acolo.
+
+Măsurat înainte să-l scot de tot: filtrul arunca **patru** potriviri din tot `src`. Două erau
+șiruri reale (`+ Assign Member`, `typing...`). Celelalte două erau `liveQuery` (un identificator
+care iese din `liveQuery<any>(`) și `0 && dist` (un `if` obișnuit într-un fișier .tsx). Adică
+plătea două defecte reale ca să evite două false pozitive — iar ambele false pozitive au o
+formă pe care o poți numi: un token singur, scris cu literă mică, și un `&&`.
+
+### A doua: o dată care rostește un cuvânt
+
+`format()` din date-fns scrie engleza dacă nu i se dă o `locale`. **Măsurat: 15 apeluri al căror
+șablon poate rosti un cuvânt, 9 fără locale** — antetul ferestrei de eveniment (patru),
+despărțitorul de zi din chat, arcade-ul, fereastra de ieșire din grup și panoul de repetări.
+
+Poarta de i18n n-avea cum: `format(d, 'MMM d, yyyy')` nu conține nicio proză englezească —
+engleza se produce la rulare, dintr-un șablon făcut din litere care nu sunt cuvinte. E o altă
+formă de defect, deci o a doua plasă: `src/utils/dateLocaleCoverage.test.ts`. Ea ignoră intenționat
+șabloanele din cifre (`yyyy-MM-dd`, `HH:mm`) — alea se citesc la fel în orice limbă, iar o poartă
+zgomotoasă ajunge să fie ignorată.
+
+Ordinea rămâne **ziua întâi**, ca ieri la lista de repetări și ca în restul aplicației.
+
+### Probe
+
+**5 din 5 mutații prinse:** filtrul de majusculă pus la loc, filtrul de cod care uită `&&` și
+`||`, lista de responsabili întoarsă la engleză, antetul care-și pierde locale-ul, și poarta de
+date care nu mai recunoaște un nume de lună.
+
+### Restaurarea unei mutații nu s-a prins, și verificarea de la final a spus-o
+
+După rulare, harness-ul și-a rulat propria verificare finală și a ieșit **roșu**: linia primei
+mutații era înapoi în fișier, deși scriptul scrisese originalul și-l citise înapoi ca să-l
+compare, iar mutația următoare rulase demonstrabil pe fișierul curat (a dat două eșecuri, ceea ce
+e posibil doar fără filtrul ăla). Arborele stă în Google Drive; nu pot dovedi mecanismul.
+
+Ce pot spune e că **verificarea de la CAPĂTUL rulării e cea care și-a meritat existența** — nu
+comparația de după fiecare restaurare, care a trecut. Am curățat de mână și am recitit fiecare
+ancoră din cele trei fișiere atinse.
+
+(Și o alarmă falsă de-a mea pe drum: am căutat `/^[A-Z]/.test(text)` ca să confirm curățenia și
+l-am găsit — în **comentariul** care povestește despre el.)
+
+### Ce rămâne, măsurat
+
+**29 de șiruri englezești de forma `|| 'Ceva'`** — valori de rezervă din interiorul unei expresii
+(`|| 'Someone'`, `|| 'Unknown'`, `|| 'Photo'`, `|| 'Member'`). Niciuna nu e vizibilă pentru poarta
+de text, fiindcă stă în `{…}`, iar `{…}` e exact ce maschează poarta ca să nu citească cod. Nu
+toate sunt vizibile omului (`'Render error'` e un mesaj de jurnal). Următorul task.
+
+`npx tsc -b` verde · poartă de lint verde · **1460 de teste** · build verde.
+

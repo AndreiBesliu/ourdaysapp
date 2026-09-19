@@ -9,7 +9,7 @@ import { db, auth } from '../firebase';
 import { playTone } from '../utils/sounds';
 import { triggerHaptic } from '../utils/haptics';
 import { generateGroupDigestAI } from '../ai';
-import { t } from '../utils/i18n';
+import { t, getDateLocale } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { dialogDepth } from '../utils/dialogStack';
 import { useMenu } from '../hooks/useMenu';
@@ -852,7 +852,7 @@ export default function GroupChatWidget({
                 if (showDateSeparator) {
                   if (isToday(msgDate)) dateLabel = 'Today';
                   else if (isYesterday(msgDate)) dateLabel = 'Yesterday';
-                  else dateLabel = format(msgDate, 'MMMM d, yyyy');
+                  else dateLabel = format(msgDate, 'd MMMM yyyy', { locale: getDateLocale(language) });
                 }
 
                 return (
@@ -1064,7 +1064,10 @@ export default function GroupChatWidget({
           {typingUsers.length > 0 && (
             <div className="px-4 py-1 pb-2 bg-zinc-50/50 dark:bg-zinc-900/50">
               <span className="text-[10px] text-zinc-500 italic animate-pulse">
-                {typingUsers.map(id => userMap[id]?.name?.split(' ')[0] || 'Someone').join(', ')} {typingUsers.length > 1 ? 'are' : 'is'} typing...
+                {t(typingUsers.length > 1 ? 'chatTypingMany' : 'chatTypingOne', language).replace(
+                  '{names}',
+                  typingUsers.map(id => userMap[id]?.name?.split(' ')[0] || t('chatSomeone', language)).join(', '),
+                )}
               </span>
             </div>
           )}

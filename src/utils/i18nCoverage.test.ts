@@ -37,6 +37,22 @@
 //   3. **`if (!/^[A-Z]/.test(text)) continue;`** skipped anything starting lowercase, so
 //      "e.g., Buy Milk, Order Cake..." was invisible even as text.
 //
+// ── 19.09.2026, later the same day: the third repair was half a repair ─────────────────
+//
+// The capital filter came out of the ATTRIBUTE loop and stayed in the text loop, which is the
+// one the note above is about. Two more strings were found by eye on a bench a few hours
+// later — `+ Assign Member` in the assignee picker and `typing...` in the chat — both of them
+// lowercase-or-punctuation at the front, both invisible to this file while it reported clean.
+//
+// Measured before removing it: the filter was throwing away four matches in the whole of
+// `src`. Two were those strings. The other two were `liveQuery` (an identifier leaking out of
+// `liveQuery<any>(`) and `0 && dist` (a plain `if` in a .tsx file). So the filter was paying
+// for two false positives with two real defects, and both false positives have a shape worth
+// naming instead.
+//
+// Repairing one call site and leaving the other is the failure this whole file is about:
+// afterwards the header said the blindness was gone while half of it was still there.
+//
 // The lesson is the header's own, turned on itself: a guard is a claim about the day it was
 // written unless something proves it can still SEE. Hence the two tests below that feed it the
 // exact shapes it went blind to.
@@ -109,9 +125,14 @@ function literalJsxText(src: string): { line: number; text: string }[] {
     const text = m[1].split(/\s+/).filter(Boolean).join(' ');
     if (text.length < 3) continue;
     if (!/[A-Za-z]{3}/.test(text)) continue;     // punctuation, entities, separators
-    if (!/^[A-Z]/.test(text)) continue;          // prose starts with a capital; fragments do not
+    // A lone lowercase token is an identifier leaking out of a generic — `liveQuery<any>(`
+    // matches `>liveQuery<`. This is what is left of the old `^[A-Z]` rule, which threw away
+    // every lowercase match and with it "+ Assign Member" and "typing...". Anything with a
+    // space or a mark of punctuation in it is prose and is looked at.
+    if (/^[a-z_$][A-Za-z0-9_$]*$/.test(text)) continue;
     if (ALLOWED.has(text) || text.startsWith('http')) continue;
-    if (/[=;{}()[\]/\\]|className|=>/.test(text)) continue; // still code, not prose
+    // `&&` and `||`: `if (dist > 0 && dist < 150)` is a `>…<` match with no other code in it.
+    if (/[=;{}()[\]/\\]|&&|\|\||className|=>/.test(text)) continue; // still code, not prose
     out.push({ line: lineOf(m.index! + 1), text });
   }
 
@@ -160,6 +181,23 @@ describe('no user-facing screen ships a hardcoded string', () => {
     const found = literalJsxText(sample).map((h) => h.text);
     expect(found).toContain('Profile picture');
     expect(found).toContain('e.g. Kroger Card');
+  });
+
+  it('sees text that does not begin with a capital — the half of the repair I missed', () => {
+    // Both found by eye on a bench hours after this file reported clean, because `^[A-Z]`
+    // came out of the attribute loop and stayed in the one above it.
+    const sample = `<option value="unassigned" disabled>+ Assign Member</option>\n`
+      + `<span>someone is typing...</span>`;
+    const found = literalJsxText(sample).map((h) => h.text);
+    expect(found).toContain('+ Assign Member');
+    expect(found).toContain('someone is typing...');
+  });
+
+  it('still does not flag the two things that filter was paying for', () => {
+    // A generic's identifier and a plain comparison. Measured: these two were the ENTIRE
+    // cost of `^[A-Z]` across src, against the two real strings above.
+    expect(literalJsxText('const u = liveQuery<any>(q);')).toEqual([]);
+    expect(literalJsxText('if (dist > 0 && dist < 150) setPull(dist);')).toEqual([]);
   });
 
   it('still lets a translated attribute through', () => {

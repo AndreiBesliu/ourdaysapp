@@ -15,7 +15,7 @@ import { useDialog } from '../hooks/useDialog';
 import { useMenu } from '../hooks/useMenu';
 import { getFrequencyKey } from '../utils/recurrence';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
-import { t } from '../utils/i18n';
+import { t, getDateLocale } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { localZone } from '../utils/eventTime';
 import { spanRangeLabel } from '../utils/spanLabel';
@@ -32,6 +32,7 @@ interface EventDetailsModalProps {
 
 export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}, groups = [], onEdit }: EventDetailsModalProps) {
   const { language, timezone } = useThemeStore();
+  const dateLocale = getDateLocale(language);
   const [loading, setLoading] = useState(false);
 
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -513,10 +514,10 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                   // is the previous day west of Greenwich, which is what this line used to do.
                   const asLocal = (day: string) => { const [y, mo, dd] = day.split('-').map(Number); return new Date(y, mo - 1, dd); };
                   const r = spanRangeLabel(event, timezone || localZone());
-                  if (!r) return format(new Date(event.date), 'EEEE, MMMM d, yyyy');
+                  if (!r) return format(new Date(event.date), 'EEEE, d MMMM yyyy', { locale: dateLocale });
                   const days = r.sameDay
-                    ? format(asLocal(r.startDay), 'EEEE, MMMM d, yyyy')
-                    : `${format(asLocal(r.startDay), 'EEEE, MMMM d')} → ${format(asLocal(r.endDay), 'EEEE, MMMM d, yyyy')}`;
+                    ? format(asLocal(r.startDay), 'EEEE, d MMMM yyyy', { locale: dateLocale })
+                    : `${format(asLocal(r.startDay), 'EEEE, d MMMM', { locale: dateLocale })} → ${format(asLocal(r.endDay), 'EEEE, d MMMM yyyy', { locale: dateLocale })}`;
                   return (
                     <>
                       {days}
@@ -634,7 +635,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                   disabled={loading}
                   className="text-xs bg-primary/10 text-primary rounded-md font-medium px-2 py-1.5 outline-none border-none cursor-pointer hover:bg-primary/20 transition-colors shrink-0"
                 >
-                  <option value="unassigned" disabled>+ Assign Member</option>
+                  <option value="unassigned" disabled>{t('addAssignee', language)}</option>
                   {!isAssignee && <option value={auth.currentUser?.uid}>{t('taskAssignToMe', language)}</option>}
                   {Object.values(userMap)
                     .filter((u: any) => !assigneeIds.includes(u.id))

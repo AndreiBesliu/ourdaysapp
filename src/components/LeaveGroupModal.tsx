@@ -6,7 +6,7 @@ import { deleteGroupCascade } from '../serverActions';
 import { reportError } from '../reportError';
 import { useDialog } from '../hooks/useDialog';
 import { format } from 'date-fns';
-import { t } from '../utils/i18n';
+import { t, getDateLocale } from '../utils/i18n';
 import { useThemeStore } from '../store';
 
 interface LeaveGroupModalProps {
@@ -200,7 +200,7 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
                         {ev.title}
                       </p>
                       {ev.date && (
-                        <p className="text-xs text-zinc-500">{format(new Date(ev.date), 'MMM d, yyyy')}</p>
+                        <p className="text-xs text-zinc-500">{format(new Date(ev.date), 'd MMM yyyy', { locale: getDateLocale(language) })}</p>
                       )}
                     </div>
                   </div>
