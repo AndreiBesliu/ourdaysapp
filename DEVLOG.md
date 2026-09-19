@@ -6411,3 +6411,49 @@ las așa și o scriu aici.
 **166 de teste de reguli** (de la 160). Publicat pe live și recitit din API: 33.636 de octeți,
 identic cu fișierul.
 
+---
+
+## 2026-09-19 · A treia oară aceeași formă, și o ușă într-un singur sens
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+Am continuat prin colecțiile rămase neprobate. Șapte fișiere de reguli acum, **184 de teste**
+(de la 128 azi-dimineață).
+
+### Ce a trecut așa cum era — și merită spus
+
+* **bătăliile Warlord chiar sunt ale serverului:** niciunul dintre cei doi jucători nu poate
+  modifica documentul, nici măcar cel care a provocat nu-l poate șterge, și un client nu poate
+  crea unul;
+* **armata ascunsă** a provocatorului (`warlordDeploys`) e invizibilă pentru amândoi;
+* **configurarea de balans** se citește de oricine și se scrie doar dacă exiști în `admins` — iar
+  `admins` e `if false` pentru orice client, deci poarta e un document pe care nimeni nu-l poate
+  falsifica. (Nota mea din memorie despre „warlordConfig se scrie direct din browser” era despre
+  lipsa unui callable cu listă albă și jurnal, nu despre o regulă lipsă.)
+* jurnalul de memento-uri, ledgerul de costuri AI și contoarele de buget refuză chiar — inclusiv
+  la listare.
+
+### Ce nu
+
+La jocurile din arcade, `delete` cere să fii cel care l-a creat — dar `update` lăsa `createdBy`
+scriibil. **A treia oară azi aceeași formă** (`notifications`, `events`, acum `games`).
+
+Și una nouă, care nu e furt ci **vandalism**: `gameType` era scriibil, iar amândouă regulile
+refuză `'warlord-battle'`. Deci oricine putea juca putea transforma un joc de arcade într-o
+„bătălie” — **o ușă într-un singur sens**: de-acolo încolo nimeni nu-l mai poate nici muta, nici
+șterge. Nici cel care l-a pornit.
+
+Plus mutarea într-un grup în care nu ești, ca la calendar.
+
+### Fixate toate trei, și de ce se poate
+
+`groupId` e **fixat**, nu îngustat ca la evenimente: un joc n-are funcționalitate de mutare pe alt
+calendar. La fel `gameType` — un joc nu-și schimbă tipul.
+
+Sigur pentru client fiindcă **toate scrierile din arcade trec printr-un singur loc**,
+`writeGame(gameId, fields)`, care împrăștie câmpurile apelantului și o ștampilă de timp — și
+niciunul dintre cele 52 de apeluri nu trimite vreunul dintre cele trei câmpuri.
+
+**3 din 3 mutații prinse**, câte un test pentru fiecare fixare. 1505 teste de aplicație neatinse.
+Publicat și recitit din API: 34.787 de octeți, identic.
+

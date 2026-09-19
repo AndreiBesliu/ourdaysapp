@@ -302,7 +302,23 @@ service cloud.firestore {
       // games keep the original client-authoritative behavior.
       allow update: if isSignedIn() &&
         resource.data.gameType != 'warlord-battle' &&
-        isMemberOfGroup(resource.data.groupId);
+        isMemberOfGroup(resource.data.groupId) &&
+        // Three fields a move may not touch. Each was reachable, and each was proved so on
+        // the emulator before this line existed:
+        //
+        //  * `createdBy` gates `delete` below — leave it writable and owner-only deletion is a
+        //    formality, exactly as it was on `events` and on `notifications` earlier today;
+        //  * `gameType` is a ONE-WAY DOOR: flip an arcade game to 'warlord-battle' and both
+        //    `update` and `delete` refuse it for ever, so the game is frozen for everybody,
+        //    including the person who started it;
+        //  * `groupId` decides who may read it. A game has no 'move to another calendar'
+        //    feature, so it is pinned outright rather than narrowed.
+        //
+        // Safe for the client: every arcade write goes through `writeGame`, which spreads the
+        // caller's fields and a timestamp — and no caller passes any of these three.
+        request.resource.data.createdBy == resource.data.createdBy &&
+        request.resource.data.gameType == resource.data.gameType &&
+        request.resource.data.groupId == resource.data.groupId;
       // Warlord battles are never client-deletable (cancelling a waiting challenge
       // goes through forfeitWarlordBattle, which also cleans the private deploy doc).
       allow delete: if isSignedIn() &&

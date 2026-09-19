@@ -1302,3 +1302,18 @@ Ambele închise, probate pe emulator întâi pe regula veche (patru teste roșii
 **Mutarea unui eveniment pe alt calendar rămâne exact cum era** — doar destinația e îngustată la
 un calendar pe care chiar ești.
 
+### Arcade-ul: un joc putea fi înghețat pentru toată lumea (19.09) — fapt
+
+A treia oară azi, aceeași formă. La jocurile din arcade:
+
+* cine putea juca putea să-și treacă numele la „creat de” — și abia apoi să șteargă jocul altuia;
+* putea să-i schimbe tipul în „bătălie Warlord”, ceea ce e o **ușă într-un singur sens**: de-acolo
+  încolo, regulile refuză și modificarea și ștergerea, deci jocul rămâne blocat pentru toată
+  lumea, inclusiv pentru cine l-a pornit;
+* și putea să-l mute într-un grup în care nu e.
+
+Închise toate trei. **Restul regimului a trecut probele așa cum era:** bătăliile Warlord chiar
+sunt ale serverului (niciun jucător nu le poate modifica sau șterge direct), armata ascunsă a
+provocatorului e invizibilă pentru amândoi, configurarea de balans se poate scrie doar de un
+admin, iar domeniul fiecărui jucător e doar al lui.
+
