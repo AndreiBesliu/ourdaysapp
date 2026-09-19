@@ -1,18 +1,14 @@
 # De verificat de Andrei
 
-> **Starea listei, 19.09:** 262 de căsuțe nebifate, 8 bifate, peste o lună de acumulare. Aia nu
-> mai e o listă, e o arhivă — și e vina mea: am scris și **fapte** ca și când ar fi sarcini
-> (o secțiune numită chiar „Ce trebuie să știi, **nu** să verifici” are 52 de căsuțe).
+> **Starea listei, 19.09 seara:** 296 de căsuțe nebifate, 8 bifate. Dimineață erau 262 —
+> **29 le-am adăugat eu azi**, în cinci secțiuni, toate la COADĂ, adică exact unde nu te uiți,
+> iar cinci sunt chiar din fața asta, rescrisă acum ca să le aducă în față. N-am șters nimic.
 >
-> N-am șters nimic. Am pus în față ce contează, și am reparat două puncte care te trimiteau să
-> faci lucruri deja făcute. **De-acum: faptele se scriu ca text, nu ca bife**, iar fiecare punct
-> nou spune ce se strică dacă răspunsul e greșit.
+> **Cifrele de mai jos sunt re-măsurate acum**, nu repetate din memorie.
 
 ---
 
 ## Dacă ai zece minute, astea sunt
-
-Toate cele patru sunt măsurate **azi**, pe datele tale reale, nu repetate din memorie.
 
 ### 1. Rotează cheia de service account — singura cu miză de securitate
 
@@ -25,34 +21,60 @@ ea e să **citească toată baza** — evenimente, chat, portofel, conturi. Nu p
       (contul `claude-error-reader` → **Keys** → șterge-o pe cea existentă), creează alta, și
       pune-o tot la `~/.ourdays/service-account.json`. Durează un minut și închide subiectul.
 
-### 2. Push-ul: merge acum pentru 2 din 8 conturi
+### 2. Push-ul: tot 2 conturi din 8 (re-măsurat acum)
 
-**Corectat azi.** Punctul 30 de mai jos îți spunea să pui cheia VAPID — e deja pusă și
-înregistrarea funcționează. Măsurat acum: **două conturi au token** (unul are șapte, adică mai
-multe dispozitive), șase n-au niciunul.
+Nimic nu s-a mișcat de dimineață: **un cont are 9 token-uri** (adică mai multe dispozitive),
+**unul are 1**, celelalte șase niciunul. Cheia VAPID e pusă și înregistrarea merge — verificat
+azi și că e chiar în pachetul livrat. Celor șase le trebuie doar o reconectare.
 
-- [ ] **Cele șase n-au nevoie de nicio cheie — doar să se reconecteze o dată** și să accepte
-      notificările când le cere browserul. Spune-le, sau spune-mi când au făcut-o și confirm
-      din date.
-- [ ] **Tu** ai token: pune-ți un memento peste zece minute și vezi dacă sună telefonul. Dacă nu
-      sună, ăsta e un bug real și vreau să știu — restul lanțului n-a fost probat niciodată
-      cap-coadă pe un telefon adevărat.
+- [ ] **Spune-le să intre o dată și să accepte notificările** când le cere browserul. Spune-mi
+      când au făcut-o și confirm din date.
+- [ ] **Tu ai token:** pune-ți un memento peste zece minute și vezi dacă sună telefonul. Dacă nu
+      sună, ăsta e un bug real și vreau să știu — lanțul n-a fost probat niciodată cap-coadă pe
+      un telefon adevărat.
 
-### 3. Cardul pus pe un eveniment de grup (livrat ieri)
+### 3. Cardurile de pe evenimentele de grup — acum ai și un buton
 
-- [ ] Pune un card din portofel pe un eveniment de grup, salvează, și **întreabă pe cineva din
-      grup dacă vede codul de bare**. Până ieri nu-l vedea nimeni în afară de tine: poza stă pe
-      eveniment și se vede, codul stă pe card și nu se vedea.
-- [ ] Apoi uită-te la card în portofel: trebuie să scrie **„Partajat cu «Grup»”**. Dacă nu
-      scrie, ceva s-a lărgit fără să se vadă și vreau să știu imediat.
+Ieri am făcut ca un card pus pe un eveniment de grup să devină vizibil **la salvare**. Azi am
+măsurat că asta nu ajunge la ce era pus ÎNAINTE: două atașamente vechi, **niciunul lizibil de
+ceilalți**, iar unul ascunde chiar un cod care se scanează. Tu nu vezi nimic greșit — îți
+citești propriul card — de-aia îți scrie acum pe ecran.
 
-### 4. Două fișiere orfane în bucket (3,34 MB)
+- [ ] Deschide evenimentele de grup pe care ai pus un card și apasă **„Partajează cu grupul”**
+      din chenarul galben de sub cod. Chenarul trebuie să dispară pe loc.
+- [ ] **Întreabă pe cineva din grup dacă vede codul.** Ăsta e singurul test care contează.
 
-Sunt urma bug-ului de încărcare reparat ieri: unul e un card, unul o poză din chat, și niciun
-document nu le arată. **Nu le-am șters** — cheia mea e doar-citire, și oricum e o ștergere pe
-producție.
+### 4. Categoriile orfane din portofel (nou azi)
+
+Ștergerea unei categorii o scotea din listă și o lăsa pe carduri, sub un titlu pe care nu-l mai
+puteai filtra, redenumi sau șterge. **Cinci carduri din 18** poartă un nume care nu mai e în
+lista ta.
+
+- [ ] Portofel → **Gestionează**. Cele marcate **„— nu mai e în lista ta”** sunt orfanele
+      („Cards”, „Loyalty”, „Groceries/Alimente”). Șterge-le sau redenumește-le — acum chiar
+      curăță și cardurile.
+
+### 5. Textul care mai era în engleză (trei livrări azi)
+
+- [ ] Data de sub titlul unui eveniment: **„duminică, 20 septembrie 2026”**, cu ziua întâi.
+- [ ] Butonul mare din formularul de eveniment: **„Salvează evenimentul”** / **„Gata”**.
+- [ ] În chat, când scrie cineva: **„Andrei scrie…”**, nu „… is typing...”.
+- [ ] **Dacă mai vezi engleză oriunde, spune-mi.** Acum există trei porți care chiar văd, deci
+      fiecare caz nou înseamnă o gaură pe care o pot închide definitiv.
+
+### 6. Două fișiere orfane în bucket (re-măsurat acum: tot două, 3,34 MB)
+
+Sunt urma bug-ului de încărcare reparat pe 18.09: unul e un card, unul o poză din chat, și
+niciun document nu le arată. **Nu le-am șters** — cheia mea e doar-citire, și oricum e o
+ștergere pe producție.
 
 - [ ] Spune-mi dacă le vrei curățate și îți dau exact căile.
+
+---
+
+**Ce am livrat azi**, dacă vrei detaliile — secțiunile sunt la coada fișierului, în ordinea asta:
+*text englezesc rămas prin aplicație* · *cardul pe care doar TU îl vezi* · *date și două butoane*
+· *engleza din interiorul expresiilor* · *categoriile din portofel*.
 
 ---
 

@@ -6066,3 +6066,56 @@ servea, și la primul commit de după.
 
 `npx tsc -b` verde · poartă de lint verde · **1487 de teste** · build verde.
 
+---
+
+## 2026-09-19 · O măsurătoare care n-a găsit nimic, și o listă pe care o stricam eu
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+### Am căutat același defect în altă parte și nu era acolo
+
+După categoriile din portofel am căutat aceeași formă — **un câmp nou și unul vechi pentru același
+adevăr** — la responsabilii unui eveniment: `assigneeIds[]` și vechiul `assigneeId`. Și acolo
+regula e scrisă de două ori, în două forme diferite:
+
+```js
+A  ev.assigneeIds || (ev.assigneeId ? [ev.assigneeId] : [])                       // formular, detalii
+B  ev.assigneeIds?.length > 0 ? ev.assigneeIds : (ev.assigneeId ? […] : [ev.ownerId])  // grilă, listă
+```
+
+A tratează un tablou GOL ca pe un răspuns; B trece mai departe. Arăta exact ca defectul de
+adineauri. **Măsurat pe cele 25 de evenimente de pe live:**
+
+* tablou gol + câmp vechi care numește pe cineva: **0**;
+* cele două câmpuri numind alt om primul: **0**;
+* singura diferență între cele două reguli, pe 7 evenimente: când **nimeni** nu e responsabil,
+  grila desenează chipul proprietarului iar formularul zice „neatribuit”. Aia e o alegere de
+  afișare, nu o nepotrivire de date.
+
+Motivul pentru care nu poate diverge: **fiecare cale de scriere le scrie împreună** — formularul
+(`assigneeId: assigneeIds[0] || null`), fereastra de detalii, copia de la ieșirea din grup, și
+`functions/src/index.ts`. Iar `eventScope.isNamed` citește **reuniunea** celor două, deci nici
+măcar o divergență viitoare n-ar ascunde un eveniment de cineva.
+
+**Deci n-am schimbat nimic.** O măsurătoare care nu găsește nimic e tot un rezultat; ce n-are
+voie să urmeze e o „curățenie” pe cod care nu e stricat.
+
+### Lista lui Andrei: eu eram cel care o strica
+
+Dimineață am scris în `CLAUDE.md` că **o listă la care doar adaugi încetează să fie o listă** —
+262 de căsuțe nebifate, 8 bifate. Apoi, în aceeași zi, i-am mai adăugat **29**, în cinci
+secțiuni, **toate la coada unui fișier de 1200 de rânduri**. Fața fișierului încă vorbea despre
+dimineață.
+
+Am rescris fața, nu am mai adăugat la coadă. Și am **re-măsurat** cele două puncte care se pot
+re-măsura, fiindcă regula din `CLAUDE.md` spune s-o fac înainte să repet o constatare veche:
+
+* **push:** tot 2 conturi din 8 au token (unul are 9 dispozitive, unul 1). Verificat în plus că
+  cheia VAPID chiar e în pachetul livrat, nu doar în `.env`;
+* **fișiere orfane în bucket:** tot două, tot 3,34 MB.
+
+Numărul din antet e acum cel pe care fișierul chiar îl are (296), nu cel de dinaintea
+rescrierii — fața nouă acoperă șase subiecte în loc de patru, deci a adăugat cinci căsuțe.
+
+Nicio schimbare de cod, deci niciun deploy: `dist/` e neatins.
+
