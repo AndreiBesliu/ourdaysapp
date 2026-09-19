@@ -1271,3 +1271,19 @@ ecran în loc să tărască tot.
       Oprește partajarea cardului în cauză și încearcă din nou — și spune-mi, ca să văd dacă se
       întâmplă din alt motiv.
 
+### O gaură în reguli, închisă (19.09) — fapt, nu sarcină
+
+Nu ai ce verifica aici; e pe server. Ți-o scriu fiindcă e genul de lucru pe care vrei să-l știi.
+
+Regula pentru notificări interzicea crearea lor din browser — tocmai ca să nu poată nimeni să-ți
+scrie în listă — dar **permitea actualizarea**, și verifica doar documentul așa cum ERA. Deci
+oricine, cu o notificare de-a lui, putea să-i rescrie titlul și textul și să i-l dea altcuiva în
+listă. Un cont în aplicație era tot ce trebuia.
+
+Probat pe emulator înainte și după, apoi publicat pe live — și am recitit setul de reguli pe care
+îl servește chiar Firebase, ca să nu mă bazez pe „Deploy complete”: identic cu fișierul.
+
+Descoperită pentru că am măsurat câte colecții au vreodată un test de reguli: **28 guvernate, 11
+probate.** Acum sunt 16, și printre cele nou-probate sunt fix cele care țin oameni: conturile,
+profilurile publice, notificările, cererile de prietenie și lista de administratori.
+

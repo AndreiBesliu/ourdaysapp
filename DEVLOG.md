@@ -6293,3 +6293,67 @@ montată cu adevărat.
 
 `npx tsc -b` verde · poartă de lint verde · **1505 teste** + **132 de reguli** · build verde.
 
+---
+
+## 2026-09-19 · Notificarea putea fi dată altcuiva, cu vorbele rescrise
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+### Cum am ajuns acolo
+
+Am numărat: `firestore.rules` guvernează **28 de colecții**, iar testele de reguli numeau **11**.
+Printre cele șaptesprezece pe care nu le probase nimeni erau exact cele care țin un om — `users`
+(e-mail, token-uri de push), `profiles`, `notifications`, `friend_requests` — și `admins`, lista
+care decide cine e administrator.
+
+**O regulă greșită pe o colecție pe care n-o probează nimeni e o regulă pe care n-o găsește
+nimeni până când nu curge.**
+
+### Gaura
+
+```
+allow create: if false;                                            // ușa din față
+allow update: if isSignedIn() && resource.data.userId == request.auth.uid;   // ușa din lateral
+```
+
+Comentariul de deasupra blocului spune limpede la ce servește `create: if false`: „închide vectorul
+de spam prin care orice membru putea scrie notificări către orice userId”. Numai că **update
+verifica doar documentul așa cum ERA**. Cu o notificare pe care o deții legitim, îi rescrii titlul
+și textul, îi pui `userId` pe altcineva, și apare în lista aceluia.
+
+Exact forma pe care regula pentru `assets` o are deja documentată în comentariu: *o regulă care
+citește doar `resource` îl lasă pe proprietar să rescrie câmpul care decide proprietatea.* Reparată
+acolo, ne-căutată aici.
+
+### Reparat și probat în ordinea asta
+
+ÎNTÂI testul, pe regula veche: **158 trec, 1 pică** — cea care spune că nu se poate re-ținti. Abia
+apoi regula. După: **160 din 160**.
+
+Noua regulă cere ca singurele chei schimbate să fie `['read']` — fiindcă asta e tot ce scrie
+browserul acolo (`NotificationsDropdown` bifează una sau toate ca citite, și nimic altceva).
+
+**Și mutațiile spun care clauză ține greutatea:** dacă scot lista de câmpuri, un test se face
+roșu; dacă scot doar fixarea lui `userId`, **niciunul** — e redundantă cât timp lista de câmpuri
+stă acolo. O las, fiindcă e clauza care mai ține dacă cineva lărgește lista, dar scriu în regulă
+că e centură-și-bretele, nu ceva ce suita probează.
+
+### Ce mai spun cele 25 de cazuri noi
+
+* documentul de cont nu se citește de nimeni altcineva, și colecția nu se poate lista deloc;
+* **oglinda publică de profiluri CHIAR se poate enumera** de orice cont autentificat — scris ca
+  atare, ca să fie o decizie, nu o descoperire: ăsta e prețul unei oglinzi publice și motivul
+  pentru care ea trebuie să rămână ne-sensibilă;
+* `admins`, `errorLogs` și `errorGroups` chiar refuză — verificat și că `if false` nu e umbrit de
+  vreun catch-all (singurul `{sub=**}` din fișier e imbricat și tot fals);
+* o cerere de prietenie nu poate fi trimisă în numele altuia, nu poate sosi deja acceptată, și nu
+  poate fi răspunsă din browser — răspunsul atinge ambele liste de prieteni, deci e al serverului.
+
+### Publicat, și citit înapoi
+
+`firebase deploy --only firestore:rules --project live`, apoi am cerut API-ului setul de reguli
+pe care îl **servește** live și l-am comparat cu fișierul: **32.274 de octeți, identic**, iar
+clauza nouă e în el. „Deploy complete” numește un fișier, nu un rezultat.
+
+**160 de teste de reguli** (de la 128) · colecții probate: **16 din 28**, de la 11.
+

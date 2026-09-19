@@ -502,7 +502,30 @@ service cloud.firestore {
     match /notifications/{notifId} {
       allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if false;
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // An update may not move the notification, nor rewrite what it says.
+      //
+      // This checked only the document as it STANDS, so the recipient could set `userId` to
+      // anybody and the row appeared in that person's list — with whatever title and body they
+      // had just written into it. `create: if false` above closes the front door; this was the
+      // side one, and it needs no more than a notification you legitimately own to walk through.
+      // Proved on the emulator before the repair (`rules-tests/personal.test.ts`).
+      //
+      // The `assets` rule carries a comment about exactly this shape: a rule that reads only
+      // `resource` lets the owner rewrite the field that decides ownership.
+      //
+      // `read` is the only field any client writes here — NotificationsDropdown marks one, or
+      // all of them, as read, and does nothing else. A rule that permits exactly that is
+      // narrower than one that only pins `userId`, and the cost of being wrong is a visible
+      // refusal rather than a silent spam vector.
+      //
+      // Of the two added clauses only the field list is load-bearing: dropping the `userId`
+      // pin alone turns no test red, because re-pointing is already a key outside [read].
+      // It stays as the clause that still holds if the field list is ever widened, and it is
+      // written here as belt-and-braces rather than as something the suite proves.
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
