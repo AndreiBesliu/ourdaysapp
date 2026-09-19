@@ -238,11 +238,32 @@ service cloud.firestore {
               request.resource.data.assigneeId == request.auth.uid)
           )
         );
+      // WHO may write is the list below. WHAT they may not change is the two lines after it.
+      //
+      // `delete` on the next line is owner-only, deliberately. But `ownerId` was writable by
+      // anybody this rule lets edit — so owner-only was a formality: make yourself the owner,
+      // then delete. Proved on the emulator before the repair, and the sharpest case was not a
+      // group member at all: somebody merely ASSIGNED a personal event, who shares no group
+      // with its owner, could take it and remove it from their calendar.
+      //
+      // Third time this exact shape has been found in this file — `assets` carries a comment
+      // about it, `notifications` was repaired the same day. A rule that reads only `resource`
+      // checks the document as it STANDS, and lets the writer rewrite what it stands for.
+      //
+      // The destination of a MOVE is narrowed the way `shareTargetOk` narrows a share: a
+      // calendar you are on, or your own. Moving between calendars stays a feature; moving a
+      // group's event into a group you do not belong to does not.
       allow update: if isSignedIn() && (
         resource.data.ownerId == request.auth.uid ||
         (resource.data.groupId != null && isMemberOfGroup(resource.data.groupId)) ||
         (resource.data.assigneeIds != null && request.auth.uid in resource.data.assigneeIds) ||
         resource.data.assigneeId == request.auth.uid
+      )
+      && request.resource.data.ownerId == resource.data.ownerId
+      && (
+        !('groupId' in request.resource.data) ||
+        request.resource.data.groupId == null ||
+        isMemberOfGroup(request.resource.data.groupId)
       );
       allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }

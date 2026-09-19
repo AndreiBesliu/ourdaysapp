@@ -1287,3 +1287,18 @@ Descoperită pentru că am măsurat câte colecții au vreodată un test de regu
 probate.** Acum sunt 16, și printre cele nou-probate sunt fix cele care țin oameni: conturile,
 profilurile publice, notificările, cererile de prietenie și lista de administratori.
 
+### Ștergerea unui eveniment era „doar a proprietarului” doar pe hârtie (19.09) — fapt
+
+Tot pe server, tot fără nimic de bifat. După gaura de la notificări am căutat aceeași formă în
+toate celelalte reguli de actualizare, și am găsit-o la calendar:
+
+* **ștergerea** unui eveniment era doar a proprietarului — dar **proprietarul se putea rescrie**.
+  Deci oricine avea voie să-l editeze își putea trece numele pe el și apoi îl ștergea. Cazul cel
+  mai urât nu era un membru de grup, ci cineva **doar asignat** la o sarcină, care nu împarte
+  niciun grup cu tine: putea lua un eveniment din calendarul tău personal și îl putea șterge;
+* un eveniment putea fi **împins într-un grup în care cel care-l mută nu e**.
+
+Ambele închise, probate pe emulator întâi pe regula veche (patru teste roșii), apoi publicate.
+**Mutarea unui eveniment pe alt calendar rămâne exact cum era** — doar destinația e îngustată la
+un calendar pe care chiar ești.
+

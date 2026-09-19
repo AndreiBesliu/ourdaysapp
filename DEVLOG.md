@@ -6357,3 +6357,57 @@ clauza nouă e în el. „Deploy complete” numește un fișier, nu un rezultat
 
 **160 de teste de reguli** (de la 128) · colecții probate: **16 din 28**, de la 11.
 
+---
+
+## 2026-09-19 · „Doar proprietarul șterge”, când proprietarul se poate rescrie
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+Regula pe care mi-o scrisesem în memorie acum o oră: *când repari o formă de defect într-o
+regulă, caut-o în toate celelalte înainte să închizi subiectul.* Am aplicat-o.
+
+### Sonda
+
+Am extras toate cele **12** instrucțiuni `allow update` din `firestore.rules` și, pentru fiecare,
+am întrebat: citește un câmp care decide apartenența (`ownerId`, `userId`, `senderId`…) — și, dacă
+da, îl și **fixează** față de valoarea veche? Trei semnalate; una fals pozitivă (cheltuielile îl
+fixează într-o formă echivalentă pe care sonda mea n-o recunoștea). Două reale.
+
+### Calendarul
+
+```
+allow update: if isSignedIn() && ( … owner, membru de grup, sau asignat … );
+allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+```
+
+Nimic nu constrângea `request.resource.data`. Deci **ștergerea „doar a proprietarului” era o
+formalitate**: te faci proprietar, apoi ștergi. Patru teste scrise ÎNAINTE de reparație au ieșit
+roșii pe motorul real, iar cel mai urât nu implica un membru de grup: **cineva doar ASIGNAT** la
+un eveniment personal — care nu împarte niciun grup cu proprietarul — putea să-l ia și să-l
+șteargă din calendarul altuia.
+
+Al patrulea: un eveniment putea fi **împins într-un grup în care cel care-l mută nu e**. Exact
+ce previne `shareTargetOk` la carduri.
+
+### Reparat cu grijă să nu închidă o funcționalitate
+
+Două clauze: `ownerId` nu se schimbă, și destinația unei mutări trebuie să fie `null` sau un grup
+în care chiar ești. **Mutarea între calendare rămâne** — e o funcționalitate reparată pe 16.09 —
+doar că destinația e îngustată.
+
+Verificat și că nu rupe clientul: `AddEventModal` scrie la editare `ownerId: editEvent.ownerId`,
+adică exact valoarea veche, iar celelalte scrieri nu ating deloc câmpul.
+
+**Amândouă clauzele țin greutatea**, spre deosebire de cazul notificărilor: fără fixarea
+proprietarului, 3 teste roșii; fără îngustarea destinației, 1.
+
+### A treia regulă semnalată
+
+`/groups/` citește `ownerId` fără să-l fixeze — dar acolo lista de membri e deja constrânsă
+(`toSet()` egal, sau egal minus tine însuți), iar `ownerId` nefixat înseamnă că proprietarul își
+poate da grupul altcuiva. Nu e același defect — e o **decizie**, și e a lui Andrei, nu a mea. O
+las așa și o scriu aici.
+
+**166 de teste de reguli** (de la 160). Publicat pe live și recitit din API: 33.636 de octeți,
+identic cu fișierul.
+

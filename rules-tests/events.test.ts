@@ -14,7 +14,7 @@
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
-import { ALICE, BOB, CAROL, DAVE, G1, anon, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
+import { ALICE, BOB, CAROL, DAVE, G1, G2, anon, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
 
 beforeAll(async () => { await startEnv('demo-ourdays-events'); });
 afterAll(stopEnv);
@@ -189,5 +189,50 @@ describe('what a group member can actually see, not just query', () => {
     // that is legal but matches nothing — indistinguishable from a broken calendar on screen.
     const snap = await getDocs(query(collection(as(BOB), 'events'), where('groupId', '==', G1)));
     expect(snap.docs.map((d) => d.id)).toEqual(['e-group']);
+  });
+});
+
+describe('who an event belongs to, and which calendar it is on', () => {
+  // Asked after the same shape was found on `notifications`: a rule that reads only
+  // `resource.data` checks the document as it STANDS, so anybody it lets write may rewrite the
+  // field that decides who it belongs to. `assets` carries a comment about exactly this.
+  //
+  // It matters more here than anywhere else, because `delete` on an event is owner-only. If
+  // ownership is writable, owner-only is not a restriction, it is a formality.
+
+  it('a group member may edit a group event — that part is intended', async () => {
+    await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'e-group'), { title: 'Dinner, later' }));
+  });
+
+  it('but may not make themselves its owner', async () => {
+    await assertFails(updateDoc(doc(as(BOB), 'events', 'e-group'), { ownerId: BOB }));
+  });
+
+  it('so they cannot reach the delete they are not allowed', async () => {
+    // The whole chain: Bob may not delete Alice's event, and must not be able to become its
+    // owner in order to.
+    await assertFails(deleteDoc(doc(as(BOB), 'events', 'e-group')));
+    await assertFails(updateDoc(doc(as(BOB), 'events', 'e-group'), { ownerId: BOB }));
+  });
+
+  it('somebody merely ASSIGNED a personal event cannot take it either', async () => {
+    // Carol shares no group with Alice at all; she was handed a task. That is a smaller
+    // relationship than membership, and it must not be a way to own somebody's calendar entry.
+    await assertSucceeds(updateDoc(doc(as(CAROL), 'events', 'e-assigned'), { taskStatus: 'done' }));
+    await assertFails(updateDoc(doc(as(CAROL), 'events', 'e-assigned'), { ownerId: CAROL }));
+  });
+
+  it('an event may not be pushed into a group the writer is not in', async () => {
+    // The `assets` rule has `shareTargetOk` for precisely this: pointing a document at a group
+    // you do not belong to puts your content in front of people who never invited you — or, the
+    // other way round, takes a group's event somewhere its members cannot follow.
+    await assertFails(updateDoc(doc(as(BOB), 'events', 'e-group'), { groupId: G2 }));
+  });
+
+  it('moving one to a calendar you ARE on still works', async () => {
+    // Moving an event between calendars is a feature, repaired on 16.09. The rule has to
+    // narrow the destination without closing the door.
+    await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'e-group'), { groupId: null }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'e-personal'), { groupId: G1 }));
   });
 });
