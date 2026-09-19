@@ -5991,3 +5991,78 @@ fiindcă eșecul e tăcut. Probată rupând o traducere românească: prinsă.
 
 `npx tsc -b` verde · poartă de lint verde · **1471 de teste** · build verde.
 
+---
+
+## 2026-09-19 · Ștergerea unei categorii o scotea din listă și o lăsa pe carduri
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+### Defectul, în trei rânduri
+
+```js
+const affected = assets.filter((a) => a.category === catName && a.ownerId === uid);
+await Promise.all(affected.map((a) => updateDoc(ref(a.id), { category: 'Uncategorized' })));
+```
+
+Un card își poartă categoriile în **două** câmpuri: `categories[]` (ce citește tot ecranul — filtrul,
+gruparea, selectorul) și vechiul `category`, păstrat pentru cardurile scrise înainte de tablou.
+
+Două greșeli în trei rânduri: **caută** doar după câmpul vechi, deci un card care ține numele în
+tablou nu e atins niciodată; și **scrie** doar câmpul vechi, deci cele atinse păstrează numele în
+tablou. Oricum ai lua-o, numele dispare din listă și rămâne pe card — iar gruparea citește
+`categories[0]`, deci cardul stă mai departe sub un titlu pe care nu-l mai poți filtra, redenumi
+sau șterge. **Nu există drum înapoi la el din ecran.**
+
+Redenumirea, cinci rânduri mai sus, învățase deja asta și are chiar comentariul care o spune.
+Ștergerea, nu. Același regulament, scris de două ori.
+
+### Măsurătoarea, și cum am greșit-o întâi
+
+Prima rulare a raportat 8 din 18 carduri cu categorii „fantomă”. Greșită: **inventasem lista de
+categorii implicite** în loc s-o copiez din `Wallet.tsx`, și pe deasupra o adunam la lista
+stocată, deși codul face `walletCategories || DEFAULT_CATEGORIES` — un SAU, nu o reuniune. Șase
+din cele opt erau fantome ale măsurătorii mele.
+
+Corectat: **5 carduri din 18** poartă un nume care nu mai e în lista stăpânului („Cards”,
+„Loyalty”, „Groceries/Alimente”). Încă patru poartă „Uncategorized”, care e valoarea de rezervă
+prin construcție și nu e în lista nimănui.
+
+**Cifra aia spune că orfanii EXISTĂ, nu că acest cod i-a făcut** — o versiune mai veche a
+ecranului ar fi putut. Ce e sigur din citirea codului e că el nu poate curăța niciunul și că va
+mai face.
+
+### Ce am făcut
+
+`src/utils/walletCategories.ts`: `categoriesOf`, `affectedByRemoval`, `afterRemoval`,
+`orphanCategories`, și constanta `UNCATEGORIZED`. Regula era scrisă în patru locuri (salvare,
+redenumire, ștergere, grupare) — iar cea scrisă separat e cea care a greșit.
+
+Și partea fără de care reparația n-ar ajunge la cei cinci orfani de azi: **numele orfane apar
+acum în bara de filtre și în „Gestionează”**, marcate. Ecranul GRUPA deja după ele; doar nu
+oferea niciun buton pentru ele. Acum le poți redenumi sau șterge — **reparația o face omul, nu
+o fac eu pe datele lui**. Intenționat NU apar în selectorul de la categorisirea unui card: un
+orfan e ceva de golit, nu de răspândit.
+
+### Probe
+
+16 teste noi, **6 din 6 mutații prinse** — primele două fiind defectul exact așa cum a fost
+livrat. Pe banc, ecranul REAL cu trei carduri ale mele și unul al Emiliei: bara de filtre arată
+șase nume (patru implicite + doi orfani), „Gestionează” marchează exact doi, iar ștergerea lui
+„Cards” a scris:
+
+```
+assets/a1 {"categories":["Loyalty"],"category":"Loyalty"}
+assets/a3 {"categories":[],"category":"Uncategorized"}
+```
+
+`a1` e cazul care contează: tabloul lui zicea `['Cards','Loyalty']`, câmpul vechi zicea
+`'Loyalty'` — **vechiul selector trecea pe lângă el**. Cardul Emiliei, neatins.
+
+### Poarta de ieri și-a făcut treaba azi
+
+Înlocuind literalii `'Uncategorized'` cu constanta, testul de onestitate al listei de excepții
+scris ieri a devenit **roșu**: exista o excepție pentru ceva care nu mai e acolo. Exact la ce
+servea, și la primul commit de după.
+
+`npx tsc -b` verde · poartă de lint verde · **1487 de teste** · build verde.
+

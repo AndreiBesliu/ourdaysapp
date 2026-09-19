@@ -18,6 +18,9 @@ import {
   canEdit, groupNameOf, mergeAssets, shareFieldsFor, shareKindOf, shareListenerGroupIds,
   shareTargetOf,
 } from '../utils/assetSharing';
+import {
+  UNCATEGORIZED, categoriesOf, affectedByRemoval, afterRemoval, orphanCategories,
+} from '../utils/walletCategories';
 
 // One list, used by the initial state and by both fallbacks below.
 const DEFAULT_CATEGORIES = ['Home & Living', 'Health & Medical', 'Vehicles', 'Financial'];
@@ -216,7 +219,7 @@ export default function Wallet() {
       const assetData = {
         name,
         categories: selectedCategories,
-        category: selectedCategories[0] || 'Uncategorized',
+        category: selectedCategories[0] || UNCATEGORIZED,
         imageUrl: url,
         ...shareFieldsFor(shareGroupId),
         barcodeValue: barcodeValue || null,
@@ -431,8 +434,13 @@ export default function Wallet() {
       const newCats = categories.filter(c => c !== catName);
       await updateDoc(doc(db, 'users', auth.currentUser.uid), { walletCategories: newCats });
       
-      const assetsToUpdate = assets.filter(a => a.category === catName && a.ownerId === auth.currentUser?.uid);
-      await Promise.all(assetsToUpdate.map(a => updateDoc(doc(db, 'assets', a.id), { category: 'Uncategorized' })));
+      // Was: find by the LEGACY field, patch the LEGACY field. A card whose `categories[]`
+      // held the name was never found, and the ones that were kept it in the array — so the
+      // name vanished from the list and stayed on the cards, under a heading with no control
+      // left for it. The rename five lines up had already learned this; the deletion had not.
+      const assetsToUpdate = affectedByRemoval(assets, catName, auth.currentUser.uid);
+      await Promise.all(assetsToUpdate.map(
+        (a) => updateDoc(doc(db, 'assets', a.id), afterRemoval(a, catName))));
       
       if (activeFilters.includes(catName)) {
         setActiveFilters(prev => prev.filter(f => f !== catName));
@@ -444,19 +452,26 @@ export default function Wallet() {
     setLoading(false);
   };
 
+  // Names sitting on my own cards that my list has lost. The screen already GROUPS by them; it
+  // simply offered no control for them, so there was no way back to a card once its category
+  // was gone. Listed here so the owner can rename or delete them — a repair they make, not one
+  // made for them. Deliberately NOT offered in the picker when categorising a card: an orphan
+  // is something to clear, not something to spread.
+  const orphans = orphanCategories(assets, categories, auth.currentUser?.uid || '');
+  const manageableCategories = [...categories, ...orphans];
+
   // If active filters are selected, we just show matching assets in a flat list to avoid duplication
   // If no filters are selected, we group by the PRIMARY category (the first one) to avoid duplication
   const filteredAssets = activeFilters.length > 0 
     ? assets.filter(a => {
-        const cats = a.categories && a.categories.length > 0 ? a.categories : (a.category ? [a.category] : ['Uncategorized']);
+        const cats = categoriesOf(a);
+        if (!cats.length) cats.push(UNCATEGORIZED);
         return activeFilters.every(f => cats.includes(f));
       })
     : [];
 
   const groupedAssets = activeFilters.length === 0 ? assets.reduce((acc: any, asset: any) => {
-    const primaryCat = (asset.categories && asset.categories.length > 0) 
-      ? asset.categories[0] 
-      : (asset.category || 'Uncategorized');
+    const primaryCat = categoriesOf(asset)[0] || UNCATEGORIZED;
       
     if (!acc[primaryCat]) acc[primaryCat] = [];
     acc[primaryCat].push(asset);
@@ -666,7 +681,7 @@ export default function Wallet() {
             <p role="alert" className="mb-3 text-sm text-rose-700 dark:text-rose-300">{t('categoryRenameFailed', language)}</p>
           )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {categories.map(cat => {
+            {manageableCategories.map(cat => {
               const isActive = activeFilters.includes(cat);
               return (
                 <button 
@@ -705,7 +720,7 @@ export default function Wallet() {
           Object.keys(groupedAssets).map(catName => (
             <div key={catName}>
               <div className="flex items-center justify-between mb-3 pl-1 border-l-4 border-emerald-500">
-                <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-200 pl-2">{catName === 'Uncategorized' ? t('uncategorized', language) : catName}</h2>
+                <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-200 pl-2">{catName === UNCATEGORIZED ? t('uncategorized', language) : catName}</h2>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {groupedAssets[catName].map((asset: any) => renderAssetCard(asset))}
@@ -888,7 +903,7 @@ export default function Wallet() {
             </div>
             
             <div className="p-4 overflow-y-auto flex-1 space-y-3">
-              {categories.map(cat => (
+              {manageableCategories.map(cat => (
                 <div key={cat} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg border border-zinc-200 dark:border-zinc-700">
                   {editingFilter === cat ? (
                     <div className="flex-1 flex items-center gap-2">
@@ -911,6 +926,9 @@ export default function Wallet() {
                       <div className="flex items-center gap-2">
                         {getCategoryIcon(cat, false)}
                         <span className="font-medium text-zinc-800 dark:text-zinc-200">{cat}</span>
+                        {orphans.includes(cat) && (
+                          <span className="text-xs text-amber-600 dark:text-amber-400">{t('walletCategoryOrphan', language)}</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-1">
                         <button onClick={() => { setEditingFilter(cat); setEditFilterValue(cat); }} className="p-1.5 text-zinc-500 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded transition-colors">

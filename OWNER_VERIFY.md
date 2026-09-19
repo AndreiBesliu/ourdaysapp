@@ -1180,3 +1180,22 @@ mai greu de observat uitându-te la ecran, fiindcă de obicei nu e acolo. Printr
       **două** grupuri, unul românesc și unul „Uncategorized”, spune-mi — înseamnă că am rupt
       cheia de grupare, nu doar eticheta.
 
+### Categoriile din portofel (reparat 19.09)
+
+Ștergerea unei categorii căuta și scria doar câmpul VECHI, deși tot ce citește ecranul folosește
+tabloul nou. Deci numele dispărea din listă și rămânea pe carduri — iar gruparea citește tabloul,
+așa că aveai un titlu pe care nu-l mai puteai filtra, redenumi sau șterge. **Măsurat pe live:
+cinci carduri din 18 poartă un nume care nu mai e în lista stăpânului lor.**
+
+- [ ] **Deschide Portofel → Gestionează.** Dacă ai categorii orfane, apar acum în listă cu
+      **„— nu mai e în lista ta”** lângă ele. Pe datele de pe live ar trebui să vezi „Cards”,
+      „Loyalty” și „Groceries/Alimente”.
+- [ ] **Șterge una dintre ele.** Cardurile care o purtau trebuie să treacă sub altă categorie a
+      lor sau sub „Fără categorie”, iar numele trebuie să dispară și din titluri, și din bara de
+      filtre. **Dacă titlul rămâne, spune-mi** — înseamnă că scrierea n-a ajuns la tabloul nou.
+- [ ] **Sau redenumește-o**, dacă vrei s-o păstrezi: redenumirea era deja corectă și o aduce
+      înapoi în listă.
+- [ ] **Un card primit de la altcineva** poate sta sub un titlu pe care tu nu-l poți gestiona — e
+      categoria LUI, pe cardul LUI. Intenționat: n-aș putea s-o repar oricum, regulile refuză
+      scrierea pe cardul altuia.
+

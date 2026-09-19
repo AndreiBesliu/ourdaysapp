@@ -54,9 +54,9 @@ const STORED_NOT_SHOWN = new Set([
   'components/ErrorBoundary.tsx::Render error',
   // Written as `fromName` on a friend request and read by the RECIPIENT.
   'components/GroupSettingsModal.tsx::Friend',
-  // The stored `category` of a card, and the grouping key that has to equal it. The heading
-  // beside it IS translated — see the `<h2>` in Wallet.tsx — so one category stays one category.
-  'screens/Wallet.tsx::Uncategorized',
+  // (The wallet's `Uncategorized` was exempted here until 19.09, when it became the shared
+  // constant `UNCATEGORIZED` in walletCategories.ts. The honesty test below is what noticed
+  // that the exemption had nothing left to exempt — on the first commit after it was added.)
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {
