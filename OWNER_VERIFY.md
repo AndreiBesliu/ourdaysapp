@@ -1317,3 +1317,20 @@ sunt ale serverului (niciun jucător nu le poate modifica sau șterge direct), a
 provocatorului e invizibilă pentru amândoi, configurarea de balans se poate scrie doar de un
 admin, iar domeniul fiecărui jucător e doar al lui.
 
+### Notele vocale acceptau orice fișier (reparat 19.09) — fapt
+
+Regulile de storage n-avuseseră niciodată niciun test. Le-am probat, și una era greșită: dosarul
+de **note vocale** verifica doar mărimea, nu și tipul. Adică orice cont autentificat putea urca
+acolo un HTML sau un executabil de până în 15 MB, în conversația oricui.
+
+Comentariul din reguli spunea că „tipul de la MediaRecorder variază” — premisa era greșită, nu
+concluzia: aplicația nu trimite ghicitura recorderului, ci învelește înregistrarea într-un blob cu
+tip fix. Deci se putea îngusta fără să se strice nimic.
+
+**Notele vocale trebuie să meargă exact ca până acum.** Dacă vreodată una nu se trimite, spune-mi
+— asta ar fi singurul mod în care îngustarea ar fi greșită.
+
+Restul a trecut așa cum era: nimeni nu scrie în dosarul altuia, nimeni nu-i poate **enumera**
+fișierele, poza de profil nu se poate suprascrie botezând-o cu numele altcuiva, iar dosarele de
+imagini refuză tot ce nu e imagine și tot ce trece de 10 MB.
+

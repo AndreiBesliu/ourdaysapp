@@ -80,9 +80,12 @@ const inner = ['npx', 'vitest', 'run', '--config', 'vitest.rules.config.ts', ...
 // arguments and firebase answered "Too many arguments" — a message about the wrapper, nothing to
 // do with the rules. Single quotes inside, double outside, so neither layer eats the other.
 //
+// Storage runs alongside Firestore because `storage.rules` had no test of any kind until
+// 19.09, and a storage rule that refuses is indistinguishable from a bug in the uploader.
+//
 // A `demo-` prefixed project id makes the emulator skip credentials entirely, so this cannot be
 // pointed at the real project even by accident.
-const cmd = `npx firebase emulators:exec --only firestore --project demo-ourdays-rules "${inner}"`;
+const cmd = `npx firebase emulators:exec --only firestore,storage --project demo-ourdays-rules "${inner}"`;
 const r = spawnSync(cmd, {
   stdio: 'inherit', env, shell: true, cwd: join(import.meta.dirname, '..'),
 });

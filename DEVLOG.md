@@ -6489,3 +6489,60 @@ toate trei au fost găsite numărând ce nu era probat.**
 `/groups/` nu fixează `ownerId`: proprietarul unui grup își poate da grupul altcuiva. Lista de
 membri e deja constrânsă, deci nu e același defect — e o alegere, și nu e a mea.
 
+---
+
+## 2026-09-19 · Bucket-ul: singurul fișier de reguli pe care nu-l rulase nimeni
+
+**Prompt (Andrei):** „Co tinua”. **Model:** Claude Opus 5.
+
+### Ce a trebuit construit întâi
+
+Nu exista niciun mod de a rula regulile de storage: emulatorul nu pornea, harnașamentul nu știa
+de bucket. Trei linii de infrastructură — portul în `firebase.json`, `--only firestore,storage`
+în runner, și contextele `filesAs`/`filesAnon` în harnașament.
+
+### Prima aserțiune nu e o permisiune
+
+Regulile de storage se potrivesc pe **calea obiectului**, dosar cu dosar, și nu „cad” cum se
+așteaptă cineva care citește: o cale pe care n-o acoperă niciun bloc `match` ajunge la refuzul
+implicit. Deci o regulă și un încărcător pot fi în dezacord la nesfârșit, iar simptomul e un refuz,
+nu o eroare pe care s-o citească cineva — așa au apărut cele două fișiere orfane din bucket.
+
+Așa că primul lucru probat sunt **cele șapte căi pe care aplicația chiar le scrie**, fiecare
+accesibilă pentru cine o scrie. Toate șapte se potrivesc. (Măsurat, nu presupus: enumerasem
+întâi literalii de cale din sursă.)
+
+### Ce era greșit
+
+`chat-audio` verifica **doar mărimea**:
+
+```
+// Audio MIME from MediaRecorder varies, so gate on auth + size only.
+allow write: if isSignedIn() && request.resource.size < 15 * 1024 * 1024;
+```
+
+Deci orice cont autentificat putea urca un `text/html` sau un `application/x-msdownload` de până
+în 15 MB, în dosarul oricărei conversații. Probat pe emulator — amândouă au urcat.
+
+**Premisa era greșită, nu concluzia.** Aplicația nu trimite ghicitura recorderului:
+`sendRecording` face `new Blob(chunks, { type: 'audio/webm' })`, deci ce ajunge e exact aia, pe
+orice browser. Se putea îngusta la `audio/.*` fără să se piardă nimic.
+
+### Ce a trecut așa cum era
+
+Dosarul altuia nu se scrie și nu se **enumeră** (`list` e al proprietarului — asta e ce ține o
+cale de la a fi ghicită, fiindcă `get` rămâne deschis oricui e autentificat). Poza de profil nu se
+suprascrie botezând-o cu numele altcuiva. Dosarele de imagini refuză `text/plain`, `text/html`,
+`application/javascript` și orice trece de 10 MB. Deconectat nu ajungi nicăieri. Iar o cale pe
+care n-o numește nicio regulă e refuzată.
+
+### Ce am scris ca DECIZIE, nu ca defect
+
+Regulile de storage nu pot interoga Firestore, deci „e Bob în grupul ăsta?” e o întrebare pe care
+fișierul ăsta n-o poate pune. Media din chat e păzită doar pe autentificare — **Bob poate scrie
+într-o conversație din care nu face parte**, și asta e un compromis deja scris în `storage.rules`.
+L-am fixat într-un test, ca schimbarea lui să fie un act deliberat, nu o derivare tăcută.
+
+**202 teste de reguli** (de la 190). Publicat pe live și recitit din API: 2989 de octeți, identic
+cu fișierul, cu clauza nouă în el.
+

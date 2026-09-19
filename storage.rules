@@ -50,8 +50,17 @@ service firebase.storage {
     }
     match /chat-audio/{groupId}/{path=**} {
       allow get: if isSignedIn();
-      // Audio MIME from MediaRecorder varies, so gate on auth + size only.
-      allow write: if isSignedIn() && request.resource.size < 15 * 1024 * 1024;
+      // Gated on the TYPE as well as the size, since 19.09. The comment that used to sit here
+      // said MediaRecorder's MIME varies and left the type unchecked entirely — so this folder
+      // accepted an HTML page or a Windows executable up to 15 MiB, from any signed-in account,
+      // into any conversation. Proved on the storage emulator before the repair.
+      //
+      // The premise was wrong rather than the conclusion: the app does not send the recorder's
+      // guess. `sendRecording` wraps the chunks in `new Blob(chunks, { type: 'audio/webm' })`,
+      // so what arrives is that, always, on every browser.
+      allow write: if isSignedIn() &&
+        request.resource.contentType.matches('audio/.*') &&
+        request.resource.size < 15 * 1024 * 1024;
     }
 
     // ── Default deny ──

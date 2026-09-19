@@ -42,6 +42,13 @@ export async function startEnv(projectId: string): Promise<RulesTestEnvironment>
       host: '127.0.0.1',
       port: 8080,
     },
+    // Both, always. The storage emulator costs a second at startup and buys the only rules
+    // file in the project that nothing had ever probed.
+    storage: {
+      rules: readFileSync(join(__dirname, '..', 'storage.rules'), 'utf8'),
+      host: '127.0.0.1',
+      port: 9199,
+    },
   });
   return env;
 }
@@ -81,5 +88,11 @@ export async function seed(fn: (db: Firestore) => Promise<void>): Promise<void> 
  */
 export const as = (uid: string): Firestore =>
   need().authenticatedContext(uid, { email: EMAIL[uid], email_verified: true }).firestore();
+
+/** The same two identities, holding a bucket instead of a database. */
+export const filesAs = (uid: string) =>
+  need().authenticatedContext(uid, { email: EMAIL[uid], email_verified: true }).storage();
+
+export const filesAnon = () => need().unauthenticatedContext().storage();
 
 export const anon = (): Firestore => need().unauthenticatedContext().firestore();
