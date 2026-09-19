@@ -42,8 +42,9 @@ const SKIP_FILES = new Set(['Admin.tsx', 'Warlord.tsx']);
  * the reader gets the writer's language, or a lookup stops matching.
  */
 const STORED_NOT_SHOWN = new Set([
-  // Written as the account's `name` in Firestore the first time somebody signs in.
-  'App.tsx::User',
+  // Written as the account's `name` in Firestore the first time somebody signs in. App.tsx's
+  // entry went on 19.09: the public mirror stopped inventing a name from the e-mail, so there
+  // is no literal left there to exempt. The honesty test below is what noticed.
   'screens/Login.tsx::User',
   // Written as the stored `name` of a card created from an event's image or checklist item.
   'components/AddEventModal.tsx::Event Image',

@@ -708,13 +708,20 @@ const OVERRIDE_FIELDS = [
     "checklistItems", "isTask", "taskStatus",
     "categoryId", "color", "emoji", "imageUrl",
     "location", "reminderMinutes", "assetId", "time", "timezone",
+    // Who the occurrence is for. Found missing on 19.09 by the guard written for `rsvps`, and it
+    // is the same defect: the details window writes these through `resolveWriteTarget`, so the
+    // ADD path re-sets them and looks fine — but materialising the occurrence any OTHER way, by
+    // ticking a checklist item say, dropped everybody who was assigned to that date.
+    "assigneeIds", "assigneeId",
     // The span. Relative fields, so an override of one occurrence carries exactly that
     // occurrence's length — see the header of eventTime.ts for why it is not an absolute end.
     "endDayOffset", "endTime",
     // `hiddenFrom` replaced `visibleTo` on 18.09: the audience is stored as the EXCLUSION now, so
     // it cannot go stale when somebody joins the group. `visibleTo` stays on the list because
     // documents written before that still carry it and an override copies what it is given.
-    "rsvpEnabled", "visibleTo", "hiddenFrom",
+    // `rsvps` joined `rsvpEnabled` on 19.09: without it, materialising an occurrence kept the
+    // question and dropped every answer, silently, on the write that created the override.
+    "rsvpEnabled", "rsvps", "visibleTo", "hiddenFrom",
 ];
 exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c, _d;

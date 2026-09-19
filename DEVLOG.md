@@ -6625,3 +6625,70 @@ REALE:
 **Rămase din audit:** șase medii (chat, portofel, nume la înscriere, două de server, service
 worker) și cele două grave (Rummy, pornirea offline).
 
+---
+
+## 2026-09-19 · Un răspuns care ștergea un mesaj, un card blocat, și un nume inventat
+
+**Prompt (Andrei):** „Incepe cu cele medii”. **Model:** Claude Opus 5.
+
+Următoarele trei din cele nouă medii ale auditului.
+
+### 1. Reply peste Edit rescria mesajul vechi
+
+Editarea și răspunsul folosesc aceeași casetă, deci sunt același slot. `startEditing`
+ștergea deja `replyingTo`; invers nu ștergea nimic. Deci ambele bannere se suprapuneau,
+iar `handleSend` testează `editingMsg` **primul**: lua ramura de editare.
+Mesajul vechi era **rescris** cu textul răspunsului, niciun răspuns nu pleca, iar coada comună
+suna tonul de „trimis” și golea caseta. Nu există document de istoric, deci textul original
+dispărea pentru toată lumea.
+
+### 2. Un card partajat cu un grup părăsit nu mai putea fi salvat
+
+Nimic nu curăță `sharedGroupId` când ieși dintr-un grup sau când grupul e șters. Valoarea
+supraviețuiește, selectorul n-are nicio opțiune care s-o potrivească, iar React afișează atunci
+**prima** opțiune — deci formularul spunea „Privat” despre un card pe care lista îl arăta
+„Partajat”. Salvarea eșua de fiecare dată, fiindcă regulile refuză orice scriere care lasă
+partajarea veche pe loc — lucru probat azi în `rules-tests/assets.test.ts` — și mesajul spunea
+doar „nu s-a putut salva”.
+
+**Arătat, nu reparat tăcut.** A pune formularul pe „Privat” ar fi anulat partajarea la următoarea
+salvare fără ca cineva să ceară asta — exact forma de defect despre care e tot auditul ăsta. Acum
+opțiunea există, e selectată, și sub ea scrie ce să faci. Și selectorul se randează chiar dacă nu
+mai ai niciun grup — fiindcă tocmai ăla e cazul care te blochează.
+
+### 3. Un cont nou era publicat sub prefixul din e-mail
+
+`Login` scria numele tastat doar în `users/{uid}`, și nu chema niciodată `updateProfile`. Iar
+`App` citește `users/{uid}` **înainte** ca `Login` să-l scrie, nu recitește, și completa golul cu
+`email.split('@')[0]`. Deci cineva care tasta „Andrei Besliu” era publicat pentru **ceilalți** ca
+„besliandrei” toată prima sesiune. Propriile lui ecrane citesc documentul de cont și arătau
+corect — de-aia n-a raportat nimeni. Iar serverul preferă oglinda (`profiles.name || users.name`),
+deci numele inventat îl **întrecea** pe cel real, și o prietenie legată în sesiunea aia îl copia în
+lista celuilalt.
+
+Reparat la sursă: **oglinda nu mai inventează**. Regula a ieșit din handlerul de 120 de rânduri
+într-o funcție pură (`publicMirrorFor`) tocmai ca să poată fi spusă simplu — *o oglindă reflectă,
+nu inventează* — și probată. Omiterea cheii la un `merge` lasă ce e acolo, deci **ordinea celor
+două scrieri concurente nu mai contează**. Iar `Login` scrie acum numele în toate cele trei locuri
+pe care aplicația le citește: `users`, `profiles` și `displayName`.
+
+### Poarta de ieri a tras a doua oară
+
+Scoasă invenția din `App.tsx`, testul de onestitate al listei de excepții a devenit roșu:
+excepția `App.tsx::User` n-avea ce să mai scutească. A doua oară în două zile când poarta aia
+prinde exact ce a fost scrisă să prindă.
+
+### Probe
+
+**3 din 3 mutații** pe regula oglinzii. Pe banc, componentele REALE:
+
+* chat: după Edit → Reply rămâne **un singur** banner și caseta e goală; trimiterea a produs un
+  **`add`** cu `replyToId: "m2"`, și **nicio** scriere pe mesajul vechi, care e încă pe ecran;
+* portofel: cardul blocat deschide selectorul pe **„Un grup în care nu mai ești”** (`value` chiar
+  e id-ul grupului dispărut), cu linia care spune ce să faci dedesubt.
+
+`npx tsc -b` verde · poartă de lint verde · **1520 de teste** · build verde.
+
+**Rămase din audit:** două medii de server (digestul AI, `aiSources.maySee`), service worker-ul,
+și cele două grave.
+

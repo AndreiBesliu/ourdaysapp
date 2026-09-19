@@ -966,7 +966,14 @@ export default function GroupChatWidget({
                             </>
                           )}
                           <button
-                            onClick={() => setReplyingTo(msg)}
+                            // Editing and replying are the same composer, so they have to be
+                            // the same slot. `startEditing` already clears `replyingTo`; this
+                            // way round it did not, so both banners stacked and `handleSend`
+                            // — which tests `editingMsg` first — took the edit branch: the old
+                            // message was REWRITTEN with the reply’s text, no reply was sent,
+                            // and the sent tone played anyway. There is no history document,
+                            // so the original wording was gone for everybody.
+                            onClick={() => { setEditingMsg(null); setNewMessage(''); setReplyingTo(msg); }}
                             className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full shrink-0"
                             title={t('replyTooltip', language)}
                           >

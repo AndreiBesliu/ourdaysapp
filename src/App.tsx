@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, setDoc, updateDoc, getDoc, arrayUnion } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import { publicMirrorFor } from './utils/publicProfile';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
 
@@ -240,11 +241,24 @@ function App() {
           // other group members can render this user's name/photo/birthday
           // without reading the (owner-only) user doc. Self-populates on login.
           const src: any = { ...(userDocSnap?.data() || {}), ...profileUpdate };
-          await setDoc(doc(db, 'profiles', currentUser.uid), {
-            name: src.name || currentUser.displayName || currentUser.email?.split('@')[0] || 'User',
-            photoURL: src.photoURL || null,
-            birthday: src.birthday || null,
-          }, { merge: true }).catch((e) => console.error('Failed to sync profile:', e));
+          // The mirror does not INVENT a name.
+          //
+          // It used to fall back to the e-mail prefix, and on a brand-new account it always
+          // reached that fallback: this handler reads `users/{uid}` before Login has written
+          // it, and never re-reads. So everybody ELSE saw “besliandrei” instead of the name
+          // typed on the form — the new account’s own screens read the user doc and looked
+          // right, which is why nobody reported it. Worse, the server reads
+          // `profiles.name || users.name`, so the invented one OUTRANKED the real one, and a
+          // friendship formed during that first session copied it into the other person’s list.
+          //
+          // Omitting the key on a merge leaves whatever is there, so the order of the two
+          // writes stops mattering. A profile with no name still renders: the readers fall
+          // back per viewer, which is transient, rather than persisting a guess.
+          await setDoc(
+            doc(db, 'profiles', currentUser.uid),
+            publicMirrorFor(src, currentUser.displayName),
+            { merge: true },
+          ).catch((e) => console.error('Failed to sync profile:', e));
           
           // If the document was just created, it won't have familyMembers, 
           // but we can initialize it if it's completely missing

@@ -288,6 +288,18 @@ export default function Wallet() {
     }
   };
 
+  // The card names a group this account is no longer in — left, or deleted under it. Nothing
+  // clears `sharedGroupId` in either case, so the value survives and the select has no option
+  // matching it; React then shows the FIRST option, so the form said “Private” about a card the
+  // list showed as Shared. Saving failed every time and said only “that item was not saved”:
+  // the rules refuse any write that leaves a stale share in place, which `rules-tests/
+  // assets.test.ts` proves — and they allow the same write once it unshares.
+  //
+  // Shown rather than silently repaired. Quietly setting the form to Private would unshare a
+  // card on the next Save without anybody asking for it, which is the shape of defect the
+  // whole audit is about.
+  const staleShare = !!shareGroupId && !myGroups.some((g) => g.id === shareGroupId);
+
   const openEditModal = (asset: any) => {
     setEditingAsset(asset);
     setName(asset.name);
@@ -892,7 +904,7 @@ export default function Wallet() {
                   <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{t('walletShareAsset', language)}</p>
                   <p className="text-xs text-zinc-500">{t('walletShareHint', language)}</p>
                 </div>
-                {myGroups.length === 0 ? (
+                {myGroups.length === 0 && !staleShare ? (
                   <p className="text-xs text-zinc-500 max-w-[45%] text-right">{t('walletShareNoGroups', language)}</p>
                 ) : (
                   <select
@@ -902,10 +914,18 @@ export default function Wallet() {
                     className="px-3 py-2 text-sm border rounded-lg bg-white dark:bg-zinc-800 dark:border-zinc-700 outline-none focus:border-emerald-500 max-w-[55%]"
                   >
                     <option value="">{t('walletSharePrivate', language)}</option>
+                    {staleShare && (
+                      <option value={shareGroupId as string}>{t('walletShareLostGroup', language)}</option>
+                    )}
                     {myGroups.map((g) => (
                       <option key={g.id} value={g.id}>{g.name}</option>
                     ))}
                   </select>
+                )}
+                {staleShare && (
+                  <p className="basis-full text-xs text-amber-700 dark:text-amber-400 mt-1">
+                    {t('walletShareLostGroupHint', language)}
+                  </p>
                 )}
               </div>
 

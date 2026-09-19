@@ -1353,3 +1353,20 @@ imagini refuză tot ce nu e imagine și tot ce trece de 10 MB.
 - [ ] **Bonus, găsit de o poartă nouă:** dacă asignezi pe cineva la o ocurență și apoi bifezi ceva
       din lista ei, responsabilii trebuie să rămână. Până azi dispăreau.
 
+### Chat, portofel și numele de la înscriere (reparat 19.09)
+
+- [ ] **În chat: începe să editezi un mesaj de-al tău, apoi apasă săgeata de răspuns la mesajul
+      altcuiva.** Trebuie să rămână **un singur** banner deasupra casetei („Răspunzi…”), iar
+      caseta să se golească. Scrie ceva și trimite: trebuie să apară un **mesaj nou**, ca
+      răspuns. Până azi se rescria mesajul tău vechi cu textul răspunsului, nu se trimitea niciun
+      răspuns — și suna tonul de „trimis” ca și cum ar fi mers. Textul vechi nu se putea recupera.
+- [ ] **În portofel: dacă ai un card partajat cu un grup din care ai ieșit** (sau care a fost
+      șters), deschide-l. Selectorul de partajare trebuie să arate **„Un grup în care nu mai
+      ești”** — nu „Privat” — și sub el o linie care spune ce să faci. Până azi scria „Privat”,
+      iar Salvează eșua de fiecare dată cu „nu s-a putut salva” și nimic altceva.
+- [ ] **La următorul cont nou creat cu e-mail și parolă:** întreabă pe altcineva din grup cum îl
+      vede. Trebuie să fie numele tastat pe formular, nu prefixul din e-mail. Până azi ceilalți
+      vedeau prefixul până la a doua conectare — iar dacă se lega o prietenie în prima sesiune,
+      numele greșit rămânea copiat în lista celuilalt. (Tu nu aveai cum să observi: ecranele tale
+      îți citesc propriul document, care era corect.)
+

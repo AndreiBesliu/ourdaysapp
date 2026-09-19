@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendEmailVerification } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendEmailVerification, updateProfile } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { CalendarDays, Mail, Lock, AlertCircle } from 'lucide-react';
@@ -48,12 +48,22 @@ export default function Login() {
           console.error('Failed to send verification email:', verErr);
         }
         try {
-          // Create user profile in Firestore
+          // All three places the app reads a name, because it reads all three.
+          //
+          //   users/{uid}      — your own screens
+          //   profiles/{uid}   — what everybody ELSE sees, and what the server prefers
+          //   Auth displayName — what App.tsx falls back to when the user doc is not there yet
+          //
+          // Only the first was written, so a new account was published under its e-mail prefix
+          // until its second sign-in. `merge: true` because App.tsx is writing `timezone`,
+          // `lastLogin` and `familyMembers` to the same document at the same moment.
+          await updateProfile(userCredential.user, { displayName: name });
           await setDoc(doc(db, 'users', userCredential.user.uid), {
             name,
             email,
             createdAt: new Date()
-          });
+          }, { merge: true });
+          await setDoc(doc(db, 'profiles', userCredential.user.uid), { name }, { merge: true });
         } catch (dbErr) {
           reportError(dbErr instanceof Error ? dbErr.message : String(dbErr), { context: 'Login.handleSubmit' });
           console.error("Failed to create user doc:", dbErr);
