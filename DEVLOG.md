@@ -5661,3 +5661,42 @@ se întâmplau în tăcere încep să se vadă. Raportorul are deja deduplicare 
 
 `npx tsc -b` verde · poarta de lint verde · **1439 de teste** · build verde · 17 fișiere, +73/-5.
 
+---
+
+## 2026-09-19 · Lista de verificat încetase să fie o listă
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+### Ce am măsurat
+
+Am verificat întâi că panoul de erori n-a crescut după măturătoarea de aseară (nu crescuse —
+nimeni n-a folosit aplicația între timp, deci plata e în așteptare, nu absentă).
+
+Apoi m-am uitat la `OWNER_VERIFY.md`: **262 de căsuțe nebifate, 8 bifate, 1028 de linii, 22 de
+secțiuni, o lună de acumulare.** Andrei n-a bifat nimic din șapte livrări în două zile — nu
+fiindcă n-a vrut, ci fiindcă ce contează era îngropat. O secţiune numită chiar „Ce trebuie să
+știi, **NU** să verifici” avea 52 de bife. Am scris fapte ca și când ar fi sarcini.
+
+### Mai rău: lista îi cerea lucruri deja făcute
+
+Punctul 30 îi spunea de cinci zile să genereze și să pună cheia VAPID, fiindcă „push-ul n-a
+funcționat niciodată, `fcmTokens` lipsește de pe toate cele 8 conturi”. **Re-măsurat azi: cheia e
+pusă, înregistrarea merge, două conturi au token** — unul cu șapte dispozitive. Ce lipsește e ca
+celelalte șase să se reconecteze o dată.
+
+O listă învechită nu e doar inutilă: **îi consumă timpul pe lucruri făcute.**
+
+### Ce s-a făcut
+
+N-am șters nimic. O primă pagină cu patru lucruri, toate măsurate AZI pe datele reale: rotația
+cheii de service account (singura cu miză de securitate — a tranzitat Drive), push-ul 2 din 8,
+cardul de pe evenimentul de grup, și cei doi orfani din bucket. Apoi întrebările care-l așteaptă,
+ca întrebări — nu ca bife. Restul, cinstit etichetat ca arhivă.
+
+Regula e acum în `CLAUDE.md`, ca să nu reconstruiesc arhiva peste două săptămâni: un fapt se
+scrie ca text, fiecare punct spune ce se strică dacă răspunsul e greșit, și **re-măsoară înainte
+să repeți o constatare veche**.
+
+Nicio schimbare de cod — deci niciun deploy. `npx tsc -b` verde · poartă de lint verde · 1439 de
+teste verzi (rulate fiindcă așa spune regula, nu fiindcă s-ar fi putut schimba ceva).
+

@@ -1,5 +1,85 @@
 # De verificat de Andrei
 
+> **Starea listei, 19.09:** 262 de căsuțe nebifate, 8 bifate, peste o lună de acumulare. Aia nu
+> mai e o listă, e o arhivă — și e vina mea: am scris și **fapte** ca și când ar fi sarcini
+> (o secțiune numită chiar „Ce trebuie să știi, **nu** să verifici” are 52 de căsuțe).
+>
+> N-am șters nimic. Am pus în față ce contează, și am reparat două puncte care te trimiteau să
+> faci lucruri deja făcute. **De-acum: faptele se scriu ca text, nu ca bife**, iar fiecare punct
+> nou spune ce se strică dacă răspunsul e greșit.
+
+---
+
+## Dacă ai zece minute, astea sunt
+
+Toate cele patru sunt măsurate **azi**, pe datele tale reale, nu repetate din memorie.
+
+### 1. Rotează cheia de service account — singura cu miză de securitate
+
+Cheia pe care ai creat-o pe 14.09 ca să pot citi erorile **a tranzitat Google Drive** (tot
+`MyWork` e sincronizat). E doar-citire (`Cloud Datastore Viewer`), deci ce poate face cineva cu
+ea e să **citească toată baza** — evenimente, chat, portofel, conturi. Nu poate scrie nimic.
+
+- [ ] Șterge cheia veche din
+      <https://console.cloud.google.com/iam-admin/serviceaccounts?project=our-days-2a939>
+      (contul `claude-error-reader` → **Keys** → șterge-o pe cea existentă), creează alta, și
+      pune-o tot la `~/.ourdays/service-account.json`. Durează un minut și închide subiectul.
+
+### 2. Push-ul: merge acum pentru 2 din 8 conturi
+
+**Corectat azi.** Punctul 30 de mai jos îți spunea să pui cheia VAPID — e deja pusă și
+înregistrarea funcționează. Măsurat acum: **două conturi au token** (unul are șapte, adică mai
+multe dispozitive), șase n-au niciunul.
+
+- [ ] **Cele șase n-au nevoie de nicio cheie — doar să se reconecteze o dată** și să accepte
+      notificările când le cere browserul. Spune-le, sau spune-mi când au făcut-o și confirm
+      din date.
+- [ ] **Tu** ai token: pune-ți un memento peste zece minute și vezi dacă sună telefonul. Dacă nu
+      sună, ăsta e un bug real și vreau să știu — restul lanțului n-a fost probat niciodată
+      cap-coadă pe un telefon adevărat.
+
+### 3. Cardul pus pe un eveniment de grup (livrat ieri)
+
+- [ ] Pune un card din portofel pe un eveniment de grup, salvează, și **întreabă pe cineva din
+      grup dacă vede codul de bare**. Până ieri nu-l vedea nimeni în afară de tine: poza stă pe
+      eveniment și se vede, codul stă pe card și nu se vedea.
+- [ ] Apoi uită-te la card în portofel: trebuie să scrie **„Partajat cu «Grup»”**. Dacă nu
+      scrie, ceva s-a lărgit fără să se vadă și vreau să știu imediat.
+
+### 4. Două fișiere orfane în bucket (3,34 MB)
+
+Sunt urma bug-ului de încărcare reparat ieri: unul e un card, unul o poză din chat, și niciun
+document nu le arată. **Nu le-am șters** — cheia mea e doar-citire, și oricum e o ștergere pe
+producție.
+
+- [ ] Spune-mi dacă le vrei curățate și îți dau exact căile.
+
+---
+
+## Întrebări care te așteaptă (nu sunt verificări)
+
+Niciuna nu e urgentă; niciuna nu se mișcă fără tine.
+
+1. **PvP pe o singură linie** — `PVP_MAX_COMBATANTS` e exact lățimea tablei, deci al doilea rând
+   nu intră niciodată în luptă. Se repară cu un rând în plus sau cu un plafon mai mic, dar ambele
+   schimbă cum se simte jocul.
+2. **Membrii noi și evenimentele vechi** — rezolvat pe 18.09 în favoarea „văd tot”. Dacă
+   vreodată vrei invers, se schimbă într-un loc.
+3. **App Check** — neaplicat. Înseamnă că cineva cu id-ul proiectului poate vorbi cu baza din
+   afara aplicației. De pornit când ai chef de un sfert de oră de verificat că nu rupe nimic.
+
+*Calibrarea Warlord rămâne amânată de tine — nu o ridic.*
+
+---
+
+## Restul, de la 1 la 31
+
+O lună de puncte, de la 26.08 încoace, în ordinea în care au apărut. Nu sunt urgente și nu se
+strică nimic dacă nu ajungi la ele — dar dacă deschizi ecranul respectiv oricum, aruncă un ochi.
+**Dacă un punct ți se pare deja făcut, probabil chiar e**; spune-mi și îl verific din date.
+
+---
+
 Lucruri pe care **nu le pot verifica eu** și de ce. Fiecare are ce să te uiți și cum arată „bine".
 Acoperă și Warlord, fiindcă se livrează prin aplicația asta.
 
@@ -583,9 +663,13 @@ Andrei alege DOAR CITIRE (14.09), deci rolul de mai jos nu e negociabil in pasii
 
 ## 30. Push-ul n-a functionat NICIODATA (14.09) — ai un pas de facut
 
-**Constatat din date:** `fcmTokens` lipseste de pe toate cele 8 conturi. Cheia VAPID din cod avea
-44 de caractere in loc de 87, deci inregistrarea era respinsa de fiecare browser, de fiecare data.
-Toate notificarile push trimise vreodata au sarit fiecare destinatar.
+**Constatat din date pe 14.09:** `fcmTokens` lipsea de pe toate cele 8 conturi. Cheia VAPID din
+cod avea 44 de caractere in loc de 87, deci inregistrarea era respinsa de fiecare browser.
+
+> **Re-masurat pe 19.09: cheia e pusa si inregistrarea MERGE.** Doua conturi au token (unul are
+> sapte, adica mai multe dispozitive), sase n-au niciunul. Pasii de mai jos cu cheia sunt
+> FACUTI — ce lipseste e ca cele sase sa se reconecteze o data. Vezi punctul 2 din capul
+> listei.
 
 - [ ] **Firebase Console → Project settings → Cloud Messaging → Web configuration →
       Web Push certificates.** Daca nu exista o pereche de chei, apasa **Generate key pair**.

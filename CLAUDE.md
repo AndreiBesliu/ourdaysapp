@@ -69,6 +69,15 @@ normalizează sfârșiturile de linie tocmai ca să nu ajungi să-l ignori. `arm
   autentificării) plus deciziile care-i aparțin lui Andrei. Când livrezi ceva ce nu poți vedea
   singur, adaugă-l acolo cu „ce te uiți" și „cum arată bine" — nu în DEVLOG, care e append-only și
   se citește ca istorie, nu ca listă de bifat.
+  - **O listă la care doar adaugi încetează să fie o listă.** Pe 19.09 avea **262 de căsuțe
+    nebifate și 8 bifate**, dintre care zeci erau *fapte* scrise ca sarcini — o secțiune numită
+    chiar „Ce trebuie să știi, NU să verifici" avea 52 de bife. Andrei n-a putut bifa nimic din
+    șapte livrări în două zile, fiindcă ce contează era îngropat.
+  - **Un fapt se scrie ca text, nu ca bifă.** O bifă e ceva ce omul FACE și termină.
+  - **Fiecare punct spune ce se strică dacă răspunsul e greșit** — altfel nu se poate prioritiza.
+  - **Re-măsoară înainte să repeți o constatare veche.** Punctul despre push îi cerea de cinci
+    zile să pună o cheie VAPID care era deja pusă: măsurat pe 19.09, două conturi din opt aveau
+    deja token. O listă învechită nu doar că nu ajută — îi consumă timpul pe lucruri făcute.
 - **Adminul e punct orb la randare:** `/admin` și panoul Warlord cer autentificare, deci nu pot fi încărcate de mine în browser. Typecheck + teste + build pot fi toate verzi cu adminul căzut pe ErrorBoundary. Ancorează hook-urile lângă celelalte hook-uri, nu lângă un `return`.
 
 ## ⚠️ REGULĂ (Andrei, 2026-08-15): publicarea test → live, din adminul proiectului
