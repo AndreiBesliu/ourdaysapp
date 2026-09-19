@@ -5700,3 +5700,45 @@ să repeți o constatare veche**.
 Nicio schimbare de cod — deci niciun deploy. `npx tsc -b` verde · poartă de lint verde · 1439 de
 teste verzi (rulate fiindcă așa spune regula, nu fiindcă s-ar fi putut schimba ceva).
 
+---
+
+## 2026-09-19 · Livrasem șapte locuri și probasem unul
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5. **Nicio schimbare de cod.**
+
+### Gaura din livrarea mea
+
+Ieri am rutat **șapte** locuri de încărcare prin același încărcător și am probat pe banc **unul**
+(portofelul). Typecheck și teste nu spun nimic despre celelalte șase. Recitite, arătau corect pe
+hârtie — dar „arăta corect pe hârtie" e exact ce m-a pedepsit de trei ori săptămâna asta.
+
+### Ce am probat
+
+Două ecrane pe care nu le montasem niciodată, cu încărcarea condusă de mână:
+
+* **poza din chat** — cale `chat-images/g_family/…`, corectă; **mesajul nu se scrie până nu se
+  termină încărcarea** (zero scrieri înainte); URL-ul ajunge în mesaj;
+* **poza principală a unui eveniment** — cale `events/u1/…`; evenimentul nu se scrie până nu se
+  termină; URL-ul ajunge pe el.
+
+Calea nu e un amănunt: **regulile de Storage sunt pe folder**, deci o cale greșită nu e un fișier
+prost așezat, e un refuz.
+
+Trei din șapte, dar acoperă **ambele forme de argument** — `File` (chat, eveniment) și
+`ArrayBuffer` + `contentType` (portofel). Cele patru rămase sunt aceeași formă, în același tipar
+de apel. **Nu spun că le-am probat pe toate șapte** — spun ce am probat și de ce cred că restul e
+acoperit.
+
+### Instrumentul avea două defecte, codul niciunul
+
+Prima rulare a arătat mesajul scris cu `imageUrl: null` și am fost gata să strig bug. Era falsul
+meu: `getDownloadURL` returna **șir gol**, deci orice încărcare părea să nu producă nimic. Reparat,
+a ieșit URL-ul — dar cu calea `unknown`, fiindcă falsul de `ref` pentru Storage arunca calea.
+Reparat și ăla, și abia atunci proba a devenit o probă.
+
+Un banc cu instrumentul stricat nu dă un răspuns greșit — dă un răspuns care **pare** corect.
+Amndouă reparațiile stau în copia de banc din scratchpad, deci următorul banc de încărcare
+pornește cu ele.
+
+`npx tsc -b` verde · arbore curat · nimic de comis în `src/`.
+
