@@ -5800,3 +5800,72 @@ Pe banc, cu limba pusă pe română: **„Zilnic — până pe 20 oct 2026”**,
 
 `npx tsc -b` verde · poartă de lint verde · **1442 de teste** · build verde.
 
+---
+
+## 2026-09-19 · Cel care poate repara e singurul care nu vede nimic
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+### De unde am plecat
+
+Din jurnalul de erori de pe live. Singura intrare **nouă**: `Missing or insufficient
+permissions.` la `EventDetailsModal.checklistAssets`, de două ori, un om. Adică exact defectul
+reparat ieri — devenit vizibil tocmai fiindcă l-am făcut să se raporteze.
+
+Doar că reparația de ieri se întâmplă **la apăsarea pe Salvează**. Ce era atașat înainte rămâne
+privat, iar evenimentele alea nu se re-salvează singure.
+
+### Ce am măsurat (read-only, 19.09)
+
+* 18 carduri, **niciunul** partajat cu vreun grup;
+* două atașamente pe evenimente de grup, **niciunul** lizibil de ceilalți;
+* dintre ele **unul singur ascunde un cod scanabil** (UPC-A). Celălalt e un card doar-cu-poză,
+  iar acolo singurul efect e o **alarmă falsă**: celuilalt membru i se scrie „cardul nu poate fi
+  arătat” pentru un card care oricum n-avea ce să arate.
+
+Măsurătoarea asta a schimbat textul: scrisesem „doar tu vezi **codul** acestui card”, ceea ce e
+fals pentru 8 din cele 18 carduri, care n-au cod deloc. Acum scrie „doar tu vezi acest card”.
+
+### Asimetria
+
+**Cel care poate repara e singurul care nu vede nimic.** Proprietarul își citește propriul card,
+deci codul i se desenează perfect; scuza galbenă o primesc ceilalți. Deci anunțul trebuie pus pe
+ecranul celui care nu vede nimic — și trebuie să fie un **gest**: deschiderea unei ferestre nu e
+consimțământ pentru lărgirea unui drept de citire. (Același motiv pentru care ieri am scos
+partajarea din autosalvare.)
+
+### Ce am făcut
+
+`unsharedAttachedCards` — **aceeași** funcție de decizie pe care o folosește salvarea, cu același
+set de id-uri (inclusiv articolele bifate: bifarea nu e dezatașare). Un regulament scris de două
+ori e un regulament care se desincronizează.
+
+În `EventDetailsModal`: un chenar galben cu numele cardului și un buton. Refuză, explicit, cardul
+altcuiva și cardul partajat cu ALT grup — al doilea fiindcă `sharedGroupId` numește un singur
+grup, deci re-țintirea ar lua tăcut accesul unor oameni care nu sunt în cameră.
+
+### Probe
+
+* 10 teste noi (21 în fișier), și **5 din 5 mutații prinse**: uită lista de bifat, uită imaginea
+  evenimentului, sare peste articolele bifate, inventează un grup pe un eveniment personal,
+  răspunde pentru un card pe care nu l-a citit;
+* pe banc, componenta REALĂ cu patru carduri pe un eveniment: al meu privat → **oferit**; al
+  Emiliei, refuzat → scuza, neoferit; al meu partajat cu Gym → codul se vede, **neoferit**; al
+  meu deja partajat cu Family → nimic. Apăsat: **o singură scriere**, `assets/a1`, cu
+  `{sharedGroupId, sharedWithFamily}`, și chenarul dispare;
+* calea de eșec, cu scrierea refuzată din banc: **nicio** scriere, chenarul rămâne, butonul rămâne,
+  și apare „Nu s-a putut partaja”.
+
+### Două lucruri văzute pe banc, de reparat separat
+
+Cu limba pe română, în antetul ferestrei scrie **„Sunday, September 20, 2026”**, iar butonul de
+asignare scrie **„+ Assign Member”**. Aceeași familie cu intrarea de azi-dimineață.
+
+### Confidențialitate
+
+Depozitul e **public**. Ieri am scris în `OWNER_VERIFY.md` titlurile reale a două evenimente de pe
+live; le-am scos. Măsurătorile rămân cifre, iar scripturile de citire nu tipăresc niciun uid și
+niciun e-mail.
+
+`npx tsc -b` verde · poartă de lint verde · **1452 de teste** · build verde.
+

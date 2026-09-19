@@ -3,7 +3,7 @@
 // The live error of 18.09, as something that runs in a second.
 
 import { describe, it, expect } from 'vitest';
-import { shareOnAttach, sharesForAttachments } from './assetAttach';
+import { shareOnAttach, sharesForAttachments, unsharedAttachedCards } from './assetAttach';
 
 const ME = 'u1', EMILIA = 'u5';
 const FAMILY = 'g_family', GYM = 'g_gym';
@@ -80,5 +80,67 @@ describe('a whole event’s attachments at once', () => {
 
   it('is empty when nothing is attached', () => {
     expect(sharesForAttachments(ALL, [], FAMILY, ME)).toEqual([]);
+  });
+});
+
+describe('the same refusal on an event that is already saved', () => {
+  // Sharing happens when somebody presses Save. Everything attached BEFORE 18.09 is still
+  // private and will not re-save itself: measured on live on 19.09, all 18 assets private, two
+  // attachments on group events, one of them hiding a scannable code from the other member.
+  const event = (over: Record<string, unknown> = {}) => ({
+    groupId: FAMILY, assetId: null, checklistItems: [], ...over,
+  });
+
+  it('names the private card sitting on a group event', () => {
+    expect(unsharedAttachedCards(event({ assetId: 'a1' }), ALL, ME)).toEqual([
+      { assetId: 'a1', sharedGroupId: FAMILY },
+    ]);
+  });
+
+  it('looks at the checklist as well as the event image', () => {
+    const ev = event({ assetId: null, checklistItems: [{ text: 'Lapte', assetId: 'a1' }] });
+    expect(unsharedAttachedCards(ev, ALL, ME)).toEqual([{ assetId: 'a1', sharedGroupId: FAMILY }]);
+  });
+
+  it('asks once for a card attached in two places', () => {
+    const ev = event({ assetId: 'a1', checklistItems: [{ assetId: 'a1' }, { assetId: 'a1' }] });
+    expect(unsharedAttachedCards(ev, ALL, ME)).toEqual([{ assetId: 'a1', sharedGroupId: FAMILY }]);
+  });
+
+  it('counts a ticked item too, because ticking a box is not unattaching', () => {
+    // The barcode is hidden while the item is done; the card is still on the event, and the
+    // save path shares it. Two answers to one question is how they drift apart.
+    const ev = event({ checklistItems: [{ assetId: 'a1', isCompleted: true }] });
+    expect(unsharedAttachedCards(ev, ALL, ME)).toEqual([{ assetId: 'a1', sharedGroupId: FAMILY }]);
+  });
+
+  it('is silent once the card is shared with this group', () => {
+    expect(unsharedAttachedCards(event({ assetId: 'a2' }), ALL, ME)).toEqual([]);
+  });
+
+  it('is silent about a card that is not mine \u2014 I could not write it anyway', () => {
+    expect(unsharedAttachedCards(event({ assetId: 'a4' }), ALL, ME)).toEqual([]);
+  });
+
+  it('is silent about a card shared with another group', () => {
+    expect(unsharedAttachedCards(event({ assetId: 'a3' }), ALL, ME)).toEqual([]);
+  });
+
+  it('is silent on a personal event', () => {
+    expect(unsharedAttachedCards(event({ groupId: null, assetId: 'a1' }), ALL, ME)).toEqual([]);
+  });
+
+  it('is silent about a card that did not load, so it never names one I cannot read', () => {
+    // The list is built from the documents that came back. A refused read leaves nothing to
+    // name, which is right: a card I cannot read is not a card I can share.
+    expect(unsharedAttachedCards(event({ assetId: 'a1' }), [], ME)).toEqual([]);
+  });
+
+  it('survives an event with nothing on it', () => {
+    expect(unsharedAttachedCards(null, ALL, ME)).toEqual([]);
+    expect(unsharedAttachedCards(undefined, ALL, ME)).toEqual([]);
+    expect(unsharedAttachedCards({}, ALL, ME)).toEqual([]);
+    expect(unsharedAttachedCards({ groupId: FAMILY, checklistItems: 'not a list' }, ALL, ME)).toEqual([]);
+    expect(unsharedAttachedCards({ groupId: FAMILY, checklistItems: [null, {}] }, ALL, ME)).toEqual([]);
   });
 });

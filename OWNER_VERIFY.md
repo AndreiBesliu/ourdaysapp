@@ -1055,14 +1055,14 @@ citi orice eveniment al grupului daca sapa. Calendarul doar refuza sa-l deseneze
 Până azi, un card din portofel pus pe un eveniment de grup era vizibil doar pentru tine: ceilalți
 vedeau poza și nu vedeau codul. Două din două atașamente de pe live erau așa.
 
-- [ ] **Pune un card pe un eveniment de grup și salvează.** Sub poză trebuie să apară, îNAINTE de
+- [ ] **Pune un card pe un eveniment de grup și salvează.** Sub poză trebuie să apară, ÎNAINTE de
       salvare, un rând galben: „Cardul atașat va deveni vizibil pentru «Grup»”. Întreabă pe cineva
       din grup dacă vede codul de bare.
 - [ ] **Uită-te apoi la card în portofel:** trebuie să scrie „Partajat cu «Grup»”. Dacă nu scrie,
       ceva s-a lărgit fără să se vadă — spune-mi imediat.
-- [ ] **Cele două atașamente vechi** („Listă de cumpărături” și „Shop Mega image”) rămân private
-      până le deschizi și apeși **Done**. Autosalvarea NU le partajează, intenționat: o lărgire de
-      acces urmează un gest, nu un cronometru.
+- [ ] **Cele două atașamente vechi** rămân private până când le deschizi și apeși butonul nou
+      (vezi secțiunea de mai jos). Autosalvarea NU le partajează, intenționat: o lărgire de acces
+      urmează un gest, nu un cronometru.
 - [ ] **Un card deja partajat cu ALT grup nu se mută.** Rămâne unde e, și pe ecranul celuilalt
       scrie de ce nu-l vede.
 - [ ] **Codul de pe lista de bifat și cel al evenimentului** trebuie să arate la fel ca în
@@ -1123,4 +1123,25 @@ citește cu voce tare un cititor de ecran). Poarta care ar fi trebuit să le pri
 - [ ] **Setări:** „Schimbă poza”, și mesajul despre tema personalizată.
 - [ ] **Dacă mai vezi ceva în engleză oriunde în aplicație, spune-mi** — acum există o poartă care
       chiar vede, deci fiecare caz nou e o scăpare pe care o pot închide definitiv.
+
+### Cardul pe care doar TU îl vezi (livrat 19.09)
+
+Partajarea de ieri se întâmplă când apăsă cineva **Salvează**. Tot ce era atașat înainte a rămas
+privat — măsurat azi pe live: două atașamente pe evenimente de grup, niciunul partajat, iar unul
+dintre ele ascunde un cod care chiar se scanează. Evenimentele alea nu se re-salvează singure.
+
+Partea nasoală: **cel care poate repara e singurul care nu vede nimic.** Tu îți citești propriul
+card, deci codul ți se desenează perfect; ceilalți primesc scuza galbenă. Așa că acum ți se spune.
+
+- [ ] **Deschide un eveniment de grup pe care ai pus un card mai demult.** Sub cod trebuie să
+      apară un chenar galben: „Doar tu vezi acest card — ceilalți din «Grup» nu”, cu numele
+      cardului dedesubt și un buton **„Partajează cu grupul”**.
+- [ ] **Apasă-l.** Chenarul trebuie să dispară pe loc. Întreabă pe cineva din grup dacă vede
+      codul — ăsta e singurul test care contează.
+- [ ] **Un card deja partajat cu ALT grup nu trebuie să apară în chenar.** Dacă apare, spune-mi:
+      înseamnă că butonul ar lua accesul altcuiva care nu e în cameră.
+- [ ] **Un card al altcuiva nu trebuie să apară în chenar** — nici măcar al tău dacă e deja
+      partajat cu grupul ăsta.
+- [ ] **Dacă apasă și scrie „Nu s-a putut partaja”**, spune-mi: înseamnă că regulile bazei de date
+      nu sunt de acord cu butonul, iar asta e o problemă de-a mea, nu ceva ce ai greșit tu.
 

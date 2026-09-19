@@ -3,6 +3,8 @@ import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon,
 import { doc, updateDoc, deleteDoc, getDoc, arrayUnion, collection, query as fsQuery, where, getDocs } from 'firebase/firestore';
 import { reportError } from '../reportError';
 import { planEventWrite } from '../utils/eventWriteTarget';
+import { unsharedAttachedCards } from '../utils/assetAttach';
+import { shareFieldsFor, groupNameOf } from '../utils/assetSharing';
 import { createEventOverride } from '../serverActions';
 import { db, auth } from '../firebase';
 import AssetBarcode from './AssetBarcode';
@@ -50,6 +52,11 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   // cannot tell apart.
   const [deniedChecklistAssets, setDeniedChecklistAssets] = useState<Set<string>>(new Set());
   const [mainAssetDenied, setMainAssetDenied] = useState(false);
+  // The other half of the same refusal. The person who can repair it is the one who cannot see
+  // it: the owner reads their own card, so the barcode renders for them exactly as it should,
+  // and it is everybody else who gets the apology above. So the owner is told, and asked.
+  const [sharingCards, setSharingCards] = useState(false);
+  const [shareCardsFailed, setShareCardsFailed] = useState(false);
 
   useEffect(() => {
     if (event?.assetId) {
@@ -129,6 +136,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       setFullScreenImage(null);
       // Same reasoning, one state later: the owner card must not be waiting behind the next event.
       setShowOwnerProfile(false);
+      setShareCardsFailed(false);
     }
   }, [isOpen]);
 
@@ -164,6 +172,40 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   const materialising = useRef<Promise<string> | null>(null);
 
   if (!isOpen || !event) return null;
+
+  // Cards attached to THIS event that I own and that this event's group cannot read. Built from
+  // the documents that actually loaded, so by construction it only ever names cards I can read,
+  // and it uses the same function the save path uses — a rule written twice is a rule that
+  // drifts. Measured on live on 19.09: two attachments on group events, neither shared, one of
+  // them carrying a scannable code nobody else could see.
+  const loadedAssets = [linkedAsset, ...Object.values(linkedChecklistAssets)].filter(Boolean) as any[];
+  const cardsToShare = unsharedAttachedCards(event, loadedAssets, auth.currentUser?.uid || '');
+  const shareCardNames = cardsToShare
+    .map(({ assetId }) => loadedAssets.find((a) => a && a.id === assetId)?.name)
+    .filter(Boolean)
+    .join(', ');
+
+  const shareCardsNow = async () => {
+    setSharingCards(true);
+    setShareCardsFailed(false);
+    let failed = false;
+    for (const { assetId, sharedGroupId } of cardsToShare) {
+      try {
+        await updateDoc(doc(db, 'assets', assetId), shareFieldsFor(sharedGroupId));
+        // Nothing re-reads the asset — the modal is never unmounted and the fetch is keyed on
+        // the event — so the notice would sit there after the write that answered it.
+        setLinkedAsset((a: any) => (a && a.id === assetId ? { ...a, ...shareFieldsFor(sharedGroupId) } : a));
+        setLinkedChecklistAssets((m) => (m[assetId] ? { ...m, [assetId]: { ...m[assetId], ...shareFieldsFor(sharedGroupId) } } : m));
+      } catch (err) {
+        // Updating my own asset: a refusal here is the rules disagreeing with the button, not
+        // the user doing anything wrong, so it is reported and said out loud rather than eaten.
+        failed = true;
+        reportError(err instanceof Error ? err.message : String(err), { context: 'EventDetailsModal.shareCard' });
+      }
+    }
+    setShareCardsFailed(failed);
+    setSharingCards(false);
+  };
 
   const isOwner = event.ownerId === auth.currentUser?.uid;
   const isInvitee = event.inviteeId === auth.currentUser?.uid;
@@ -922,6 +964,32 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                   language={language}
                 />
               </div>
+            </div>
+          )}
+
+          {/* The same refusal, seen from the only side that can end it. */}
+          {cardsToShare.length > 0 && (
+            <div className="rounded-lg border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-3">
+              <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                {t(cardsToShare.length === 1 ? 'cardHiddenFromGroup' : 'cardsHiddenFromGroup', language).replace(
+                  '{group}',
+                  groupNameOf(groups || [], event.groupId) || t('group', language),
+                )}
+              </p>
+              {shareCardNames && (
+                <p className="mt-1 text-xs text-amber-700/80 dark:text-amber-300/80">{shareCardNames}</p>
+              )}
+              <button
+                type="button"
+                onClick={shareCardsNow}
+                disabled={sharingCards}
+                className="mt-2 text-xs font-semibold text-amber-900 dark:text-amber-100 underline underline-offset-2 disabled:opacity-50"
+              >
+                {sharingCards ? t('sharingCards', language) : t('shareCardsWithGroup', language)}
+              </button>
+              {shareCardsFailed && (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t('shareCardsFailed', language)}</p>
+              )}
             </div>
           )}
 

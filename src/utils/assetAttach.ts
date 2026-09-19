@@ -104,3 +104,32 @@ export function sharesForAttachments(
   }
   return out;
 }
+
+/**
+ * The cards on an ALREADY SAVED event that this person could share with the event's group, and
+ * has not.
+ *
+ * Sharing happens when somebody presses Save in `AddEventModal`. That covers every attachment
+ * made from 18.09 onwards and nothing before it: measured on live the same day, all 18 assets
+ * were private and both of the two attachments sitting on a group event were unreadable by a
+ * member of that group. Those two events will not re-save themselves.
+ *
+ * The person who can repair it is also the only one who cannot see that anything is wrong: the
+ * owner reads their own card, so the barcode renders for them exactly as it should, and it is
+ * the OTHER members who get the refusal and the apology. So the notice belongs on the screen of
+ * the one who sees nothing, and it has to be a gesture — opening a modal is not consent to
+ * widen a read.
+ *
+ * The set of ids is the same one the save path uses, completed checklist items included: a
+ * completed item hides its barcode but keeps its card, and ticking a box is not unattaching.
+ */
+export function unsharedAttachedCards(
+  event: { groupId?: unknown; assetId?: unknown; checklistItems?: unknown } | null | undefined,
+  loaded: readonly AttachableAsset[],
+  uid: string,
+): { assetId: string; sharedGroupId: string }[] {
+  if (!event) return [];
+  const items = Array.isArray(event.checklistItems) ? event.checklistItems : [];
+  const ids = [event.assetId, ...items.map((i: { assetId?: unknown } | null) => i && i.assetId)];
+  return sharesForAttachments(loaded, ids, event.groupId, uid);
+}
