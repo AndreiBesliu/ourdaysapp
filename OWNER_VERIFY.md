@@ -1255,3 +1255,19 @@ N-a fost găsită de niciun scaner fiindcă stătea într-un bloc `{cond && (…
 acolade înghițea blocul cu etichete cu tot. Aceeași familie cu capcana `/*` de acum două zile: un
 scaner care sare peste o regiune nu dă un răspuns greșit, dă unul curat.
 
+### Un card partajat cu un grup din care ai ieșit (reparat 19.09, seara târziu)
+
+Probat pe emulatorul de reguli: dacă un card rămâne partajat cu un grup pe care l-ai părăsit,
+regula îți refuză **orice** modificare a acelui card — chiar și una care nu atinge partajarea.
+Și, cum ștergerea unei categorii scrie mai multe carduri deodată, un singur refuz oprea toate
+celelalte scrieri **după** ce lista fusese deja modificată: adică exact defectul cu categorii
+orfane reparat azi-dimineață, recreat de o eroare de permisiune.
+
+Acum cardurile se scriu **întâi**, lista abia după ce toate au reușit, iar un refuz îți apare pe
+ecran în loc să tărască tot.
+
+- [ ] **Dacă vezi vreodată mesajul galben „Unele carduri n-au putut fi actualizate…”** în
+      Portofel → Gestionează: categoria a fost **păstrată** intenționat, nu e o eroare de-a ta.
+      Oprește partajarea cardului în cauză și încearcă din nou — și spune-mi, ca să văd dacă se
+      întâmplă din alt motiv.
+

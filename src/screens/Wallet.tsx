@@ -38,6 +38,9 @@ export default function Wallet() {
   );
   const [assetsLoadError, setAssetsLoadError] = useState(false);
   const [categoryError, setCategoryError] = useState(false);
+  // Distinct from `categoryError`: that one means the whole write threw. This one means some
+  // cards were refused and the category was therefore KEPT — a different thing to tell someone.
+  const [categoryPartial, setCategoryPartial] = useState(false);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [isAdding, setIsAdding] = useState(false);
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
@@ -400,10 +403,9 @@ export default function Wallet() {
 
     setLoading(true);
     setCategoryError(false);
+    setCategoryPartial(false);
     try {
-      const newCats = listAfterRename(categories, oldName, newName);
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), { walletCategories: newCats });
-      
+
       // Assets carry BOTH `categories[]` (what every read path uses — the filter and the
       // grouping) and the legacy single `category`. The rename only patched the legacy field, so
       // afterwards the chip showed the new name while the assets stayed grouped under the old one,
@@ -413,8 +415,30 @@ export default function Wallet() {
       // The ownerId term stays: the assets rule permits updates by the owner only, so including a
       // shared asset would turn this into a guaranteed partial failure.
       const assetsToUpdate = affectedByRemoval(assets, oldName, auth.currentUser.uid);
-      await Promise.all(assetsToUpdate.map(
+      // Cards FIRST, list second, and one refusal must not abort the rest.
+      //
+      // Proved on the emulator (`rules-tests/assets.test.ts`): the assets rule evaluates
+      // `shareTargetOk` on the MERGED document, so a card still naming a group its owner has
+      // LEFT refuses every update — including one that does not touch `sharedGroupId` at all.
+      // With `Promise.all` and the list written first, one such card aborted every remaining
+      // write while `walletCategories` had already changed: the name gone from the list and
+      // still on the cards. That is precisely the orphan defect repaired this morning,
+      // recreated by a permission error.
+      //
+      // So: the list changes only when EVERY card did, which keeps the one invariant that
+      // matters — a name is in the list exactly while some card still carries it.
+      const outcomes = await Promise.allSettled(assetsToUpdate.map(
         (a) => updateDoc(doc(db, 'assets', a.id), afterRename(a, oldName, newName))));
+      const refused = outcomes.filter((r) => r.status === 'rejected');
+      if (refused.length) {
+        setCategoryPartial(true);
+        reportError('rename refused on ' + refused.length + ' of ' + outcomes.length + ' cards',
+          { context: 'Wallet.renameCategory.partial' });
+        setLoading(false);
+        return;
+      }
+      await updateDoc(doc(db, 'users', auth.currentUser.uid),
+        { walletCategories: listAfterRename(categories, oldName, newName) });
       
       if (activeFilters.includes(oldName)) {
         setActiveFilters(prev => prev.map(f => f === oldName ? newName : f));
@@ -434,17 +458,38 @@ export default function Wallet() {
     if (!confirm(t('categoryDeleteConfirm', language).replace('{name}', catName))) return;
     
     setLoading(true);
+    setCategoryPartial(false);
     try {
-      const newCats = categories.filter(c => c !== catName);
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), { walletCategories: newCats });
-      
+
       // Was: find by the LEGACY field, patch the LEGACY field. A card whose `categories[]`
       // held the name was never found, and the ones that were kept it in the array — so the
       // name vanished from the list and stayed on the cards, under a heading with no control
       // left for it. The rename five lines up had already learned this; the deletion had not.
       const assetsToUpdate = affectedByRemoval(assets, catName, auth.currentUser.uid);
-      await Promise.all(assetsToUpdate.map(
+      // Cards FIRST, list second, and one refusal must not abort the rest.
+      //
+      // Proved on the emulator (`rules-tests/assets.test.ts`): the assets rule evaluates
+      // `shareTargetOk` on the MERGED document, so a card still naming a group its owner has
+      // LEFT refuses every update — including one that does not touch `sharedGroupId` at all.
+      // With `Promise.all` and the list written first, one such card aborted every remaining
+      // write while `walletCategories` had already changed: the name gone from the list and
+      // still on the cards. That is precisely the orphan defect repaired this morning,
+      // recreated by a permission error.
+      //
+      // So: the list changes only when EVERY card did, which keeps the one invariant that
+      // matters — a name is in the list exactly while some card still carries it.
+      const outcomes = await Promise.allSettled(assetsToUpdate.map(
         (a) => updateDoc(doc(db, 'assets', a.id), afterRemoval(a, catName))));
+      const refused = outcomes.filter((r) => r.status === 'rejected');
+      if (refused.length) {
+        setCategoryPartial(true);
+        reportError('delete refused on ' + refused.length + ' of ' + outcomes.length + ' cards',
+          { context: 'Wallet.removeCategory.partial' });
+        setLoading(false);
+        return;
+      }
+      await updateDoc(doc(db, 'users', auth.currentUser.uid),
+        { walletCategories: categories.filter((c) => c !== catName) });
       
       if (activeFilters.includes(catName)) {
         setActiveFilters(prev => prev.filter(f => f !== catName));
@@ -692,6 +737,9 @@ export default function Wallet() {
           </div>
           {categoryError && (
             <p role="alert" className="mb-3 text-sm text-rose-700 dark:text-rose-300">{t('categoryRenameFailed', language)}</p>
+          )}
+          {categoryPartial && (
+            <p role="alert" className="mb-3 text-sm text-amber-700 dark:text-amber-300">{t('categoryPartialFailure', language)}</p>
           )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {filterChips.map(cat => {

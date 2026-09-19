@@ -152,6 +152,42 @@ describe('writing', () => {
   });
 });
 
+describe('the owner of a card shared with a group they have LEFT', () => {
+  // `shareTargetOk` is evaluated on the MERGED document, so a card still naming a group the
+  // owner is no longer in fails the check on every update — even an update that does not touch
+  // `sharedGroupId` at all. Asked because today's work makes sharing ordinary: saving an event
+  // with a card attached shares it, and there is now a button for an already-saved one.
+
+  beforeEach(async () => {
+    await seed(async (db) => {
+      await updateDoc(doc(db, 'groups', G1), { members: [BOB] });   // Alice has left G1
+    });
+  });
+
+  it('cannot edit any other field while the stale share is still on the card', async () => {
+    const db = as(ALICE);
+    await assertFails(updateDoc(doc(db, 'assets', 'a-shared'), { categories: ['Vehicles'] }));
+  });
+
+  it('CAN unshare it, which is the way out', async () => {
+    const db = as(ALICE);
+    await assertSucceeds(updateDoc(doc(db, 'assets', 'a-shared'), {
+      sharedGroupId: null, sharedWithFamily: false,
+    }));
+  });
+
+  it('CAN edit it in the same write that unshares it', async () => {
+    const db = as(ALICE);
+    await assertSucceeds(updateDoc(doc(db, 'assets', 'a-shared'), {
+      categories: ['Vehicles'], category: 'Vehicles', sharedGroupId: null, sharedWithFamily: false,
+    }));
+  });
+
+  it('can still delete it — delete asks only about the owner', async () => {
+    await assertSucceeds(deleteDoc(doc(as(ALICE), 'assets', 'a-shared')));
+  });
+});
+
 describe('revocation', () => {
   it('leaving the group takes the access with it, immediately', async () => {
     await assertSucceeds(getDoc(doc(as(BOB), 'assets', 'a-shared')));

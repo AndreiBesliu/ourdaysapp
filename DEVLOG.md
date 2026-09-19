@@ -6252,3 +6252,44 @@ erori, un nume de simbologie și un identificator de fus orar.
 **5 din 5 mutații prinse**, zero derive. `npx tsc -b` verde · poartă de lint verde · **1505 de
 teste** · build verde.
 
+---
+
+## 2026-09-19 · O eroare de permisiune recrea defectul reparat dimineața
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+### De ce m-am uitat acolo
+
+Azi am adăugat scrieri noi pe `assets`: partajarea la salvare, butonul de partajare din fereastra
+de eveniment, și ștergerea/redenumirea de categorii care acum ating mai multe carduri. Suita de
+reguli (`npm run test:rules`) trecea — **132 de teste** — dar verdele ei nu spune nimic despre
+căi pe care nu le acoperă. Am probat-o pe emulator, nu am raționat despre ea.
+
+### Ce am găsit
+
+`shareTargetOk` se evaluează pe documentul **rezultat**, nu pe schimbare. Deci un card care
+încă numește un grup din care proprietarul a IEȘIT pică verificarea la **orice** actualizare —
+inclusiv una care nu atinge `sharedGroupId`. Patru cazuri noi în `rules-tests/assets.test.ts` o
+spun: nu poți edita alt câmp, **poți** opri partajarea, **poți** edita în aceeași scriere care
+oprește partajarea, și poți șterge cardul.
+
+### De ce contează, și de ce e defectul de dimineață întors
+
+Ștergerea unei categorii scria lista **întâi**, apoi cardurile cu `Promise.all`. Un singur card
+refuzat → respingerea abandona toate scrierile rămase, iar `walletCategories` era deja schimbat.
+Rezultatul: **numele dispărut din listă și rămas pe carduri** — exact categoria orfană pe care
+am reparat-o azi-dimineață, recreată de o eroare de permisiune.
+
+Acum: **cardurile întâi, lista abia dacă toate au reușit**, cu `Promise.allSettled` ca un refuz
+să nu le tragă pe celelalte după el. Invariantul pe care-l păstrează: *un nume e în listă exact
+cât timp vreun card îl mai poartă.*
+
+### Probat
+
+Pe banc, cu o singură scriere refuzată (`assets/a3`): celelalte carduri **tot s-au scris**, lista
+**nu**, iar pe ecran a apărut mesajul galben care numește cauza. Fără refuz: două carduri, apoi
+lista, fără mesaj. Ramura asta se vede doar când ceva merge prost, deci e singura care merita
+montată cu adevărat.
+
+`npx tsc -b` verde · poartă de lint verde · **1505 teste** + **132 de reguli** · build verde.
+
