@@ -4,7 +4,8 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  UNCATEGORIZED, categoriesOf, affectedByRemoval, afterRemoval, orphanCategories,
+  UNCATEGORIZED, categoriesOf, affectedByRemoval, afterRemoval, afterRename, listAfterRename,
+  orphanCategories,
 } from './walletCategories';
 
 const ME = 'u1', EMILIA = 'u5';
@@ -118,5 +119,56 @@ describe('the names with no way back', () => {
     const cleaned = assets.map((a) =>
       touched.includes(a) ? { ...a, ...afterRemoval(a, 'Cards') } : a);
     expect(orphanCategories(cleaned, listed, ME)).toEqual(['Loyalty']);
+  });
+});
+
+describe('renaming, including renaming something the list has lost', () => {
+  const listed = ['Home & Living', 'Health & Medical', 'Vehicles', 'Financial'];
+
+  it('renames a listed category in place, keeping the order', () => {
+    expect(listAfterRename(listed, 'Vehicles', 'Mașini'))
+      .toEqual(['Home & Living', 'Health & Medical', 'Mașini', 'Financial']);
+  });
+
+  it('ADOPTS an orphan, which is the whole point of the pencil on that row', () => {
+    // An orphan is by definition absent from the list, so `map` left the list untouched, the
+    // write stored the same entries, and the cards landed under a brand new orphan. The button
+    // could not produce a repaired state for any input at all.
+    expect(listAfterRename(listed, 'Loyalty', 'Carduri de fidelitate'))
+      .toEqual([...listed, 'Carduri de fidelitate']);
+  });
+
+  it('lets an orphan be MERGED into a category that already exists', () => {
+    // The obvious repair, and the one the old `categoryExists` refusal forbade.
+    expect(listAfterRename(listed, 'Loyalty', 'Financial')).toEqual(listed);
+  });
+
+  it('does not put an empty name in the list', () => {
+    expect(listAfterRename(listed, 'Vehicles', '')).toEqual(
+      ['Home & Living', 'Health & Medical', 'Financial']);
+  });
+
+  it('rewrites both fields on a card, and keeps the legacy one in step', () => {
+    expect(afterRename({ categories: ['Cards', 'Vehicles'], category: 'Cards' }, 'Cards', 'Carduri'))
+      .toEqual({ categories: ['Carduri', 'Vehicles'], category: 'Carduri' });
+  });
+
+  it('does not leave a card carrying the same category twice after a merge', () => {
+    // Fold "Loyalty" into "Financial" on a card that had both.
+    expect(afterRename({ categories: ['Loyalty', 'Financial'], category: 'Loyalty' }, 'Loyalty', 'Financial'))
+      .toEqual({ categories: ['Financial'], category: 'Financial' });
+  });
+
+  it('leaves a card that does not carry the old name alone', () => {
+    expect(afterRename({ categories: ['Vehicles'], category: 'Vehicles' }, 'Cards', 'Carduri'))
+      .toEqual({ categories: ['Vehicles'], category: 'Vehicles' });
+  });
+
+  it('closes the loop: renaming an orphan stops it being one', () => {
+    const ME = 'u1';
+    const assets = [{ id: 'a1', ownerId: ME, categories: ['Loyalty'], category: 'Loyalty' }];
+    expect(orphanCategories(assets, listed, ME)).toEqual(['Loyalty']);
+    const renamed = assets.map((a) => ({ ...a, ...afterRename(a, 'Loyalty', 'Fidelitate') }));
+    expect(orphanCategories(renamed, listAfterRename(listed, 'Loyalty', 'Fidelitate'), ME)).toEqual([]);
   });
 });

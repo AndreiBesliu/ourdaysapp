@@ -6119,3 +6119,87 @@ rescrierii — fața nouă acoperă șase subiecte în loc de patru, deci a adă
 
 Nicio schimbare de cod, deci niciun deploy: `dist/` e neatins.
 
+---
+
+## 2026-09-19 · Recenzia a găsit găuri în chiar porțile pe care le scrisesem azi
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+**20 de agenți, 2,49M tokens, 431 de apeluri de unealtă, 7 minute.** Șase cititori (câte unul pe
+dimensiune) peste un diff de 2039 de rânduri din 20 de fișiere, apoi câte un **refuzator** pentru
+fiecare constatare peste severitatea minimă. **13 confirmate, 1 refuzată.** Niciuna gravă;
+majoritatea în codul scris de mine azi.
+
+### Trei dintre ele erau în porțile mele
+
+Scrisesem în mesajul de commit că „acum există trei porți care chiar văd”. Aveau trei găuri
+numite, fiecare cu un șir REAL care trecea prin ea:
+
+1. **Plafonul de 200 de caractere măsura codul mascat.** `blank()` păstrează LUNGIMEA, deci 95 de
+   caractere de expresie mascată dintr-o propoziție de 60 împingeau regiunea peste cuantificator
+   și potrivirea era **abandonată**. Așa a stat nevăzut un paragraf întreg în engleză sub lista de
+   repetare. Acum plafonul e pe textul COLAPSAT.
+2. **`( )` făcea proza să pară cod.** `({yesUsers.length})` se maschează la `( )`, iar filtrul de
+   cod arunca „Going ( )”. Trei etichete RSVP, invizibile.
+3. **Pragul de trei litere.** Al treilea buton RSVP scria `No`. Două litere.
+
+Și la poarta de date: `[^,]+` pentru primul argument nu putea trece de prima virgulă de pe rând,
+deci `format(getRecurrenceEndDate(new Date(d), r), 'MMMM d, yyyy')` **nu se potrivea deloc** —
+exact apelul pe care măturația de azi îl ratase. Iar fereastra de trei rânduri pentru `locale:`
+scutea un apel gol pentru locale-ul VECINULUI; acum se caută în parantezele APELULUI, numărate.
+
+La poarta de rezerve: regula pentru ternar cerea ghilimele pe AMBELE ramuri, deci orbea exact
+când jumătate de rând fusese reparată (`cond ? t('cheie') : 'English'`). Așa a supraviețuit
+„Linked Card” — și, odată regula lărgită, și „0 results” din căutarea din chat.
+
+**Măsurat înainte de a lărgi ceva:** cele trei reparații scot la iveală exact 7 șiruri în tot
+`src`, și toate 7 sunt reale. Zero zgomot.
+
+### Portofel: creionul pe o categorie orfană nu putea repara nimic
+
+Dimineață am făcut orfanele vizibile și le-am dat două butoane. Unul dintre ele era inert **prin
+construcție**: o orfană e prin definiție absentă din listă, deci `categories.map(...)` lăsa lista
+neatinsă, scrierea stoca aceleași intrări, iar cardurile aterizau sub o orfană NOUĂ. Iar dacă
+scriai un nume care există deja — adică reparația evidentă, să unești orfana cu o categorie
+existentă — primeai „categoria există deja”. Deci: niciun input nu producea o stare reparată.
+
+`listAfterRename` adoptă numele nou, iar refuzul se aplică doar când redenumești o categorie
+LISTATĂ. `afterRename` deduplică, fiindcă o unire pe un card care le avea pe amândouă l-ar fi
+lăsat cu aceeași categorie de două ori.
+
+Plus: bara de filtre desenează acum un buton și pentru orice filtru ACTIV pe care niciuna dintre
+liste nu-l mai conține — altfel portofelul rămânea filtrat pe nimic, fără nimic pe ecran de
+apăsat ca să-l stingi.
+
+### Ce am găsit eu, pe banc, în plus
+
+`{g.name} {t('calendar', language)}` — lista de calendare oferea **„Gym Calendar”**. Cuvântul
+„Calendar” e identic în română, deci nimic nu părea netradus: **ORDINEA** era englezească. O
+cheie pentru fraza întreagă, cu numele ca substituent. (Același tipar despre care chat-ul are
+deja un comentariu: o frază ruptă în chei a randat „Gestionează Filters”.)
+
+### Trei dintre propriile mele probe nu probau nimic
+
+Din 10 mutații, primele trei rulări au dat **7 prinse, 3 RATATE** — și toate trei ratate erau
+vina probelor, nu a reparațiilor:
+
+* fixtura pentru plafon era **un singur rând ne-indentat** de ~160 de caractere, deci încăpea sub
+  vechiul plafon de 200 și trecea și cu reparația anulată;
+* fixtura pentru fereastra de `locale:` avea apelul localizat **deasupra** celui gol, iar
+  fereastra se uita doar ÎNAINTE — nu putea scăpa nimic;
+* mutația care întorcea anunțul de repetare la engleză înlocuia **un singur rând** dintr-o
+  expresie de trei, lăsând `{ locale: … }` dedesubt — deci poarta de date rămânea satisfăcută.
+
+Reparate toate trei, **10 din 10 prinse**, zero derive la final. *Un control negativ care nu
+strică lucrul pe care-l numește nu probează nimic* — a șaptea oară când îmi trebuie regula asta.
+
+### Refuzată, și bine refuzată
+
+„Butonul de partajare trimite un card vechi, pe care proprietarul l-a scos din eveniment”.
+Refuzatorul a arătat că fereastra **desenează chiar cardul ăla** (numele și codul de bare sunt pe
+ecran), că butonul îi scrie numele, și că gestul e reversibil din portofel în două apăsări. Deci
+nu e un card invizibil — e cardul pe care omul îl vede.
+
+`npx tsc -b` verde · poartă de lint verde · **1501 de teste** · build verde · arbore curat după
+workflow.
+

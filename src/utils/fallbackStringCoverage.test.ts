@@ -92,9 +92,17 @@ export function englishFallbacks(src: string): { line: number; text: string }[] 
     for (const m of line.matchAll(/\|\|\s*\{[^}]*'([A-Z0-9][A-Za-z0-9 .!?…]{2,40})'/g)) {
       out.push({ line: i + 1, text: m[1] });
     }
-    if (line.includes('?')) {
-      for (const m of line.matchAll(/\?[^']*'[^']*'\s*:\s*'([A-Z0-9][A-Za-z0-9 .!?…]{2,40})'/g)) {
-        out.push({ line: i + 1, text: m[1] });
+    // The far branch of a ternary whose NEAR branch is not a literal — the ordinary shape once
+    // the near branch has been translated: `cond ? t('key', language) : 'English'`, or
+    // `x?.name ? x.name : 'Linked Card'`. The rule this replaces needed quotes on BOTH sides,
+    // so it went blind the moment half of a line was repaired.
+    //
+    // Requiring the `?` to come BEFORE the colon is what keeps an object property out:
+    // `name: 'Blue'` in a theme table has no question mark in front of it.
+    const q = line.indexOf('?');
+    if (q >= 0) {
+      for (const m of line.matchAll(/:\s*'([A-Z0-9][A-Za-z0-9 .!?…]{2,40})'/g)) {
+        if (m.index !== undefined && m.index > q) out.push({ line: i + 1, text: m[1] });
       }
     }
   });
@@ -152,6 +160,15 @@ describe('a word a person reads is not left in one language by accident', () => 
 
   it('does not read a commented-out example as code', () => {
     expect(englishFallbacks("// it used to say || 'Member' here")).toEqual([]);
+  });
+
+  it('sees the far branch after the near one has been translated', () => {
+    // The shape a half-finished sweep leaves behind, and the one the old rule was blind to:
+    // it needed a quoted literal on BOTH sides of the colon.
+    const a = "<span>{item.name ? item.name : 'Linked Card'}</span>";
+    const b = "<span>{n > 0 ? t('hits', language) : '0 results'}</span>";
+    expect(englishFallbacks(a).map((h) => h.text)).toContain('Linked Card');
+    expect(englishFallbacks(b).map((h) => h.text)).toContain('0 results');
   });
 
   it('every English fallback a person reads goes through t()', () => {

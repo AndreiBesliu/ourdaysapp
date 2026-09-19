@@ -19,7 +19,8 @@ import {
   shareTargetOf,
 } from '../utils/assetSharing';
 import {
-  UNCATEGORIZED, categoriesOf, affectedByRemoval, afterRemoval, orphanCategories,
+  UNCATEGORIZED, categoriesOf, affectedByRemoval, afterRemoval, afterRename, listAfterRename,
+  orphanCategories,
 } from '../utils/walletCategories';
 
 // One list, used by the initial state and by both fallbacks below.
@@ -388,12 +389,19 @@ export default function Wallet() {
       return;
     }
     const newName = editFilterValue.trim();
-    if (categories.includes(newName)) return alert(t('categoryExists', language));
+    // Only a LISTED category can collide with another one. Renaming an ORPHAN onto an existing
+    // name is a merge, and a merge is the obvious thing to want: it is how you fold a name the
+    // list lost back into one it still has. Refusing it left the pencil on an orphan row with
+    // no input at all that could repair anything.
+    const renamingAnOrphan = !categories.includes(oldName);
+    if (!renamingAnOrphan && categories.includes(newName)) {
+      return alert(t('categoryExists', language));
+    }
 
     setLoading(true);
     setCategoryError(false);
     try {
-      const newCats = categories.map(c => c === oldName ? newName : c);
+      const newCats = listAfterRename(categories, oldName, newName);
       await updateDoc(doc(db, 'users', auth.currentUser.uid), { walletCategories: newCats });
       
       // Assets carry BOTH `categories[]` (what every read path uses — the filter and the
@@ -404,13 +412,9 @@ export default function Wallet() {
       //
       // The ownerId term stays: the assets rule permits updates by the owner only, so including a
       // shared asset would turn this into a guaranteed partial failure.
-      const assetsToUpdate = assets.filter(
-        (a) => (a.categories?.includes(oldName) || a.category === oldName) && a.ownerId === auth.currentUser?.uid,
-      );
-      await Promise.all(assetsToUpdate.map((a) => updateDoc(doc(db, 'assets', a.id), {
-        categories: (a.categories || [a.category]).map((c: string) => (c === oldName ? newName : c)),
-        category: a.category === oldName ? newName : a.category,
-      })));
+      const assetsToUpdate = affectedByRemoval(assets, oldName, auth.currentUser.uid);
+      await Promise.all(assetsToUpdate.map(
+        (a) => updateDoc(doc(db, 'assets', a.id), afterRename(a, oldName, newName))));
       
       if (activeFilters.includes(oldName)) {
         setActiveFilters(prev => prev.map(f => f === oldName ? newName : f));
@@ -459,6 +463,15 @@ export default function Wallet() {
   // is something to clear, not something to spread.
   const orphans = orphanCategories(assets, categories, auth.currentUser?.uid || '');
   const manageableCategories = [...categories, ...orphans];
+  // Plus anything currently FILTERING that neither list contains any more. `orphans` is derived
+  // from the cards, and `categories` from a live listener, so either can lose an entry while it
+  // is still in `activeFilters` — delete the last card carrying an orphan, or remove a category
+  // from another device. Tapping the chip is the only control that clears an entry, so without
+  // this the wallet stays filtered to nothing with nothing on screen to switch off.
+  const filterChips = [
+    ...manageableCategories,
+    ...activeFilters.filter((f) => !manageableCategories.includes(f)),
+  ];
 
   // If active filters are selected, we just show matching assets in a flat list to avoid duplication
   // If no filters are selected, we group by the PRIMARY category (the first one) to avoid duplication
@@ -681,7 +694,7 @@ export default function Wallet() {
             <p role="alert" className="mb-3 text-sm text-rose-700 dark:text-rose-300">{t('categoryRenameFailed', language)}</p>
           )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {manageableCategories.map(cat => {
+            {filterChips.map(cat => {
               const isActive = activeFilters.includes(cat);
               return (
                 <button 

@@ -780,7 +780,7 @@ export default function GroupChatWidget({
               />
               {searchQuery && (
                 <span className="text-[10px] text-zinc-500 whitespace-nowrap">
-                  {searchResults.length > 0 ? `${currentSearchIndex + 1}/${searchResults.length}` : '0 results'}
+                  {searchResults.length > 0 ? `${currentSearchIndex + 1}/${searchResults.length}` : t('noResults', language)}
                 </span>
               )}
               <button onClick={() => navigateSearch('up')} className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" disabled={searchResults.length === 0}>
@@ -850,8 +850,8 @@ export default function GroupChatWidget({
                 const showDateSeparator = !prevDate || !isSameDay(msgDate, prevDate);
                 let dateLabel = '';
                 if (showDateSeparator) {
-                  if (isToday(msgDate)) dateLabel = 'Today';
-                  else if (isYesterday(msgDate)) dateLabel = 'Yesterday';
+                  if (isToday(msgDate)) dateLabel = t('todayLabel', language);
+                  else if (isYesterday(msgDate)) dateLabel = t('yesterdayLabel', language);
                   else dateLabel = format(msgDate, 'd MMMM yyyy', { locale: getDateLocale(language) });
                 }
 

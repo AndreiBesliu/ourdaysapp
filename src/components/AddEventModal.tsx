@@ -1369,7 +1369,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                                     <div className="p-2 flex flex-col items-center justify-center text-zinc-500">
                                       <Wallet className="w-6 h-6 mb-1 text-emerald-500" />
                                       <span className="text-[10px] text-center font-medium px-1 line-clamp-2">
-                                        {item.assetId && assets.find(a => a.id === item.assetId)?.name ? assets.find(a => a.id === item.assetId)?.name : 'Linked Card'}
+                                        {item.assetId && assets.find(a => a.id === item.assetId)?.name ? assets.find(a => a.id === item.assetId)?.name : t('linkedCard', language)}
                                       </span>
                                     </div>
                                   )}
@@ -1545,7 +1545,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               >
                 <option value="personal">{t('personalCalendar', language)}</option>
                 {groups.map(g => (
-                  <option key={g.id} value={g.id}>{g.name} {t('calendar', language)}</option>
+                  <option key={g.id} value={g.id}>{t('groupCalendar', language).replace('{name}', g.name)}</option>
                 ))}
               </select>
             </div>
@@ -1620,7 +1620,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 </select>
                 {repeat !== 'none' && (
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                    🔁 This event will repeat {repeat} until {eventDate ? format(getRecurrenceEndDate(new Date(eventDate), repeat), 'MMMM d, yyyy') : '...'}. Recurrence is not infinite.
+                    🔁 {t('repeatNotice', language).replace('{date}', eventDate
+                      ? format(getRecurrenceEndDate(new Date(eventDate), repeat), 'd MMM yyyy', { locale: getDateLocale(language) })
+                      : '…')}
                   </p>
                 )}
               </div>

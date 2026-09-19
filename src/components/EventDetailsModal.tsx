@@ -767,7 +767,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                       : 'bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 border border-red-500/20'
                   }`}
                 >
-                  <ThumbsDown className="w-4 h-4" /> No
+                  <ThumbsDown className="w-4 h-4" /> {t('rsvpNotGoing', language)}
                 </button>
               </div>
 
@@ -778,7 +778,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                       <span className="text-xs text-zinc-600 dark:text-zinc-400">
-                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">Going ({yesUsers.length})</span>{' — '}
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">{t('rsvpGoing', language)} ({yesUsers.length})</span>{' — '}
                         {yesUsers.map(uid => userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || t('memberFallback', language)).join(', ')}
                       </span>
                     </div>
@@ -787,7 +787,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
                       <span className="text-xs text-zinc-600 dark:text-zinc-400">
-                        <span className="font-semibold text-amber-600 dark:text-amber-400">Maybe ({maybeUsers.length})</span>{' — '}
+                        <span className="font-semibold text-amber-600 dark:text-amber-400">{t('rsvpMaybe', language)} ({maybeUsers.length})</span>{' — '}
                         {maybeUsers.map(uid => userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || t('memberFallback', language)).join(', ')}
                       </span>
                     </div>
@@ -796,7 +796,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
                       <span className="text-xs text-zinc-600 dark:text-zinc-400">
-                        <span className="font-semibold text-red-600 dark:text-red-400">Not going ({noUsers.length})</span>{' — '}
+                        <span className="font-semibold text-red-600 dark:text-red-400">{t('rsvpNotGoing', language)} ({noUsers.length})</span>{' — '}
                         {noUsers.map(uid => userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || t('memberFallback', language)).join(', ')}
                       </span>
                     </div>

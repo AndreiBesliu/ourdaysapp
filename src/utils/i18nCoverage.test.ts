@@ -121,18 +121,29 @@ function literalJsxText(src: string): { line: number; text: string }[] {
   masked = masked.replace(/\{[^{}]*\}/g, blank);
 
   const out: { line: number; text: string }[] = [];
-  for (const m of masked.matchAll(/>([^<>]{2,200}?)</gs)) {
+  for (const m of masked.matchAll(/>([^<>]{2,2000}?)</gs)) {
     const text = m[1].split(/\s+/).filter(Boolean).join(' ');
-    if (text.length < 3) continue;
-    if (!/[A-Za-z]{3}/.test(text)) continue;     // punctuation, entities, separators
+    // The size test belongs on the COLLAPSED text, never on the raw region. Blanking `{…}`
+    // preserves length, so 95 characters of masked expression inside a 60-character sentence
+    // pushed the region past the old 200-character quantifier and the match was ABANDONED —
+    // an English paragraph in AddEventModal was invisible for exactly that reason.
+    if (text.length < 2 || text.length > 200) continue;
+    // All that survives of a count like `({yesUsers.length})` is `( )`. Removing it before the
+    // code-shaped test below is what lets `Going (2)` be read as the label it is; with the
+    // brackets left in, the scanner filed three RSVP labels as code.
+    const probe = text.replace(/\(\s*\)/g, '').trim();
+    // Two letters, not three: the third RSVP button says `No`, and its two siblings were
+    // translated around it. Measured before lowering it — across all of `src` the change
+    // surfaces four strings, and all four are real.
+    if (!/[A-Za-z]{2}/.test(probe)) continue;     // punctuation, entities, separators
     // A lone lowercase token is an identifier leaking out of a generic — `liveQuery<any>(`
     // matches `>liveQuery<`. This is what is left of the old `^[A-Z]` rule, which threw away
     // every lowercase match and with it "+ Assign Member" and "typing...". Anything with a
     // space or a mark of punctuation in it is prose and is looked at.
-    if (/^[a-z_$][A-Za-z0-9_$]*$/.test(text)) continue;
-    if (ALLOWED.has(text) || text.startsWith('http')) continue;
+    if (/^[a-z_$][A-Za-z0-9_$]*$/.test(probe)) continue;
+    if (ALLOWED.has(probe) || probe.startsWith('http')) continue;
     // `&&` and `||`: `if (dist > 0 && dist < 150)` is a `>…<` match with no other code in it.
-    if (/[=;{}()[\]/\\]|&&|\|\||className|=>/.test(text)) continue; // still code, not prose
+    if (/[=;{}()[\]/\\]|&&|\|\||className|=>/.test(probe)) continue; // still code, not prose
     out.push({ line: lineOf(m.index! + 1), text });
   }
 
@@ -202,6 +213,41 @@ describe('no user-facing screen ships a hardcoded string', () => {
 
   it('still lets a translated attribute through', () => {
     expect(literalJsxText(`<img alt={t('altProfile', language)} />`)).toEqual([]);
+  });
+
+  it('sees a short sentence with a long masked expression inside it', () => {
+    // Found by an adversarial review on 19.09, hours after this file was mended. Blanking
+    // `{…}` keeps its LENGTH, so 95 characters of masked code inside a 60-character sentence
+    // pushed the region past the old 200-character quantifier and the match was abandoned.
+    // The English paragraph under the repeat dropdown had been live all along.
+    // Written out with the newlines and the indentation the real file has: the first version of
+    // this fixture was one unindented line of about 160 characters, which fitted inside the old
+    // 200-character quantifier and so passed with the repair reverted. A negative control that
+    // does not break the thing it names proves nothing.
+    const sample = [
+      '                  <p className="text-xs">',
+      '                    \u{1F501} This event will repeat {repeat} until '
+        + "{eventDate ? format(getRecurrenceEndDate(new Date(eventDate), repeat), 'MMMM d, yyyy') : '...'}"
+        + '. Recurrence is not infinite.',
+      '                  </p>',
+    ].join('\n');
+    expect(literalJsxText(sample).map((h) => h.text).join(' ')).toContain('This event will repeat');
+  });
+
+  it('sees a label with a count in brackets', () => {
+    // `({yesUsers.length})` collapses to `( )`, and the brackets made the scanner file three
+    // RSVP labels as code. Stripping the empty pair before the code test is the repair.
+    const sample = '<span>Going ({yesUsers.length})</span><span>Not going ({noUsers.length})</span>';
+    const found = literalJsxText(sample).map((h) => h.text);
+    expect(found.some((t) => t.startsWith('Going'))).toBe(true);
+    expect(found.some((t) => t.startsWith('Not going'))).toBe(true);
+  });
+
+  it('sees a two-letter word between two translated siblings', () => {
+    // The third RSVP button said `No` while the other two went through t(). Three characters
+    // was the floor; two is enough for a word somebody clicks.
+    const sample = '<button><ThumbsDown /> No</button>';
+    expect(literalJsxText(sample).map((h) => h.text)).toContain('No');
   });
 
   it('every literal is gone', () => {

@@ -55,6 +55,28 @@ function walk(dir: string, out: string[] = []): string[] {
  */
 const SPEAKS = /MMM|LLL|EEE|ccc|aaa|\ba\b|\bo\b/;
 
+/**
+ * The text of one `format(…)` call, from its opening bracket to the bracket that closes it,
+ * however many lines that takes. Stops after eight lines, which is far more than any real call.
+ */
+function callText(lines: string[], row: number, from: number): string {
+  let depth = 0;
+  let out = '';
+  for (let i = row; i < Math.min(lines.length, row + 8); i++) {
+    for (let c = i === row ? from : 0; c < lines[i].length; c++) {
+      const ch = lines[i][c];
+      out += ch;
+      if (ch === '(') depth++;
+      else if (ch === ')') {
+        depth--;
+        if (depth === 0) return out;
+      }
+    }
+    out += ' ';
+  }
+  return out;
+}
+
 /** `format(x, '…')` calls whose pattern spells a word and which are handed no locale. */
 export function nakedDateFormats(src: string): { line: number; pattern: string }[] {
   const lines = src.split('\n');
@@ -62,11 +84,17 @@ export function nakedDateFormats(src: string): { line: number; pattern: string }
   lines.forEach((line, i) => {
     const trimmed = line.trim();
     if (trimmed.startsWith('//') || trimmed.startsWith('*')) return;
-    for (const m of line.matchAll(/\bformat\(\s*[^,]+,\s*(['"`])([^'"`]+)\1/g)) {
+    // `.+?` and not `[^,]+`: the first argument is very often a call of its own, and a
+    // comma inside it ended the match before it began. `format(getRecurrenceEndDate(new
+    // Date(d), r), 'MMMM d, yyyy')` — the one call the sweep missed — was invisible for
+    // exactly that reason, and this guard reported clean while it shipped.
+    for (const m of line.matchAll(/\bformat\(\s*.+?,\s*(['"`])([^'"`]+)\1/g)) {
       const pattern = m[2];
       if (!SPEAKS.test(pattern)) continue;
-      // The options object is often wrapped onto the next line or two by the formatter.
-      if (/locale\s*:/.test(lines.slice(i, i + 3).join(' '))) continue;
+      // Inside THIS call's brackets, not merely nearby: asking whether the word `locale:`
+      // appears in the next three lines exempts a bare call for its NEIGHBOUR's locale, and
+      // in this codebase localised calls sit in clusters.
+      if (/locale\s*:/.test(callText(lines, i, line.indexOf('(', m.index)))) continue;
       out.push({ line: i + 1, pattern });
     }
   });
@@ -98,6 +126,26 @@ describe('a date that spells a word is told which language to spell it in', () =
 
   it('does not read a commented-out example as a call', () => {
     expect(nakedDateFormats("// format(d, 'MMM d, yyyy') was what this used to do")).toEqual([]);
+  });
+
+  it('sees a call whose first argument is itself a call with arguments', () => {
+    // `[^,]+` could never reach past the first comma on the line, so this exact call — the one
+    // the sweep missed — did not match at all, and the guard reported clean while it shipped.
+    const sample = "format(getRecurrenceEndDate(new Date(eventDate), repeat), 'MMMM d, yyyy')";
+    expect(nakedDateFormats(sample).map((h) => h.pattern)).toEqual(['MMMM d, yyyy']);
+  });
+
+  it('is not satisfied by the locale of a neighbouring call', () => {
+    // Localised calls sit in clusters here. A three-line window let a bare one hide behind the
+    // options object of the call above it.
+    // Order matters and the first version had it backwards: the old window was
+    // `lines.slice(i, i + 3)`, which only ever looked FORWARD, so a localised call ABOVE the
+    // bare one could never have exempted it. The bare call has to come first.
+    const sample = [
+      "const bare = format(d, 'EEEE, d MMMM');",
+      "const ok = format(d, 'd MMM yyyy', { locale: getDateLocale(language) });",
+    ].join('\n');
+    expect(nakedDateFormats(sample).map((h) => h.pattern)).toEqual(['EEEE, d MMMM']);
   });
 
   it('every date that speaks is given a language', () => {

@@ -107,3 +107,44 @@ export function orphanCategories(
   }
   return out.sort((a, b) => a.localeCompare(b));
 }
+
+/**
+ * What one card's two fields become when `oldName` is renamed to `newName`.
+ *
+ * Deduplicated, because a rename can also be a MERGE: fold the orphan "Loyalty" into the
+ * existing "Financial" and a card carrying both would otherwise end up with it twice.
+ */
+export function afterRename(
+  asset: CategorisedAsset,
+  oldName: string,
+  newName: string,
+): { categories: string[]; category: string } {
+  const out: string[] = [];
+  for (const c of categoriesOf(asset)) {
+    const next = c === oldName ? newName : c;
+    if (!out.includes(next)) out.push(next);
+  }
+  return { categories: out, category: out[0] || UNCATEGORIZED };
+}
+
+/**
+ * The stored category list after that rename.
+ *
+ * The point of the last line: renaming an ORPHAN has to ADOPT it. An orphan is by definition
+ * absent from the list, so `map` leaves the list untouched, the write stores the same entries,
+ * and the cards land under a brand-new orphan — the pencil button was inert by construction.
+ * Found by an adversarial review on 19.09, hours after the orphans were first made visible.
+ */
+export function listAfterRename(
+  listed: readonly string[],
+  oldName: string,
+  newName: string,
+): string[] {
+  const out: string[] = [];
+  for (const c of listed) {
+    const next = c === oldName ? newName : c;
+    if (name(next) && !out.includes(next)) out.push(next);
+  }
+  if (name(newName) && !out.includes(newName)) out.push(newName);
+  return out;
+}

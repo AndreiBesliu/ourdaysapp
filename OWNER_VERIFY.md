@@ -1221,3 +1221,26 @@ cinci carduri din 18 poartă un nume care nu mai e în lista stăpânului lor.**
       categoria LUI, pe cardul LUI. Intenționat: n-aș putea s-o repar oricum, regulile refuză
       scrierea pe cardul altuia.
 
+### Ce a găsit recenzia peste ce livrasem azi (reparat 19.09, seara)
+
+Am pus douăzeci de agenți să caute defecte în tot ce livrasem azi. 13 constatări confirmate,
+niciuna gravă, **majoritatea în codul meu de azi** — inclusiv trei găuri în chiar porțile
+despre care scrisesem că „chiar văd”.
+
+- [ ] **Un eveniment cu confirmare de prezență (RSVP).** Al treilea buton scria **„No”** în
+      engleză, lângă „Particip” și „Poate”. Acum trebuie să scrie **„Nu particip”**, iar
+      rezumatul de dedesubt **„Particip (2) — …”**, nu „Going (2)”.
+- [ ] **Alege o repetare în formularul de eveniment.** Rândul de sub listă scria o propoziție
+      întreagă în engleză, cu data în engleză și cu cuvântul brut `weekly`. Acum:
+      **„Evenimentul se repetă până pe 19 sep 2027”** — și data trebuie să fie **aceeași** cu cea
+      din lista de deasupra. Dacă diferă, spune-mi.
+- [ ] **Lista de calendare din același formular:** „**Calendarul Gym**”, nu „Gym Calendar”.
+      Cuvântul „Calendar” e la fel în română, deci nu părea netradus — ordinea era englezească.
+- [ ] **În chat:** despărțitorul de zi trebuie să scrie **„Azi” / „Ieri”**, nu „Today”/„Yesterday”.
+      Caută ceva în chat și, dacă nu găsește nimic, trebuie să scrie **„0 rezultate”**.
+- [ ] **În portofel → Gestionează, pe o categorie orfană, apasă creionul și redenumește-o.**
+      Până acum butonul ăla nu putea repara nimic, orice ai fi scris: numele nou devenea tot
+      orfan, iar dacă scriai un nume existent primeai „categoria există deja”. Acum: numele nou
+      **intră în listă**, iar un nume existent **unește** orfana cu el. După redenumire,
+      marcajul galben trebuie să dispară.
+
