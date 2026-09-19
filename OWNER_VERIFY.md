@@ -1244,3 +1244,14 @@ despre care scrisesem că „chiar văd”.
       **intră în listă**, iar un nume existent **unește** orfana cu el. După redenumire,
       marcajul galben trebuie să dispară.
 
+### O frază întreagă în engleză, în Setări (reparat 19.09, seara târziu)
+
+- [ ] **Setări → aprinde modul întunecat, apoi uită-te la tema personalizată.** Chenarul gri de
+      acolo scria, în engleză: *„Default Dark Mode is overriding these settings…”*. Acum trebuie
+      să scrie **„Modul întunecat implicit are prioritate. Închide-l mai sus ca să vezi
+      schimbările.”**
+
+N-a fost găsită de niciun scaner fiindcă stătea într-un bloc `{cond && (…)}`, iar masca de
+acolade înghițea blocul cu etichete cu tot. Aceeași familie cu capcana `/*` de acum două zile: un
+scaner care sare peste o regiune nu dă un răspuns greșit, dă unul curat.
+

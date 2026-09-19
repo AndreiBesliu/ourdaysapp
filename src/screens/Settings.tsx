@@ -444,7 +444,7 @@ export default function Settings() {
               )}
               {isDarkMode && (
                 <div className="p-3 mb-4 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-500 rounded-xl text-sm font-medium">
-                  Default Dark Mode is overriding these settings. Turn it off above to see changes.
+                  {t('darkModeOverrides', language)}
                 </div>
               )}
 

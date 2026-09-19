@@ -54,6 +54,12 @@ const STORED_NOT_SHOWN = new Set([
   'components/ErrorBoundary.tsx::Render error',
   // Written as `fromName` on a friend request and read by the RECIPIENT.
   'components/GroupSettingsModal.tsx::Friend',
+  // The three in plain `.ts` modules, brought into scope on 19.09. All three go to a log or to
+  // a lookup, never to a screen.
+  'ai.ts::Unknown error',            // the message handed to reportError when a callable throws
+  'reportError.ts::Unknown error',   // the same, inside the reporter itself
+  'utils/barcodeFormat.ts::CODE128', // a symbology name compared against, never shown
+  'utils/eventTime.ts::UTC',         // an IANA zone id the runtime is asked for and may not give
   // (The wallet's `Uncategorized` was exempted here until 19.09, when it became the shared
   // constant `UNCATEGORIZED` in walletCategories.ts. The honesty test below is what noticed
   // that the exemption had nothing left to exempt — on the first commit after it was added.)
@@ -65,7 +71,11 @@ function walk(dir: string, out: string[] = []): string[] {
     if (statSync(p).isDirectory()) {
       if (SKIP_DIRS.has(name)) continue;
       walk(p, out);
-    } else if (name.endsWith('.tsx') && !SKIP_FILES.has(name) && !name.endsWith('.test.tsx')) {
+      // `.ts` as well as `.tsx`: a fallback is an expression, and expressions live in plain
+      // modules too. Walking only `.tsx` put a whole class of file out of scope by
+      // construction — which is not a narrow net, it is a net with a side missing.
+    } else if ((name.endsWith('.tsx') || name.endsWith('.ts')) && !SKIP_FILES.has(name)
+               && !name.includes('.test.') && !name.endsWith('.d.ts')) {
       out.push(p);
     }
   }
@@ -169,6 +179,14 @@ describe('a word a person reads is not left in one language by accident', () => 
     const b = "<span>{n > 0 ? t('hits', language) : '0 results'}</span>";
     expect(englishFallbacks(a).map((h) => h.text)).toContain('Linked Card');
     expect(englishFallbacks(b).map((h) => h.text)).toContain('0 results');
+  });
+
+  it('walks plain .ts modules too, not only .tsx', () => {
+    // A fallback is an expression, and expressions live in plain modules. Walking `.tsx` only
+    // left a whole class of file out of scope by construction.
+    const plain = files.filter((f) => f.endsWith('.ts'));
+    expect(plain.length).toBeGreaterThan(20);
+    expect(plain.some((f) => f.endsWith(`${sep}reportError.ts`))).toBe(true);
   });
 
   it('every English fallback a person reads goes through t()', () => {

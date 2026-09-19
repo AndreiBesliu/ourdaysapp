@@ -117,8 +117,17 @@ function literalJsxText(src: string): { line: number; text: string }[] {
   // Block comments are matched ONLY where `/*` opens a line, which is where a real one lives.
   // The unanchored version swallowed `accept="image/*"` and 36,000 characters after it.
   const blank = (m: string) => ' '.repeat(m.length);
-  let masked = src.replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, blank).replace(/\/\/[^\n]*/g, blank);
-  masked = masked.replace(/\{[^{}]*\}/g, blank);
+  let masked = src.replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, blank);
+  // `//` only when it is not the tail of `://`. A URL in an href blanked the rest of its line,
+  // and with it any text after the link. No live instance today; the shape is free to close.
+  masked = masked.replace(/(^|[^:])\/\/[^\n]*/g, (m, p) => p + ' '.repeat(m.length - p.length));
+  // A `{…}` region that CARRIES JSX keeps its contents; only the two braces go. Blanking the
+  // whole region is how `{isDarkMode && (<div>…English sentence…</div>)}` was invisible on the
+  // settings screen — the inner JSX has no braces of its own, so the single-level mask ate the
+  // tags along with the words. Same family as the `/*` trap this file opens with: a scanner
+  // that skips a region does not return a wrong answer, it returns a clean one.
+  masked = masked.replace(/\{[^{}]*\}/gs, (m) =>
+    /<[a-zA-Z]/.test(m) ? ' ' + m.slice(1, -1) + ' ' : blank(m));
 
   const out: { line: number; text: string }[] = [];
   for (const m of masked.matchAll(/>([^<>]{2,2000}?)</gs)) {
@@ -144,6 +153,11 @@ function literalJsxText(src: string): { line: number; text: string }[] {
     if (ALLOWED.has(probe) || probe.startsWith('http')) continue;
     // `&&` and `||`: `if (dist > 0 && dist < 150)` is a `>…<` match with no other code in it.
     if (/[=;{}()[\]/\\]|&&|\|\||className|=>/.test(probe)) continue; // still code, not prose
+    // What keeping the contents costs, measured: 13 fragments across `src`, and every one of
+    // them is one of these two shapes. A real label can end in a question mark — the app has
+    // “RSVP — Are you going?” — so the test is ONE token before it, not the mark itself.
+    if (/^[A-Za-z_$][A-Za-z0-9_$.]*\s*\?$/.test(probe)) continue;  // `isWeekView ?`
+    if (probe.startsWith(',') || probe.endsWith(':')) continue;     // `, animals:`
     out.push({ line: lineOf(m.index! + 1), text });
   }
 
@@ -248,6 +262,32 @@ describe('no user-facing screen ships a hardcoded string', () => {
     // was the floor; two is enough for a word somebody clicks.
     const sample = '<button><ThumbsDown /> No</button>';
     expect(literalJsxText(sample).map((h) => h.text)).toContain('No');
+  });
+
+  it('sees a sentence inside a conditional block', () => {
+    // `{isDarkMode && (<div>…</div>)}` — the inner JSX carries no braces of its own, so the
+    // single-level mask ate the tags along with the words, and an English sentence sat on the
+    // settings screen unseen. Found by an adversarial review, not by this file.
+    const sample = [
+      '      {isDarkMode && (',
+      '        <div className="p-3">',
+      '          Default Dark Mode is overriding these settings.',
+      '        </div>',
+      '      )}',
+    ].join('\n');
+    expect(literalJsxText(sample).map((h) => h.text))
+      .toContain('Default Dark Mode is overriding these settings.');
+  });
+
+  it('still walks past what keeping those contents costs', () => {
+    // Measured: 13 fragments across `src`, every one of them one of these two shapes.
+    expect(literalJsxText('{isWeekView ? <Week /> : <Month />}')).toEqual([]);
+    expect(literalJsxText('{EMOJI.map((e) => <b>{e}</b>)}, animals: 3}')).toEqual([]);
+  });
+
+  it('keeps reading after a link, whose // is not a comment', () => {
+    const sample = '<a href="https://ourdays.app">Visit our site</a>';
+    expect(literalJsxText(sample).map((h) => h.text)).toContain('Visit our site');
   });
 
   it('every literal is gone', () => {

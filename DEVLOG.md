@@ -6203,3 +6203,52 @@ nu e un card invizibil — e cardul pe care omul îl vede.
 `npx tsc -b` verde · poartă de lint verde · **1501 de teste** · build verde · arbore curat după
 workflow.
 
+---
+
+## 2026-09-19 · Găurile fără instanță — una avea instanță
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+Cititorul de porți din recenzie a lăsat, pe lângă constatările lui, o listă de găuri **pe care nu
+le putea lega de niciun șir viu**. Le-am măsurat pe toate, una câte una.
+
+### (a) Masca de acolade — O INSTANȚĂ, și e o frază întreagă
+
+`\{[^{}]*\}` e de un singur nivel, deci un bloc `{isDarkMode && (<div>…</div>)}` al cărui JSX
+n-are acolade proprii e înghițit **cu etichete cu tot**. În `Settings.tsx` stătea așa:
+
+> *Default Dark Mode is overriding these settings. Turn it off above to see changes.*
+
+Acum regiunile care poartă JSX își păstrează conținutul și li se albesc doar cele două acolade.
+**Măsurat înainte:** asta adaugă 14 potriviri, din care 13 sunt de exact două forme — `isWeekView ?`
+(o condiție de ternar) și `, animals:` (o proprietate de obiect). Excluse amândouă cu grijă:
+testul pentru prima e **un singur token înainte de semnul întrebării**, nu semnul în sine, fiindcă
+aplicația chiar are o etichetă care se termină cu „?” („RSVP — Are you going?”). Rămâne exact 1.
+
+### (b) `//` dintr-un URL — zero instanțe, dar e gratis
+
+`.replace(/\/\/[^\n]*/g, blank)` citește `//` din `https://…` drept comentariu și albește restul
+rândului, adică și textul de după link. Nicio instanță azi. Acum se cere ca `//` să nu fie
+precedat de `:`.
+
+### (c) Clasa de literali a scanerului de rezerve — zero instanțe, și bine că e îngustă
+
+Lărgită la ghilimele duble, inițială mică și virgule, ar prinde **376** de șiruri în `src` — și
+aproape toate sunt clase CSS, valori de enum și id-uri (`'bg-blue-500'`, `'not-started'`,
+`'personal'`). Deci n-o lărgesc: aici îngustimea e corectă, nu o scăpare. **O poartă zgomotoasă
+e o poartă oprită.**
+
+### (d) Apeluri `format()` pe care scanerul de rânduri nu le vede — zero instanțe
+
+Un apel rupt de formatare pe mai multe rânduri, sau cu șablonul într-o variabilă. Zero în `src`
+azi (cele două pe care le-a raportat sonda mea erau false pozitive ale sondei).
+
+### (e) Scanerul mergea doar pe `.tsx` — o latură lipsă, nu o plasă îngustă
+
+O valoare de rezervă e o expresie, iar expresiile stau și în module simple. Acum merge și pe
+`.ts`. Prețul: **patru excepții**, fiecare cu motivul scris — două mesaje pentru jurnalul de
+erori, un nume de simbologie și un identificator de fus orar.
+
+**5 din 5 mutații prinse**, zero derive. `npx tsc -b` verde · poartă de lint verde · **1505 de
+teste** · build verde.
+
