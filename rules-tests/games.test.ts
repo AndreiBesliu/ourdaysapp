@@ -35,6 +35,10 @@ beforeEach(async () => {
     await setDoc(doc(db, 'reminder_log', 'r1'), { eventId: 'e1', day: '2026-09-19' });
     await setDoc(doc(db, 'aiLedger', 'l1'), { uid: ALICE, cost: 0.01 });
     await setDoc(doc(db, 'ai_budget', 'b1'), { limit: 5 });
+    await setDoc(doc(db, 'aiSpendDaily', '2026-09-19'), { total: 0.42 });
+    await setDoc(doc(db, 'aiSpendDaily', '2026-09-19', 'byUser', ALICE), { total: 0.42 });
+    await setDoc(doc(db, 'errorGroups', 'grp1'), { status: 'open', count: 3 });
+    await setDoc(doc(db, 'warlordPlayers', ALICE), { name: 'Alice', rank: 1, wins: 2, losses: 0 });
   });
 });
 
@@ -144,5 +148,43 @@ describe('the server-only collections really refuse', () => {
   it('and none of them can be listed', async () => {
     await assertFails(getDocs(collection(as(ALICE), 'reminder_log')));
     await assertFails(getDocs(collection(as(ALICE), 'aiLedger')));
+  });
+});
+
+describe('the Warlord roster', () => {
+  it('is readable by any signed-in account — recorded, not accidental', async () => {
+    // The same trade as the profile mirror, and worth writing down for the same reason: the
+    // roster is keyed by uid, so anybody signed in can enumerate every uid in the app. Nothing
+    // else may depend on a uid being unguessable.
+    await assertSucceeds(getDoc(doc(as(DAVE), 'warlordPlayers', ALICE)));
+    await assertSucceeds(getDocs(collection(as(DAVE), 'warlordPlayers')));
+  });
+
+  it('only its owner writes it', async () => {
+    await assertFails(updateDoc(doc(as(BOB), 'warlordPlayers', ALICE), { name: 'Not Alice' }));
+  });
+
+  it('and not even its owner writes their own record', async () => {
+    // A win is something the server awards. Left writable, the ladder is whatever you type.
+    await assertFails(updateDoc(doc(as(ALICE), 'warlordPlayers', ALICE), { wins: 99 }));
+  });
+
+  it('nobody deletes one — that happens server-side when an account goes', async () => {
+    await assertFails(deleteDoc(doc(as(ALICE), 'warlordPlayers', ALICE)));
+  });
+});
+
+describe('the last two server-only collections', () => {
+  it('the daily AI spend rollup, and its per-person subcollection', async () => {
+    // The subcollection matters separately: its `{sub=**}` is the only catch-all in the file,
+    // and a catch-all that granted instead of refusing would be invisible from the parent.
+    await assertFails(getDoc(doc(as(ALICE), 'aiSpendDaily', '2026-09-19')));
+    await assertFails(getDoc(doc(as(ALICE), 'aiSpendDaily', '2026-09-19', 'byUser', ALICE)));
+    await assertFails(setDoc(doc(as(ALICE), 'aiSpendDaily', '2026-09-19', 'byUser', ALICE), { total: 0 }));
+  });
+
+  it('and the error-group state an admin console writes', async () => {
+    await assertFails(getDoc(doc(as(ALICE), 'errorGroups', 'grp1')));
+    await assertFails(updateDoc(doc(as(ALICE), 'errorGroups', 'grp1'), { status: 'fixed' }));
   });
 });

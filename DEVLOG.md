@@ -6457,3 +6457,35 @@ niciunul dintre cele 52 de apeluri nu trimite vreunul dintre cele trei câmpuri.
 **3 din 3 mutații prinse**, câte un test pentru fiecare fixare. 1505 teste de aplicație neatinse.
 Publicat și recitit din API: 34.787 de octeți, identic.
 
+---
+
+## 2026-09-19 · Ultimele trei colecții, și linia trasată
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+Am închis ce mai rămăsese: rosterul Warlord, rollup-ul zilnic de costuri AI cu subcolecția lui,
+și starea grupurilor de erori. **Toate au trecut așa cum erau** — nicio reparație, doar probe.
+
+* rosterul se citește de oricine e autentificat (la fel ca oglinda de profiluri), deci **uid-urile
+  sunt enumerabile** — scris ca atare, fiindcă nimic altceva n-are voie să se sprijine pe ideea că
+  un uid e greu de ghicit;
+* nici măcar proprietarul nu-și scrie `wins`/`losses` — o victorie e ceva ce acordă serverul;
+* subcolecția `aiSpendDaily/{zi}/byUser/{uid}` e probată **separat** de părinte: `{sub=**}` de
+  acolo e singurul catch-all din fișier, iar un catch-all care ar acorda în loc să refuze ar fi
+  invizibil din regula părintelui.
+
+### Linia
+
+Dimineață: `firestore.rules` guverna 28 de colecții, iar testele numeau **11**. Acum: **toate**
+(a 28-a din numărătoarea sondei e nodul rădăcină, nu o colecție). **190 de teste de reguli**, de
+la 128.
+
+Trei găuri reale găsite pe drum, toate aceeași formă — `notifications`, `events`, `games` — și
+toate în colecții pe care nu le probase nimeni. **Niciuna n-a fost găsită citind codul de azi;
+toate trei au fost găsite numărând ce nu era probat.**
+
+### Rămas, ca decizie a lui Andrei
+
+`/groups/` nu fixează `ownerId`: proprietarul unui grup își poate da grupul altcuiva. Lista de
+membri e deja constrânsă, deci nu e același defect — e o alegere, și nu e a mea.
+
