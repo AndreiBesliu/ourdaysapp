@@ -473,11 +473,16 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       newRsvps[currentUserId] = status;
     }
     try {
-      // For recurring instances, update the parent if editing "all", or create an override
-      const docId = event.isRecurringInstance ? event.parentEventId : event.id;
-      if (docId) {
-        await updateDoc(doc(db, 'events', docId), { rsvps: newRsvps });
-      }
+      // The same target as every other write in this file. It used to aim at the PARENT for a
+      // recurring occurrence, so answering “not going” for one Tuesday answered it for every
+      // Tuesday, past ones included — and there was no way to answer for a single date. The
+      // comment that stood here described an override it never created.
+      //
+      // `resolveWriteTarget` materialises the occurrence first, exactly as ticking a checklist
+      // item does. `rsvps` had to be added to OVERRIDE_FIELDS on the server for that to carry
+      // the answers across: `rsvpEnabled` was on the list and `rsvps` was not, so the new
+      // document kept the question and dropped everybody’s replies.
+      await updateDoc(doc(db, 'events', await resolveWriteTarget()), { rsvps: newRsvps });
     } catch (e) {
       reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.handleRsvp' });
       console.error('Failed to update RSVP', e);

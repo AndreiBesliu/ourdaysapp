@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   COMMON_ZONES, dayOf, displayTime, isValidTime, isValidZone, reminderInstant, startInstant,
-  timeFieldsFor, zoneChoices, zoneLabel, zoneOffsetMs,
+  timeFieldsFor, timeFieldsKeepingZone, zoneChoices, zoneLabel, zoneOffsetMs,
 } from './eventTime';
 
 const BUC = 'Europe/Bucharest';
@@ -220,5 +220,41 @@ describe('dayOf', () => {
 
   it('is null for rubbish', () => {
     expect(dayOf('nope')).toBeNull();
+  });
+});
+
+describe('the zone an event that already exists keeps', () => {
+  // Opening the edit form used to re-stamp the event with the EDITOR’s zone, from the autosave,
+  // a second after the form was populated and before any field was touched. The wall clock on
+  // screen did not change; the event moved by the difference between the two zones, for
+  // everybody, and the reminder followed it.
+
+  it('keeps the zone it was written in, whoever is editing', () => {
+    expect(timeFieldsKeepingZone('19:00', 'Europe/Bucharest'))
+      .toEqual({ time: '19:00', timezone: 'Europe/Bucharest' });
+  });
+
+  it('does not GIVE a zone to an event that deliberately has none', () => {
+    // Events written before zones existed render raw for every reader, on purpose. Stamping one
+    // would start converting it for everybody, including its owner.
+    expect(timeFieldsKeepingZone('19:00', undefined)).toEqual({ time: '19:00', timezone: null });
+    expect(timeFieldsKeepingZone('19:00', null)).toEqual({ time: '19:00', timezone: null });
+    expect(timeFieldsKeepingZone('19:00', '')).toEqual({ time: '19:00', timezone: null });
+  });
+
+  it('refuses a zone that is not one, rather than passing it on', () => {
+    expect(timeFieldsKeepingZone('19:00', 'Mars/Olympus')).toEqual({ time: '19:00', timezone: null });
+    expect(timeFieldsKeepingZone('19:00', 42)).toEqual({ time: '19:00', timezone: null });
+  });
+
+  it('clears both fields when the event stops having a time', () => {
+    expect(timeFieldsKeepingZone('', 'Europe/Bucharest')).toEqual({ time: null, timezone: null });
+    expect(timeFieldsKeepingZone(null, 'Europe/Bucharest')).toEqual({ time: null, timezone: null });
+  });
+
+  it('differs from timeFieldsFor exactly where the defect was', () => {
+    // Same clock, same call site, two answers: the old one hands the event to whoever opened it.
+    expect(timeFieldsFor('19:00', 'Europe/London').timezone).toBe('Europe/London');
+    expect(timeFieldsKeepingZone('19:00', 'Europe/Bucharest').timezone).toBe('Europe/Bucharest');
   });
 });

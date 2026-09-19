@@ -1334,3 +1334,22 @@ Restul a trecut așa cum era: nimeni nu scrie în dosarul altuia, nimeni nu-i po
 fișierele, poza de profil nu se poate suprascrie botezând-o cu numele altcuiva, iar dosarele de
 imagini refuză tot ce nu e imagine și tot ce trece de 10 MB.
 
+### Trei lucruri din calendar care mutau date fără să ceară cineva (reparat 19.09)
+
+- [ ] **Fusul orar.** Schimbă-ți fusul din Setări pe Europe/London, deschide un eveniment cu
+      oră și apasă creionul. **Nu atinge nimic.** Închide. Pune fusul înapoi pe București și
+      uită-te la eveniment: ora trebuie să fie **exact aceeași** ca înainte. Până azi se muta cu
+      două ore, pentru toată lumea, iar mementoul suna la ora mutată — fără să fi atins un câmp.
+      (Punctul din listă care îți cerea chiar să comuți pe Londra era o capcană.)
+- [ ] **Răspunsul la o invitație pe un eveniment care se repetă.** Deschide o ocurență și apasă
+      „Particip”. Butonul trebuie să se aprindă, iar răspunsul să fie **doar pentru data aia** —
+      celelalte săptămâni nu se schimbă. Până azi răspundeai pentru toată seria, inclusiv pentru
+      datele trecute, și nu se vedea nimic întâmplându-se în fereastră.
+- [ ] **Editarea unei serii din panoul de repetări** (iconița din antet → creionul). Nu mai
+      trebuie să apară întrebarea „doar acest eveniment / toate” — fiindcă acolo editezi seria,
+      și asta e tot ce se putea întâmpla. Până azi întrebarea apărea, era preselectată pe „doar
+      acest eveniment”, și schimba seria oricum — la o secundă după ce tastai, chiar dacă
+      închideai fereastra fără să salvezi.
+- [ ] **Bonus, găsit de o poartă nouă:** dacă asignezi pe cineva la o ocurență și apoi bifezi ceva
+      din lista ei, responsabilii trebuie să rămână. Până azi dispăreau.
+

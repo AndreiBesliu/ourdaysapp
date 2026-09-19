@@ -6546,3 +6546,82 @@ L-am fixat într-un test, ca schimbarea lui să fie un act deliberat, nu o deriv
 **202 teste de reguli** (de la 190). Publicat pe live și recitit din API: 2989 de octeți, identic
 cu fișierul, cu clauza nouă în el.
 
+---
+
+## 2026-09-19 · Trei scrieri de calendar pe care nu le ceruse nimeni
+
+**Prompt (Andrei):** „Incepe cu cele medii”. **Model:** Claude Opus 5.
+
+Primele trei din cele nouă medii ale auditului. Toate trei au aceeași formă: **o scriere care se
+întâmplă fără un gest**, și pe care nimeni n-o vede întâmplându-se.
+
+### 1. Deschiderea formularului re-ștanța fusul evenimentului
+
+Fiecare scriere folosea `timeFieldsFor(eventTime, timezone || localZone())` — adică
+„ceasul ăsta, în fusul MEU”. Corect exact o dată: la crearea evenimentului. La editare, cineva cu
+alt fus re-ștanța evenimentul **doar deschizând formularul**: autosalvarea pleacă la o secundă
+după ce se populează câmpurile, înainte să fie atins ceva. Ceasul de pe ecran nu se schimba;
+evenimentul se muta cu diferența dintre fusuri, pentru toată lumea, și mementoul îl urma.
+
+Formularul **n-are niciun control de fus** — singurul selector din aplicație e în Setări — deci nu
+exista niciun gest în spatele schimbării. Un singur cont ajunge ca s-o reproducă: `OWNER_VERIFY`
+îi cerea chiar lui Andrei să comute pe Europe/London ca să verifice conversia.
+
+`timeFieldsKeepingZone` ține fusul scris pe eveniment, și **nu dă unul** celor vechi care
+deliberat n-au (alea se afișează brut pentru toată lumea — DEVLOG 14.09; a le ștanța ar fi
+început să le convertească pentru fiecare cititor). Re-zonarea rămâne ceva ce ar cere un control
+propriu.
+
+`eventTime.ts` e copie byte-identică pe server, cu test care o impune — deci helperul a intrat în
+amândouă.
+
+### 2. Răspunsul la invitație scria pe părinte
+
+`handleRsvp` era singurul handler din fișier care nu trecea prin `resolveWriteTarget`. Pe o
+ocurență scria pe documentul seriei, deci „nu particip” pentru o marți era „nu particip” pentru
+toate marțile, inclusiv cele trecute — și nu exista niciun mod de a răspunde pentru o dată.
+Comentariul de deasupra descria un override pe care codul nu-l crea niciodată.
+
+### 3. Un control aprins pe „doar acest eveniment”, legat la nimic
+
+Selectorul de domeniu se randa pe `isRecurringInstance || recurrenceRule`, deci apărea și pentru
+o **serie-mamă** — deschisă din panoul de repetări — preselectat pe „doar acest eveniment”. Dar
+`handleSubmit` se ramifică pe `isRecurringInstance && parentId`, iar autosalvarea iese pe
+`isRecurringInstance` singur. Deci seria se rescria întreagă, **și nu la Done**: autosalvarea o
+făcea la o secundă după tastare, chiar dacă închideai fereastra.
+
+Aceeași întrebare scrisă în două locuri, care nu erau de acord. Acum e o singură expresie,
+`occurrenceEdit`, citită și de control și de handler.
+
+### Poarta nouă a găsit imediat a patra
+
+Ca să probez că `rsvps` supraviețuiește materializării unei ocurențe, am scris prima probă pe care
+`OVERRIDE_FIELDS` a avut-o vreodată — lista din `functions/src/index.ts` care copiază doar ce e pe
+ea și aruncă restul **tăcut**. A picat pe loc: **nici `assigneeIds` nu era pe listă.**
+
+Mecanismul e identic și explică de ce n-a observat nimeni: calea care ADAUGĂ un responsabil
+rescrie tot tabloul imediat după ce creează override-ul, deci se auto-repară. Dar materializarea
+prin **alt** handler — bifezi ceva din listă — crea ocurența fără responsabili, și nimeni nu-i mai
+punea la loc.
+
+Poarta fixează acum **perechile care n-au sens despărțite**: `rsvpEnabled`+`rsvps`,
+`time`+`timezone`, `endDayOffset`+`endTime`, `assigneeIds`+`assigneeId`. Defectul nu era un
+cuvânt lipsă; era că jumătățile au fost adăugate separat, de schimbări diferite, la luni distanță.
+
+### Probe
+
+**5 din 5 mutații prinse**, inclusiv una care rupe copia de pe server. Pe banc, componentele
+REALE:
+
+* pe o serie-mamă, cu editorul pe Europe/London: selectorul de domeniu **nu apare**, iar
+  autosalvarea a scris `"timezone":"Europe/Bucharest"` — fusul evenimentului, nu al editorului;
+* pe o ocurență: selectorul **apare**, și autosalvarea nu scrie nimic;
+* apăsat „Particip” pe o ocurență: întâi `createEventOverride` cu `parentId` și `overrideDate`,
+  iar datele seminței **conțin `rsvps`**; apoi scrierea a aterizat pe `events/override-1`, nu pe
+  părinte.
+
+`npx tsc -b` verde · poartă de lint verde · **1514 teste** · build verde.
+
+**Rămase din audit:** șase medii (chat, portofel, nume la înscriere, două de server, service
+worker) și cele două grave (Rummy, pornirea offline).
+

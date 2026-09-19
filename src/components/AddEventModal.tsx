@@ -3,7 +3,7 @@ import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckC
 import { addDoc, collection, query, where, updateDoc, doc, getDoc } from 'firebase/firestore';
 import { liveQuery } from '../utils/liveQuery';
 import { mergeAssets, shareFieldsFor } from '../utils/assetSharing';
-import { localZone, timeFieldsFor, endFieldsFor, spanOf, dayOf, dayPlus, dayOffsetBetween } from '../utils/eventTime';
+import { localZone, timeFieldsFor, timeFieldsKeepingZone, endFieldsFor, spanOf, dayOf, dayPlus, dayOffsetBetween } from '../utils/eventTime';
 import { formSpan, SPAN_MESSAGE_KEY } from '../utils/eventForm';
 import { keepAssignees } from '../utils/eventTargeting';
 import { sharesForAttachments } from '../utils/assetAttach';
@@ -73,6 +73,20 @@ type ReminderUnit = keyof typeof REMINDER_UNIT_TO_MINUTES;
 
 export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent, initialTemplate, userMap = {}, activeGroupId = 'personal', groups = [] }: AddEventModalProps) {
   const { language, timezone } = useThemeStore();
+  // Is this edit about ONE occurrence of a series, rather than the series itself?
+  //
+  // Written once and read twice, because the defect was that it was written twice and the two
+  // disagreed. The scope selector rendered on `isRecurringInstance || recurrenceRule`, so it
+  // appeared for a series MASTER too — opened from the Recurring panel — pre-selected on “This
+  // event only”. Neither write path honours that: `handleSubmit` branches on
+  // `isRecurringInstance && parentId`, and the autosave bails on `isRecurringInstance` alone, so
+  // a master is rewritten whole. A control that says one thing while the code does another is
+  // worse than no control: it is a promise.
+  //
+  // And it does not wait for Done. The autosave runs a second after the form is populated, so
+  // the series was rewritten while somebody was still typing, even if they then closed it.
+  const occurrenceEdit = !!(editEvent && editEvent.isRecurringInstance && editEvent.parentEventId);
+
   const [title, setTitle] = useState('');
   const [eventDate, setEventDate] = useState<string>('');
   const [description, setDescription] = useState('');
@@ -495,7 +509,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             rsvpEnabled: rsvpEnabled,
             location: location,
             reminderMinutes: reminderMinutes,
-        ...timeFieldsFor(eventTime, timezone || localZone()),
+        // Its own zone, never the editor’s. The autosave fires a second after this form is
+        // POPULATED, so re-stamping here moved an event because somebody merely looked at it.
+        ...timeFieldsKeepingZone(eventTime, editEvent.timezone),
             ...endFieldsFor(spanOffset, endTime, !!eventTime)
           };
 
@@ -850,16 +866,18 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         // Firestore to reject.
         location: location,
         reminderMinutes: reminderMinutes,
-        ...timeFieldsFor(eventTime, timezone || localZone()),
+        // A NEW event is stamped with the author’s zone; an existing one keeps its own.
+        ...(editEvent
+          ? timeFieldsKeepingZone(eventTime, editEvent.timezone)
+          : timeFieldsFor(eventTime, timezone || localZone())),
         ...endFieldsFor(spanOffset, endTime, !!eventTime)
       };
 
       if (editEvent) {
         // Determine if we are editing a recurring instance
-        const isRecurringInstance = editEvent.isRecurringInstance;
         const parentId = editEvent.parentEventId;
 
-        if (isRecurringInstance && parentId) {
+        if (occurrenceEdit && parentId) {
           // Ask user: edit this one or all?
           // Written as "only an explicit 'all' rewrites the series" rather than "anything that
           // is not 'this' rewrites the series". The difference is the whole defect: with the test
@@ -1629,7 +1647,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             )}
 
             {/* Edit scope prompt for recurring events */}
-            {editEvent && (editEvent.isRecurringInstance || editEvent.recurrenceRule) && (
+            {occurrenceEdit && (
               <div className="flex flex-col gap-2 border border-indigo-200 dark:border-indigo-700/50 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-500/10">
                 <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
                   🔁 {t('recurringEventIs', language).replace('{freq}', t(getFrequencyKey(editEvent.recurrenceRule?.frequency || editEvent.parentFrequency || 'weekly'), language))}

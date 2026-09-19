@@ -222,6 +222,38 @@ export function timeFieldsFor(time: string | null | undefined, zone: string): {
   return { time, timezone: isValidZone(zone) ? zone : localZone() };
 }
 
+/**
+ * The same two fields for an event that ALREADY EXISTS: its own zone, kept.
+ *
+ * `timeFieldsFor` answers “this clock, in MY zone”, which is right exactly once — when the event
+ * is created. Every later write used it too, so a person whose Settings zone differed from the
+ * event’s re-stamped the event by merely OPENING its edit form: the autosave fires a second
+ * after the form is populated, before any field is touched. The wall clock on screen did not
+ * change; the event moved by the difference between the two zones, for everybody, including its
+ * owner, and the reminder followed it.
+ *
+ * The form has no zone control — the only picker in the app is in Settings — so there was no
+ * gesture behind the change at all. One account is enough to reproduce it: OWNER_VERIFY asks the
+ * owner to switch to Europe/London to check the conversion, and any timed event opened while
+ * switched over kept London afterwards.
+ *
+ * An absent zone stays absent. Legacy events deliberately carry none and render raw for
+ * everybody (DEVLOG 14.09); adding one would start converting them for every reader.
+ *
+ * Re-zoning an event is a real thing to want, and this is not it: it would need a control of its
+ * own, which `zoneChoices`/`zoneLabel` below already exist to feed.
+ */
+export function timeFieldsKeepingZone(
+  time: string | null | undefined,
+  existingZone: unknown,
+): { time: string | null; timezone: string | null } {
+  if (!isValidTime(time)) return { time: null, timezone: null };
+  return {
+    time,
+    timezone: typeof existingZone === 'string' && isValidZone(existingZone) ? existingZone : null,
+  };
+}
+
 // ── Spans ────────────────────────────────────────────────────────────────────────────
 //
 // Everything below reads the two end fields and nothing else changes: `startInstant`, `dayOf`
