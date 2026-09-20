@@ -89,6 +89,24 @@ export async function seed(fn: (db: Firestore) => Promise<void>): Promise<void> 
 export const as = (uid: string): Firestore =>
   need().authenticatedContext(uid, { email: EMAIL[uid], email_verified: true }).firestore();
 
+/**
+ * The same person, with the address NOT yet proved.
+ *
+ * Everything above hands out `email_verified: true`, which is the right default — and is also
+ * why nothing in this suite could see the hole it was covering for. An unverified account could
+ * read every invitation addressed to an address it had merely typed.
+ */
+export const asUnverified = (uid: string): Firestore =>
+  need().authenticatedContext(uid, { email: EMAIL[uid], email_verified: false }).firestore();
+
+/** A verified account whose address is spelled differently from the stored, lowercased copy. */
+export const asEmail = (uid: string, email: string): Firestore =>
+  need().authenticatedContext(uid, { email, email_verified: true }).firestore();
+
+/** Signed in with no email at all — the shape that made `null == null` a read. */
+export const asNoEmail = (uid: string): Firestore =>
+  need().authenticatedContext(uid, {}).firestore();
+
 /** The same two identities, holding a bucket instead of a database. */
 export const filesAs = (uid: string) =>
   need().authenticatedContext(uid, { email: EMAIL[uid], email_verified: true }).storage();

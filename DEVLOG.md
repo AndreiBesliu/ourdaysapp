@@ -92,9 +92,9 @@
 - **#5 Firebase App Check** 🟡 IN PROGRESS (2026-05-26): code is wired up but enforcement is OFF pending manual console setup.
   - DONE: client App Check init (`firebase.ts`, reCAPTCHA v3, env `VITE_APPCHECK_RECAPTCHA_KEY`, debug token in dev, graceful skip if no key); the 4 AI callables now **require auth** + a **per-user daily rate limit** (`ai_usage/{uid}`, default 50/day, `AI_DAILY_LIMIT`) and accept an `enforceAppCheck` flag driven by `APPCHECK_ENFORCE`.
   - TO ENFORCE (manual, Firebase Console): (1) App Check → register the web app with **reCAPTCHA v3**, copy the site key → set `VITE_APPCHECK_RECAPTCHA_KEY` in the web `.env` and rebuild/redeploy; (2) run in **Monitor** mode first and confirm tokens flow; (3) enable **enforcement** for Firestore, Storage and Cloud Functions; (4) set functions env `APPCHECK_ENFORCE=true` and redeploy functions. For the Android (Capacitor) build, add **Play Integrity** as a second provider later.
-- **Email verification (toEmail trust)** 🟡 IMPERSONATION CLOSED (2026-05-26); residual read-disclosure 🟢 LOW.
+- ~~**Email verification (toEmail trust)**~~ ✅ DONE (2026-09-20) — impersonation closed 2026-05-26, the residual read-disclosure closed today. Details in the session log for 2026-09-20.
   - DONE: sign-up now calls `sendEmailVerification`; a `VerifyEmailBanner` lets email/password users resend + recheck (reload + `getIdToken(true)` to refresh the claim). The **accept** path is gated: `respondToFriendRequest` and `acceptGroupInvite` require `request.auth.token.email_verified === true` to honor an email-addressed (`toEmail`) match — so you can no longer **accept** an invite/request sent to an address you don't own (the account-takeover/impersonation vector). uid-addressed (`toId`) flows — friend-invites to groups, group-member friend-adds — are unaffected (uid can't be spoofed), so the common cases work without verification. Google users are already verified.
-  - REMAINING (LOW): the **read** rules (`canAccessInvite` / `canAccessFriendReq` `toEmail` branch) are NOT yet gated on `email_verified`, so an email-squatter can still SEE (not accept) pending invites/requests addressed to that email (discloses inviter name/email). Gating reads would deny the existing `where('toEmail',...)` listener queries for unverified users, so it needs the client listeners made conditional on `emailVerified` first (skip the toEmail listeners + show the verify prompt when unverified). Deferred.
+  - CLOSED (2026-09-20): the `toEmail` read branch of `canAccessInvite` / `canAccessFriendReq` now requires `email_verified`, and compares both sides lowercased (a capital letter in an address used to refuse the whole listener). The client listeners ask with the TOKEN CLAIM via `useVerifiedEmail()` and skip when it is absent, so an unverified account gets a sentence rather than a refused query. Proved on the emulator: `rules-tests/email-addressed.test.ts`.
 - **`assets` — shared visibility** 🟠 `sharedWithFamily` assets owned by other users are no longer readable (asset listeners scoped to `ownerId == uid` to satisfy the rule). Restoring cross-user shared wallet assets needs a real sharing model: e.g. an `allowedUserIds` array on the asset + a read rule `request.auth.uid in resource.data.allowedUserIds`, and queries split into "mine" + "shared with me".
 - ~~**Housekeeping** 🟢 `.firebase/` deploy cache is git-tracked~~ ✅ DONE (2026-05-26) Added `.firebase/` to `.gitignore` and `git rm --cached` the tracked `hosting.*.cache`. (`functions/lib/` left tracked — it's the deployed artifact and there's no predeploy build hook.)
 
@@ -7526,3 +7526,79 @@ vedea gaura ar fi familia cuiva, citind `ai-checklist/bad-output`. Deci tabelul 
 
 `npx tsc -b` verde · poarta de lint verde · **1682 de teste** (de la 1666) · build verde ·
 functions build verde.
+
+## 2026-09-20 · O adresă pe care doar ai scris-o, și una pe care n-o mai recunoștea nimeni
+
+**Prompt (Andrei):** „Continua”. **Model:** Claude Opus 5.
+
+Ultima intrare din „Deferred Security Work”, deschisă de pe 26.05. Și, găsită pe drum, o a doua
+care strica exact invers.
+
+### Ce era deschis
+
+O invitație se poate adresa în două feluri, și doar unul e un fapt. Un uid nu se poate falsifica.
+O **adresă de e-mail** e o pretenție până o verifică cineva.
+
+Pe 26.05 s-a închis calea de ACCEPTARE: `acceptGroupInvite` și `respondToFriendRequest` nu mai
+onorează o potrivire pe e-mail venită de la un cont neverificat. Aia a oprit preluarea de cont.
+Restul s-a notat ca LOW și s-a amânat, cu motivul scris: dacă gardezi și **citirea**, ascultătoarele
+`where('toEmail','==',…)` din client încep să fie refuzate pentru utilizatorii neverificați — deci
+întâi trebuie ca ele să știe să nu întrebe.
+
+Restul era: cine își face cont cu o adresă care nu e a lui putea în continuare să **VADĂ** fiecare
+invitație și cerere de prietenie trimisă la ea — cine a trimis-o, la ce adresă, în ce grup, sub ce
+nume. Nu o preluare. Tot o divulgare, exact către omul care n-ar trebui s-o aibă.
+
+### Și defectul care arăta în cealaltă direcție
+
+Regula compara `request.auth.token.email` cu `toEmail`-ul stocat. Clientul scrie
+`toEmail.toLowerCase()`; tokenul poartă adresa **așa cum a fost înregistrată**. Pentru oricine are
+o majusculă în partea locală, cele două n-au fost egale niciodată — iar o interogare LIST se
+validează față de regulă **fără să citească vreun document**, deci ce pierdeau ăia nu era un rând
+ascuns, ci **toată ascultătoarea**. Acum ambele părți se coboară la litere mici.
+
+O regulă care exclude tăcut un utilizator real e un defect în orice direcție greșește.
+
+### Clientul întreabă cu valoarea pe care o citește REGULA
+
+Ecranul avea la îndemână două fapte apropiate: `auth.currentUser.emailVerified`, din înregistrarea
+utilizatorului, și claim-ul `email_verified` din token, care e ce citește regula. Sunt același lucru
+aproape mereu și se contrazic exact când doare — în minutele dintre confirmarea adresei și
+reîmprospătarea tokenului.
+
+Deci `useVerifiedEmail()` citește **claim-ul**, iar cele trei ascultătoare se abțin când răspunsul e
+null. Nu e o economie: un LIST refuzat nu dă o listă mai scurtă, ci un refuz pe toată ascultătoarea
+plus un rând în panoul de sănătate la fiecare montare a ecranului. Partea pe **uid** nu e păzită
+niciodată — un uid nu se falsifică — deci un utilizator neverificat păstrează exact ce merge oricum.
+
+Și pe ecranul de Prieteni, lista goală a căpătat al treilea caz. „Nimeni n-a cerut” și „nu ne-am
+uitat” nu mai citesc la fel.
+
+### Ce a corectat emulatorul din ce scrisesem eu
+
+Am pus două gărzi de null în regulă și am scris lângă ele că `null.lower()` **aruncă**, deci fără
+ele expresia ar fi eșuat și ar fi refuzat chiar pe expeditor. Am scris și două teste care
+„dovedeau” asta.
+
+Le-am probat: **nu e adevărat.** O eroare într-o ramură a unui `||` nu refuză regula — o ramură
+adevărată tot câștigă. Deci gărzile nu schimbă niciun rezultat la niciunul dintre cele două locuri
+de apel și **niciun test nu le poate prinde**. Au rămas (o regulă care își spune presupunerea
+valorează mai mult decât una care se sprijină pe cum tratează motorul o eroare), dar comentariile
+spun acum ce s-a măsurat, nu ce presupusesem, iar cele două mutații au ieșit din listă ca
+**echivalente** — o mutație echivalentă e un fapt despre linie, nu o gaură în plasă, iar trecută la
+„ratate” ar face cifra să mintă în cealaltă direcție.
+
+A treia ratare era însă reală: ramura `fromId` nu era probată de nimic. Fiecare expeditor din
+fișier era și membru al grupului țintă, deci ramura de apartenență răspundea pentru el și `fromId`
+putea fi orice. Acum există o invitație personală de la cineva care nu împarte niciun grup cu
+destinatarul.
+
+**5 din 5 mutații pe reguli** și **7 din 7 pe client**, cu control negativ.
+
+`npx tsc -b` verde · poarta de lint verde · **1689 de teste** (de la 1682) · **226 de teste de
+reguli** (de la 223) · build verde.
+
+**Ordinea de livrare, inversată deliberat:** *hosting înainte de reguli.* Regula obișnuită
+(functions → rules → hosting) există ca să nu rămână clientul chemând ceva ce nu există încă. Aici
+dependența e pe dos: dacă regulile se strâng primele, clientul VECHI al unui utilizator neverificat
+continuă să pună o întrebare care acum se refuză.

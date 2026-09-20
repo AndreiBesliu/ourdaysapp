@@ -19,6 +19,7 @@ import LeaveGroupModal from '../components/LeaveGroupModal';
 import GroupSettingsModal from '../components/GroupSettingsModal';
 import NotificationsDropdown from '../components/NotificationsDropdown';
 import VerifyEmailBanner from '../components/VerifyEmailBanner';
+import { useVerifiedEmail } from '../hooks/useVerifiedEmail';
 import GroupChatWidget from '../components/GroupChatWidget';
 import GamesHubModal from '../components/games/GamesHubModal';
 import RecurringEventsPanel from '../components/RecurringEventsPanel';
@@ -54,6 +55,9 @@ export default function CalendarHome() {
   const [eventsLoadError, setEventsLoadError] = useState(false);
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [pendingFamilyInvites, setPendingFamilyInvites] = useState<any[]>([]);
+  // The address the RULES will accept for an email-addressed invitation, which is the token
+  // claim and not the user record. Null while it is unknown or unproved.
+  const { email: verifiedEmail } = useVerifiedEmail();
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [overviewModalType, setOverviewModalType] = useState<'total' | 'pending' | 'completed' | null>(null);
   const [isGroupSettingsOpen, setIsGroupSettingsOpen] = useState(false);
@@ -210,12 +214,18 @@ export default function CalendarHome() {
     return () => unsubscribe();
   }, [activeGroupId, selectedDate]);
 
-  // Listen to incoming group invites
+  // Listen to incoming group invites.
+  //
+  // Only for an address this account has PROVED. Since 20.09 the rules honour the `toEmail`
+  // branch only for a verified address — and a LIST query is validated against the rule without
+  // reading any document, so subscribing while unverified is not a shorter list, it is a refusal
+  // for the whole listener, reported to the health panel on every mount. `VerifyEmailBanner`,
+  // rendered further down this screen, is what tells the person why.
   useEffect(() => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser || !verifiedEmail) { setPendingFamilyInvites([]); return; }
     const q = query(
-      collection(db, 'group_invites'), 
-      where('toEmail', '==', auth.currentUser.email?.toLowerCase()),
+      collection(db, 'group_invites'),
+      where('toEmail', '==', verifiedEmail),
       where('status', '==', 'pending')
     );
     // Reported rather than swallowed: an invitation you were never shown is indistinguishable
@@ -224,13 +234,16 @@ export default function CalendarHome() {
       (docs) => setPendingFamilyInvites(docs),
       () => setPendingFamilyInvites([]));
     return () => unsubscribe();
-  }, []);
+  }, [verifiedEmail]);
 
   // Count incoming pending friend requests (by uid or email) for the menu badge.
+  //
+  // The uid half needs nothing: a uid cannot be spoofed, so it is never gated. Only the email
+  // half waits for a verified address — see the invite listener above for why asking anyway is
+  // worse than not asking.
   useEffect(() => {
     if (!auth.currentUser) return;
     const uid = auth.currentUser.uid;
-    const myEmail = auth.currentUser.email?.toLowerCase();
     let byId = new Set<string>();
     let byEmail = new Set<string>();
     const update = () => setPendingFriendCount(new Set([...byId, ...byEmail]).size);
@@ -238,13 +251,13 @@ export default function CalendarHome() {
     const unsubId = liveQuery<any>(qId, 'CalendarHome.pendingById',
       (docs) => { byId = new Set(docs.map((d) => d.id)); update(); }, () => {});
     let unsubEmail = () => {};
-    if (myEmail) {
-      const qEmail = query(collection(db, 'friend_requests'), where('toEmail', '==', myEmail), where('status', '==', 'pending'));
+    if (verifiedEmail) {
+      const qEmail = query(collection(db, 'friend_requests'), where('toEmail', '==', verifiedEmail), where('status', '==', 'pending'));
       unsubEmail = liveQuery<any>(qEmail, 'CalendarHome.pendingByEmail',
         (docs) => { byEmail = new Set(docs.map((d) => d.id)); update(); }, () => {});
     }
     return () => { unsubId(); unsubEmail(); };
-  }, []);
+  }, [verifiedEmail]);
 
   // Request notification permissions and save FCM token
   useEffect(() => {

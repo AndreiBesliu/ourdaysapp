@@ -1,3 +1,24 @@
+## ⭐ Invitațiile trimise pe e-mail cer acum adresa confirmată (20.09)
+
+**De citit dacă cineva spune „nu-mi mai apar invitațiile”.** Sunt două schimbări, în direcții
+opuse, și amândouă ating aceleași ecrane.
+
+1. **Cine nu și-a confirmat adresa nu mai VEDE invitațiile trimise la ea.** Putea deja să nu le
+   accepte (din 26.05), dar le vedea — cu tot cu cine le-a trimis și de la ce adresă. Acum nici
+   atât. Pe calendar apare bannerul de confirmare; pe Prieteni, lista goală spune de ce.
+   *Ce se strică dacă greșesc:* un om verificat care nu-și mai vede invitațiile. Ăsta e cazul de
+   raportat imediat.
+2. **Cine are majusculă în adresă își recapătă invitațiile.** Dacă adresa cuiva e scrisă
+   `Ion.Popescu@...`, regula o compara cu varianta stocată cu litere mici și nu se potrivea
+   niciodată — deci nu vedea **nicio** invitație pe e-mail, tăcut, dintotdeauna.
+
+- [ ] **Întreabă pe cine are cont pe e-mail+parolă (nu Google) dacă vede bannerul de confirmare**
+      pe calendar. Conturile Google sunt verificate din start, deci ele nu sunt afectate deloc.
+- [ ] **Dacă cineva confirmă adresa acum, invitațiile trebuie să apară fără să se redeschidă
+      aplicația** — butonul „Am confirmat” din banner reîmprospătează tokenul. *Dacă cer
+      reîncărcare*, vreau să știu: înseamnă că ascultătoarea nu se re-abonează.
+
+---
 ## ⭐ O listă AI care nu s-a făcut acum îți spune DE CE (20.09)
 
 - [ ] **Fă un eveniment cu asistentul AI bifat, după ce ți-ai consumat porția zilnică.**

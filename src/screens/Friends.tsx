@@ -8,6 +8,7 @@ import { ArrowLeft, UserPlus, Mail, Check, X, Users, Clock, Trash2, AlertCircle,
 import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
 import { respondToFriendRequest, removeFriend } from '../serverActions';
+import { useVerifiedEmail } from '../hooks/useVerifiedEmail';
 
 interface Friend { uid: string; name?: string; email?: string }
 interface FriendRequest { id: string; fromId: string; fromName?: string; fromEmail?: string; toId?: string | null; toEmail?: string | null; status: string }
@@ -38,6 +39,8 @@ export default function Friends() {
   const [busy, setBusy] = useState(false);
 
   const myEmail = auth.currentUser?.email?.toLowerCase() || '';
+  // The address the RULES will accept, which is not always the one the user record shows.
+  const { email: verifiedEmail, ready: verifiedReady } = useVerifiedEmail();
 
   // My own user doc → friends array + name.
   useEffect(() => {
@@ -64,14 +67,19 @@ export default function Friends() {
       (docs) => { setIncomingLoadError(false); setIncomingById(docs); },
       () => setIncomingLoadError(true));
     let unsubEmail = () => {};
-    if (myEmail) {
-      const qEmail = query(collection(db, 'friend_requests'), where('toEmail', '==', myEmail), where('status', '==', 'pending'));
+    // Only for a PROVED address. The rules stopped honouring the `toEmail` branch for an
+    // unverified account on 20.09, and a refused LIST costs the whole listener plus a row in the
+    // health panel every time this screen mounts. The empty-state below says so instead.
+    if (verifiedEmail) {
+      const qEmail = query(collection(db, 'friend_requests'), where('toEmail', '==', verifiedEmail), where('status', '==', 'pending'));
       unsubEmail = liveQuery<any>(qEmail, 'Friends.incomingByEmail',
         (docs) => setIncomingByEmail(docs),
         () => setIncomingLoadError(true));
+    } else {
+      setIncomingByEmail([]);
     }
     return () => { unsubId(); unsubEmail(); };
-  }, [myEmail]);
+  }, [myEmail, verifiedEmail]);
 
   // Outgoing pending requests I sent.
   useEffect(() => {
@@ -263,8 +271,16 @@ export default function Friends() {
               {incoming.length === 0 ? (
                 // "Nobody asked" and "we could not check" are the same picture otherwise, and the
                 // person waiting on an answer is the one who pays for the confusion.
+                // A third case joins the two: we are not LOOKING at the email-addressed ones,
+                // because the address is not confirmed. Saying "nobody asked" there would be a
+                // guess dressed as a fact. Held until `verifiedReady`, so a verified user never
+                // sees this flash during the tick before the token is read.
                 <p className={`text-sm ${incomingLoadError ? 'text-rose-500' : 'text-zinc-500'}`}>
-                  {incomingLoadError ? t('requestsLoadFailed', language) : t('noRequestsYet', language)}
+                  {incomingLoadError
+                    ? t('requestsLoadFailed', language)
+                    : (verifiedReady && !verifiedEmail && myEmail)
+                      ? t('emailRequestsHidden', language)
+                      : t('noRequestsYet', language)}
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">

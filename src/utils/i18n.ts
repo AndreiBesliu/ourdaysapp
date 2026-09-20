@@ -700,6 +700,7 @@ export const translations: Translations = {
     aiChecklistBusy: "The AI was busy. It is worth trying again in a minute.",
     aiChecklistFailed: "Something went wrong while generating it.",
     aiChecklistNothing: "The AI had nothing to add for this one.",
+    emailRequestsHidden: "Requests sent to your email address stay hidden until you confirm it.",
   },
   'ro-RO': {
     todayOverview: "Prezentare generală",
@@ -1389,6 +1390,7 @@ export const translations: Translations = {
     aiChecklistBusy: "AI-ul era ocupat. Merită să încerci din nou peste un minut.",
     aiChecklistFailed: "Ceva n-a mers la generare.",
     aiChecklistNothing: "AI-ul n-a avut ce să adauge aici.",
+    emailRequestsHidden: "Cererile trimise pe adresa ta de e-mail rămân ascunse până o confirmi.",
   },
   'fr-FR': {
     todayOverview: "Aperçu d'aujourd'hui",
@@ -2078,6 +2080,7 @@ export const translations: Translations = {
     aiChecklistBusy: "L'IA était occupée. Cela vaut la peine de réessayer dans une minute.",
     aiChecklistFailed: "Quelque chose s'est mal passé pendant la génération.",
     aiChecklistNothing: "L'IA n'avait rien à ajouter ici.",
+    emailRequestsHidden: "Les demandes envoyées à votre adresse e-mail restent masquées jusqu'à ce que vous la confirmiez.",
   },
   'es-ES': {
     todayOverview: "Resumen de hoy",
@@ -2767,6 +2770,7 @@ export const translations: Translations = {
     aiChecklistBusy: "La IA estaba ocupada. Merece la pena reintentarlo en un minuto.",
     aiChecklistFailed: "Algo salió mal al generarla.",
     aiChecklistNothing: "La IA no tenía nada que añadir aquí.",
+    emailRequestsHidden: "Las solicitudes enviadas a tu correo permanecen ocultas hasta que lo confirmes.",
   },
   'it-IT': {
     todayOverview: "Panoramica di oggi",
@@ -3456,6 +3460,7 @@ export const translations: Translations = {
     aiChecklistBusy: "L'IA era occupata. Vale la pena riprovare tra un minuto.",
     aiChecklistFailed: "Qualcosa è andato storto durante la generazione.",
     aiChecklistNothing: "L'IA non aveva nulla da aggiungere qui.",
+    emailRequestsHidden: "Le richieste inviate al tuo indirizzo e-mail restano nascoste finché non lo confermi.",
   },
   'de-DE': {
     todayOverview: "Heute im Überblick",
@@ -4145,6 +4150,7 @@ export const translations: Translations = {
     aiChecklistBusy: "Die KI war beschäftigt. Ein erneuter Versuch in einer Minute lohnt sich.",
     aiChecklistFailed: "Beim Erstellen ist etwas schiefgelaufen.",
     aiChecklistNothing: "Die KI hatte hier nichts hinzuzufügen.",
+    emailRequestsHidden: "Anfragen an deine E-Mail-Adresse bleiben verborgen, bis du sie bestätigst.",
   }
 };
 

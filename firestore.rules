@@ -16,6 +16,46 @@ service cloud.firestore {
         request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
     }
 
+    // Is this document addressed to an email address the caller has PROVED is theirs?
+    //
+    // Used by group invitations and friend requests, which can be addressed either to a uid
+    // (unspoofable) or to an email (a claim until it is checked).
+    //
+    // ── Why `email_verified` ──────────────────────────────────────────────────────────
+    //
+    // ACCEPTING an email-addressed invite has required a verified address since 26.05, which
+    // closed the account-takeover: you can no longer join a group by claiming somebody else's
+    // address. What stayed open for four months was the READ. Somebody who registers an address
+    // they do not own could still SEE the pending invitation addressed to it — who sent it, at
+    // which address, to which group. Different act, same premise, so the same condition.
+    //
+    // ── Why `.lower()` on BOTH sides ─────────────────────────────────────────────────
+    //
+    // The client stores `toEmail.toLowerCase()`, while the token carries the address as it was
+    // registered. For anybody whose local part has a capital letter these were never equal, so
+    // the branch matched nothing — and because a LIST query is validated against the rule
+    // WITHOUT reading any document, the refusal was not one hidden row, it was the entire
+    // invitation listener. A rule that silently excludes a real user is a defect whichever
+    // direction it errs in.
+    //
+    // The null guards earn their place for ONE of the two reasons I first wrote down, and the
+    // emulator settled which. An unguarded `token.email == toEmail` does read TRUE when both are
+    // null, and uid-addressed invites are written with `toEmail: null` — that half is real, and
+    // removing the whole comparison for the old one is caught by the suite.
+    //
+    // The other half was wrong. I claimed `null.lower()` raising would deny the rule; measured,
+    // an error in one branch of an `||` does NOT deny — a true branch still wins, and where no
+    // branch is true the request was refused anyway. So the guards change no outcome at either
+    // call site, and no test can prove them. They stay because a rule that states its assumption
+    // is worth more than one that leans on how the engine happens to treat an error, and because
+    // this helper would be the only branch the moment somebody used it alone.
+    function addressedToVerifiedEmail(stored) {
+      return stored != null
+        && request.auth.token.email != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() == stored.lower();
+    }
+
     // ── Users ──
     // Owner-only: the full user doc holds sensitive data (email, fcmTokens,
     // preferences). Other members read the public `profiles` mirror instead.
@@ -85,9 +125,13 @@ service cloud.firestore {
     // Readable only by the invitee (toEmail), the sender (fromId), or a member
     // of the target group (covers groupId-scoped cleanup queries on group
     // delete / leave). Prevents arbitrary enumeration of all invited emails.
+    //
+    // NB this gates `update` and `delete` as well as `read`, so declining an email-addressed
+    // invitation now needs the same verified address. That is the intended pair: an invitation
+    // you may not see is not one you may answer.
     function canAccessInvite() {
       return isSignedIn() && (
-        request.auth.token.email == resource.data.toEmail ||
+        addressedToVerifiedEmail(resource.data.toEmail) ||
         request.auth.uid == resource.data.fromId ||
         (resource.data.groupId != null && isMemberOfGroup(resource.data.groupId))
       );
@@ -620,7 +664,7 @@ service cloud.firestore {
       return isSignedIn() && (
         request.auth.uid == resource.data.fromId ||
         request.auth.uid == resource.data.toId ||
-        (resource.data.toEmail != null && request.auth.token.email == resource.data.toEmail)
+        addressedToVerifiedEmail(resource.data.toEmail)
       );
     }
     match /friend_requests/{requestId} {
