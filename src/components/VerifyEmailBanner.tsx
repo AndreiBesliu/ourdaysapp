@@ -68,7 +68,7 @@ export default function VerifyEmailBanner() {
         <button onClick={recheck} disabled={checking} className="px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg text-sm font-medium hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50">
           {t('iVerified', language)}
         </button>
-        <button onClick={() => setDismissed(true)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
+        <button onClick={() => setDismissed(true)} aria-label={t('dismissAction', language)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors">
           <X className="w-4 h-4" />
         </button>
       </div>

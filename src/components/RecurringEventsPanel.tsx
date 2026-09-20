@@ -159,14 +159,14 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
                           <div className="flex items-center gap-1 shrink-0">
                             {isOwner && (
                               <>
-                                <button
+                                <button aria-label={t('editSeries', language)}
                                   onClick={() => onEditEvent(ev)}
                                   className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors"
                                   title={t('editSeries', language)}
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
-                                <button
+                                <button aria-label={t('deleteSeries', language)}
                                   onClick={() => handleDeleteSeries(ev)}
                                   disabled={deletingId === ev.id}
                                   className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"

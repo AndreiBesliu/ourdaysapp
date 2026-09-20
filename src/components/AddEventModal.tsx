@@ -1357,6 +1357,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                                     onClick={() => setShowAssetPicker(item.id)}
                                     className={`p-1 transition-colors ${item.selectedAssetUrl || item.assetId || (item.assetUrl && !item.assetFile) ? 'text-emerald-500' : 'text-zinc-400 hover:text-emerald-500'}`}
                                     title={t('pickFromAssets', language)}
+                                    aria-label={t('pickFromAssets', language)}
                                   >
                                     <Wallet className="w-4 h-4" />
                                   </button>
@@ -1366,12 +1367,13 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                                       onClick={() => setChecklistItems(checklistItems.map(i => i.id === item.id ? { ...i, assetUrl: null, selectedAssetUrl: null, assetId: null, assetFile: undefined } : i))}
                                       className="p-1 text-red-400 hover:text-red-500 transition-colors"
                                       title={t('removeAssetTooltip', language)}
+                                      aria-label={t('removeAssetTooltip', language)}
                                     >
                                       <Trash2 className="w-4 h-4" />
                                     </button>
                                   )}
                                 </div>
-                                <button type="button" onClick={() => handleRemoveChecklistItem(item.id)} className="p-1 text-zinc-400 hover:text-red-500 transition-colors">
+                                <button type="button" onClick={() => handleRemoveChecklistItem(item.id)} aria-label={t('removeChecklistItem', language)} className="p-1 text-zinc-400 hover:text-red-500 transition-colors">
                                   <X className="w-4 h-4" />
                                 </button>
                               </div>
@@ -1766,6 +1768,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   type="button" 
                   onClick={() => setShowAssetPicker('main')}
                   className="flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors w-full h-full"
+                  aria-label={selectedAssetUrl || selectedAssetId ? t('assetSelected', language) : t('pickFromAssets', language)}
                 >
                   <Wallet className="w-5 h-5" />
                   <span className="text-xs font-medium">{selectedAssetUrl || selectedAssetId ? t('assetSelected', language) : t('pickFromAssets', language)}</span>
@@ -1850,7 +1853,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 <Wallet className="w-5 h-5 text-emerald-500" />
                 {t('pickFromAssets', language)}
               </h3>
-              <button onClick={() => setShowAssetPicker(null)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors">
+              <button onClick={() => setShowAssetPicker(null)} aria-label={t('closeAction', language)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>

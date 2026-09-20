@@ -165,6 +165,7 @@ export default function TicTacToe({ game, userMap, onBack }: TicTacToeProps) {
             return (
               <button
                 key={idx}
+                aria-label={`${t('boardSquare', language)} ${idx + 1}`}
                 onClick={() => handleClick(idx)}
                 disabled={game.status !== 'playing' || !isMyTurn() || cell !== null}
                 className={`w-20 h-20 sm:w-24 sm:h-24 rounded-xl flex items-center justify-center text-4xl sm:text-5xl font-bold font-mono transition-all

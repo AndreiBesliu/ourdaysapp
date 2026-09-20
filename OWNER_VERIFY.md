@@ -1,3 +1,22 @@
+## ⭐ Butoanele au căpătat nume (20.09)
+
+Nimic de bifat pentru ochi — schimbarea e pentru cititoarele de ecran și pentru comanda vocală.
+Dar două lucruri merită știute:
+
+1. **O poartă din teste era oarbă la 72% din butoane.** Se potrivea cu un regex al cărui câmp de
+   atribute se oprea la primul `>` — iar în codul ăsta acela e `>`-ul din
+   `onClick={() => …}`. Măsurat: din 307 butoane, **221 erau sărite tăcut**. Poarta era
+   verde de luni de zile și se uita la 86.
+2. **74 de butoane n-aveau nume.** 45 fără niciunul (cititorul de ecran spunea doar „buton”),
+   29 numite doar prin `title` — care **nu se afișează deloc pe Android**, unde nu există
+   hover. Toate au primit `aria-label`.
+
+- [ ] **Dacă folosești vreodată TalkBack sau comanda vocală pe telefon**, încearcă câteva butoane
+      din chat și din portofel. Trebuie să fie citite cu un nume („Închide căutarea”, „Șterge
+      cheltuiala”), nu ca „buton”. **Dacă auzi un cuvânt lipit gen „closeRecap”**, o cheie de
+      traducere lipsește — spune-mi.
+
+---
 ## ⭐ Chatul care nu se mai închidea (reparat 20.09)
 
 - [ ] **Deschide chatul într-un grup, apoi apasă pastila altui grup.** Fereastra de chat trebuie

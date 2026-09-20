@@ -185,7 +185,7 @@ export default function Friends() {
     <div className="min-h-screen bg-transparent pt-[60px]">
       <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 py-3 fixed top-0 left-0 right-0 w-full z-[100] shadow-sm">
         <div className="max-w-2xl w-full mx-auto px-4 flex items-center gap-3">
-          <button onClick={() => navigate('/')} className="p-2 -ml-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
+          <button onClick={() => navigate('/')} aria-label={t('back', language)} className="p-2 -ml-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <h1 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-2">
@@ -246,7 +246,7 @@ export default function Friends() {
                     {f.email && <p className="text-xs text-zinc-500 truncate">{f.email}</p>}
                   </div>
                 </div>
-                <button onClick={() => unfriend(f.uid)} disabled={busy} className="p-2 text-zinc-400 hover:text-red-500 transition-colors shrink-0" title={t('removeFriendLabel', language)}>
+                <button onClick={() => unfriend(f.uid)} disabled={busy} aria-label={`${t('removeFriendLabel', language)} ${f.name || f.email}`} className="p-2 text-zinc-400 hover:text-red-500 transition-colors shrink-0" title={t('removeFriendLabel', language)}>
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>

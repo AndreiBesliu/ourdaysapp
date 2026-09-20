@@ -332,7 +332,7 @@ export default function ExpensesTab(
               <div className="flex items-center gap-3">
                 <span className="font-bold text-zinc-900 dark:text-white">{exp.amount.toFixed(2)}</span>
                 {exp.paidBy === auth.currentUser?.uid && (
-                  <button onClick={() => handleDelete(exp.id)} className="text-red-400 hover:text-red-500 p-1.5 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors">
+                  <button aria-label={t('deleteExpense', language)} onClick={() => handleDelete(exp.id)} className="text-red-400 hover:text-red-500 p-1.5 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors">
                     <Trash2 className="w-4 h-4"/>
                   </button>
                 )}

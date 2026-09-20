@@ -777,7 +777,7 @@ export default function GroupChatWidget({
                   </span>
                 </button>
               )}
-              <button onClick={() => { setIsSearchOpen(!isSearchOpen); setSearchQuery(''); setCurrentSearchIndex(0); }} className="p-1 hover:bg-black/10 rounded-full transition-colors">
+              <button onClick={() => { setIsSearchOpen(!isSearchOpen); setSearchQuery(''); setCurrentSearchIndex(0); }} aria-label={t('searchMessages', language)} className="p-1 hover:bg-black/10 rounded-full transition-colors">
                 <Search className="w-4 h-4" />
               </button>
               {(!embedded || onClose) && (
@@ -806,6 +806,7 @@ export default function GroupChatWidget({
             <div role="status" className="shrink-0 bg-indigo-50 dark:bg-indigo-500/10 border-b border-indigo-200 dark:border-indigo-500/20 p-3 relative shadow-inner z-10">
               <button 
                 onClick={() => setDigestText(null)} 
+                aria-label={t('closeRecap', language)}
                 className="absolute top-2 right-2 p-1 text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 rounded-full"
               >
                 <X className="w-3.5 h-3.5" />
@@ -844,13 +845,13 @@ export default function GroupChatWidget({
                   {searchResults.length > 0 ? `${currentSearchIndex + 1}/${searchResults.length}` : t('noResults', language)}
                 </span>
               )}
-              <button onClick={() => navigateSearch('up')} className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" disabled={searchResults.length === 0}>
+              <button onClick={() => navigateSearch('up')} aria-label={t('previousResult', language)} className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" disabled={searchResults.length === 0}>
                 <ChevronUp className="w-4 h-4" />
               </button>
-              <button onClick={() => navigateSearch('down')} className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" disabled={searchResults.length === 0}>
+              <button onClick={() => navigateSearch('down')} aria-label={t('nextResult', language)} className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200" disabled={searchResults.length === 0}>
                 <ChevronDown className="w-4 h-4" />
               </button>
-              <button onClick={() => { setIsSearchOpen(false); setSearchQuery(''); }} className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
+              <button onClick={() => { setIsSearchOpen(false); setSearchQuery(''); }} aria-label={t('closeSearch', language)} className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1014,6 +1015,7 @@ export default function GroupChatWidget({
                                 onClick={() => handleDelete(msg.id)}
                                 className="p-1 text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-full shrink-0"
                                 title={t('delete', language)}
+                                aria-label={t('delete', language)}
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -1021,6 +1023,7 @@ export default function GroupChatWidget({
                                 onClick={() => startEditing(msg)}
                                 className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full shrink-0"
                                 title={t('edit', language)}
+                                aria-label={t('edit', language)}
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
@@ -1037,6 +1040,7 @@ export default function GroupChatWidget({
                             onClick={() => { setEditingMsg(null); setNewMessage(''); setReplyingTo(msg); }}
                             className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full shrink-0"
                             title={t('replyTooltip', language)}
+                            aria-label={t('replyTooltip', language)}
                           >
                             <Reply className="w-3.5 h-3.5" />
                           </button>
@@ -1044,6 +1048,7 @@ export default function GroupChatWidget({
                             onClick={() => handlePin(msg.id)}
                             className={`p-1 rounded-full shrink-0 ${msg.isPinned ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10' : 'text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}
                             title={t(msg.isPinned ? 'unpinMessage' : 'pinMessage', language)}
+                            aria-label={t(msg.isPinned ? 'unpinMessage' : 'pinMessage', language)}
                           >
                             <Pin className="w-3.5 h-3.5 rotate-45" />
                           </button>
@@ -1063,6 +1068,7 @@ export default function GroupChatWidget({
                             onClick={() => setActiveReactionMsg(activeReactionMsg === msg.id ? null : msg.id)}
                             className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full shrink-0"
                             title={t('addReactionTooltip', language)}
+                            aria-label={t('addReactionTooltip', language)}
                           >
                             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"/><path d="M8 14C8 14 9.5 16 12 16C14.5 16 16 14 16 14"/><path d="M9 9H9.01"/><path d="M15 9H15.01"/></svg>
                           </button>
@@ -1083,6 +1089,7 @@ export default function GroupChatWidget({
                                 : 'bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300'
                             }`}
                             title={users.map((uid: string) => uid === auth.currentUser?.uid ? t('chatYou', language) : (userMap[uid]?.name || userMap[uid]?.email?.split('@')[0] || t('chatSomeone', language))).join(', ')}
+                            aria-label={t('reactionToggle', language).replace('{emoji}', emoji).replace('{n}', String(users.length))}
                           >
                             <span>{emoji}</span>
                             <span className="font-medium">{users.length}</span>
@@ -1150,7 +1157,7 @@ export default function GroupChatWidget({
                   <span className="text-xs text-zinc-500 truncate">{replyingTo.text || t('chatPhoto', language)}</span>
                 </div>
               </div>
-              <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full text-zinc-500 transition-colors">
+              <button onClick={() => setReplyingTo(null)} aria-label={t('cancelReply', language)} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full text-zinc-500 transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1166,7 +1173,7 @@ export default function GroupChatWidget({
                   <span className="text-xs text-zinc-500 truncate">{editingMsg.text || t('chatPhoto', language)}</span>
                 </div>
               </div>
-              <button onClick={() => { setEditingMsg(null); setNewMessage(''); }} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full text-zinc-500 transition-colors">
+              <button onClick={() => { setEditingMsg(null); setNewMessage(''); }} aria-label={t('cancelEditing', language)} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full text-zinc-500 transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>

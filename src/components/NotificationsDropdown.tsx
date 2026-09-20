@@ -124,6 +124,7 @@ export default function NotificationsDropdown() {
                       </p>
                     </div>
                     <button 
+                      aria-label={t('deleteNotification', language)}
                       onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
                       className="shrink-0 p-1 text-zinc-400 hover:text-red-500 transition-colors self-start"
                     >

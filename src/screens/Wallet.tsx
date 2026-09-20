@@ -643,6 +643,7 @@ export default function Wallet() {
         <div className="p-3 flex-1 flex flex-col relative">
           {asset.barcodeValue && asset.imageUrl && (
             <button
+              aria-label={t('showCode', language)}
               onClick={(e) => {
                 e.stopPropagation();
                 setViewingAssetCode(asset);
@@ -663,6 +664,7 @@ export default function Wallet() {
             {isOwner && (
               <div className="flex items-center gap-1 shrink-0">
                 <button 
+                  aria-label={t('editAsset', language)}
                   onClick={(e) => {
                     e.stopPropagation();
                     openEditModal(asset);
@@ -673,6 +675,7 @@ export default function Wallet() {
                   <Edit2 className="w-4 h-4" />
                 </button>
                 <button 
+                  aria-label={t('deleteAsset', language)}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDelete(asset.id, true);
@@ -696,7 +699,7 @@ export default function Wallet() {
       <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 py-3 fixed top-0 left-0 right-0 w-full z-[100] shadow-sm">
        <div className="max-w-5xl w-full mx-auto px-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/')} className="p-1.5 -ml-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
+          <button onClick={() => navigate('/')} aria-label={t('goHome', language)} className="p-1.5 -ml-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
             <Home className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2 text-emerald-500">
@@ -878,7 +881,7 @@ export default function Wallet() {
                 </div>
                 
                 <div className="flex-1 flex flex-col gap-2">
-                  <button type="button" onClick={openPastImages} className="flex-1 min-h-0 overflow-hidden flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed bg-zinc-50 dark:bg-zinc-800/30">
+                  <button type="button" onClick={openPastImages} aria-label={t('walletPickFromPast', language)} className="flex-1 min-h-0 overflow-hidden flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors p-2 border border-zinc-200 dark:border-zinc-700 rounded-lg border-dashed bg-zinc-50 dark:bg-zinc-800/30">
                     <Folder className="w-4 h-4" />
                     <span className="text-[10px] font-medium leading-tight">{t('walletPickFromPast', language)}</span>
                   </button>
@@ -890,7 +893,7 @@ export default function Wallet() {
                         <button type="button" onClick={() => { setBarcodeValue(''); setBarcodeFormat(''); }} className="text-[9px] text-red-500 hover:underline">{t('walletRemove', language)}</button>
                       </div>
                     ) : (
-                      <button type="button" onClick={() => setIsScanning(true)} className="flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors w-full h-full">
+                      <button type="button" onClick={() => setIsScanning(true)} aria-label={t('walletScanCode', language)} className="flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-emerald-500 transition-colors w-full h-full">
                         <ScanLine className="w-4 h-4" />
                         <span className="text-[10px] font-medium">{t('walletScanCode', language)}</span>
                       </button>
@@ -978,7 +981,7 @@ export default function Wallet() {
                     an English sentence. */}
                 <Settings2 className="w-5 h-5 text-emerald-500" /> {t('walletManageFilters', language)}
               </h3>
-              <button onClick={() => setIsManagingFilters(false)} className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+              <button onClick={() => setIsManagingFilters(false)} aria-label={t('closeAction', language)} className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -995,10 +998,10 @@ export default function Wallet() {
                         className="flex-1 px-2 py-1 text-sm border rounded bg-white dark:bg-zinc-800 dark:border-zinc-600 outline-none focus:border-emerald-500"
                         autoFocus
                       />
-                      <button onClick={() => handleUpdateCategory(cat)} disabled={loading} className="p-1.5 bg-emerald-500 text-white rounded hover:bg-emerald-600 transition-colors">
+                      <button onClick={() => handleUpdateCategory(cat)} disabled={loading} aria-label={t('save', language)} className="p-1.5 bg-emerald-500 text-white rounded hover:bg-emerald-600 transition-colors">
                         <Check className="w-4 h-4" />
                       </button>
-                      <button onClick={() => setEditingFilter(null)} disabled={loading} className="p-1.5 bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-colors">
+                      <button onClick={() => setEditingFilter(null)} disabled={loading} aria-label={t('cancel', language)} className="p-1.5 bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-colors">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -1012,10 +1015,10 @@ export default function Wallet() {
                         )}
                       </div>
                       <div className="flex items-center gap-1">
-                        <button onClick={() => { setEditingFilter(cat); setEditFilterValue(cat); }} className="p-1.5 text-zinc-500 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded transition-colors">
+                        <button onClick={() => { setEditingFilter(cat); setEditFilterValue(cat); }} aria-label={t('editCategory', language)} className="p-1.5 text-zinc-500 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded transition-colors">
                           <Edit2 className="w-4 h-4" />
                         </button>
-                        <button onClick={() => handleRemoveCategory(cat)} className="p-1.5 text-zinc-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded transition-colors">
+                        <button onClick={() => handleRemoveCategory(cat)} aria-label={t('deleteCategory', language)} className="p-1.5 text-zinc-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded transition-colors">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -1051,7 +1054,7 @@ export default function Wallet() {
                 <Folder className="w-5 h-5 text-emerald-500" />
                 {t('selectPastUpload', language)}
               </h3>
-              <button onClick={() => setShowPastImages(false)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors">
+              <button onClick={() => setShowPastImages(false)} aria-label={t('closeAction', language)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -1103,7 +1106,7 @@ export default function Wallet() {
       {viewingAssetCode && (
         <div onClick={() => setViewingAssetCode(null)} className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div onClick={(e) => e.stopPropagation()} ref={codeDialog.dialogRef} {...codeDialog.dialogProps} className="bg-white rounded-2xl p-8 max-w-sm w-full flex flex-col items-center shadow-2xl relative">
-            <button onClick={() => setViewingAssetCode(null)} className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-zinc-900 bg-zinc-100 rounded-full transition-colors">
+            <button onClick={() => setViewingAssetCode(null)} aria-label={t('closeAction', language)} className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-zinc-900 bg-zinc-100 rounded-full transition-colors">
               <X className="w-5 h-5" />
             </button>
             <h3 className="text-lg font-bold text-zinc-900 mb-6 text-center">{viewingAssetCode.name}</h3>
@@ -1133,6 +1136,7 @@ export default function Wallet() {
           className="fixed inset-0 bg-black/90 backdrop-blur-md z-[60] flex items-center justify-center p-4 sm:p-8 animate-in fade-in duration-200"
         >
           <button 
+            aria-label={t('closeAction', language)}
             onClick={() => setViewingImage(null)} 
             className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
           >

@@ -175,7 +175,7 @@ export default function GroupSettingsModal({
                   <button aria-label={t('save', language)} onClick={handleRename} disabled={loading} className="p-2 bg-primary text-white rounded-lg hover:opacity-90 transition-opacity">
                     <Check className="w-4 h-4" />
                   </button>
-                  <button onClick={() => setIsEditingName(false)} className="p-2 bg-zinc-100 dark:bg-zinc-700 rounded-lg text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors">
+                  <button aria-label={t('cancel', language)} onClick={() => setIsEditingName(false)} className="p-2 bg-zinc-100 dark:bg-zinc-700 rounded-lg text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors">
                     <X className="w-4 h-4" />
                   </button>
                 </>
@@ -185,7 +185,7 @@ export default function GroupSettingsModal({
                     {groupName}
                   </span>
                   {isOwner && (
-                    <button onClick={() => setIsEditingName(true)} className="p-2 bg-zinc-100 dark:bg-zinc-700 rounded-lg text-zinc-500 hover:text-primary hover:bg-primary/10 transition-colors">
+                    <button aria-label={t('editGroupName', language)} onClick={() => setIsEditingName(true)} className="p-2 bg-zinc-100 dark:bg-zinc-700 rounded-lg text-zinc-500 hover:text-primary hover:bg-primary/10 transition-colors">
                       <Edit2 className="w-4 h-4" />
                     </button>
                   )}
@@ -220,7 +220,7 @@ export default function GroupSettingsModal({
                       sentTo.has(memberId) ? (
                         <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 shrink-0">{t('requestSentShort', language)}</span>
                       ) : (
-                        <button
+                        <button aria-label={t('addFriendShort', language)}
                           onClick={() => handleAddFriend(memberId)}
                           className="p-1.5 text-zinc-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors shrink-0"
                           title={t('addFriendShort', language)}
@@ -230,7 +230,7 @@ export default function GroupSettingsModal({
                       )
                     )}
                     {isOwner && !isMe && (
-                      <button
+                      <button aria-label={t('removeMember', language)}
                         onClick={() => handleRemoveMember(memberId)}
                         disabled={loading}
                         className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors shrink-0"

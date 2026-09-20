@@ -539,6 +539,7 @@ export default function CalendarHome() {
             onClick={() => setIsRecurringPanelOpen(true)}
             className="hidden sm:flex p-2 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-full transition-colors"
             title={t('recurringEvents', language)}
+            aria-label={t('recurringEvents', language)}
           >
             <Repeat className="w-5 h-5" />
           </button>
@@ -546,6 +547,7 @@ export default function CalendarHome() {
             onClick={() => navigate('/log')}
             className="hidden sm:flex p-2 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-full transition-colors"
             title={t('logTitle', language)}
+            aria-label={t('logTitle', language)}
           >
             <ClipboardList className="w-5 h-5" />
           </button>
@@ -561,12 +563,14 @@ export default function CalendarHome() {
             onClick={() => navigate('/wallet')}
             className="hidden sm:flex p-2 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded-full transition-colors"
             title={t('assetsTitle', language)}
+            aria-label={t('assetsTitle', language)}
           >
             <Wallet className="w-5 h-5" />
           </button>
           <button
             onClick={() => navigate('/settings')}
             className="hidden sm:flex p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+            aria-label={t('settings', language)}
           >
             <Settings className="w-5 h-5" />
           </button>
@@ -575,6 +579,7 @@ export default function CalendarHome() {
               onClick={() => navigate('/admin')}
               className="hidden sm:flex p-2 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 rounded-full transition-colors"
               title="Admin"
+              aria-label="Admin"
             >
               <ShieldCheck className="w-5 h-5" />
             </button>
@@ -583,6 +588,7 @@ export default function CalendarHome() {
             onClick={() => navigate('/warlord')}
             className="hidden sm:flex p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-full transition-colors"
             title="Warlord"
+            aria-label="Warlord"
           >
             <Swords className="w-5 h-5" />
           </button>
@@ -1093,7 +1099,7 @@ export default function CalendarHome() {
                 {overviewModalType === 'pending' && t('pendingTasksToday', language)}
                 {overviewModalType === 'completed' && t('completedTasksToday', language)}
               </h3>
-              <button onClick={() => setOverviewModalType(null)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors">
+              <button onClick={() => setOverviewModalType(null)} aria-label={t('closeAction', language)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>

@@ -375,7 +375,7 @@ export default function Admin() {
       <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 py-3 fixed top-0 left-0 right-0 w-full z-[100] shadow-sm">
         <div className="max-w-5xl w-full mx-auto px-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/')} className="p-2 -ml-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white"><ArrowLeft className="w-5 h-5" /></button>
+            <button onClick={() => navigate('/')} aria-label="Back" className="p-2 -ml-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white"><ArrowLeft className="w-5 h-5" /></button>
             <h1 className="text-xl font-bold text-zinc-900 dark:text-white flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary" /> Admin</h1>
           </div>
           <button onClick={refresh} disabled={loading} className="p-2 text-zinc-500 hover:text-primary disabled:opacity-50" aria-label="Refresh" title="Refresh">
@@ -634,7 +634,7 @@ export default function Admin() {
                     </div>
                   </div>
                   {!a.bootstrap && admins.length > 1 ? (
-                    <button onClick={() => grant(undefined, a.uid, false)} disabled={busy} className="p-2 text-zinc-400 hover:text-red-500 shrink-0" title="Revoke admin"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => grant(undefined, a.uid, false)} disabled={busy} aria-label="Revoke admin" className="p-2 text-zinc-400 hover:text-red-500 shrink-0" title="Revoke admin"><Trash2 className="w-4 h-4" /></button>
                   ) : (
                     <span className="text-[10px] uppercase font-bold text-zinc-400 shrink-0">{a.bootstrap ? 'owner' : 'last'}</span>
                   )}
@@ -1016,6 +1016,7 @@ export default function Admin() {
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col gap-1.5">
                   {aiSpend.topUsers.map(u => (
                     <button
+                      aria-label={`AI spending for ${profiles.some(p => p.uid === u.uid) ? nameOf(u.uid) : '(deleted account)'}`}
                       key={u.uid}
                       onClick={() => { setAiUid(u.uid); loadAi(aiDays, aiDate, u.uid); }}
                       className="flex items-center justify-between text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg px-1 py-0.5 text-left"
@@ -1208,7 +1209,7 @@ export default function Admin() {
           <div onClick={e => e.stopPropagation()} ref={detailDialog.dialogRef} {...detailDialog.dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col shadow-xl">
             <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
               <h3 className="font-bold text-lg text-zinc-900 dark:text-zinc-100">User detail</h3>
-              <button onClick={() => setDetail(null)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 rounded-full"><X className="w-4 h-4" /></button>
+              <button onClick={() => setDetail(null)} aria-label="Close" className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 rounded-full"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-5 overflow-y-auto flex-1 flex flex-col gap-4">
               {detailLoading || !detail.auth ? (

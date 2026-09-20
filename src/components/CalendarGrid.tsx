@@ -373,7 +373,7 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
               <h3 className="text-xl font-bold text-zinc-900 dark:text-white">
                 {modalDay && format(modalDay, 'EEEE, d MMMM', { locale: dateLocale })}
               </h3>
-              <button onClick={() => setIsDayModalOpen(false)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 rounded-full transition-colors">
+              <button aria-label={t('closeAction', language)} onClick={() => setIsDayModalOpen(false)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 rounded-full transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>

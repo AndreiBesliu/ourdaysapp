@@ -263,6 +263,7 @@ function ConversationRow({ conversation: c, people, myUid, language, active, onS
 
   return (
     <button
+      aria-label={`${t('chatOpenConversation', language)}: ${c.title}`}
       onClick={onSelect}
       className={`w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors ${
         active ? 'bg-primary/10' : 'hover:bg-zinc-100 dark:hover:bg-zinc-800'
@@ -312,6 +313,7 @@ function StartChatSheet({ candidates, people, language, busy, onPick, onClose }:
             const name = personName(people, uid, t('chatSomeone', language));
             return (
               <button
+                aria-label={`${t('chatStartWith', language)} ${name}`}
                 key={uid}
                 disabled={busy}
                 onClick={() => onPick(uid)}

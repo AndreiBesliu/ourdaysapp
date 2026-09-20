@@ -539,12 +539,14 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                 onClick={() => setShowRulesFor(activeGame.gameType)}
                 className="p-1.5 text-zinc-400 hover:text-blue-500 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors mr-2"
                 title={t('howToPlay', language)}
+                aria-label={t('howToPlay', language)}
               >
                 <Info className="w-5 h-5" />
               </button>
             )}
             <button 
               onClick={() => playingGameId ? setPlayingGameId(null) : onClose()} 
+              aria-label={playingGameId ? t('backToArcade', language) : t('closeAction', language)}
               className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-200 dark:bg-zinc-800 rounded-full transition-colors"
             >
               <X className="w-5 h-5" />
@@ -611,7 +613,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Tic Tac Toe Card */}
                       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors group flex flex-col h-full relative">
-                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('tic-tac-toe'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title={t('howToPlay', language)}>
+                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('tic-tac-toe'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title={t('howToPlay', language)} aria-label={`${t('howToPlay', language)}: ${t('gameTicTacToe', language)}`}>
                           <Info className="w-4 h-4" />
                         </button>
                         <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('tic-tac-toe')}>
@@ -625,7 +627,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
 
                       {/* Connect 4 Card */}
                       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors group flex flex-col h-full relative">
-                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('connect-4'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title={t('howToPlay', language)}>
+                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('connect-4'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title={t('howToPlay', language)} aria-label={`${t('howToPlay', language)}: ${t('gameConnect4', language)}`}>
                           <Info className="w-4 h-4" />
                         </button>
                         <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('connect-4')}>
@@ -642,7 +644,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
 
                       {/* Rummy 45 Card */}
                       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors group flex flex-col h-full relative">
-                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('rummy-45'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title={t('howToPlay', language)}>
+                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('rummy-45'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title={t('howToPlay', language)} aria-label={`${t('howToPlay', language)}: ${t('gameRummy45', language)}`}>
                           <Info className="w-4 h-4" />
                         </button>
                         <div className="cursor-pointer flex flex-col flex-1" onClick={() => handleCreateGame('rummy-45')}>
@@ -656,7 +658,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
 
                       {/* Memory Match Card */}
                       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-primary/50 transition-colors group flex flex-col h-full relative">
-                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('memory-match'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title={t('howToPlay', language)}>
+                        <button onClick={(e) => { e.stopPropagation(); setShowRulesFor('memory-match'); }} className="absolute top-3 right-3 p-1.5 text-zinc-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-full transition-colors z-10" title={t('howToPlay', language)} aria-label={`${t('howToPlay', language)}: ${t('gameMemoryMatch', language)}`}>
                           <Info className="w-4 h-4" />
                         </button>
                         <div className="cursor-pointer flex flex-col flex-1" onClick={() => setShowThemePicker(true)}>
@@ -717,6 +719,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                                   onClick={(e) => handleCancelGame(game.id, e)}
                                   className="p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
                                   title={t('cancelGame', language)}
+                                  aria-label={t('cancelGame', language)}
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
@@ -816,7 +819,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                 <Info className="w-5 h-5" />
                 <h3 className="font-bold text-lg">{gameRules[showRulesFor].title}</h3>
               </div>
-              <button onClick={() => setShowRulesFor(null)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-white dark:bg-zinc-800 rounded-full transition-colors shadow-sm">
+              <button onClick={() => setShowRulesFor(null)} aria-label={t('closeAction', language)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-white dark:bg-zinc-800 rounded-full transition-colors shadow-sm">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -846,7 +849,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                 <Gamepad2 className="w-5 h-5" />
                 <h3 className="font-bold text-lg">{t('chooseTheme', language)}</h3>
               </div>
-              <button onClick={() => setShowThemePicker(false)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-white dark:bg-zinc-800 rounded-full transition-colors shadow-sm">
+              <button onClick={() => setShowThemePicker(false)} aria-label={t('closeAction', language)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-white dark:bg-zinc-800 rounded-full transition-colors shadow-sm">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -854,6 +857,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
               {THEME_IDS.map((id) => (
                 <button
                   key={id}
+                  aria-label={t(THEME_PACKS[id].labelKey, language)}
                   onClick={() => { setShowThemePicker(false); handleCreateGame('memory-match', id); }}
                   className="flex items-center gap-3 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800 hover:border-primary/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors text-left"
                 >

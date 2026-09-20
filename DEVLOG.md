@@ -7029,3 +7029,76 @@ fișierul REAL, poarta se face roșie.
 * **O restaurare de mutație a eșuat iarăși tăcut** și a lăsat fișierul mutat. Harness-ul rescrie
   acum până când octeții se potrivesc.
 
+---
+
+## 2026-09-20 · O poartă care se uita la 28% din butoane
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+### Poarta
+
+`buttonNames.test.ts` refuză butoanele fără nume accesibil. Potrivea cu
+`/<button\b([^>]*)>([\s\S]*?)<\/button>/`. `[^>]*` se oprește la **primul** `>`,
+iar în codul ăsta acela aproape niciodată nu e sfârșitul etichetei — e `>`-ul din
+`onClick={() => …}`. Deci `attrs` ieșea `onClick={() =`, **restul atributelor
+cădeau în copii**, iar verificarea „are text vizibil?” vedea `className="p-1 hover:…"` și
+declara butonul etichetat.
+
+**Măsurat înainte de rescriere: 221 din 307 butoane potrivite — 72% — sărite tăcut.** Poarta se
+uita la 86 și era verde de luni de zile.
+
+**Și testul ei de onestitate n-avea cum s-o prindă:** număra câte `<button` există în TEXT,
+nu câte au fost **examinate**. *O poartă care numără munca disponibilă în loc de munca făcută nu
+poate observa că a încetat să lucreze.* Acum afirmă `examined >= present`.
+
+Rescrisă cu parserul TypeScript, ca `siblingKeys` de acum două ore. Rămâne intenționat
+conservatoare: o etichetă randată de o expresie **este** o etichetă, iar un buton cu `{...spread}`
+nu e judecat, fiindcă spread-ul poate conține chiar `aria-label`.
+
+### Ce a găsit
+
+**74 de constatari reale:** 45 de butoane fără niciun nume și 29 numite doar prin `title`.
+Al doilea grup contează mai mult decât pare: aplicația se livrează prin Capacitor pe Android,
+unde **nu există hover și `title` nu se afișează niciodată**.
+
+Șase agenți în paralel, pe seturi de fișiere disjuncte. `i18n.ts` a rămas la mine — șase
+agenți care scriu în același fișier e o coliziune garantată — deci ei au **cerut** chei
+structurat, iar eu le-am adăugat într-o singură trecere. Verificat după: **37 de hunk-uri cu
+ștergeri, 0 atribute pierdute** (au re-rupt rânduri lungi ca să încapă atributul nou).
+
+### Și atunci a apărut a treia gaură
+
+Pasul care adăuga cele 19 chei noi **a eșuat tăcut** (heredoc-ul a mâncat backslash-urile — a
+șasea oară în sesiunea asta). Rezultatul: 74 de butoane trimiteau la chei inexistente.
+
+**Și toate porțile au rămas verzi.** `t()` se termină în `|| key`, deci o cheie lipsă se
+rendează ca `closeRecap` și nimic nu cade. `i18nCoverage` caută engleză hard-codată —
+asta nu era. `i18n.test` compară cele șase dicționare între ele — o cheie lipsă din **toate
+șase** e perfect consistentă. `buttonNames` întreabă dacă există `aria-label`, nu dacă se
+rezolvă. Fiecare are dreptate despre întrebarea ei. Asta era întrebarea pe care n-o punea nimeni.
+
+Nou: `src/utils/i18nKeysExist.test.ts` — fiecare `t('literal')` din `src/` trebuie să
+numească o cheie care există. Citește **ambele brațe** ale unui ternar (aplicația chiar scrie
+`t(p ? 'unpinMessage' : 'pinMessage')`) și sare peste cheile calculate în loc să ghicească.
+
+### Probe
+
+**6 mutații din 6**, cu control negativ, iar prima e chiar eșecul de azi: scoase toate cele 19
+chei, poarta se face roșie.
+
+Prima rulare a dat o **ratare reală**: comparatia `uses.filter(…)` era inline, deci o
+mutație care o înlocuia cu `[]` lăsa suita verde — testul de onestitate proba **colectorul**,
+niciodată **verdictul**. Scoasă într-un `missingKeys(uses, dict)` testabil cu un dicționar
+fabricat. Iar testul nou pe care l-am scris pentru el a picat imediat: `'toString' in {}` e
+**true** prin lanțul de prototipuri, deci `t('toString')` ar fi întors o **funcție**. Acum
+verifică proprietate proprie și tip `string`.
+
+`npx tsc -b` verde · poartă de lint verde · **1601 de teste** (+15) · build verde.
+
+### Tiparul, a treia oară azi
+
+Cheile React duplicate, poarta de butoane, cheile de traducere lipsă — toate trei erau **verzi**
+și toate trei erau oarbe prin construcție. Un scaner pe SURSĂ își pierde priza fără să spună
+nimic; un parser nu. Și fiecare poartă are nevoie de o întrebare despre **ea însăși** — cât a
+examinat, nu cât exista.
+

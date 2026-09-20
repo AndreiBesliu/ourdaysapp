@@ -622,7 +622,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                         <span key={id} className="inline-flex items-center gap-1 bg-zinc-200 dark:bg-zinc-700 px-2 py-1 rounded-full text-xs font-medium text-zinc-700 dark:text-zinc-300">
                           {userMap[id]?.name || userMap[id]?.email?.split('@')[0] || t('memberFallback', language)}
                           {(canEdit || id === auth.currentUser?.uid) && (
-                            <button onClick={() => handleRemoveAssignee(id)} className="text-zinc-500 hover:text-red-500 transition-colors ml-1" title={`Remove ${id === auth.currentUser?.uid ? 'yourself' : 'member'}`}>
+                            <button aria-label={t('removeAssignee', language)} onClick={() => handleRemoveAssignee(id)} className="text-zinc-500 hover:text-red-500 transition-colors ml-1" title={`Remove ${id === auth.currentUser?.uid ? 'yourself' : 'member'}`}>
                               <X className="w-3 h-3" />
                             </button>
                           )}
@@ -850,7 +850,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                                     <GripVertical className="w-4 h-4" />
                                   </div>
                                 )}
-                                <button 
+                                <button aria-label={t('toggleChecklistItem', language)} 
                                   onClick={() => handleToggleChecklistItem(item.id)}
                                   disabled={!canEdit}
                                   className={`mt-0.5 shrink-0 w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${

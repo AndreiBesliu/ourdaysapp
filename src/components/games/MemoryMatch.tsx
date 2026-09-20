@@ -343,6 +343,7 @@ export default function MemoryMatch({ game, userMap, onBack }: MemoryMatchProps)
             return (
               <button
                 key={idx}
+                aria-label={`${t('memoryCard', language)} ${idx + 1}`}
                 onClick={() => handleCardClick(idx)}
                 disabled={isFlipped || game.status !== 'playing' || !players.P2}
                 className="relative w-full aspect-square perspective-1000"

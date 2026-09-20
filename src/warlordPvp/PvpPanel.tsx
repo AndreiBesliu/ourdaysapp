@@ -40,6 +40,7 @@ function UnitPicker({ units, picked, onToggle }: {
         const full = !on && picked.length >= PVP_MAX_COMBATANTS;
         return (
           <button
+            aria-label={`${on ? 'Deselect' : 'Select'} ${prettyName(u.type)}, ${size} soldiers`}
             key={u.id}
             onClick={() => !full && onToggle(u.id)}
             disabled={full}

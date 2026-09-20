@@ -207,7 +207,7 @@ export default function Settings() {
       {/* Header */}
       <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 py-3 fixed top-0 left-0 right-0 w-full z-[100] shadow-sm">
        <div className="max-w-2xl w-full mx-auto px-4 flex items-center gap-3">
-        <button onClick={() => navigate('/')} className="p-1.5 -ml-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
+        <button onClick={() => navigate('/')} aria-label={t('goHome', language)} className="p-1.5 -ml-1.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors">
           <Home className="w-5 h-5" />
         </button>
         <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300">
@@ -288,6 +288,7 @@ export default function Settings() {
             </div>
 
             <button 
+              aria-label={t('signOut', language)}
               onClick={handleSignOut}
               className="w-full p-4 flex items-center justify-between text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
             >
