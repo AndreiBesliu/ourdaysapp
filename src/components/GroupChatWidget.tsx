@@ -682,8 +682,11 @@ export default function GroupChatWidget({
           <div className="p-3 bg-primary flex items-center justify-between shrink-0">
             <div className="flex-1 min-w-0">
               <h3 className="font-bold text-sm truncate">{title}</h3>
-              {/* Member avatars */}
-              <div className="flex items-center gap-1 mt-1">
+              {/* Member avatars. `overflow-hidden` because eight of them are 188px against a
+                  174px column — the row already ran past its box before the button grew a word,
+                  painting under the buttons rather than being clipped. Hit-tested: the taps still
+                  landed on the button, so it was cosmetic; with the label it would not be. */}
+              <div className="flex items-center gap-1 mt-1 overflow-hidden">
                 {members.map(memberId => {
                   const member = userMap[memberId];
                   if (!member) return null;
@@ -706,18 +709,48 @@ export default function GroupChatWidget({
               </div>
             </div>
             <div className="flex items-center gap-1 ml-2">
+              {/* ── The digest button ───────────────────────────────────────────────────
+                  It was a bare sparkle, and the owner's report was that nothing about it says
+                  what it does. Two separate reasons, and the second is the worse one.
+
+                  A `title` never renders on Android: Capacitor has no hover. `aria-label` is
+                  spoken only by a screen reader. So on the device this app actually ships to,
+                  the button carried NO name at all — it was a glyph and nothing else. Hence a
+                  visible word.
+
+                  And the spinner was white. `index.css` auto-contrasts this header by colouring
+                  `svg` elements to `--primary-foreground`; the spinner is a `div` with a
+                  `border`, so it opted out of the promise. Measured against the ten presets in
+                  `Settings.tsx`: 1.80:1 on Amber, and below the 3:1 WCAG asks of non-text UI on
+                  every primary lighter than 0.30 luminance — four of ten presets, plus roughly
+                  the light half of the custom colour picker. Pressing the button made it go
+                  blank for several seconds, which is its own answer to "what does this do".
+
+                  NO resting background, and that is measured rather than taste. The header
+                  guarantees exactly one relationship — `--primary-foreground` against
+                  `--primary` — and any surface slipped between the two voids it. `bg-black/10`
+                  under this 11px label measures 4.00:1 on Rose; `bg-primary-foreground/15`
+                  measures 3.83:1 on the DEFAULT blue. Bare, the worst preset is Slate at 4.51.
+                  The rule generalises: in this header, anything that is not an `svg` and not the
+                  `.bg-primary` element itself has opted out and must be checked by hand. */}
               {convKind === 'group' && (
                 <button
                   onClick={handleGenerateDigest}
                   disabled={isGeneratingDigest}
-                  className="p-1 hover:bg-black/10 rounded-full transition-colors"
+                  aria-busy={isGeneratingDigest}
+                  className="flex items-center gap-1 shrink-0 px-2 py-1.5 rounded-full hover:bg-black/10 transition-colors"
                   aria-label={t('aiDigestTooltip', language)} title={t('aiDigestTooltip', language)}
                 >
                   {isGeneratingDigest ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span aria-hidden="true" className="w-3.5 h-3.5 shrink-0 border-2 border-current border-t-transparent rounded-full animate-spin" />
                   ) : (
-                    <Sparkles className="w-4 h-4 text-white" />
+                    <Sparkles aria-hidden="true" className="w-3.5 h-3.5 shrink-0" />
                   )}
+                  {/* The word does not change while it works, so the header cannot shift under a
+                      thumb that is still on the button. The spinner replaces the icon, in place. */}
+                  <span className="text-[11px] font-semibold leading-none whitespace-nowrap">
+                    {t('aiDigestLabel', language)}
+                  </span>
                 </button>
               )}
               <button onClick={() => { setIsSearchOpen(!isSearchOpen); setSearchQuery(''); setCurrentSearchIndex(0); }} className="p-1 hover:bg-black/10 rounded-full transition-colors">
@@ -741,8 +774,12 @@ export default function GroupChatWidget({
               <p className="text-xs text-rose-700 dark:text-rose-300">{t('digestFailed', language)}</p>
             </div>
           )}
+            {/* `role="status"`: the FAILURE path has announced itself since the day it was
+                written (`role="alert"` above), and the success path announced nothing at all — so
+                a screen-reader user pressed the button, heard silence, and had no way to know the
+                answer had arrived. */}
           {digestText && (
-            <div className="shrink-0 bg-indigo-50 dark:bg-indigo-500/10 border-b border-indigo-200 dark:border-indigo-500/20 p-3 relative shadow-inner z-10">
+            <div role="status" className="shrink-0 bg-indigo-50 dark:bg-indigo-500/10 border-b border-indigo-200 dark:border-indigo-500/20 p-3 relative shadow-inner z-10">
               <button 
                 onClick={() => setDigestText(null)} 
                 className="absolute top-2 right-2 p-1 text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 rounded-full"

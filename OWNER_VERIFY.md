@@ -1401,3 +1401,29 @@ ocupe o căsuță:
 3. **Anunțul de versiune nouă nu mai apare când ești offline.** Nu avea cum să fie adevărat
    acolo, și un anunț care minte o dată e ignorat pentru totdeauna.
 
+### Butonul de rezumat din chat (reparat 20.09)
+
+- [ ] **Deschide un chat de grup pe telefon.** Butonul trebuie să arate o steliță urmată de
+      cuvântul **Rezumat**, în aceeași culoare cu lupa și cu X-ul de lângă el. **Dacă scrisul
+      are altă culoare decăt pictogramele**, ceva a pus un fundal sub el și garanția de contrast
+      a antetului nu mai ține.
+- [ ] **Apasă-l și uită-te la buton cât lucrează.** Stelița devine un inel care se învârte,
+      **în culoarea pictogramelor**, iar cuvântul stă pe loc. Până azi inelul era ALB: pe tema ta
+      chihlimbar măsura 1,80:1, adică invizibil — apăsai și butonul părea că nu face nimic câteva
+      secunde. **Dacă antetul „sare” când apeși**, eticheta și-a schimbat lățimea și e defect.
+- [ ] **Schimbă tema pe Amber, apoi pe Blue** (Setări → cercurile de culoare) și repetă. Ambele
+      trebuie să arate la fel de lizibil. *De ce contează:* asta e toată clasa de defect — patru
+      din cele zece teme predefinite erau afectate, iar selectorul de culoare liberă o face
+      continuă.
+- [ ] **Titlul ferestrei de chat nu mai scrie „Chat de grup · …”, ci doar numele grupului.**
+      Prefixul mânca 97 din cele 174 de puncte ale coloanei, iar ce se tăia era exact numele
+      grupului. **Dacă îți lipsește**, spune-mi — se pune înapoi într-un rând, dar atunci numele
+      lungi se vor tăia iar.
+- [ ] **Peste o lună, uită-te la cheltuiala AI.** Un buton pe care lumea îl poate citi e un buton
+      pe care lumea îl apasă. Fiecare rezumat e un apel plătit, nu există cache, iar rezultatul
+      se pierde când schimbi conversația — deci următoarea apăsare plătește din nou. **Dacă
+      volumul sare**, reparația e să ținem minte ultimul rezumat pe grup, nu să ascundem butonul
+      la loc.
+- [ ] **„Rückblick” e cuvântul bun în germană?** E cel mai slab dintre cele șase — sună mai
+      degrabă a „retrospectivă”. `Überblick` încape la fel de bine dacă întrebi pe cineva.
+

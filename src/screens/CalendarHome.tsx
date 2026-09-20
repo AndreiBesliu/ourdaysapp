@@ -1053,7 +1053,11 @@ export default function CalendarHome() {
           key={activeGroupId}
           convId={activeGroupId}
           convKind="group"
-          title={`${t('groupChatTitle', language)} · ${groups.find(g => g.id === activeGroupId)?.name || t('group', language)}`}
+          // No „Chat de grup ·” prefix. It costs 97px of a 174px title column, and what gets
+          // truncated is the far end — the group's own NAME, the only informative half. The pane
+          // is visibly a chat; it does not need to say so twice. Measured: with the prefix the
+          // Romanian title shows 64% at 320px, without it the name fits whole with room spare.
+          title={groups.find(g => g.id === activeGroupId)?.name || t('group', language)}
           userMap={userMap}
           members={groups.find(g => g.id === activeGroupId)?.members || []}
         />

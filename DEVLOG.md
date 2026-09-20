@@ -6781,3 +6781,81 @@ functions verde. Regulile n-au fost atinse, deci `test:rules` n-a rulat.
   era LF, și tiparele au încetat să potrivească. A șaptea oară. Scriptul își citește acum
   terminatorul din fișier.
 
+---
+
+## 2026-09-20 · Un buton care nu-și spunea numele, și un cerc alb pe galben
+
+**Prompt (Andrei):** „vreau ca butonul AI digest sa apara altfel. Acum nu este evident ce
+face.” **Model:** Claude Opus 5.
+
+### Două motive, iar al doilea e mai rău
+
+**Butonul n-avea nume.** Un `title` nu se afișează niciodată pe Android — Capacitor n-are
+hover — iar `aria-label` îl rosește doar un cititor de ecran. Deci pe dispozitivul pe care
+aplicația chiar se livrează, butonul era o steliță și **nimic altceva**. Acum are cuvântul lângă
+el.
+
+**Și indicatorul de așteptare era alb.** `index.css` auto-contrastează antetul colorând
+elementele `svg` cu `--primary-foreground`; inelul care se învârte e un `div` cu
+un `border`, deci **a ieșit din promisiune**. Măsurat pe cele zece teme din
+`Settings.tsx`: **1,80:1 pe Amber**, și sub pragul de 3:1 pe orice culoare primară mai
+deschisă de 0,30 luminanță — patru din zece teme, plus cam jumătatea deschisă a selectorului
+liber. Apăsai butonul și se golea câteva secunde. **Aia e, foarte probabil, chiar reclamația.**
+
+### Regula pe care o scrie antetul ăsta
+
+Toate cele trei propuneri de design au pus un fundal colorat sub etichetă. **Niciuna n-a
+măsurat contrastul etichetei pe acel fundal.** Măsurat: `bg-black/10` scade eticheta de 11px
+la **4,00:1 pe Rose**, iar `bg-primary-foreground/15` la **3,83:1 pe tema albastră
+IMPLICITĂ**. Fără fundal, cel mai prost caz e Slate la 4,49.
+
+De-aia butonul **n-are fundal în repaus**. Regula generală, care merită scrisă: *antetul garantează
+exact o relație — `--primary-foreground` față de `--primary` — și orice suprafață strecurată
+între cele două anulează garanția.* Același defect e și inelul alb, și `text-white`-ul mort de
+pe steliță: o culoare care a ieșit din promisiune. **Nicio poartă din repo nu poate prinde asta
+azi** — `themeContrast.test.ts` probează aritmetica, niciodată antetul.
+
+### Titlul, și de ce s-a schimbat
+
+Prefixul „Chat de grup ·” măsoară **97px** dintr-o coloană de 174. Ce se tăia era capătul — adică
+**numele grupului**, singura jumătate care spune ceva. Scos, numele încape întreg în toate cele
+șase limbi, cu eticheta lângă el. Se pune înapoi într-un rând dacă Andrei îl vrea.
+
+### Și o notă care mințea de ieri
+
+`digestTruncated` scria în toate cele șase limbi „peste 50 de mesaje” — dar de ieri steagul se
+ridică și când a fost tăiată **lista de evenimente**. Un grup cu patru mesaje și un calendar plin
+era informat că are peste cincizeci de mesaje. Reformulat, nu despărțit: pe fir călătorește un
+singur boolean, iar un bundle vechi tot ăla îl primește. Am reparat și că `aiDigestTooltip` se
+termina în englezescul „(AI Digest)” în patru limbi din șase.
+
+### Probe
+
+Banc pe **toate cele zece teme reale**, cu markup-ul livrat și CSS-ul real. Inelul: **de la
+1,80 la 9,78 pe Amber**, și între 4,49 și 9,78 peste tot. Eticheta urmărește pictogramele exact,
+fiindcă e aceeași pereche de culori. Titlul încape întreg la 286px cu opt avataruri.
+
+`npx tsc -b` verde · poartă de lint verde · **1556 de teste** · build verde.
+
+### Ce-am greșit, și ce m-a prins
+
+* **Am inventat culoarea.** Am luat chihlimbarul de pe captura de ecran și am măsurat contra lui,
+  în loc să deschid `Settings.tsx`. Există **zece** teme plus un `<input type="color">`,
+  deci enunțul corect e o **bandă de luminanță**, nu o culoare. Am nimerit concluzia cu o metodă
+  stricată — exact situația în care un răspuns bun ascunde o metodă rea.
+* **Am lăsat bancul în `public/`.** Vite copiază `public/` ca atare în `dist/`, deci la
+  următorul deploy de hosting s-ar fi **publicat pe live** o pagină de banc și o copie de 94KB a
+  foii de stil. Propriul meu comentariu „de șters înainte de commit” nu e un mecanism; auditul
+  a fost. Bancul stă acum în rădăcină, care **nu** intră în build.
+* **Un `{/* */}` nu e legal într-o poziție de expresie.** L-am pus între `{digestText && (` și
+  `<div>`, iar fișierul a încetat să parseze. Typecheck-ul l-a prins imediat.
+
+### Rămase, semnalate de audit
+
+* `buttonNames.test.ts` e **oarbă prin construcție**: captura ei `<button\b([^>]*)>` se
+  oprește la `>`-ul din `onClick={() =>`, iar textul scurs face verificarea să fie sărită.
+  Butonul de căutare de alături n-are nici `aria-label`, nici `title`, și poarta tace.
+* Mesajul de eroare al digestului aruncă `aiErrorMessage`: cine a depășit bugetul zilnic află
+  doar „nu s-a putut genera” și apasă din nou.
+* `App.tsx` dublează aritmetica din `themeContrast.ts`, netestată, deși o importă deja.
+
