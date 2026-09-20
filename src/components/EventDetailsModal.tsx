@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon, Trash2, Edit2, GripVertical, Sparkles, Users, ThumbsUp, HelpCircle, ThumbsDown, MapPin, Bell } from 'lucide-react';
-import { doc, updateDoc, deleteDoc, getDoc, arrayUnion, collection, query as fsQuery, where, getDocs } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, getDoc, arrayUnion, collection, query as fsQuery, where, getDocs, deleteField } from 'firebase/firestore';
 import { reportError } from '../reportError';
 import { planEventWrite } from '../utils/eventWriteTarget';
 import { unsharedAttachedCards } from '../utils/assetAttach';
@@ -19,6 +19,8 @@ import { t, getDateLocale } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { localZone } from '../utils/eventTime';
 import { spanRangeLabel } from '../utils/spanLabel';
+import { generateChecklistForTask } from '../ai';
+import { checklistReasonKey, checklistWorthRetrying } from '../utils/aiErrorKey';
 
 
 interface EventDetailsModalProps {
@@ -125,6 +127,31 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       setChecklist(event.checklistItems || []);
     }
   }, [event]);
+
+  // ── The AI checklist that did not happen ───────────────────────────────────────────────
+  //
+  // `autoSuggestChecklist` is an `onDocumentCreated` trigger: it fires ONCE per event, so a bad
+  // ending is permanent. It used to have two, and this screen made both invisible. The skeleton
+  // further down renders exactly while `ai_assistant` is in the assignees, so stripping that id
+  // left an empty checklist and no explanation, and NOT stripping it left the skeleton spinning
+  // for the life of the event. The trigger now writes `aiChecklist: { status, reason }`, and this
+  // reads it.
+  //
+  // These live up here with the other hooks, and not beside the handler they serve, because
+  // `if (!isOpen || !event) return null` sits between the two. That return is why this app has
+  // shipped React #310 twice.
+  const [aiRetrying, setAiRetrying] = useState(false);
+  const [aiRetryError, setAiRetryError] = useState<string | null>(null);
+  // Hides the card the moment a retry lands, without waiting for the snapshot to come back.
+  const [aiOutcomeDone, setAiOutcomeDone] = useState(false);
+
+  // Keyed on the event ID, NOT on `event`: that object gets a new identity on every Firestore
+  // snapshot, and resetting there would wipe the error sentence before it could be read.
+  useEffect(() => {
+    setAiRetrying(false);
+    setAiRetryError(null);
+    setAiOutcomeDone(false);
+  }, [event?.id]);
 
   // The lightbox is local state on a modal that CalendarHome never unmounts — it only toggles
   // `isOpen` — so nothing ever cleared it. Open an event, tap its picture, press Escape: the modal
@@ -353,6 +380,50 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       console.error("Failed to update checklist item:", e);
       // Revert on failure
       setChecklist(event.checklistItems || []);
+    }
+  };
+
+  /**
+   * Retry through `generateAIChecklist` — the callable that already exists, so the retry faces the
+   * same auth, quota and budget the trigger faced. That is deliberate: the usual reason the
+   * trigger stopped is a limit, and a retry must meet the same limit rather than route around it.
+   */
+  const handleRetryAiChecklist = async () => {
+    if (!canEdit || aiRetrying) return;
+    setAiRetrying(true);
+    setAiRetryError(null);
+    try {
+      const suggestions = await generateChecklistForTask(event.title, event.description || '');
+      if (!suggestions.length) {
+        // A refusal states itself; an empty answer would otherwise look like a broken button.
+        setAiRetryError(t('aiChecklistNothing', language));
+        return;
+      }
+      const newItems = suggestions.map((text, i) => ({
+        id: `${Date.now()}${i}`,
+        text: String(text),
+        isCompleted: false,
+        assetUrl: null,
+        assetId: null,
+      }));
+      const merged = [...checklist, ...newItems];
+      setChecklist(merged);
+      setAiOutcomeDone(true);
+      await updateDoc(doc(db, 'events', await resolveWriteTarget()), {
+        checklistItems: merged,
+        // Removed rather than set to a "succeeded" value: the question this field answers is
+        // "why is there no checklist", and there is one now.
+        aiChecklist: deleteField(),
+      });
+    } catch (e) {
+      // `generateChecklistForTask` already turns a refusal into a translated sentence, so this
+      // says WHICH limit bit rather than "could not generate".
+      setAiOutcomeDone(false);
+      setChecklist(event.checklistItems || []);
+      setAiRetryError(e instanceof Error ? e.message : String(e));
+      reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.handleRetryAiChecklist' });
+    } finally {
+      setAiRetrying(false);
     }
   };
 
@@ -921,6 +992,36 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                   )}
                 </Droppable>
               </DragDropContext>
+            </div>
+          )}
+
+          {/* Why there is no checklist, and what to do about it.
+
+              Shown only when the trigger recorded a failure. `ai_assistant` has been removed by
+              then — it fires once, so leaving it would promise work that can never run — which is
+              why the skeleton below no longer draws and this takes its place. */}
+          {!aiOutcomeDone && event.aiChecklist?.status === 'failed' && (
+            <div className="p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20">
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4" /> {t('aiChecklistNotGenerated', language)}
+              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                {t(checklistReasonKey(event.aiChecklist.reason), language)}
+              </p>
+              {aiRetryError && (
+                <p className="text-xs text-red-700 dark:text-red-400 mt-1.5">{aiRetryError}</p>
+              )}
+              {canEdit && checklistWorthRetrying(event.aiChecklist.reason) && (
+                <button
+                  type="button"
+                  onClick={handleRetryAiChecklist}
+                  disabled={aiRetrying}
+                  className="mt-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-60 flex items-center gap-1.5"
+                >
+                  <Sparkles className={`w-3.5 h-3.5 ${aiRetrying ? 'animate-pulse' : ''}`} />
+                  {aiRetrying ? t('generatingChecklist', language) : t('retry', language)}
+                </button>
+              )}
             </div>
           )}
 

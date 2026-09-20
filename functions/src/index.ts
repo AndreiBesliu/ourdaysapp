@@ -25,6 +25,10 @@ import {
   ERROR_STATUSES, STATUS_RANK, groupDocId, isErrorStatus, joinState,
 } from "./errorState";
 import { AI_QUOTA_CODE, isProviderQuotaError, isOwnBudgetRefusal } from "./aiProviderError";
+import {
+  checklistFailure, checklistReason, refundsQuota,
+  CHECKLIST_QUOTA, CHECKLIST_UNCONFIGURED, CHECKLIST_BAD_OUTPUT, CHECKLIST_ERROR,
+} from "./aiChecklistOutcome";
 import { spanProblem } from "./eventTime";
 import type { EventDoc } from "./recurrenceServer";
 import {
@@ -190,61 +194,63 @@ async function usersShareGroup(a: string, b: string): Promise<boolean> {
 
 
 
-// Stop an event advertising AI work that will never run.
+// Stop an event advertising AI work that will never run — and say WHY it will not run.
 //
-// `onDocumentCreated` fires once per document, so if the trigger ends without clearing this the
-// event keeps `ai_assistant` in its assignees forever and there is no retry path short of creating
-// a new event. Best effort by design: it runs on failure paths, where another write may also fail.
-async function clearAiAssignee(
+// `onDocumentCreated` fires ONCE per document, so every bad ending here is permanent: there is no
+// second attempt for this event, ever. The two endings it used to have both lied about that.
+//
+//   STRIP — the catch and the non-array branch removed `ai_assistant` and nothing else. The screen
+//     draws its "generating checklist…" skeleton exactly while that id is present, so the skeleton
+//     vanished and an empty checklist was left. Indistinguishable from the AI having looked and
+//     found nothing worth adding.
+//   STICK — the daily-quota branch and the missing-key branch returned without touching anything.
+//     The id stayed, so the skeleton spun FOREVER: every open of that event, for the rest of its
+//     life, claimed a checklist was being generated.
+//
+// Now there is one ending. The reason is written onto the event, the screen says it in the
+// reader's language, and it offers Retry — through `generateAIChecklist`, which already exists, so
+// a retry faces the same auth, quota and budget the trigger faced. That is the retry story: not
+// the trigger firing again, which it cannot, but the person choosing to.
+async function recordChecklistOutcome(
   snapshot: { ref: FirebaseFirestore.DocumentReference },
   data: FirebaseFirestore.DocumentData,
+  reason: string,
 ): Promise<void> {
   try {
     const ids: string[] = Array.isArray(data?.assigneeIds) ? data.assigneeIds : [];
-    if (!ids.includes("ai_assistant")) return;
-    await snapshot.ref.update({ assigneeIds: ids.filter((id) => id !== "ai_assistant") });
+    await snapshot.ref.update({
+      // Removed in every case: an assignee advertising work that can never run is the STICK
+      // ending, and it is the thing this whole path exists to stop.
+      assigneeIds: ids.filter((id) => id !== "ai_assistant"),
+      aiChecklist: { status: "failed", reason, at: new Date().toISOString() },
+    });
   } catch (err) {
-    console.error("could not clear ai_assistant", (err as any)?.message || err);
+    // Best effort by design: this runs on failure paths, where another write may also fail.
+    console.error("could not record the checklist outcome", (err as any)?.message || err);
   }
 }
 
-export const autoSuggestChecklist = onDocumentCreated({
-  document: "events/{eventId}"
-}, async (event) => {
-  const snapshot = event.data;
-  if (!snapshot) return;
-
-  const data = snapshot.data();
-  
-  // We only intercept if assigned to "ai_assistant"
-  if (!data.assigneeIds || !data.assigneeIds.includes("ai_assistant")) {
-    return;
-  }
-
-  // Rate-limit the trigger by the event owner, sharing the same daily AI quota
-  // as the callables — otherwise this is a free path to spam Gemini by creating
-  // events with the ai_assistant assignee.
-  const ownerId = data.ownerId;
-  if (ownerId && !(await tryConsumeQuota(ownerId, "ai_usage", AI_DAILY_LIMIT))) {
-    console.log(`AI daily quota exceeded for ${ownerId}; skipping auto-checklist.`);
-    return;
-  }
-
-  // If there's already a non-empty checklist, we might skip to not overwrite.
-  // But maybe the user assigned it just to get suggestions added!
-
+/**
+ * The generation itself: it either writes the checklist, or it THROWS.
+ *
+ * There is deliberately no `return` in this body. A `return` is how both of the old endings
+ * happened — a branch decided to stop and told nobody, and because the caller could not tell that
+ * apart from success, the event was left claiming work that was never going to run. Every stop in
+ * here is a throw carrying a reason, so the one catch in the caller is the only ending there is.
+ */
+async function runAutoChecklist(
+  snapshot: { ref: FirebaseFirestore.DocumentReference },
+  data: FirebaseFirestore.DocumentData,
+  ownerId: string | undefined,
+): Promise<void> {
   const title = data.title;
   const description = data.description || "";
 
-  try {
-    const key = process.env.GEMINI_API_KEY_LOCAL;
-    if (!key) {
-      console.error("GEMINI_API_KEY_LOCAL missing from environment.");
-      return;
-    }
-    const ai = new GoogleGenAI({ apiKey: key });
+  const key = process.env.GEMINI_API_KEY_LOCAL;
+  if (!key) throw checklistFailure(CHECKLIST_UNCONFIGURED);
+  const ai = new GoogleGenAI({ apiKey: key });
 
-    const prompt = `You are a helpful AI Assistant for a family organization app. 
+  const prompt = `You are a helpful AI Assistant for a family organization app.
 The user created a task/event titled "${title}".
 ${description ? `The description is: "${description}".` : ""}
 
@@ -255,61 +261,96 @@ Otherwise, generate a checklist of 3 to 7 actionable, brief steps or items neede
 Return ONLY a valid JSON array of strings, nothing else. No markdown formatting.
 Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1", "Step 2"]`;
 
-    const result = await withLedger(
-      { feature: 'auto-checklist', model: AI_MODEL, uid: ownerId || 'system' },
-      estimateUsdFor(AI_MODEL, prompt.length, await charsPerToken(ownerId || 'system')),
-      // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
-      // the output at this ceiling, and without it nothing stopped a response from exceeding it.
-      () => ai.models.generateContent({
-        model: AI_MODEL, contents: prompt,
-        config: { maxOutputTokens: AI_MAX_OUTPUT_TOKENS },
-      }),
-      usageOf,
-      prompt.length,
-    );
-    const text = textOf(result);
-    const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const list = JSON.parse(cleanText);
+  const result = await withLedger(
+    { feature: 'auto-checklist', model: AI_MODEL, uid: ownerId || 'system' },
+    estimateUsdFor(AI_MODEL, prompt.length, await charsPerToken(ownerId || 'system')),
+    // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
+    // the output at this ceiling, and without it nothing stopped a response from exceeding it.
+    () => ai.models.generateContent({
+      model: AI_MODEL, contents: prompt,
+      config: { maxOutputTokens: AI_MAX_OUTPUT_TOKENS },
+    }),
+    usageOf,
+    prompt.length,
+  );
+  const text = textOf(result);
+  const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+  const list = JSON.parse(cleanText);
 
-    if (Array.isArray(list)) {
-      const newItems = list.map((itemText) => ({
-        id: Date.now().toString() + Math.random().toString().slice(2, 6),
-        text: String(itemText),
-        isCompleted: false,
-        assetUrl: null,
-        assetId: null
-      }));
+  // `JSON.parse` succeeds for `{"items":[...]}`, so this is not the catch's business — and it used
+  // to be the path that simply fell off the end. The call was already PAID FOR: the ledger row
+  // closed ok, the hold settled, and one of the owner's fifty was spent.
+  if (!Array.isArray(list)) throw checklistFailure(CHECKLIST_BAD_OUTPUT);
 
-      const existingItems = data.checklistItems || [];
-      const combinedItems = [...existingItems, ...newItems];
+  const newItems = list.map((itemText) => ({
+    id: Date.now().toString() + Math.random().toString().slice(2, 6),
+    text: String(itemText),
+    isCompleted: false,
+    assetUrl: null,
+    assetId: null
+  }));
 
-      // Remove the ai_assistant from assigneeIds since the task is "processed",
-      // so it doesn't get infinitely processed.
-      const newAssignees = data.assigneeIds.filter((id: string) => id !== "ai_assistant");
+  await snapshot.ref.update({
+    checklistItems: [...(data.checklistItems || []), ...newItems],
+    // Removed because the work is DONE, which is the one ending that needs no explanation.
+    assigneeIds: data.assigneeIds.filter((id: string) => id !== "ai_assistant"),
+  });
+  console.log(`Successfully generated checklist for: ${title}`);
+}
 
-      await snapshot.ref.update({
-        checklistItems: combinedItems,
-        assigneeIds: newAssignees
-      });
-      console.log(`Successfully generated checklist for: ${title}`);
-    } else {
-      // `JSON.parse` succeeds for `{"items":[...]}`, so the catch below never sees this — the
-      // function simply fell off the end. The call was already PAID FOR: the ledger row closed
-      // ok, the hold settled, and one of the owner's fifty daily calls was spent. Meanwhile the
-      // event kept advertising `ai_assistant`, and onDocumentCreated cannot fire twice for the
-      // same document, so there was no retry short of creating a new event.
-      void logServerError("model returned a non-array checklist", "ai:generateChecklist", { uid: ownerId });
-      await clearAiAssignee(snapshot, data);
+export const autoSuggestChecklist = onDocumentCreated({
+  document: "events/{eventId}"
+}, async (event) => {
+  const snapshot = event.data;
+  if (!snapshot) return;
+
+  const data = snapshot.data();
+
+  // Not ours: the only two returns left, and both are "this trigger has no job here" rather than
+  // "the job failed". Nothing has been promised to anybody at this point.
+  if (!data.assigneeIds || !data.assigneeIds.includes("ai_assistant")) {
+    return;
+  }
+
+  const ownerId = data.ownerId;
+  try {
+    // Rate-limited by the event owner, sharing the same daily allowance as the callables —
+    // otherwise this is a free path to spam Gemini by creating events with the assignee.
+    if (ownerId && !(await tryConsumeQuota(ownerId, "ai_usage", AI_DAILY_LIMIT))) {
+      throw checklistFailure(CHECKLIST_QUOTA);
     }
+    await runAutoChecklist(snapshot, data, ownerId);
   } catch (error) {
-    console.error("AI Generation Error", error);
-    // Nobody is waiting on this one — it is a trigger — so there is nothing to tell. It still
-    // stays out of the error log when the provider merely rationed us, for the same reason.
-    if (!isProviderQuotaError(error)) {
-      void logServerError((error as any)?.message || "AI generation error", "ai:generateChecklist", { stack: (error as any)?.stack, uid: ownerId });
+    const reason = checklistReason(error);
+
+    // The fifth site. `releaseQuota` was added to the four CALLABLES that recognise our own budget
+    // refusal; this one was missed, because a trigger throws to nobody and so had no refusal
+    // branch at all. Same fact applies: nothing reached the model, so nothing may be charged.
+    if (refundsQuota(reason) && ownerId) {
+      await releaseQuota(ownerId, "ai_usage").catch(() => undefined);
     }
-    // Every terminal path has to stop the event advertising work that can never run.
-    await clearAiAssignee(snapshot, data);
+
+    // What belongs in the health panel, and what would bury it.
+    //
+    // A model that answers with the wrong SHAPE is a defect worth a row. Everything else here is
+    // an operating condition that arrives in bursts — a spent budget, a pressed kill switch, a
+    // rationing provider, a service with no key — and each one fires per event created, which a
+    // person controls. Seventy-four of ninety-five rows in that panel were once a single such
+    // condition, with every real bug underneath it.
+    if (reason === CHECKLIST_ERROR || reason === CHECKLIST_BAD_OUTPUT) {
+      console.error("AI Generation Error", error);
+      void logServerError(
+        reason === CHECKLIST_BAD_OUTPUT
+          ? "model returned a non-array checklist"
+          : ((error as any)?.message || "AI generation error"),
+        "ai:generateChecklist",
+        { stack: (error as any)?.stack, uid: ownerId },
+      );
+    } else {
+      console.log(`auto-checklist stopped for ${ownerId || "unknown"}: ${reason}`);
+    }
+
+    await recordChecklistOutcome(snapshot, data, reason);
   }
 });
 

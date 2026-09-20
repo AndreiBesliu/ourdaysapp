@@ -1,3 +1,18 @@
+## ⭐ O listă AI care nu s-a făcut acum îți spune DE CE (20.09)
+
+- [ ] **Fă un eveniment cu asistentul AI bifat, după ce ți-ai consumat porția zilnică.**
+      *Cum ajungi acolo:* limita e 50 de apeluri pe zi de om; mai simplu — bifează „Kill switch”
+      în AI Center, apoi fă evenimentul. Deschide evenimentul: trebuie să vezi o cartelă galbenă
+      **„Lista nu a fost făcută”** cu motivul scris dedesubt, și un buton **Reîncearcă**.
+      *Ce se strica înainte:* nimic nu apărea. Ori rămânea o listă goală, de parcă AI-ul s-ar fi
+      uitat și n-ar fi găsit nimic de adăugat, ori scheletul „se face lista…” se învârtea **la
+      infinit, la fiecare deschidere, pentru totdeauna** — trigger-ul pornește o singură dată,
+      deci nu exista nicio reluare în afară de „fă evenimentul din nou”.
+- [ ] **Scoate întrerupătorul și apasă Reîncearcă.** Lista trebuie să apară și cartela să dispară.
+      *De ce contează:* reluarea trece prin același buget și aceeași cotă ca trigger-ul. Dacă
+      merge cu întrerupătorul APĂSAT, ocolește frâna — și aia ar fi grav.
+
+---
 ## ⭐ Două găuri de bani care erau pe LIVE (reparate 20.09)
 
 Nimic de făcut — sunt fapte. Le scriu fiindcă amândouă înseamnă că **cifra de cheltuială din AI

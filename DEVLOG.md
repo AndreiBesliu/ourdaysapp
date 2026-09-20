@@ -7459,3 +7459,70 @@ reluare, nu un petic); și `aiSpendDaily/{date}` rămâne **un document pe zi pe
 aplicația**, scris de fiecare apel — la scara de azi (13 apeluri în 30 de zile) nu se atinge
 nimic, dar e locul unde s-ar simți creșterea, iar acum doar **efectul** lui e reparat, nu cauza.
 
+## 2026-09-20 · Lista care nu s-a făcut niciodată, și cele două feluri în care tăcea
+
+**Prompt (Andrei):** „Continua”. **Model:** Claude Opus 5.
+
+Ultimul punct rămas din audit: un eveniment atribuit asistentului AI care nu primea nicio listă
+nu spunea nimănui de ce. Verdictul reviziei zicea că **cere o poveste de reluare, nu un petic** —
+deci asta s-a construit.
+
+### Trigger-ul pornește O SINGURĂ DATĂ, și de aici vine totul
+
+`autoSuggestChecklist` e `onDocumentCreated`. Pornește **o dată** pe document, deci orice sfârșit
+prost e definitiv: nu există a doua încercare pentru evenimentul ăla, niciodată. Avea două
+sfârșituri și amândouă mințeau, în direcții opuse.
+
+**ȘTERGE** — `catch`-ul și ramura „nu e un tablou” scoteau `ai_assistant` din persoane și atât.
+Ecranul desenează scheletul „se face lista…” exact cât timp id-ul ăla e acolo, deci scheletul
+dispărea și rămânea o listă goală. **Nu se putea deosebi de „AI-ul s-a uitat și n-a găsit nimic de
+adăugat”.**
+
+**RĂMÂNE** — ramura de cotă zilnică și cea de cheie lipsă se întorceau fără să atingă nimic. Id-ul
+rămânea, deci scheletul se învârtea **la infinit**: la fiecare deschidere a evenimentului, până la
+sfârșitul vieții lui, susținea că se generează o listă. Nu se genera.
+
+Niciuna nu-i spunea omului că i s-a terminat porția zilnică, sau că întrerupătorul e apăsat, sau
+că modelul a răspuns cu ceva de necitit. Iar fiindcă trigger-ul nu poate porni de două ori,
+singurul leac era „fă evenimentul din nou” — pe care nimeni n-avea de unde să-l ghicească.
+
+### Un singur sfârșit
+
+Acum orice oprire **aruncă**, un singur loc prinde, și scrie **motivul** pe eveniment:
+`aiChecklist: { status, reason, at }`. Ecranul citește motivul, îl spune în limba cititorului, și
+oferă **Reîncearcă** — prin `generateAIChecklist`, callable-ul care exista deja. Asta e povestea de
+reluare: nu trigger-ul pornind iar, fiindcă nu poate, ci **omul alegând**. Și trece prin aceeași
+autentificare, aceeași cotă și același buget prin care a trecut trigger-ul — deliberat, fiindcă
+motivul obișnuit al opririi e o limită, iar o reluare trebuie s-o întâlnească, nu s-o ocolească.
+
+`ai_assistant` se scoate în continuare în toate cazurile. Lăsat, ar fi din nou sfârșitul RĂMÂNE.
+
+### Forma care face bug-ul imposibil, nu un test care-l caută
+
+Ambele bug-uri originale erau un `return`: o ramură se oprea și nu spunea nimănui. Deci generarea
+s-a mutat într-o funcție care **nu are niciun `return`** — singurele ei sfârșituri sunt „a scris
+lista” sau „a aruncat un motiv” — iar trigger-ul păstrează exact **două** `return`-uri, amândouă
+însemnând „n-am treabă aici”. Un test cu parser ține ambele numere. Al treilea `return` apărut
+oriunde e, prin construcție, o cale de eșec care nu înregistrează nimic.
+
+### Al cincilea loc unde un refuz te costa
+
+`releaseQuota` s-a pus ieri la cele patru **callable**-uri care recunosc refuzul propriu de buget.
+Trigger-ul a fost sărit — fiindcă nu aruncă spre nimeni, deci n-avea deloc ramură de refuz. Același
+fapt se aplică: dacă bugetul nostru a refuzat, nimic n-a ajuns la model, deci nimic nu se taxează.
+Și invers, la fel de important: dacă **cota** e cea care a oprit apelul, nu se restituie nimic —
+n-a fost consumat nimic, iar o restituire acolo ar fi însemnat un apel gratis pe eveniment creat.
+
+### Cusătura dintre server și ecran
+
+Motivele sunt coduri (`ai-checklist/…`), iar codurile devin propoziții în șase limbi. Cusătura e
+exact locul unde cineva adaugă un motiv într-o parte și nu-l traduce în cealaltă — iar cel care ar
+vedea gaura ar fi familia cuiva, citind `ai-checklist/bad-output`. Deci tabelul e **unul singur**
+(cel care traducea deja refuzurile de buget), iar un test merge pe toate motivele, prin toate cele
+șase limbi, și refuză și cazul în care două motive diferite ajung să citească la fel.
+
+**11 mutații din 11 prinse**, cu control negativ — între care ambele bug-uri originale puse la loc,
+„o limbă rămâne fără o propoziție” și „totul citește la fel”.
+
+`npx tsc -b` verde · poarta de lint verde · **1682 de teste** (de la 1666) · build verde ·
+functions build verde.
