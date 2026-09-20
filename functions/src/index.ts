@@ -108,6 +108,31 @@ async function tryConsumeQuota(uid: string, collection: string, limit: number): 
   });
 }
 
+/**
+ * Give back a quota unit taken by `tryConsumeQuota`.
+ *
+ * The daily CALL quota is consumed at the door, before the budget is even consulted — so a call
+ * the budget refuses still burned one of the caller's fifty. Press the kill switch and a person
+ * retrying a few times is locked out for the rest of the day AFTER it is lifted, for calls that
+ * never reached the model and cost nothing.
+ *
+ * Only ever decrements the counter for TODAY, and never below zero: a refund for a day that has
+ * already rolled over would hand back an allowance nobody spent.
+ */
+async function releaseQuota(uid: string, kind: string): Promise<void> {
+  const db = admin.firestore();
+  const ref = db.doc(`${kind}/${uid}`);
+  const today = new Date().toISOString().slice(0, 10);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const d = snap.exists ? snap.data() || {} : {};
+    if (d.date !== today) return;
+    const count = typeof d.count === "number" && d.count > 0 ? d.count : 0;
+    if (count === 0) return;
+    tx.set(ref, { date: today, count: count - 1 }, { merge: true });
+  });
+}
+
 // AI callables: require auth + enforce the shared daily AI quota.
 async function assertAiCallerAllowed(request: { auth?: { uid?: string } }): Promise<string> {
   const uid = request.auth?.uid;
@@ -492,7 +517,11 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
     // A refusal WE made is not an error. Re-thrown with its own code so the client can say which,
     // and kept out of errorLogs for the same reason provider quota was: it would bury every real
     // bug under itself, in bursts, exactly when the panel is needed.
-    if (isOwnBudgetRefusal(error)) throw new HttpsError('resource-exhausted', (error as any).message);
+    if (isOwnBudgetRefusal(error)) {
+      // Nothing reached the model, so the call must not cost the caller one of their fifty.
+      await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
+      throw new HttpsError('resource-exhausted', (error as any).message);
+    }
     if (isProviderQuotaError(error)) throw new HttpsError('resource-exhausted', AI_QUOTA_CODE);
     void logServerError((error as any)?.message || "AI generation error", "ai:generateChecklist", { stack: (error as any)?.stack, uid: callerUid });
     throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
@@ -547,7 +576,11 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
     // A refusal WE made is not an error. Re-thrown with its own code so the client can say which,
     // and kept out of errorLogs for the same reason provider quota was: it would bury every real
     // bug under itself, in bursts, exactly when the panel is needed.
-    if (isOwnBudgetRefusal(error)) throw new HttpsError('resource-exhausted', (error as any).message);
+    if (isOwnBudgetRefusal(error)) {
+      // Nothing reached the model, so the call must not cost the caller one of their fifty.
+      await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
+      throw new HttpsError('resource-exhausted', (error as any).message);
+    }
     if (isProviderQuotaError(error)) throw new HttpsError('resource-exhausted', AI_QUOTA_CODE);
     void logServerError((error as any)?.message || "AI category error", "ai:suggestCategory", { stack: (error as any)?.stack, uid: callerUid });
     throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
@@ -719,7 +752,11 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
     // A refusal WE made is not an error. Re-thrown with its own code so the client can say which,
     // and kept out of errorLogs for the same reason provider quota was: it would bury every real
     // bug under itself, in bursts, exactly when the panel is needed.
-    if (isOwnBudgetRefusal(error)) throw new HttpsError('resource-exhausted', (error as any).message);
+    if (isOwnBudgetRefusal(error)) {
+      // Nothing reached the model, so the call must not cost the caller one of their fifty.
+      await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
+      throw new HttpsError('resource-exhausted', (error as any).message);
+    }
     if (isProviderQuotaError(error)) throw new HttpsError('resource-exhausted', AI_QUOTA_CODE);
     void logServerError((error as any)?.message || "AI digest error", "ai:groupDigest", { stack: (error as any)?.stack, uid: callerUid });
     throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
@@ -783,7 +820,11 @@ Do not include any other text or markdown formatting.`;
     // A refusal WE made is not an error. Re-thrown with its own code so the client can say which,
     // and kept out of errorLogs for the same reason provider quota was: it would bury every real
     // bug under itself, in bursts, exactly when the panel is needed.
-    if (isOwnBudgetRefusal(error)) throw new HttpsError('resource-exhausted', (error as any).message);
+    if (isOwnBudgetRefusal(error)) {
+      // Nothing reached the model, so the call must not cost the caller one of their fifty.
+      await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
+      throw new HttpsError('resource-exhausted', (error as any).message);
+    }
     if (isProviderQuotaError(error)) throw new HttpsError('resource-exhausted', AI_QUOTA_CODE);
     void logServerError((error as any)?.message || "AI asset error", "ai:suggestAsset", { stack: (error as any)?.stack, uid: callerUid });
     throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
@@ -1960,8 +2001,20 @@ export const adminModerateUser = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
 
   const db = admin.firestore();
   const adminSnap = await db.doc(`admins/${uid}`).get();
+  // "No such account" is an ANSWER — it cannot be an admin by email. Anything else is the lookup
+  // FAILING, and swallowing that quietly reduced this check to `admins/{uid}` alone. That matters
+  // because of the line below: force-verifying a bootstrap-email account lets it auto-escalate to
+  // admin. During an Auth blip, a plain admin could have done exactly that to an address not yet
+  // in the roster. A guard that weakens itself on error is not a guard.
   let targetEmail = "";
-  try { targetEmail = ((await admin.auth().getUser(uid)).email || "").toLowerCase(); } catch { /* gone */ }
+  try {
+    targetEmail = ((await admin.auth().getUser(uid)).email || "").toLowerCase();
+  } catch (err: any) {
+    if (err?.code !== "auth/user-not-found") {
+      console.error("adminModerateUser: could not resolve the target", err?.message || err);
+      throw new HttpsError("unavailable", "Could not verify the target account. Nothing was changed.");
+    }
+  }
   const isTargetAdmin = adminSnap.exists || BOOTSTRAP_ADMIN_EMAILS.includes(targetEmail);
   // Protect admins/owner from disable, delete, AND forceVerify (force-verifying a
   // bootstrap-email account would let it auto-escalate to admin).

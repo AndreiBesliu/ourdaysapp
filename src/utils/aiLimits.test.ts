@@ -143,11 +143,32 @@ describe('the kill switch', () => {
     expect(clampAiLimits({ killSwitch: 'true' }).killSwitch).toBe(true);
   });
 
-  it('is off for everything else, including the truthy string "false"', () => {
-    // `Boolean('false')` is true. A switch that turns the whole feature off must not be flipped
-    // by a value that was plainly meant to leave it on.
-    for (const off of ['false', 'TRUE', '1', 1, 'yes', {}, [], undefined, null, '']) {
-      expect(clampAiLimits({ killSwitch: off as unknown }).killSwitch).toBe(false);
+  it('accepts the spellings somebody types into an environment variable', () => {
+    // Tightened the other way on 20.09. Strict `=== "true"` meant `AI_KILL_SWITCH=1` and `=yes`
+    // silently did NOTHING — an emergency stop that ignores a reasonable spelling in silence is
+    // worse than one that is hard to set. The value also reaches this function from the
+    // environment, where those are the obvious things to reach for.
+    for (const on of ['TRUE', 'True', ' true ', '1', 'yes', 'on', 'ON']) {
+      expect(clampAiLimits({ killSwitch: on }).killSwitch, String(on)).toBe(true);
+    }
+  });
+
+  it('is off for the spellings that plainly mean off', () => {
+    // `Boolean('false')` is TRUE, which is why this is a named list and not truthiness.
+    for (const off of ['false', 'FALSE', '0', 'no', 'off', '', undefined, null, false]) {
+      const r = clampAiLimits({ killSwitch: off as unknown });
+      expect(r.killSwitch, String(off)).toBe(false);
+      expect(r.clamped, String(off)).toEqual([]);   // ...and nothing to report
+    }
+  });
+
+  it('REPORTS a value it does not understand instead of assuming off', () => {
+    // The dangerous direction is a switch somebody believes is on. Anything outside both lists
+    // is surfaced on the admin screen rather than read as “keep spending” in silence.
+    for (const junk of [1, 'maybe', {}, [], 'tru']) {
+      const r = clampAiLimits({ killSwitch: junk as unknown });
+      expect(r.killSwitch, String(junk)).toBe(false);
+      expect(r.clamped, String(junk)).toContain('killSwitch: not recognised, treated as off');
     }
   });
 });

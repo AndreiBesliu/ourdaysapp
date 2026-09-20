@@ -7404,3 +7404,58 @@ scaner de sursă mulțumit de proză**, a treia oară azi. Numără acum expresi
 **A patra restaurare de mutație eșuată tăcut** — cinci rânduri `config:` șterse și nepuse la
 loc, prinse de `grep`-ul de după harness. Repo-ul stă în Google Drive.
 
+---
+
+## 2026-09-20 · O gardă care se slăbea singură, un refuz care te costa, un întrerupător ignorat
+
+**Prompt (Andrei):** „Continua”. **Model:** Claude Opus 5.
+
+Ultimele trei din lista „pot aștepta” a recenziei adversariale.
+
+### 1. Un `catch` gol care slăbea o verificare de admin
+
+`adminModerateUser` căuta e-mailul țintei ca să vadă dacă e o adresă de bootstrap, iar
+`catch { /* gone */ }` înghițea **orice** eșec. Dacă nu era „contul nu există” ci o cădere
+trecătoare a lui Auth, `targetEmail` rămânea gol și verificarea se reducea tăcut la
+`admins/{uid}` singur.
+
+Comentariul de două rânduri mai jos spune de ce contează: **forțarea verificării unui cont cu
+e-mail de bootstrap îl lasă să se auto-promoveze la admin.** Deci, într-o fereastră în care Auth
+șchioapătă, un admin obișnuit putea face exact asta unei adrese care nu e încă în listă.
+**O gardă care se slăbește singură la eroare nu e o gardă.** Acum `auth/user-not-found` e un
+**răspuns** — nu există contul, deci nu poate fi admin după e-mail — și orice altceva **refuză**.
+
+### 2. Un refuz de buget îți ardea totuși unul din cele 50 de apeluri
+
+`assertAiCallerAllowed` consumă cota **la ușă**, înainte ca bugetul să fie măcar consultat. Deci
+un apel pe care bugetul îl refuză ardea totuși o unitate. Apeși întrerupătorul, cineva mai încearcă
+de câteva ori, și rămâne blocat restul zilei **după** ce ridici oprirea — pentru apeluri care
+n-au ajuns niciodată la model și n-au costat nimic.
+
+Acum cele patru locuri care recunosc un refuz propriu îl și **restituie**. Restituirea atinge doar
+contorul de AZI și niciodată sub zero — o restituire pentru o zi deja întoarsă ar dărui o alocare
+pe care n-a cheltuit-o nimeni.
+
+### 3. `AI_KILL_SWITCH=1` nu făcea nimic
+
+Verificarea era strict `=== "true"`, ca să nu fie răsturnată de veridicitate — `Boolean("false")`
+e **true**, deci `Boolean(v)` era exclus, pe bună dreptate. Dar valoarea vine și dintr-o
+**variabilă de mediu**, unde `1` sau `yes` e ce scrie cineva în grabă — și alea nu făceau
+nimic, în tăcere. **Un buton de oprire care ignoră o scriere rezonabilă fără să spună e mai rău
+decât unul greu de apăsat.**
+
+Acum: o listă numită în fiecare direcție, iar orice e **în afara ambelor** e raportat prin
+`clamped` și apare pe ecran — în loc să fie citit tăcut ca „mergi înainte”.
+
+### Probe
+
+**5 mutații din 5**, cu control negativ, inclusiv „`false` se raportează ca nerecunoscut” —
+zgomot pe calea obișnuită, care e cealaltă jumătate a regulii.
+
+`npx tsc -b` verde · poartă de lint verde · **1666 de teste** · build verde.
+
+**Rămas, conștient:** un refuz în trigger șterge definitiv `ai_assistant` (cere o poveste de
+reluare, nu un petic); și `aiSpendDaily/{date}` rămâne **un document pe zi pentru toată
+aplicația**, scris de fiecare apel — la scara de azi (13 apeluri în 30 de zile) nu se atinge
+nimic, dar e locul unde s-ar simți creșterea, iar acum doar **efectul** lui e reparat, nu cauza.
+

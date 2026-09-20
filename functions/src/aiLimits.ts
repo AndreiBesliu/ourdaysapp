@@ -58,6 +58,11 @@ export const MAX_GLOBAL_DAILY_USD = 50;
  */
 export const MAX_USER_DAILY_USD = 5;
 
+/** Spellings of "stop" an operator might type into an environment variable. */
+const KILL_ON = new Set(["true", "1", "yes", "on"]);
+/** ...and of "keep going". Everything outside BOTH lists is reported, never assumed. */
+const KILL_OFF = new Set(["false", "0", "no", "off", ""]);
+
 export interface AiLimits {
   globalDailyUsd: number;
   userDailyUsd: number;
@@ -131,9 +136,32 @@ export function clampAiLimits(raw: RawAiLimits | null | undefined): AiLimits {
     user = global;
   }
 
-  // Only an explicit true switches it on. A truthy accident — the string "false" is truthy —
-  // must not be able to turn the whole feature off.
-  const killSwitch = r.killSwitch === true || r.killSwitch === "true";
+  // ── The switch, and why this is not `Boolean(v)` ───────────────────────────────────────
+  //
+  // `Boolean("false")` is TRUE. A control that turns the whole feature off must never be flipped
+  // by a value plainly meant to leave it on, so truthiness is out.
+  //
+  // But strict `=== "true"` was its own trap: this value also arrives from an ENVIRONMENT
+  // VARIABLE, where `AI_KILL_SWITCH=1` or `=yes` is what somebody reaches for in a hurry — and
+  // those silently did nothing. An emergency stop that ignores a reasonable spelling in silence
+  // is worse than one that is hard to set.
+  //
+  // So: a named list each way, and anything OUTSIDE both lists is reported through `clamped`
+  // rather than quietly read as off. The screen then says a value was not understood, which is
+  // the one thing the operator needs to know.
+  let killSwitch = false;
+  const kill = r.killSwitch;
+  if (kill === true) {
+    killSwitch = true;
+  } else if (kill === false || kill === undefined || kill === null) {
+    killSwitch = false;
+  } else if (typeof kill === "string" && KILL_ON.has(kill.trim().toLowerCase())) {
+    killSwitch = true;
+  } else if (typeof kill === "string" && KILL_OFF.has(kill.trim().toLowerCase())) {
+    killSwitch = false;
+  } else {
+    clamped.push("killSwitch: not recognised, treated as off");
+  }
 
   return { globalDailyUsd: global, userDailyUsd: user, killSwitch, clamped };
 }

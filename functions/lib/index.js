@@ -102,6 +102,32 @@ async function tryConsumeQuota(uid, collection, limit) {
         return true;
     });
 }
+/**
+ * Give back a quota unit taken by `tryConsumeQuota`.
+ *
+ * The daily CALL quota is consumed at the door, before the budget is even consulted — so a call
+ * the budget refuses still burned one of the caller's fifty. Press the kill switch and a person
+ * retrying a few times is locked out for the rest of the day AFTER it is lifted, for calls that
+ * never reached the model and cost nothing.
+ *
+ * Only ever decrements the counter for TODAY, and never below zero: a refund for a day that has
+ * already rolled over would hand back an allowance nobody spent.
+ */
+async function releaseQuota(uid, kind) {
+    const db = admin.firestore();
+    const ref = db.doc(`${kind}/${uid}`);
+    const today = new Date().toISOString().slice(0, 10);
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const d = snap.exists ? snap.data() || {} : {};
+        if (d.date !== today)
+            return;
+        const count = typeof d.count === "number" && d.count > 0 ? d.count : 0;
+        if (count === 0)
+            return;
+        tx.set(ref, { date: today, count: count - 1 }, { merge: true });
+    });
+}
 // AI callables: require auth + enforce the shared daily AI quota.
 async function assertAiCallerAllowed(request) {
     var _a;
@@ -449,8 +475,11 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
         // A refusal WE made is not an error. Re-thrown with its own code so the client can say which,
         // and kept out of errorLogs for the same reason provider quota was: it would bury every real
         // bug under itself, in bursts, exactly when the panel is needed.
-        if ((0, aiProviderError_1.isOwnBudgetRefusal)(error))
+        if ((0, aiProviderError_1.isOwnBudgetRefusal)(error)) {
+            // Nothing reached the model, so the call must not cost the caller one of their fifty.
+            await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('resource-exhausted', error.message);
+        }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
         void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI generation error", "ai:generateChecklist", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
@@ -496,8 +525,11 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
         // A refusal WE made is not an error. Re-thrown with its own code so the client can say which,
         // and kept out of errorLogs for the same reason provider quota was: it would bury every real
         // bug under itself, in bursts, exactly when the panel is needed.
-        if ((0, aiProviderError_1.isOwnBudgetRefusal)(error))
+        if ((0, aiProviderError_1.isOwnBudgetRefusal)(error)) {
+            // Nothing reached the model, so the call must not cost the caller one of their fifty.
+            await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('resource-exhausted', error.message);
+        }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
         void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI category error", "ai:suggestCategory", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
@@ -650,8 +682,11 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
         // A refusal WE made is not an error. Re-thrown with its own code so the client can say which,
         // and kept out of errorLogs for the same reason provider quota was: it would bury every real
         // bug under itself, in bursts, exactly when the panel is needed.
-        if ((0, aiProviderError_1.isOwnBudgetRefusal)(error))
+        if ((0, aiProviderError_1.isOwnBudgetRefusal)(error)) {
+            // Nothing reached the model, so the call must not cost the caller one of their fifty.
+            await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('resource-exhausted', error.message);
+        }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
         void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI digest error", "ai:groupDigest", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
@@ -705,8 +740,11 @@ Do not include any other text or markdown formatting.`;
         // A refusal WE made is not an error. Re-thrown with its own code so the client can say which,
         // and kept out of errorLogs for the same reason provider quota was: it would bury every real
         // bug under itself, in bursts, exactly when the panel is needed.
-        if ((0, aiProviderError_1.isOwnBudgetRefusal)(error))
+        if ((0, aiProviderError_1.isOwnBudgetRefusal)(error)) {
+            // Nothing reached the model, so the call must not cost the caller one of their fifty.
+            await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('resource-exhausted', error.message);
+        }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
         void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI asset error", "ai:suggestAsset", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
@@ -1849,11 +1887,21 @@ exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
         throw new https_1.HttpsError("failed-precondition", "You can't moderate your own account.");
     const db = admin.firestore();
     const adminSnap = await db.doc(`admins/${uid}`).get();
+    // "No such account" is an ANSWER — it cannot be an admin by email. Anything else is the lookup
+    // FAILING, and swallowing that quietly reduced this check to `admins/{uid}` alone. That matters
+    // because of the line below: force-verifying a bootstrap-email account lets it auto-escalate to
+    // admin. During an Auth blip, a plain admin could have done exactly that to an address not yet
+    // in the roster. A guard that weakens itself on error is not a guard.
     let targetEmail = "";
     try {
         targetEmail = ((await admin.auth().getUser(uid)).email || "").toLowerCase();
     }
-    catch ( /* gone */_b) { /* gone */ }
+    catch (err) {
+        if ((err === null || err === void 0 ? void 0 : err.code) !== "auth/user-not-found") {
+            console.error("adminModerateUser: could not resolve the target", (err === null || err === void 0 ? void 0 : err.message) || err);
+            throw new https_1.HttpsError("unavailable", "Could not verify the target account. Nothing was changed.");
+        }
+    }
     const isTargetAdmin = adminSnap.exists || BOOTSTRAP_ADMIN_EMAILS.includes(targetEmail);
     // Protect admins/owner from disable, delete, AND forceVerify (force-verifying a
     // bootstrap-email account would let it auto-escalate to admin).
@@ -1935,7 +1983,7 @@ exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
             await admin.auth().deleteUser(uid);
             authDeleted = true;
         }
-        catch ( /* already gone */_c) { /* already gone */ }
+        catch ( /* already gone */_b) { /* already gone */ }
         return {
             ok: true, deleted: true, authDeleted, storageDeleted,
             counts: { groups: groupsSnap.size, events, assets, games, expenses, notifications, friendRequests: frFrom + frTo, friendsUnlinked: myFriends.length },
