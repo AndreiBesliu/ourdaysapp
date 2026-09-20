@@ -56,5 +56,13 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # `scripts/test-rules.mjs` shells out to `npx firebase emulators:exec`, and `firebase-tools`
+      # is NOT a dependency of this repo — it is globally installed on the developer machine. The
+      # first CI run of this step failed with “could not determine executable to run” for exactly
+      # that reason. Installed here rather than added to package.json: it is a 100MB CLI that only
+      # this job needs, and pinning it in devDependencies would put it in every `npm ci`.
+      - name: Install the Firebase CLI
+        run: npm i -g firebase-tools@13
+
       - name: Rules tests
         run: npm run test:rules
