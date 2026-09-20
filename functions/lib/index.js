@@ -214,7 +214,13 @@ If this looks like a Grocery or Shopping list, generate a checklist grouped by s
 Otherwise, generate a checklist of 3 to 7 actionable, brief steps or items needed to complete this task.
 Return ONLY a valid JSON array of strings, nothing else. No markdown formatting.
 Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1", "Step 2"]`;
-        const result = await (0, aiLedger_1.withLedger)({ feature: 'auto-checklist', model: AI_MODEL, uid: ownerId || 'system' }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(ownerId || 'system')), () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }), aiLedger_1.usageOf, prompt.length);
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'auto-checklist', model: AI_MODEL, uid: ownerId || 'system' }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(ownerId || 'system')), 
+        // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
+        // the output at this ceiling, and without it nothing stopped a response from exceeding it.
+        () => ai.models.generateContent({
+            model: AI_MODEL, contents: prompt,
+            config: { maxOutputTokens: aiLedger_1.AI_MAX_OUTPUT_TOKENS },
+        }), aiLedger_1.usageOf, prompt.length);
         const text = (0, aiLedger_1.textOf)(result);
         const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
         const list = JSON.parse(cleanText);
@@ -418,7 +424,13 @@ If this looks like a Grocery or Shopping list, generate a checklist grouped by s
 Otherwise, generate a checklist of 3 to 7 actionable, brief steps or items needed to complete this task.
 Return ONLY a valid JSON array of strings, nothing else. No markdown formatting.
 Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1", "Step 2"]`;
-        const result = await (0, aiLedger_1.withLedger)({ feature: 'checklist', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }), aiLedger_1.usageOf, prompt.length);
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'checklist', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), 
+        // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
+        // the output at this ceiling, and without it nothing stopped a response from exceeding it.
+        () => ai.models.generateContent({
+            model: AI_MODEL, contents: prompt,
+            config: { maxOutputTokens: aiLedger_1.AI_MAX_OUTPUT_TOKENS },
+        }), aiLedger_1.usageOf, prompt.length);
         const text = (0, aiLedger_1.textOf)(result);
         const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
         const list = JSON.parse(cleanText);
@@ -462,7 +474,13 @@ Title: "${title}"
 ${description ? `Description: "${description}"` : ""}
 
 Return ONLY the category ID string, nothing else. No markdown formatting.`;
-        const result = await (0, aiLedger_1.withLedger)({ feature: 'category', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }), aiLedger_1.usageOf, prompt.length);
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'category', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), 
+        // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
+        // the output at this ceiling, and without it nothing stopped a response from exceeding it.
+        () => ai.models.generateContent({
+            model: AI_MODEL, contents: prompt,
+            config: { maxOutputTokens: aiLedger_1.AI_MAX_OUTPUT_TOKENS },
+        }), aiLedger_1.usageOf, prompt.length);
         const text = (0, aiLedger_1.textOf)(result).trim().toLowerCase();
         const validCategories = ["work", "family_time", "chores", "health", "other"];
         const matchedCategory = validCategories.find(c => text.includes(c)) || "other";
@@ -608,7 +626,13 @@ ${chatHistory}
 ${upcomingEvents}
 
 Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highlights what happened recently and what is coming up. Keep it concise. No markdown headers.`;
-        const result = await (0, aiLedger_1.withLedger)({ feature: 'group-digest', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }), aiLedger_1.usageOf, prompt.length);
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'group-digest', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), 
+        // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
+        // the output at this ceiling, and without it nothing stopped a response from exceeding it.
+        () => ai.models.generateContent({
+            model: AI_MODEL, contents: prompt,
+            config: { maxOutputTokens: aiLedger_1.AI_MAX_OUTPUT_TOKENS },
+        }), aiLedger_1.usageOf, prompt.length);
         const text = (0, aiLedger_1.textOf)(result).trim();
         // The caller is told when the window was cut, so a partial digest can say so instead of
         // reading as the whole story. BOTH halves can cut it — the chat window and the event window
@@ -659,7 +683,13 @@ Rules:
 4. Return ONLY the exact string ID of the best matching asset.
 5. If no asset matches reasonably well, return the exact string "none".
 Do not include any other text or markdown formatting.`;
-        const result = await (0, aiLedger_1.withLedger)({ feature: 'asset-suggest', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }), aiLedger_1.usageOf, prompt.length);
+        const result = await (0, aiLedger_1.withLedger)({ feature: 'asset-suggest', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), 
+        // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
+        // the output at this ceiling, and without it nothing stopped a response from exceeding it.
+        () => ai.models.generateContent({
+            model: AI_MODEL, contents: prompt,
+            config: { maxOutputTokens: aiLedger_1.AI_MAX_OUTPUT_TOKENS },
+        }), aiLedger_1.usageOf, prompt.length);
         const resultText = (0, aiLedger_1.textOf)(result).trim();
         // Validate that the returned ID is actually in the list, unless it's "none"
         const matchedAsset = availableAssets.find((a) => a.id === resultText);

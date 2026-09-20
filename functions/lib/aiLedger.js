@@ -34,7 +34,7 @@
 // second, unregulated copy of exactly the private data the rest of this design is careful
 // about — and it would sit in a collection whose whole point is that operators read it.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AI_CONFIG_PATH = exports.AI_KILL_SWITCH = exports.LIMITS_SOURCE = exports.AI_LIMITS = exports.MODEL_PRICING = exports.textOf = exports.usageOf = void 0;
+exports.AI_MAX_OUTPUT_TOKENS = exports.AI_CONFIG_PATH = exports.AI_KILL_SWITCH = exports.LIMITS_SOURCE = exports.AI_LIMITS = exports.MODEL_PRICING = exports.textOf = exports.usageOf = void 0;
 exports.priceUsd = priceUsd;
 exports.effectiveLimits = effectiveLimits;
 exports.holdBudget = holdBudget;
@@ -324,22 +324,56 @@ async function closeLedgerRow(handle, outcome) {
 async function withLedger(entry, estimateUsd, run, usageFrom, chars) {
     const hold = await holdBudget(entry.uid, estimateUsd);
     const handle = await openLedgerRow(entry);
+    // ── ONE line decides whether a refund is honest ─────────────────────────────────────────
+    //
+    // Everything before `run()` resolves: nothing was generated, nothing was billed, refund in full.
+    // Everything after it: the tokens are burned and the money is gone, whatever happens next.
+    //
+    // These used to share a `try`, with `closeLedgerRow` INSIDE it — and its `batch.commit()` is the
+    // last thing between a successful generation and the settle. When it threw, control landed in a
+    // catch whose comment asserted "Nothing measurable was spent", which is true for a provider
+    // failure and FALSE for this one, and `settleBudget(hold, 0)` gave back the entire hold. Net
+    // effect on the day's counter of a call that really cost money: zero. The row was never priced
+    // either, so the spend was invisible in both places.
+    //
+    // Not a remote failure mode: that batch writes `aiSpendDaily/{date}` — ONE document per day for
+    // the whole app — on every AI call. Firestore sustains roughly one write per second per
+    // document, so the failure rate rises with the request rate, which a caller controls. There is
+    // no `maxInstances` anywhere in `functions/`.
+    let result;
     try {
-        const result = await run();
-        const usage = usageFrom(result);
-        const cost = await closeLedgerRow(handle, { ok: true, usage, chars });
-        await settleBudget(hold, cost);
-        return result;
+        result = await run();
     }
     catch (err) {
         // Was `err.code ?? err.name`, which the Gemini SDK sets neither of — so every HTTP failure
         // it ever raised landed here as the one string "GoogleGenerativeAIFetchError".
         const code = (0, aiProviderError_1.providerErrorCode)(err);
         await closeLedgerRow(handle, { ok: false, errorCode: String(code).slice(0, 60) }).catch(() => undefined);
-        // Nothing measurable was spent, but the hold must not outlive the call.
+        // The ONLY place a full refund is correct: the call produced nothing.
         await settleBudget(hold, 0).catch(() => undefined);
         throw err;
     }
+    // Past this point every failure settles at a price, never at zero. `openLedgerRow` already sits
+    // outside the try for the same reason — leaving a hold in place over-charges, which is the safe
+    // direction. The success path used to do the opposite.
+    let cost = estimateUsd; // the pessimistic hold, kept if we cannot do better
+    try {
+        const usage = usageFrom(result);
+        cost = await closeLedgerRow(handle, { ok: true, usage, chars });
+    }
+    catch (bookkeeping) {
+        // The ledger row and the rollups are lost; the CHARGE is not. Priced from the usage if we can
+        // read it, and otherwise left at the estimate — an over-charge, which is recoverable, rather
+        // than a silent free call, which is not.
+        console.error("closeLedgerRow failed after a billed call", (bookkeeping === null || bookkeeping === void 0 ? void 0 : bookkeeping.message) || bookkeeping);
+        try {
+            const usage = usageFrom(result);
+            cost = priceUsd(entry.model, usage.promptTokens, usage.completionTokens);
+        }
+        catch ( /* keep the estimate */_a) { /* keep the estimate */ }
+    }
+    await settleBudget(hold, cost).catch(() => undefined);
+    return result;
 }
 /**
  * The CEILING a call could cost, for the pessimistic hold.
@@ -349,7 +383,19 @@ async function withLedger(entry, estimateUsd, run, usageFrom, chars) {
  * caller's own calibrated ratio and output is assumed to be the model's maximum, not its
  * typical.
  */
-function estimateUsdFor(model, promptChars, cpt, maxOutTokens = 2048) {
+/**
+ * The output ceiling the hold is calculated against — and the one the MODEL is given.
+ *
+ * The comment above says output is assumed to be the maximum. That was an assumption, not a
+ * fact: no call site passed `maxOutputTokens`, so nothing stopped a response from exceeding
+ * 2048 and the “pessimistic” hold from under-estimating the very call it was bounding.
+ *
+ * Fixed by making the assumption TRUE rather than by weakening the comment. Every generation
+ * now carries this limit. 2048 tokens is roughly 1,500 words — far beyond a two-paragraph
+ * digest, a checklist or a one-word category, so nothing this app asks for can reach it.
+ */
+exports.AI_MAX_OUTPUT_TOKENS = 2048;
+function estimateUsdFor(model, promptChars, cpt, maxOutTokens = exports.AI_MAX_OUTPUT_TOKENS) {
     const inTokens = Math.ceil(Math.max(0, promptChars) / Math.max(1, cpt));
     return priceUsd(model, inTokens, maxOutTokens);
 }

@@ -1,3 +1,21 @@
+## ⭐ Două găuri de bani care erau pe LIVE (reparate 20.09)
+
+Nimic de făcut — sunt fapte. Le scriu fiindcă amândouă înseamnă că **cifra de cheltuială din AI
+Center pentru zilele trecute poate fi mai mică decât ce s-a plătit în realitate.**
+
+1. **Un apel reușit și taxat era șters din contor dacă scrierea de evidență eșua.** Generarea
+   mergea, tokenii se ardeau, banii se duceau — dar dacă scrierea din Firestore de după cădea,
+   codul îi dădea înapoi **toată** suma reținută, pe motiv că „nu s-a cheltuit nimic măsurabil”.
+   Efectul pe contorul zilei: **zero**. Și rândul nu se scria nici el, deci cheltuiala era
+   invizibilă în ambele locuri.
+2. **Reținerea „pesimistă” nu era un plafon.** Se calcula presupunând 2048 de tokeni de răspuns,
+   dar **nimic nu limita răspunsul la 2048**. Acum limita e trimisă chiar modelului, deci
+   presupunerea a devenit adevărată în loc să fie slăbită.
+
+*Dacă te uiți la cheltuiala istorică și pare prea mică față de factura Google, asta e explicația.*
+De azi înainte cifrele ar trebui să se potrivească.
+
+---
 ## ⭐ Bugetul AI se poate schimba din admin (20.09) — DE CITIT
 
 **Cel mai important punct din toată lista.** Nu pot vedea ce variabile de mediu sunt puse pe

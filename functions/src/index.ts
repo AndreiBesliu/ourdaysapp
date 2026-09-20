@@ -12,7 +12,7 @@ import { fetchAssets, fetchChat, fetchEvents, fetchExpenses } from "./aiSources"
 import { dayRangePeriod, monthPeriod, periodDays, isRealDay } from "./period";
 import {
   charsPerToken, estimateUsdFor, usageOf, withLedger, textOf,
-  effectiveLimits, AI_CONFIG_PATH, AI_LIMITS, LIMITS_SOURCE,
+  effectiveLimits, AI_CONFIG_PATH, AI_LIMITS, LIMITS_SOURCE, AI_MAX_OUTPUT_TOKENS,
 } from "./aiLedger";
 import { clampAiLimits, configChangeAllowed, type AiConfigFields } from "./aiLimits";
 import { changedOutsideAdmin } from "./aiConfigProvenance";
@@ -233,7 +233,12 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
     const result = await withLedger(
       { feature: 'auto-checklist', model: AI_MODEL, uid: ownerId || 'system' },
       estimateUsdFor(AI_MODEL, prompt.length, await charsPerToken(ownerId || 'system')),
-      () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }),
+      // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
+      // the output at this ceiling, and without it nothing stopped a response from exceeding it.
+      () => ai.models.generateContent({
+        model: AI_MODEL, contents: prompt,
+        config: { maxOutputTokens: AI_MAX_OUTPUT_TOKENS },
+      }),
       usageOf,
       prompt.length,
     );
@@ -460,7 +465,12 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
     const result = await withLedger(
       { feature: 'checklist', model: AI_MODEL, uid: callerUid },
       estimateUsdFor(AI_MODEL, prompt.length, await charsPerToken(callerUid)),
-      () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }),
+      // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
+      // the output at this ceiling, and without it nothing stopped a response from exceeding it.
+      () => ai.models.generateContent({
+        model: AI_MODEL, contents: prompt,
+        config: { maxOutputTokens: AI_MAX_OUTPUT_TOKENS },
+      }),
       usageOf,
       prompt.length,
     );
@@ -512,7 +522,12 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
     const result = await withLedger(
       { feature: 'category', model: AI_MODEL, uid: callerUid },
       estimateUsdFor(AI_MODEL, prompt.length, await charsPerToken(callerUid)),
-      () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }),
+      // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
+      // the output at this ceiling, and without it nothing stopped a response from exceeding it.
+      () => ai.models.generateContent({
+        model: AI_MODEL, contents: prompt,
+        config: { maxOutputTokens: AI_MAX_OUTPUT_TOKENS },
+      }),
       usageOf,
       prompt.length,
     );
@@ -678,7 +693,12 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
     const result = await withLedger(
       { feature: 'group-digest', model: AI_MODEL, uid: callerUid },
       estimateUsdFor(AI_MODEL, prompt.length, await charsPerToken(callerUid)),
-      () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }),
+      // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
+      // the output at this ceiling, and without it nothing stopped a response from exceeding it.
+      () => ai.models.generateContent({
+        model: AI_MODEL, contents: prompt,
+        config: { maxOutputTokens: AI_MAX_OUTPUT_TOKENS },
+      }),
       usageOf,
       prompt.length,
     );
@@ -738,7 +758,12 @@ Do not include any other text or markdown formatting.`;
     const result = await withLedger(
       { feature: 'asset-suggest', model: AI_MODEL, uid: callerUid },
       estimateUsdFor(AI_MODEL, prompt.length, await charsPerToken(callerUid)),
-      () => ai.models.generateContent({ model: AI_MODEL, contents: prompt }),
+      // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
+      // the output at this ceiling, and without it nothing stopped a response from exceeding it.
+      () => ai.models.generateContent({
+        model: AI_MODEL, contents: prompt,
+        config: { maxOutputTokens: AI_MAX_OUTPUT_TOKENS },
+      }),
       usageOf,
       prompt.length,
     );

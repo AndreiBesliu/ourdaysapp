@@ -7351,3 +7351,56 @@ un `exists(/admins/$(uid))` acolo ar părea că repară ceva și ar muta tăcut 
 una din cele 50 de apeluri zilnice; și `AI_KILL_SWITCH=1` nu pornește (doar `true`),
 ceea ce e sigur ca direcție.
 
+---
+
+## 2026-09-20 · Două găuri de bani care erau pe live de dinainte
+
+**Prompt (Andrei):** „Continua”. **Model:** Claude Opus 5.
+
+Recenzia adversarială de mai devreme le-a găsit și judecătorul le-a scos din blocante — corect,
+fiindcă erau **preexistente** și diff-ul de atunci nu le atingea. Erau tot pe live.
+
+### F1 — un apel taxat era rambursat integral când eșua EVIDENȚA
+
+`closeLedgerRow` stătea în același `try` cu generarea, iar `batch.commit()` din el e
+ultimul lucru dintre o generare reușită și decontare. Când arunca, controlul ateriza într-un
+`catch` al cărui comentariu spunea **„Nothing measurable was spent”** — adevărat pentru o
+cădere a furnizorului, **fals** pentru asta — și `settleBudget(hold, 0)` dădea înapoi toată
+reținerea. Efectul pe contorul zilei al unui apel care chiar a costat: **zero**. Rândul nu era
+nici tarifat, deci cheltuiala era invizibilă și în `aiSpendDaily`.
+
+Nu e o cale exotică: acel batch scrie `aiSpendDaily/{date}` — **un singur document pe zi
+pentru toată aplicația** — la fiecare apel AI, iar Firestore susține cam o scriere pe secundă pe
+document. Rata de eșec crește cu rata cererilor, și nu există `maxInstances` nicăieri.
+
+**Regula acum, într-o propoziție: o rambursare e corectă doar dacă apelul n-a produs nimic.**
+Generarea are `try`-ul ei; tot ce urmează decontează la un preț, niciodată la zero — dacă
+nu putem afla costul, rămâne estimarea, adică o supra-taxare, care e recuperabilă.
+
+### F2 — reținerea „pesimistă” nu era un plafon
+
+`estimateUsdFor` tarifa ieșirea la 2048 de tokeni și comentariul spunea că ieșirea *„e presupusă
+a fi maximul modelului”*. Niciun loc de apel nu trimitea `maxOutputTokens`, deci era o
+presupunere, nu un fapt. **Reparat făcând presupunerea adevărată**, nu slăbind comentariul: toate
+cele cinci generări trimit acum limita modelului.
+
+### Poarta
+
+Niciuna nu se poate testa prin import — `aiLedger.ts` trage `firebase-admin`. Dar amândouă
+sunt proprietăți **structurale** ale sursei, deci un parser le poate ține: niciun `try` a cărui
+ramură de eroare rambursează integral n-are voie să conțină `closeLedgerRow`, și fiecare
+`generateContent` trebuie să poarte aceeași constantă cu care e tarifată estimarea.
+
+**5 mutații din 5**, primele două fiind chiar cele două regresii puse la loc.
+
+### Și m-a prins din nou propriul tipar
+
+Prima versiune a porții număra `settleBudget(hold, 0)` cu un regex pe fișier și găsea **două**
+— a doua fiind propoziția din comentariul pe care tocmai îl scrisesem ca să descriu bug-ul. **Un
+scaner de sursă mulțumit de proză**, a treia oară azi. Numără acum expresii de apel.
+
+`npx tsc -b` verde · poartă de lint verde · **1664 de teste** · build verde.
+
+**A patra restaurare de mutație eșuată tăcut** — cinci rânduri `config:` șterse și nepuse la
+loc, prinse de `grep`-ul de după harness. Repo-ul stă în Google Drive.
+
