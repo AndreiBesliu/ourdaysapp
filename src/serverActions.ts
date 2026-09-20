@@ -266,6 +266,76 @@ export async function adminGetAiSpend(days: 7 | 30 = 30): Promise<AiSpend> {
   return (await fn({ days })).data as AiSpend;
 }
 
+// ── The live AI budget (admin) ────────────────────────────────────────────────────────
+export interface AiConfigFields {
+  globalDailyUsd: number;
+  userDailyUsd: number;
+  killSwitch: boolean;
+}
+
+/**
+ * What the form SENDS. The limits travel as strings on purpose.
+ *
+ * `Number('')` is `0`, and an empty `<input type="number">` reads `''` — so does `1.` mid-typing,
+ * and so does anything the browser considers invalid. Coercing here would turn "I cleared the box
+ * to retype it" into "spend nothing today", which is a total AI outage that a non-owner admin
+ * cannot undo, because raising a limit is owner-only.
+ *
+ * `clampAiLimits` on the server already parses digit strings and rejects everything else — that is
+ * the whole reason it does not use `Number()`. Sending the string lets the one careful parser do
+ * the work instead of a second, careless one in the browser.
+ */
+export interface AiConfigInput {
+  globalDailyUsd: string | number;
+  userDailyUsd: string | number;
+  killSwitch: boolean;
+}
+
+export interface AiConfig {
+  /** False until somebody presses Save. Until then the app runs on the compiled defaults. */
+  exists: boolean;
+  effective: AiConfigFields & { clamped: string[]; source: string };
+  updatedAt: string | null;
+  updatedByEmail: string;
+  /**
+   * The document's own stamp disagrees with the newest log row.
+   *
+   * The Firebase console writes with the Admin SDK, bypassing both the rules and the callable,
+   * so this log can never be complete. Rather than present a partial history as a full one, the
+   * screen says when the two disagree.
+   */
+  outsideAdmin: boolean;
+  log: {
+    id: string; at: string | null; byEmail: string;
+    from: AiConfigFields | null; to: AiConfigFields | null;
+    requested: Record<string, unknown> | null;
+  }[];
+}
+
+export async function adminGetAiConfig(): Promise<AiConfig> {
+  const fn = httpsCallable(getFunctions(app), "adminGetAiConfig");
+  return (await fn({})).data as AiConfig;
+}
+
+/**
+ * Save the budget. The SERVER owns the bounds and the direction.
+ *
+ * `clamped` comes back non-empty when the server refused a number and substituted its own — the
+ * form must show that rather than redisplaying what was typed, or the screen and the bill tell
+ * two stories. A refusal by DIRECTION (raising a limit, or turning the switch off, as a non-owner)
+ * arrives as a thrown `permission-denied` with a sentence.
+ */
+export async function adminSetAiConfig(
+  input: AiConfigInput,
+): Promise<{
+  saved: AiConfigFields; previous: AiConfigFields; clamped: string[]; actor: 'owner' | 'admin';
+}> {
+  const fn = httpsCallable(getFunctions(app), "adminSetAiConfig");
+  return (await fn(input)).data as {
+    saved: AiConfigFields; previous: AiConfigFields; clamped: string[]; actor: 'owner' | 'admin';
+  };
+}
+
 export interface AiLedgerRow {
   id: string; uid: string; feature: string; model: string;
   ok: boolean | null; errorCode: string | null;

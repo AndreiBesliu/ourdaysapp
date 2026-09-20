@@ -30,6 +30,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AI_QUOTA_CODE = void 0;
 exports.isProviderQuotaError = isProviderQuotaError;
+exports.isOwnBudgetRefusal = isOwnBudgetRefusal;
 exports.providerErrorCode = providerErrorCode;
 /** The code the client turns into a translated sentence. Must match `aiErrorMessage` in src/ai.ts. */
 exports.AI_QUOTA_CODE = "ai-budget/global-budget";
@@ -57,6 +58,29 @@ function isProviderQuotaError(err) {
         || message.includes("exceeded your current quota")
         || message.includes("resource_exhausted")
         || message.includes("quota exceeded for metric");
+}
+/**
+ * OUR OWN refusal, not the provider's.
+ *
+ * `holdBudget` throws `HttpsError("resource-exhausted", "ai-budget/...")`. That is a decision this
+ * app made on purpose, and it must never reach `errorLogs`.
+ *
+ * `isProviderQuotaError` does not catch it and should not be widened to: the code lives on
+ * `.code` as the STRING "resource-exhausted", while that predicate reads `.message` and looks for
+ * "resource_exhausted" with an underscore. Two different spellings of two different things.
+ *
+ * Why it matters more now: the kill switch used to need a redeploy, so refusals were rare. Making
+ * it pressable makes them common — and they arrive in BURSTS, because whatever causes one causes
+ * it for everybody at once. The comment above each call site records that provider-quota rows were
+ * removed from the health panel because seventy-four of ninety-five rows were one thing and every
+ * real bug sat underneath it. Pressing the emergency brake must not blind the panel during the
+ * incident you pressed it for.
+ */
+function isOwnBudgetRefusal(err) {
+    const message = typeof (err === null || err === void 0 ? void 0 : err.message) === "string"
+        ? (err.message)
+        : "";
+    return message.startsWith("ai-budget/") || message.includes(" ai-budget/");
 }
 /**
  * A short, stable label for the ledger's `errorCode`.

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
+exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminSetAiConfig = exports.adminGetAiConfig = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
@@ -12,6 +12,7 @@ const aiScope_1 = require("./aiScope");
 const aiSources_1 = require("./aiSources");
 const period_1 = require("./period");
 const aiLedger_1 = require("./aiLedger");
+const aiLimits_1 = require("./aiLimits");
 const aiSpendMerge_1 = require("./aiSpendMerge");
 const friendship_1 = require("./friendship");
 const notify_1 = require("./notify");
@@ -432,6 +433,11 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
         // fact is kept — and keeping it OUT of errorLogs is the point. Seventy-four of the ~95 rows
         // in the health panel were this one thing, and the panel sorts by count, so every real bug
         // in the app sat underneath it.
+        // A refusal WE made is not an error. Re-thrown with its own code so the client can say which,
+        // and kept out of errorLogs for the same reason provider quota was: it would bury every real
+        // bug under itself, in bursts, exactly when the panel is needed.
+        if ((0, aiProviderError_1.isOwnBudgetRefusal)(error))
+            throw new https_1.HttpsError('resource-exhausted', error.message);
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
         void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI generation error", "ai:generateChecklist", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
@@ -468,6 +474,11 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
         // fact is kept — and keeping it OUT of errorLogs is the point. Seventy-four of the ~95 rows
         // in the health panel were this one thing, and the panel sorts by count, so every real bug
         // in the app sat underneath it.
+        // A refusal WE made is not an error. Re-thrown with its own code so the client can say which,
+        // and kept out of errorLogs for the same reason provider quota was: it would bury every real
+        // bug under itself, in bursts, exactly when the panel is needed.
+        if ((0, aiProviderError_1.isOwnBudgetRefusal)(error))
+            throw new https_1.HttpsError('resource-exhausted', error.message);
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
         void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI category error", "ai:suggestCategory", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
@@ -611,6 +622,11 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
         // fact is kept — and keeping it OUT of errorLogs is the point. Seventy-four of the ~95 rows
         // in the health panel were this one thing, and the panel sorts by count, so every real bug
         // in the app sat underneath it.
+        // A refusal WE made is not an error. Re-thrown with its own code so the client can say which,
+        // and kept out of errorLogs for the same reason provider quota was: it would bury every real
+        // bug under itself, in bursts, exactly when the panel is needed.
+        if ((0, aiProviderError_1.isOwnBudgetRefusal)(error))
+            throw new https_1.HttpsError('resource-exhausted', error.message);
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
         void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI digest error", "ai:groupDigest", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
@@ -655,6 +671,11 @@ Do not include any other text or markdown formatting.`;
         // fact is kept — and keeping it OUT of errorLogs is the point. Seventy-four of the ~95 rows
         // in the health panel were this one thing, and the panel sorts by count, so every real bug
         // in the app sat underneath it.
+        // A refusal WE made is not an error. Re-thrown with its own code so the client can say which,
+        // and kept out of errorLogs for the same reason provider quota was: it would bury every real
+        // bug under itself, in bursts, exactly when the panel is needed.
+        if ((0, aiProviderError_1.isOwnBudgetRefusal)(error))
+            throw new https_1.HttpsError('resource-exhausted', error.message);
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
         void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI asset error", "ai:suggestAsset", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
@@ -2629,6 +2650,7 @@ exports.adminGetAiSpend = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHE
     // NOT from the daily rollup. The two differ by whatever is in flight: `holdBudget` pre-charges
     // a ceiling before the call and reconciles downward after it, so this one is the number that
     // decides whether the next call is refused, which is the number worth showing.
+    const eff = await (0, aiLedger_1.effectiveLimits)();
     const budgetSnap = await db.doc("ai_budget/_global").get().catch(() => null);
     const b = budgetSnap && budgetSnap.exists ? budgetSnap.data() || {} : {};
     const todayGlobalUsd = b.date === days[0] ? (b.microUsd || 0) / 1000000 : 0;
@@ -2642,10 +2664,165 @@ exports.adminGetAiSpend = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHE
         topUsers: (0, aiSpendMerge_1.mergeRollups)(userDays).slice(0, 20).map((r) => ({
             uid: r.id, calls: r.calls, failures: r.failures, usd: r.usd,
         })),
-        limits: Object.assign(Object.assign({}, aiLedger_1.AI_LIMITS), { source: aiLedger_1.LIMITS_SOURCE }),
+        // What is ACTUALLY enforced right now, read the same way `holdBudget` reads it. Reporting
+        // the module constants would have shown the environment's values while a saved `aiConfig/live`
+        // quietly overrode them — a screen and a bill telling two stories.
+        limits: Object.assign(Object.assign({}, eff.limits), { source: eff.source }),
         todayGlobalUsd,
         complete,
     };
+});
+/**
+ * The live AI configuration, plus who changed it and when.
+ *
+ * `outsideAdmin` is the interesting field. The Firebase console writes with the Admin SDK, which
+ * bypasses both the rules and this callable, so the log can NEVER be complete. Rather than
+ * present an incomplete history as a full one, the document's own stamp is compared with the
+ * newest log row and the disagreement is reported.
+ */
+exports.adminGetAiConfig = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    var _a, _b;
+    await assertAdmin(request);
+    const db = admin.firestore();
+    const [snap, logSnap] = await Promise.all([
+        db.doc(aiLedger_1.AI_CONFIG_PATH).get(),
+        db.collection("aiConfigLog").orderBy("at", "desc").limit(20).get().catch(() => null),
+    ]);
+    const rows = (logSnap ? logSnap.docs : []).map((d) => {
+        var _a;
+        const r = d.data() || {};
+        return {
+            id: d.id,
+            at: r.at && typeof r.at.toDate === "function" ? r.at.toDate().toISOString() : null,
+            byEmail: ((_a = r.by) === null || _a === void 0 ? void 0 : _a.email) || "",
+            from: r.from || null,
+            to: r.to || null,
+            requested: r.requested || null,
+        };
+    });
+    const stored = snap.exists ? snap.data() || {} : null;
+    const newestLoggedBy = rows.length > 0 ? (((_b = (_a = logSnap.docs[0].data()) === null || _a === void 0 ? void 0 : _a.by) === null || _b === void 0 ? void 0 : _b.uid) || "") : "";
+    const outsideAdmin = !!stored && !!stored.updatedBy && rows.length > 0
+        && stored.updatedBy !== newestLoggedBy;
+    const eff = await (0, aiLedger_1.effectiveLimits)();
+    return {
+        exists: snap.exists,
+        effective: Object.assign(Object.assign({}, eff.limits), { source: eff.source }),
+        updatedAt: (stored === null || stored === void 0 ? void 0 : stored.updatedAt) && typeof stored.updatedAt.toDate === "function"
+            ? stored.updatedAt.toDate().toISOString() : null,
+        updatedByEmail: (stored === null || stored === void 0 ? void 0 : stored.updatedByEmail) || "",
+        outsideAdmin,
+        log: rows,
+    };
+});
+/**
+ * Change the live AI budget.
+ *
+ * Two guards, and they do different jobs. `clampAiLimits` decides what the NUMBERS may be — the
+ * server owns those bounds, never the form, because an extra zero is a hundredfold bill.
+ * `configChangeAllowed` decides who may move them in which DIRECTION: anyone with the admin may
+ * make things safer, only the owner may make them riskier. That asymmetry exists because
+ * `adminSetAdmin` is gated by `assertAdmin` alone, so any admin can mint another admin.
+ *
+ * The document and its log row go in ONE batch, and it is not best-effort: a configuration change
+ * that cannot be recorded should not happen.
+ */
+exports.adminSetAiConfig = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    var _a, _b, _c, _d;
+    const uid = await assertAdmin(request);
+    const db = admin.firestore();
+    const email = String(((_b = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || "").toLowerCase();
+    const emailVerified = ((_d = (_c = request.auth) === null || _c === void 0 ? void 0 : _c.token) === null || _d === void 0 ? void 0 : _d.email_verified) === true;
+    const actor = emailVerified && BOOTSTRAP_ADMIN_EMAILS.includes(email) ? "owner" : "admin";
+    const requested = (request.data || {});
+    const clamped = (0, aiLimits_1.clampAiLimits)({
+        globalDailyUsd: requested.globalDailyUsd,
+        userDailyUsd: requested.userDailyUsd,
+        killSwitch: requested.killSwitch,
+    });
+    const to = {
+        globalDailyUsd: clamped.globalDailyUsd,
+        userDailyUsd: clamped.userDailyUsd,
+        killSwitch: clamped.killSwitch,
+    };
+    const configRef = db.doc(aiLedger_1.AI_CONFIG_PATH);
+    const logRef = db.collection("aiConfigLog").doc();
+    // ── Read the STORED value, in the transaction that writes ────────────────────────────────
+    //
+    // NOT `effectiveLimits()`. That function is built never to fail — on a read error it returns a
+    // per-instance cache or the compiled defaults — which is right for the hot path, where a blip
+    // must not stop the app, and wrong here, where `from` decides whether this change is a RAISE.
+    //
+    // Fed a fabricated baseline, the ratchet inverts: with `{global: 1, killSwitch: true}` stored
+    // and the read failing, `from` becomes `{5, 0.25, false}`, and a non-owner submitting exactly
+    // that reads as "no change" — allowed — which raises the cap AND clears a pressed kill switch.
+    // Worse, the `aiConfigLog` row would record that invention as the previous value, and that row
+    // is the only answer to "who raised the cap last Tuesday". An audit that can invent its own
+    // baseline is not an audit.
+    //
+    // The transaction also closes the two-admins-at-once race: the old code read, then committed an
+    // unconditional batch, so the later Save silently won with a stale `from`.
+    //
+    // `holdBudget` deliberately reads this document OUTSIDE its transaction — putting it in the read
+    // set of every AI call would make one Save conflict with everything in flight. That argument
+    // does not transfer to a callable that runs when somebody presses a button.
+    let from;
+    let fromSource;
+    try {
+        from = await db.runTransaction(async (tx) => {
+            var _a, _b, _c;
+            const snap = await tx.get(configRef);
+            const stored = snap.exists ? (snap.data() || {}) : null;
+            // The RAW stored values, clamped only for comparison. A console-written 500 must not be
+            // logged as a previous value of 50.
+            const prev = stored
+                ? (0, aiLimits_1.clampAiLimits)(stored)
+                : (0, aiLimits_1.clampAiLimits)({
+                    globalDailyUsd: aiLedger_1.AI_LIMITS.globalDailyUsd,
+                    userDailyUsd: aiLedger_1.AI_LIMITS.userDailyUsd,
+                    killSwitch: aiLedger_1.AI_LIMITS.killSwitch,
+                });
+            fromSource = stored ? "aiConfig/live" : aiLedger_1.LIMITS_SOURCE;
+            const before = {
+                globalDailyUsd: prev.globalDailyUsd,
+                userDailyUsd: prev.userDailyUsd,
+                killSwitch: prev.killSwitch,
+            };
+            const verdict = (0, aiLimits_1.configChangeAllowed)(actor, before, to);
+            if (!verdict.allowed)
+                throw new https_1.HttpsError("permission-denied", verdict.reason);
+            tx.set(configRef, Object.assign(Object.assign({}, to), { updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedBy: uid, updatedByEmail: email }), { merge: true });
+            // `create`, not `set`: append-only becomes a property of the OPERATION rather than a promise
+            // about this one call site. A future `set` to an existing id would be a silent rewrite.
+            tx.create(logRef, {
+                schema: 1,
+                at: admin.firestore.FieldValue.serverTimestamp(),
+                by: { uid, email },
+                actor,
+                from: before,
+                fromSource,
+                to,
+                // What the form SENT, beside what the server stored. If somebody types 10000 and the
+                // ceiling brings it to 50, the screen, the log and the bill must not tell three stories.
+                requested: {
+                    globalDailyUsd: (_a = requested.globalDailyUsd) !== null && _a !== void 0 ? _a : null,
+                    userDailyUsd: (_b = requested.userDailyUsd) !== null && _b !== void 0 ? _b : null,
+                    killSwitch: (_c = requested.killSwitch) !== null && _c !== void 0 ? _c : null,
+                },
+                clamped: clamped.clamped,
+            });
+            return before;
+        });
+    }
+    catch (err) {
+        if (err instanceof https_1.HttpsError)
+            throw err;
+        // Refuse rather than guess. Nothing is written, and the operator is told to try again — which
+        // is a far better outcome than a change recorded against a baseline nobody ever stored.
+        console.error("adminSetAiConfig transaction failed", (err === null || err === void 0 ? void 0 : err.message) || err);
+        throw new https_1.HttpsError("unavailable", "Could not read the current configuration. Nothing was changed.");
+    }
+    return { saved: to, previous: from, clamped: clamped.clamped, actor };
 });
 /** Row-level drill-down, filtered. Never returns prompt or response text — there is none. */
 exports.adminGetAiLedger = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {

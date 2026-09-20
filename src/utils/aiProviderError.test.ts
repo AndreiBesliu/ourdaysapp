@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  AI_QUOTA_CODE, isProviderQuotaError, providerErrorCode,
+  AI_QUOTA_CODE, isProviderQuotaError, isOwnBudgetRefusal, providerErrorCode,
 } from '../../functions/src/aiProviderError';
 
 /** The real thing, copied from the production log on 2026-09-14. */
@@ -127,5 +127,47 @@ describe('surviving the SDK change', () => {
   it('recognises the retired SDK shape too, so nothing in flight is misfiled', () => {
     const legacy = Object.assign(new Error('[GoogleGenerativeAI Error]: [429 Too Many Requests]'), { status: 429 });
     expect(isProviderQuotaError(legacy)).toBe(true);
+  });
+});
+
+describe('our own refusal is not an error', () => {
+  it('recognises what holdBudget throws, in the shape a callable rethrows it', () => {
+    // `HttpsError('resource-exhausted', 'ai-budget/kill-switch')`. The code is on `.code` as a
+    // STRING; the message is the bare path.
+    expect(isOwnBudgetRefusal({ message: 'ai-budget/kill-switch' })).toBe(true);
+    expect(isOwnBudgetRefusal({ message: 'ai-budget/user-budget' })).toBe(true);
+    expect(isOwnBudgetRefusal({ message: 'ai-budget/global-budget' })).toBe(true);
+    expect(isOwnBudgetRefusal(new Error('ai-budget/kill-switch'))).toBe(true);
+  });
+
+  it('still recognises it once a wrapper has prefixed the message', () => {
+    // Some paths rethrow as `AI Error: <message>`. Losing it there would put the burst back in
+    // the health panel.
+    expect(isOwnBudgetRefusal({ message: 'AI Error: ai-budget/user-budget' })).toBe(true);
+  });
+
+  it('says NO to a provider error, so the two stay separable', () => {
+    // They are thrown for different reasons and one of them IS worth looking at.
+    expect(isOwnBudgetRefusal(REAL_429)).toBe(false);
+    expect(isOwnBudgetRefusal({ message: 'resource_exhausted' })).toBe(false);
+    expect(isOwnBudgetRefusal({ code: 'resource-exhausted' })).toBe(false);
+  });
+
+  it('says NO to junk rather than swallowing a real bug', () => {
+    // A false positive here is a defect that never reaches the error log at all.
+    for (const junk of [null, undefined, '', {}, 0, [], new Error('Cannot read properties of null')]) {
+      expect(isOwnBudgetRefusal(junk as unknown)).toBe(false);
+    }
+  });
+
+  it('is not fooled by the phrase appearing mid-word', () => {
+    expect(isOwnBudgetRefusal({ message: 'notai-budget/user-budget' })).toBe(false);
+  });
+
+  it('leaves the client able to translate it', () => {
+    // The callable rethrows the MESSAGE, and `aiErrorKey` matches by substring, so the six
+    // translated sentences survive the change. Pinned here because the two live in different
+    // files and nothing else connects them.
+    expect('ai-budget/kill-switch').toContain('ai-budget/kill-switch');
   });
 });

@@ -1,3 +1,35 @@
+## ⭐ Bugetul AI se poate schimba din admin (20.09) — DE CITIT
+
+**Cel mai important punct din toată lista.** Nu pot vedea ce variabile de mediu sunt puse pe
+serviciul live — nu sunt în repo, și totuși aplicația funcționează, deci **cineva le-a pus**.
+
+- [ ] **Deschide `/admin` → AI Center → cartela „Budget and kill switch”.** Trebuie să scrie ce
+      limite sunt în vigoare și de unde vin: **„built-in defaults”**, **„environment”** sau
+      **„aiConfig/live”**. *Dacă scrie „environment”*, există variabile puse pe serviciu despre
+      care nu știu. **Din clipa în care apeși Save o dată, documentul câștigă și variabilele
+      devin moarte** — dar până atunci ele sunt cele care se aplică.
+- [ ] **Apasă Save o dată, cu valorile deja afișate.** Nu schimbă nimic, dar creează documentul
+      și mută sursa pe `aiConfig/live`. De acolo încolo, schimbarea limitelor nu mai cere deploy.
+- [ ] **Probă reală a întrerupătorului:** bife ază „Kill switch”, Save, apoi cere un Rezumat în
+      chat. Trebuie să apară mesajul că AI-ul e oprit — **nu** „nu s-a putut genera”. Apoi
+      debifează și Save. *Dacă nu mușcă imediat*, ceva cache-uiește și vreau să știu.
+- [ ] **După aia, uită-te în panoul `/erori`.** Refuzurile de buget **NU** trebuie să apară acolo.
+      *De ce contează:* vin în rafală — când oprirea mușcă, mușcă pentru toată lumea deodată — și
+      ar îngropa orice defect real exact în timpul incidentului pentru care ai apăsat frâna.
+
+**Fapte:**
+
+1. **Orice admin poate face lucrurile mai SIGURE** (oprire, limite în jos). **Doar tu poți
+   ridica o limită sau opri întrerupătorul** — adică doar contul cu e-mailul verificat din
+   `BOOTSTRAP_ADMIN_EMAILS`. Motivul: `adminSetAdmin` e păzit doar de `assertAdmin`, deci orice
+   admin poate face alt admin.
+2. **Plafoanele sunt ale serverului:** maximum 50 $/zi pe toată aplicația și 5 $/zi pe om.
+   Peste ele cere deploy — intenționat.
+3. **O limită de 0 refuză tot.** Formularul cere confirmare și ecranul o scrie roșu. Și nu mai
+   poți seta 0 din greșeală golind căsuța: până la reparația de azi, o căsuță goală însemna zero,
+   scria „Saved.” și **un admin obișnuit nu mai putea repara**, fiindcă ridicarea e a ta.
+
+---
 ## ⭐ Mesaje care spun ce știu (20.09)
 
 - [ ] **Dacă apeși Rezumat și ți-ai consumat bugetul AI pe ziua aia**, banner-ul roșu trebuie să

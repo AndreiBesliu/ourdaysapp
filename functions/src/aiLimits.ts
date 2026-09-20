@@ -107,6 +107,10 @@ export function clampAiLimits(raw: RawAiLimits | null | undefined): AiLimits {
     clamped.push("userDailyUsd: not a number");
   }
   if (user === null) user = DEFAULT_USER_DAILY_USD;
+  if (user > MAX_USER_DAILY_USD) {
+    clamped.push(`userDailyUsd: capped at ${MAX_USER_DAILY_USD}`);
+    user = MAX_USER_DAILY_USD;
+  }
   if (user > global) {
     clamped.push("userDailyUsd: capped at the global limit");
     user = global;
@@ -117,4 +121,55 @@ export function clampAiLimits(raw: RawAiLimits | null | undefined): AiLimits {
   const killSwitch = r.killSwitch === true || r.killSwitch === "true";
 
   return { globalDailyUsd: global, userDailyUsd: user, killSwitch, clamped };
+}
+
+/**
+ * The most ONE account may be allowed to spend in a UTC day.
+ *
+ * Separate from the global ceiling on purpose. Without it, an admin could set the per-user limit
+ * equal to the app-wide one, and a single account would be entitled to the entire day's budget —
+ * a limit that exists and bounds nothing.
+ */
+export const MAX_USER_DAILY_USD = 5;
+
+/** The shape stored at `aiConfig/live`, minus the audit stamp. */
+export interface AiConfigFields {
+  globalDailyUsd: number;
+  userDailyUsd: number;
+  killSwitch: boolean;
+}
+
+export type AiConfigActor = 'owner' | 'admin';
+
+/**
+ * Which direction of change this actor may make.
+ *
+ * The rule is one sentence: **anyone who can reach the admin may make things SAFER; only the
+ * owner may make them riskier.** Turning the kill switch on, or lowering a limit, is available to
+ * whoever is holding the phone when the bill starts moving. Turning it off, or raising a limit,
+ * needs the one identity in this app that another admin cannot mint.
+ *
+ * That asymmetry matters here specifically: `adminSetAdmin` is gated by `assertAdmin` alone, so
+ * any admin can create another admin. `CLAUDE.md` records that as the reason OurDaysApp was
+ * excluded from the publish-to-live feature. A money control behind that same door would
+ * re-create exactly what was excluded, on the thing that costs money — unless the dangerous
+ * direction is held somewhere else.
+ */
+export function configChangeAllowed(
+  actor: AiConfigActor,
+  from: AiConfigFields,
+  to: AiConfigFields,
+): { allowed: true } | { allowed: false; reason: string } {
+  if (actor === 'owner') return { allowed: true };
+
+  if (from.killSwitch && !to.killSwitch) {
+    return { allowed: false, reason: 'Only the owner can turn the kill switch off.' };
+  }
+  if (to.globalDailyUsd > from.globalDailyUsd) {
+    return { allowed: false, reason: 'Only the owner can raise the app-wide daily limit.' };
+  }
+  if (to.userDailyUsd > from.userDailyUsd) {
+    return { allowed: false, reason: 'Only the owner can raise the per-person daily limit.' };
+  }
+  return { allowed: true };
 }

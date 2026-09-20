@@ -31,8 +31,9 @@
 // Phase 2 reuses `clampAiLimits` for the WRITE path, which is the point of the ceiling below: a
 // budget editable from a browser needs its bounds enforced on the server, not in the form.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MAX_GLOBAL_DAILY_USD = exports.DEFAULT_USER_DAILY_USD = exports.DEFAULT_GLOBAL_DAILY_USD = void 0;
+exports.MAX_USER_DAILY_USD = exports.MAX_GLOBAL_DAILY_USD = exports.DEFAULT_USER_DAILY_USD = exports.DEFAULT_GLOBAL_DAILY_USD = void 0;
 exports.clampAiLimits = clampAiLimits;
+exports.configChangeAllowed = configChangeAllowed;
 /** The compiled-in fallbacks. What the app costs if nobody has configured anything. */
 exports.DEFAULT_GLOBAL_DAILY_USD = 5;
 exports.DEFAULT_USER_DAILY_USD = 0.25;
@@ -94,6 +95,10 @@ function clampAiLimits(raw) {
     }
     if (user === null)
         user = exports.DEFAULT_USER_DAILY_USD;
+    if (user > exports.MAX_USER_DAILY_USD) {
+        clamped.push(`userDailyUsd: capped at ${exports.MAX_USER_DAILY_USD}`);
+        user = exports.MAX_USER_DAILY_USD;
+    }
     if (user > global) {
         clamped.push("userDailyUsd: capped at the global limit");
         user = global;
@@ -102,5 +107,41 @@ function clampAiLimits(raw) {
     // must not be able to turn the whole feature off.
     const killSwitch = r.killSwitch === true || r.killSwitch === "true";
     return { globalDailyUsd: global, userDailyUsd: user, killSwitch, clamped };
+}
+/**
+ * The most ONE account may be allowed to spend in a UTC day.
+ *
+ * Separate from the global ceiling on purpose. Without it, an admin could set the per-user limit
+ * equal to the app-wide one, and a single account would be entitled to the entire day's budget —
+ * a limit that exists and bounds nothing.
+ */
+exports.MAX_USER_DAILY_USD = 5;
+/**
+ * Which direction of change this actor may make.
+ *
+ * The rule is one sentence: **anyone who can reach the admin may make things SAFER; only the
+ * owner may make them riskier.** Turning the kill switch on, or lowering a limit, is available to
+ * whoever is holding the phone when the bill starts moving. Turning it off, or raising a limit,
+ * needs the one identity in this app that another admin cannot mint.
+ *
+ * That asymmetry matters here specifically: `adminSetAdmin` is gated by `assertAdmin` alone, so
+ * any admin can create another admin. `CLAUDE.md` records that as the reason OurDaysApp was
+ * excluded from the publish-to-live feature. A money control behind that same door would
+ * re-create exactly what was excluded, on the thing that costs money — unless the dangerous
+ * direction is held somewhere else.
+ */
+function configChangeAllowed(actor, from, to) {
+    if (actor === 'owner')
+        return { allowed: true };
+    if (from.killSwitch && !to.killSwitch) {
+        return { allowed: false, reason: 'Only the owner can turn the kill switch off.' };
+    }
+    if (to.globalDailyUsd > from.globalDailyUsd) {
+        return { allowed: false, reason: 'Only the owner can raise the app-wide daily limit.' };
+    }
+    if (to.userDailyUsd > from.userDailyUsd) {
+        return { allowed: false, reason: 'Only the owner can raise the per-person daily limit.' };
+    }
+    return { allowed: true };
 }
 //# sourceMappingURL=aiLimits.js.map

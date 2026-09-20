@@ -530,6 +530,29 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // The live AI budget, and the record of who changed it. Callable-only — `adminSetAiConfig`
+    // and `adminGetAiConfig`, through the Admin SDK, which these rules do not constrain.
+    //
+    // DENIED FOR ADMINS TOO, deliberately. The temptation is an `exists(/admins/$(uid))` gate like
+    // the one on `warlordConfig` below; that gate is sound (the roster is `if false`, so it cannot
+    // be forged) but it is the wrong shape for money. A rule can clamp a number; it cannot record
+    // WHO changed it, cannot compare the new value against the old to tell a raise from a lower,
+    // and would need every future field's bound re-derived in a second language. The callable does
+    // all three in one place.
+    //
+    // And the limits live HERE rather than on `ai_budget` on purpose: that document holds
+    // `microUsd` (the day's live spend) and `date` (the rollover key). An admin write broad enough
+    // to change a limit would also permit `microUsd: 0` — a full reset of the day's cap from a
+    // browser, leaving no ledger row — and `date: "1970-01-01"`, which makes every spend read as
+    // zero for the rest of the day. That is invisible to anyone inspecting `microUsd`.
+    match /aiConfig/{docId} {
+      allow read, write: if false;
+    }
+    // Append-only by construction: nothing here may write, and the callable never updates a row.
+    match /aiConfigLog/{entryId} {
+      allow read, write: if false;
+    }
+
     // ── Notifications ──
     // Recipient (userId) controls read/update/delete. Direct client CREATE is
     // forbidden — notifications are created only by the `notifyUsers` Cloud

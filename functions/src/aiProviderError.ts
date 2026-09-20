@@ -56,6 +56,30 @@ export function isProviderQuotaError(err: unknown): boolean {
 }
 
 /**
+ * OUR OWN refusal, not the provider's.
+ *
+ * `holdBudget` throws `HttpsError("resource-exhausted", "ai-budget/...")`. That is a decision this
+ * app made on purpose, and it must never reach `errorLogs`.
+ *
+ * `isProviderQuotaError` does not catch it and should not be widened to: the code lives on
+ * `.code` as the STRING "resource-exhausted", while that predicate reads `.message` and looks for
+ * "resource_exhausted" with an underscore. Two different spellings of two different things.
+ *
+ * Why it matters more now: the kill switch used to need a redeploy, so refusals were rare. Making
+ * it pressable makes them common — and they arrive in BURSTS, because whatever causes one causes
+ * it for everybody at once. The comment above each call site records that provider-quota rows were
+ * removed from the health panel because seventy-four of ninety-five rows were one thing and every
+ * real bug sat underneath it. Pressing the emergency brake must not blind the panel during the
+ * incident you pressed it for.
+ */
+export function isOwnBudgetRefusal(err: unknown): boolean {
+  const message = typeof (err as { message?: unknown } | null)?.message === "string"
+    ? ((err as { message: string }).message)
+    : "";
+  return message.startsWith("ai-budget/") || message.includes(" ai-budget/");
+}
+
+/**
  * A short, stable label for the ledger's `errorCode`.
  *
  * The old expression read `err.code`, then fell back to `err.name` — and since the Gemini SDK sets

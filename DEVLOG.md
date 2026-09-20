@@ -7222,3 +7222,71 @@ propriile teste:
 
 `npx tsc -b` verde · poartă de lint verde · **1634 de teste** (+19) · build verde.
 
+---
+
+## 2026-09-20 · AI Center faza 2: un întrerupător care mușcă acum
+
+**Prompt (Andrei):** „Continua”. **Model:** Claude Opus 5.
+
+Oprirea cheltuielii AI cerea până azi o variabilă de mediu și un redeploy. **Un întrerupător de
+urgență care cere un deploy ca să muște e alt produs.** Acum bugetul și întrerupătorul se
+schimbă din admin, iar `effectiveLimits()` recitește `aiConfig/live` la **fiecare apel
+plătit** — necachat, și **în afara** tranzacției, ca un Save să nu se ciocnească cu tot ce e în zbor.
+
+### Două gărzi, două meserii
+
+**Serverul deține numerele:** `clampAiLimits` — maximum 50 $/zi pe aplicație, 5 $/zi pe om,
+limita pe om niciodată peste cea globală, întrerupător strict `=== true`.
+
+**Serverul deține direcția:** orice admin face lucrurile mai sigure; **doar owner-ul ridică o
+limită sau oprește întrerupătorul.** Fiindcă `adminSetAdmin` e păzit doar de `assertAdmin`,
+deci orice admin poate face alt admin — exact motivul pentru care CLAUDE.md a **exclus** aplicația
+asta de la publicarea test→live. Un control pe bani în spatele aceleiași uși ar fi recreat fix ce
+s-a exclus.
+
+### Patru adversari înainte de deploy, și au avut dreptate
+
+**Trei blocante, toate ale mele, niciunul în primul loc al vreunui adversar:**
+
+**1. O căsuță goală nu e un buget zero.** `<input type="number">` întoarce `""` și pentru gol,
+și pentru orice consideră invalid — inclusiv `1.` în timp ce tastezi `1.5`. `Number("")` e
+**0**, iar o limită de 0 refuză fiecare apel plătit din aplicație. Măsurat într-un Chromium real.
+Ar fi scris **„Saved.”** cu `clamped` gol, ar fi desenat bara **plină, în culoarea temei**, și
+**un admin obișnuit n-ar fi putut repara**, fiindcă ridicarea e a owner-ului. Ironia: `usd()` din
+`aiLimits.ts` există tocmai ca să nu folosim `Number()` — și l-am reintrodus două fișiere
+mai încolo. Acum formularul trimite **șirul**, iar parserul atent de pe server decide.
+
+**2. Auditul își putea inventa propria linie de plecare.** `effectiveLimits()` e construită să
+**nu eșueze niciodată** — corect pentru calea fierbinte, greșit pentru singurul apelant care are
+nevoie ca `from` să fie valoarea **stocată**. Cu `{global: 1, killSwitch: true}` salvat și
+citirea eșuată, `from` devine `{5, 0.25, false}`, iar un non-owner care trimite exact
+asta apare ca **„niciună schimbare”** — permis — ceea ce ridică plafonul ȘI stinge un întrerupător
+apăsat. Iar rândul din `aiConfigLog` ar fi consemnat invenția ca fapt. **Un audit care-și poate
+inventa linia de plecare nu e un audit.** Acum scrierea citește documentul **în tranzacție**, din
+instantaneul brut, și **refuză** dacă citirea cade. Asta închide și cursa a doi admini deodată.
+
+**3. Apăsarea întrerupătorului ar fi inundat `errorLogs`.** `isProviderQuotaError` caută
+`resource_exhausted` cu **underscore** în `.message`; un refuz de buget poartă
+`resource-exhausted` cu **cratimă** în `.code`, iar mesajul e `ai-budget/...`. Deci nu-l
+prindea, și fiecare apel refuzat scria un rând. Comentariul de deasupra fiecărui loc spune de ce
+s-au scos refuzurile de cotă din panou: **74 din ~95 de rânduri erau un singur lucru**. Și
+refuzurile de buget vin în **rafală**. Apeși frâna de urgență și orbești panoul exact în
+incidentul pentru care ai apăsat-o.
+
+### Ce au ratat adversarii
+
+Doi dintre ei și-au construit clasamentul în jurul a două defecte **preexistente**, care sunt pe
+live acum și pe care diff-ul ăsta **nu le atinge**. Judecătorul a rulat `git diff` — lucru pe
+care niciunul dintre cei patru nu-l făcuse — și a arătat că singura schimbare pe calea cheltuielii
+sunt trei rânduri. **Un adversar căruia i se spune să atace va fabrica.** De-aia verdictul avea
+o secțiune de INFIRMĂRI, și de-aia am recitit eu fiecare blocant înainte să-l repar.
+
+### Probe
+
+`npx tsc -b` verde · poartă de lint verde · **1647 de teste** · **207 teste de reguli** ·
+build verde · build de functions verde.
+
+Regulile refuză `aiConfig` și `aiConfigLog` **inclusiv adminilor**, și testul o probează —
+golul pe care `games.test.ts` îl avea la `warlordConfig`, unde se afirmă doar că
+**ne**-adminii sunt refuzați, ceea ce un `allow write: if false` trece neschimbat.
+

@@ -9,7 +9,8 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  clampAiLimits, DEFAULT_GLOBAL_DAILY_USD, DEFAULT_USER_DAILY_USD, MAX_GLOBAL_DAILY_USD,
+  clampAiLimits, DEFAULT_GLOBAL_DAILY_USD, DEFAULT_USER_DAILY_USD,
+  MAX_GLOBAL_DAILY_USD, MAX_USER_DAILY_USD, configChangeAllowed,
 } from '../../functions/src/aiLimits';
 
 describe('a value that is not a number never becomes a limit', () => {
@@ -84,11 +85,19 @@ describe('the ceiling the server owns', () => {
     expect(r.clamped).toContain(`globalDailyUsd: capped at ${MAX_GLOBAL_DAILY_USD}`);
   });
 
-  it('never lets the per-user limit exceed the whole-app one', () => {
-    // A per-account ceiling above the app-wide ceiling cannot bind, so accepting one would
-    // display a limit that does nothing — the exact appearance of protection without it.
-    const r = clampAiLimits({ globalDailyUsd: 5, userDailyUsd: 40 });
-    expect(r.userDailyUsd).toBe(5);
+  it('caps ONE account well below the whole-app ceiling', () => {
+    // Tightened when the config became writable. Without a separate per-user ceiling, an admin
+    // could set the per-person limit equal to the app-wide one, and a single account would be
+    // entitled to the entire day's budget — a limit that exists and bounds nothing.
+    const r = clampAiLimits({ globalDailyUsd: 50, userDailyUsd: 50 });
+    expect(r.userDailyUsd).toBe(MAX_USER_DAILY_USD);
+    expect(r.clamped).toContain(`userDailyUsd: capped at ${MAX_USER_DAILY_USD}`);
+  });
+
+  it('never lets the per-user limit exceed the whole-app one either', () => {
+    // The other bound, which binds when the global is set BELOW the per-user ceiling.
+    const r = clampAiLimits({ globalDailyUsd: 1, userDailyUsd: 4 });
+    expect(r.userDailyUsd).toBe(1);
     expect(r.clamped).toContain('userDailyUsd: capped at the global limit');
   });
 
@@ -96,7 +105,7 @@ describe('the ceiling the server owns', () => {
     // Order matters: clamp the global first, or asking for 1e9/1e9 yields a user limit of 1e9.
     const r = clampAiLimits({ globalDailyUsd: 1e9, userDailyUsd: 1e9 });
     expect(r.globalDailyUsd).toBe(MAX_GLOBAL_DAILY_USD);
-    expect(r.userDailyUsd).toBe(MAX_GLOBAL_DAILY_USD);
+    expect(r.userDailyUsd).toBe(MAX_USER_DAILY_USD);
   });
 });
 
@@ -112,5 +121,43 @@ describe('the kill switch', () => {
     for (const off of ['false', 'TRUE', '1', 1, 'yes', {}, [], undefined, null, '']) {
       expect(clampAiLimits({ killSwitch: off as unknown }).killSwitch).toBe(false);
     }
+  });
+});
+
+describe('who may move the limits, and in which direction', () => {
+  const at = (g: number, u: number, k = false) =>
+    ({ globalDailyUsd: g, userDailyUsd: u, killSwitch: k });
+
+  it('lets ANY admin make things safer', () => {
+    // The safe direction stays with whoever is holding the phone when the bill starts moving.
+    expect(configChangeAllowed('admin', at(5, 0.25), at(1, 0.1)).allowed).toBe(true);
+    expect(configChangeAllowed('admin', at(5, 0.25, false), at(5, 0.25, true)).allowed).toBe(true);
+  });
+
+  it('refuses a plain admin RAISING either limit', () => {
+    // `adminSetAdmin` is gated by `assertAdmin` alone, so any admin can mint another admin.
+    // CLAUDE.md records that as the reason this app was excluded from publish-to-live. A money
+    // control behind that same door would re-create exactly what was excluded.
+    expect(configChangeAllowed('admin', at(5, 0.25), at(50, 0.25)).allowed).toBe(false);
+    expect(configChangeAllowed('admin', at(5, 0.25), at(5, 1)).allowed).toBe(false);
+  });
+
+  it('refuses a plain admin turning the kill switch OFF', () => {
+    expect(configChangeAllowed('admin', at(5, 0.25, true), at(5, 0.25, false)).allowed).toBe(false);
+  });
+
+  it('lets the owner do any of it', () => {
+    expect(configChangeAllowed('owner', at(5, 0.25, true), at(50, 5, false)).allowed).toBe(true);
+  });
+
+  it('gives a reason a person can act on, not a code', () => {
+    const v = configChangeAllowed('admin', at(5, 0.25), at(50, 0.25));
+    expect(v.allowed).toBe(false);
+    if (!v.allowed) expect(v.reason).toMatch(/owner/i);
+  });
+
+  it('allows a no-op change by anyone', () => {
+    // Saving the form unchanged must not be refused: it is the shape of pressing Save twice.
+    expect(configChangeAllowed('admin', at(5, 0.25), at(5, 0.25)).allowed).toBe(true);
   });
 });

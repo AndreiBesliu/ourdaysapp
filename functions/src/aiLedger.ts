@@ -86,11 +86,14 @@ export const LIMITS_SOURCE: "environment" | "built-in defaults" =
     ? "environment"
     : "built-in defaults";
 
+// The environment is now only the FALLBACK. `effectiveLimits()` reads `aiConfig/live` on
+// every call, and these values are what it falls back to when that document does not exist
+// or cannot be read — which is exactly today's behaviour, so introducing the document changes
+// nothing until somebody presses Save.
+//
+// Exported for the admin screen, which says WHICH source won. `AI_KILL_SWITCH` is no longer
+// consulted on the hot path: a switch captured at cold start needs a redeploy to bite.
 export const AI_KILL_SWITCH = AI_LIMITS.killSwitch;
-/** Whole-app ceiling for one UTC day, in USD. The only limit an attacker cannot widen. */
-const GLOBAL_DAILY_USD = AI_LIMITS.globalDailyUsd;
-/** Per-account ceiling for one UTC day, in USD. */
-const USER_DAILY_USD = AI_LIMITS.userDailyUsd;
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -117,8 +120,67 @@ function refuse(code: "kill-switch" | "user-budget" | "global-budget"): never {
  * `estimateUsd` should be the CEILING of what the call could cost, not a guess at the middle:
  * the hold is what bounds concurrency, and a hold that under-estimates bounds nothing.
  */
+/** Where `aiConfig/live` lives. One document, written only by `adminSetAiConfig`. */
+export const AI_CONFIG_PATH = "aiConfig/live";
+
+/**
+ * The last value we successfully read, kept per function instance.
+ *
+ * A FALLBACK for when the read throws, never a way to skip the read. Staleness is asymmetric: a
+ * stale LIMIT cannot overspend, because you can never exceed `max(old, new)` and the old figure
+ * was one the day was already allowed to reach. A stale KILL SWITCH is the opposite — it is
+ * pressed precisely because something is spending, and a switch that cannot report its own state
+ * turns "is it off?" into a guess at the moment you most need a fact.
+ */
+let lastGoodLimits: AiLimits | null = null;
+
+export interface EffectiveLimits {
+  limits: AiLimits;
+  /** Which source won, so the admin screen can say it instead of the operator inferring it. */
+  source: "aiConfig/live" | "environment" | "built-in defaults" | "cache (read failed)";
+}
+
+/**
+ * The limits actually in force, read fresh.
+ *
+ * Read OUTSIDE the transaction, immediately before it. Inside, this one global document would join
+ * the read set of every AI budget transaction, so an admin pressing Save would conflict with every
+ * call in flight. A Firestore read costs about $0.00000006 against a call costing $0.001 to $0.01:
+ * the switch's entire promise for roughly 0.006% of the call it guards.
+ *
+ * MISSING DOCUMENT means today's behaviour — whatever the environment resolved to — not "no
+ * limit" and not "refuse everything". Introducing the document must change nothing until somebody
+ * presses Save: absence is overwhelmingly likely to mean "nobody has saved yet", and making that
+ * an outage would be a self-inflicted one on the day it ships.
+ */
+export async function effectiveLimits(): Promise<EffectiveLimits> {
+  try {
+    const snap = await admin.firestore().doc(AI_CONFIG_PATH).get();
+    if (!snap.exists) return { limits: AI_LIMITS, source: LIMITS_SOURCE };
+    // Clamped at the READER, not only at the writer. This document can also arrive from a restore,
+    // an emulator export, or the Firebase console — which uses the Admin SDK and bypasses both the
+    // rules and the callable. The writer's clamp produces a good error message; this one is the
+    // safety property.
+    const limits = clampAiLimits(snap.data() as Record<string, unknown>);
+    lastGoodLimits = limits;
+    return { limits, source: "aiConfig/live" };
+  } catch (err) {
+    console.error("aiConfig read failed", (err as { message?: string })?.message || err);
+    // Never fall back to "no limit". The per-user cap is denominated in accounts and sign-up is
+    // open, so an unbounded global is genuinely unbounded.
+    if (lastGoodLimits) return { limits: lastGoodLimits, source: "cache (read failed)" };
+    return { limits: AI_LIMITS, source: LIMITS_SOURCE };
+  }
+}
+
 export async function holdBudget(uid: string, estimateUsd: number): Promise<BudgetHold> {
-  if (AI_KILL_SWITCH) refuse("kill-switch");
+  // Read the live configuration FIRST, and re-read it on every call. The kill switch used to be
+  // a module constant captured from the environment at cold start, which meant turning it on
+  // required a redeploy — and a kill switch that takes a deploy to bite is a different product
+  // from one that bites now.
+  const { limits } = await effectiveLimits();
+  if (limits.killSwitch) refuse("kill-switch");
+
   const db = admin.firestore();
   const date = today();
   const heldMicro = toMicro(estimateUsd);
@@ -132,8 +194,10 @@ export async function holdBudget(uid: string, estimateUsd: number): Promise<Budg
     const userSpent = u && u.date === date ? (u.microUsd || 0) : 0;
     const globalSpent = g && g.date === date ? (g.microUsd || 0) : 0;
 
-    if (userSpent + heldMicro > toMicro(USER_DAILY_USD)) refuse("user-budget");
-    if (globalSpent + heldMicro > toMicro(GLOBAL_DAILY_USD)) refuse("global-budget");
+    // `limits`, captured before the transaction opened, so a retry cannot silently use a
+    // different ceiling halfway through.
+    if (userSpent + heldMicro > toMicro(limits.userDailyUsd)) refuse("user-budget");
+    if (globalSpent + heldMicro > toMicro(limits.globalDailyUsd)) refuse("global-budget");
 
     tx.set(userRef, { date, microUsd: userSpent + heldMicro }, { merge: true });
     tx.set(globalRef, { date, microUsd: globalSpent + heldMicro }, { merge: true });

@@ -13,7 +13,8 @@ import { errorStatusOf, inErrorState, landingErrorFilter, type ErrorFilter } fro
 import {
   adminCheck, adminGetStats, adminListProfiles, adminListAdmins, adminSetAdmin,
   adminGetHealth, adminSetErrorStatus, adminGetAiLedger, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
-  adminBackfillExpenses, adminGetAiSpend, type AiSpend,
+  adminBackfillExpenses, adminGetAiSpend, adminGetAiConfig, adminSetAiConfig,
+  type AiSpend, type AiConfig,
 } from '../serverActions';
 
 type Tab = 'overview' | 'profiles' | 'groups' | 'admins' | 'ai' | 'health' | 'broadcast';
@@ -149,6 +150,13 @@ export default function Admin() {
   const [aiUid, setAiUid] = useState('');
   const [aiFailuresOnly, setAiFailuresOnly] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
+  const [aiConfig, setAiConfig] = useState<AiConfig | null>(null);
+  // The FORM, separate from what is saved, so a half-typed number never looks enforced.
+  const [cfgGlobal, setCfgGlobal] = useState('');
+  const [cfgUser, setCfgUser] = useState('');
+  const [cfgKill, setCfgKill] = useState(false);
+  const [cfgBusy, setCfgBusy] = useState(false);
+  const [cfgMsg, setCfgMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [groups, setGroups] = useState<any[]>([]);
   const [growth, setGrowth] = useState<any>(null);
   const [detail, setDetail] = useState<any>(null); // open user drill-down
@@ -258,8 +266,15 @@ export default function Admin() {
       // they were being recorded nowhere anybody looks.
       adminGetAiLedger(),
       adminGetAiSpend(aiDays),
+      adminGetAiConfig(),
     ]);
-    const [s, p, a, h, g, gr, led, spend] = results;
+    const [s, p, a, h, g, gr, led, spend, cfg] = results;
+    if (cfg.status === 'fulfilled') {
+      setAiConfig(cfg.value);
+      setCfgGlobal(String(cfg.value.effective.globalDailyUsd));
+      setCfgUser(String(cfg.value.effective.userDailyUsd));
+      setCfgKill(cfg.value.effective.killSwitch);
+    }
     if (led.status === 'fulfilled') setLedger(led.value);
     if (spend.status === 'fulfilled') setAiSpend(spend.value);
     if (s.status === 'fulfilled') setStats(s.value);
@@ -281,17 +296,74 @@ export default function Admin() {
    */
   const loadAi = async (days: 7 | 30, date: string, uid: string) => {
     setAiBusy(true);
-    const [spend, led] = await Promise.allSettled([
+    const [spend, led, cfg] = await Promise.allSettled([
       adminGetAiSpend(days),
       adminGetAiLedger({ ...(date ? { date } : {}), ...(uid ? { uid } : {}) }),
+      adminGetAiConfig(),
     ]);
     if (spend.status === 'fulfilled') setAiSpend(spend.value);
     if (led.status === 'fulfilled') setLedger(led.value);
+    if (cfg.status === 'fulfilled') {
+      setAiConfig(cfg.value);
+      // Seed the form from what is ACTUALLY enforced, not from the document: before anyone has
+      // saved, the document does not exist and the enforced values are the compiled defaults.
+      setCfgGlobal(String(cfg.value.effective.globalDailyUsd));
+      setCfgUser(String(cfg.value.effective.userDailyUsd));
+      setCfgKill(cfg.value.effective.killSwitch);
+    }
     if (spend.status === 'rejected' || led.status === 'rejected') {
       setLoadError(true);
       console.error('AI Center reload failed', spend, led);
     }
     setAiBusy(false);
+  };
+
+  const saveAiConfig = async () => {
+    // ── An empty box is not a zero budget ──────────────────────────────────────────────────
+    //
+    // `<input type="number">` reports `''` for an empty field AND for anything it considers
+    // invalid — including `1.` while you are typing `1.5`, and `5 USD`. `Number('')` is `0`, and
+    // a saved limit of 0 refuses every paid AI call in the app. It would have reported "Saved."
+    // with an empty `clamped`, drawn a full-width progress bar in the brand colour, and left a
+    // non-owner admin unable to undo it, because raising a limit is owner-only.
+    const g = cfgGlobal.trim();
+    const u = cfgUser.trim();
+    if (!g || !u || !/^\d+(\.\d+)?$/.test(g) || !/^\d+(\.\d+)?$/.test(u)) {
+      setCfgMsg({ ok: false, text: 'Both limits must be a number. Leave nothing blank.' });
+      return;
+    }
+    // Zero is a legitimate setting — it is "no paid AI today" — and it is also what a slip looks
+    // like. Ask, once, rather than making it indistinguishable from a typo.
+    if ((Number(g) === 0 || Number(u) === 0)
+        && !window.confirm('A limit of $0 refuses every AI call. Save anyway?')) {
+      return;
+    }
+
+    setCfgBusy(true); setCfgMsg(null);
+    try {
+      // The STRINGS, not Number(). The server's `clampAiLimits` is the one careful parser.
+      const res = await adminSetAiConfig({
+        globalDailyUsd: g,
+        userDailyUsd: u,
+        killSwitch: cfgKill,
+      });
+      // Re-seed from what the SERVER stored, never from what was typed. If the ceiling brought
+      // 10000 down to 50, the form must show 50 — otherwise the screen and the bill disagree.
+      setCfgGlobal(String(res.saved.globalDailyUsd));
+      setCfgUser(String(res.saved.userDailyUsd));
+      setCfgKill(res.saved.killSwitch);
+      setCfgMsg({
+        ok: true,
+        text: res.clamped.length > 0
+          ? `Saved, with limits adjusted by the server: ${res.clamped.join(' · ')}`
+          : 'Saved.',
+      });
+      await loadAi(aiDays, aiDate, aiUid);
+    } catch (e: any) {
+      // A direction refusal arrives here with a sentence from the server, and it is the useful
+      // half of the feature: "only the owner can raise this" is what the operator needs to read.
+      setCfgMsg({ ok: false, text: e?.message || 'Failed.' });
+    } finally { setCfgBusy(false); }
   };
 
   const sendBroadcast = async () => {
@@ -959,9 +1031,13 @@ export default function Admin() {
                     <span className="text-[11px] text-zinc-400">{aiSpend.limits.source}</span>
                   </div>
                   <div className="h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                    {/* A limit of ZERO is not a full bar in the brand colour. It refuses every call,
+                        so it is drawn red like any other exhausted budget — the previous version
+                        rendered the most drastic setting in the app as if everything were fine. */}
                     <div
                       className={`h-full rounded-full ${
-                        aiSpend.limits.globalDailyUsd > 0 && aiSpend.todayGlobalUsd / aiSpend.limits.globalDailyUsd > 0.8
+                        aiSpend.limits.globalDailyUsd <= 0
+                          || aiSpend.todayGlobalUsd / aiSpend.limits.globalDailyUsd > 0.8
                           ? 'bg-red-500' : 'bg-primary'
                       }`}
                       style={{ width: `${Math.min(100, aiSpend.limits.globalDailyUsd > 0
@@ -973,6 +1049,13 @@ export default function Admin() {
                     {aiSpend.limits.killSwitch
                       ? <span className="text-red-500 font-bold">KILL SWITCH ON — every paid call is being refused</span>
                       : <span>Kill switch off</span>}
+                    {/* Said in words, because a $0 limit refuses everything exactly like the kill
+                        switch does and is far easier to set by accident. */}
+                    {(aiSpend.limits.globalDailyUsd <= 0 || aiSpend.limits.userDailyUsd <= 0) && (
+                      <span className="text-red-500 font-bold">
+                        A limit is $0 — every paid call is being refused
+                      </span>
+                    )}
                   </div>
                   {/* A rejected input is SAID, not swallowed. Until today a mistyped variable made
                       the ceiling NaN, every comparison against it false, and the limit silently
@@ -981,6 +1064,94 @@ export default function Admin() {
                     <div className="bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[11px] rounded-lg p-2 flex flex-col gap-0.5">
                       <span className="font-bold">Configured values were refused and replaced:</span>
                       {aiSpend.limits.clamped.map(c => <span key={c}>· {c}</span>)}
+                    </div>
+                  )}
+                </div>
+              </Section>
+            )}
+
+
+            {/* ── The budget, editable ─────────────────────────────────────────────────────
+                Until this existed, stopping AI spend meant editing an environment variable and
+                redeploying the functions — a kill switch that takes a deploy to bite is a
+                different product from one that bites now.
+
+                The SERVER owns the bounds and the direction. Any admin may make things safer
+                (switch on, limits down); only the owner may raise a limit or switch it back off,
+                because `adminSetAdmin` is gated by `assertAdmin` alone, so any admin can mint
+                another admin. The form cannot widen anything the server will not accept. */}
+            {aiConfig && (
+              <Section icon={<Power className="w-4 h-4 text-primary" />} title="Budget and kill switch">
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex flex-col gap-3">
+                  {!aiConfig.exists && (
+                    <p className="text-[11px] text-zinc-500">
+                      Nothing saved yet — running on built-in defaults. Saving here takes over from
+                      the environment variables.
+                    </p>
+                  )}
+                  {aiConfig.outsideAdmin && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                      Last change does not match the newest log entry — something wrote this outside
+                      the admin (the Firebase console bypasses both the rules and the callable).
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] text-zinc-500 uppercase tracking-wide">Whole app, per day ($)</span>
+                      <input
+                        type="number" step="0.01" min="0" value={cfgGlobal}
+                        onChange={(e) => setCfgGlobal(e.target.value)}
+                        className="px-2 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-sm tabular-nums border-0"
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] text-zinc-500 uppercase tracking-wide">Per person, per day ($)</span>
+                      <input
+                        type="number" step="0.01" min="0" value={cfgUser}
+                        onChange={(e) => setCfgUser(e.target.value)}
+                        className="px-2 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-sm tabular-nums border-0"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-200">
+                    <input type="checkbox" checked={cfgKill} onChange={(e) => setCfgKill(e.target.checked)} />
+                    Kill switch — refuse every paid AI call
+                  </label>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={saveAiConfig}
+                      disabled={cfgBusy}
+                      className="px-3 py-1.5 rounded-lg bg-primary text-white text-sm font-bold disabled:opacity-60"
+                    >
+                      {cfgBusy ? 'Saving…' : 'Save'}
+                    </button>
+                    {cfgMsg && (
+                      <span className={`text-[11px] ${cfgMsg.ok ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {cfgMsg.text}
+                      </span>
+                    )}
+                  </div>
+
+                  {aiConfig.updatedAt && (
+                    <p className="text-[11px] text-zinc-400">
+                      Last changed {fmtDate(aiConfig.updatedAt)}{aiConfig.updatedByEmail ? ` by ${aiConfig.updatedByEmail}` : ''}.
+                    </p>
+                  )}
+
+                  {aiConfig.log.length > 0 && (
+                    <div className="border-t border-zinc-100 dark:border-zinc-800 pt-2 flex flex-col gap-1">
+                      <p className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Changes</p>
+                      {aiConfig.log.slice(0, 8).map((row) => (
+                        <p key={row.id} className="text-[11px] text-zinc-500 tabular-nums">
+                          {row.at ? fmtDate(row.at) : '—'} · {row.byEmail || 'unknown'} ·{' '}
+                          {row.from?.globalDailyUsd} → {row.to?.globalDailyUsd} global,{' '}
+                          {row.from?.userDailyUsd} → {row.to?.userDailyUsd} per person
+                          {row.to?.killSwitch ? ' · kill switch ON' : ''}
+                        </p>
+                      ))}
                     </div>
                   )}
                 </div>
