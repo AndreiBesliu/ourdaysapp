@@ -13,6 +13,34 @@ import {
   MAX_GLOBAL_DAILY_USD, MAX_USER_DAILY_USD, configChangeAllowed,
 } from '../../functions/src/aiLimits';
 
+describe('the numbers themselves', () => {
+  it('pins every money constant to a LITERAL', () => {
+    // Everything else in this file asserts against the constant imported from the module under
+    // test, so it follows the code anywhere: change 50 to 5000 and fourteen assertions stay
+    // green. Measured by an adversarial review — four one-token edits to the money, all silent.
+    //
+    // These four lines are the only place the VALUES are stated. Changing a limit should require
+    // changing this file, which is the point: it is a decision, not a refactor.
+    expect(MAX_GLOBAL_DAILY_USD).toBe(50);
+    expect(MAX_USER_DAILY_USD).toBe(5);
+    expect(DEFAULT_GLOBAL_DAILY_USD).toBe(5);
+    expect(DEFAULT_USER_DAILY_USD).toBe(0.25);
+  });
+
+  it('keeps the defaults inside the ceilings', () => {
+    // A default above its own ceiling would be clamped on every read, so the app would run on a
+    // figure nobody wrote down.
+    expect(DEFAULT_GLOBAL_DAILY_USD).toBeLessThanOrEqual(MAX_GLOBAL_DAILY_USD);
+    expect(DEFAULT_USER_DAILY_USD).toBeLessThanOrEqual(MAX_USER_DAILY_USD);
+    expect(DEFAULT_USER_DAILY_USD).toBeLessThanOrEqual(DEFAULT_GLOBAL_DAILY_USD);
+  });
+
+  it('leaves the per-person ceiling well below the app-wide one', () => {
+    // If they were equal, one account could be entitled to the whole day's budget.
+    expect(MAX_USER_DAILY_USD).toBeLessThan(MAX_GLOBAL_DAILY_USD);
+  });
+});
+
 describe('a value that is not a number never becomes a limit', () => {
   it('falls back to the default instead of producing NaN', () => {
     // This is the shipped bug, in one line. `Number('5 USD')` is NaN, and NaN as a ceiling is

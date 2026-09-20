@@ -43,6 +43,21 @@ export const DEFAULT_USER_DAILY_USD = 0.25;
  */
 export const MAX_GLOBAL_DAILY_USD = 50;
 
+/**
+ * The most ONE account may be allowed to spend in a UTC day.
+ *
+ * Separate from the global ceiling on purpose. Without it, an admin could set the per-user limit
+ * equal to the app-wide one, and a single account would be entitled to the entire day's budget —
+ * a limit that exists and bounds nothing.
+ *
+ * Declared HERE, above `clampAiLimits`, and not beside the phase-2 block where it was written.
+ * `const` is hoisted but not initialised: read before its assignment it is `undefined`, and
+ * `50 > undefined` is `false`, so a partial module initialisation would drop the per-user cap
+ * with `clamped: []` — no error, no trace. Unreachable today because this file imports nothing,
+ * which is exactly the property that could change without anyone thinking about this line.
+ */
+export const MAX_USER_DAILY_USD = 5;
+
 export interface AiLimits {
   globalDailyUsd: number;
   userDailyUsd: number;
@@ -122,15 +137,6 @@ export function clampAiLimits(raw: RawAiLimits | null | undefined): AiLimits {
 
   return { globalDailyUsd: global, userDailyUsd: user, killSwitch, clamped };
 }
-
-/**
- * The most ONE account may be allowed to spend in a UTC day.
- *
- * Separate from the global ceiling on purpose. Without it, an admin could set the per-user limit
- * equal to the app-wide one, and a single account would be entitled to the entire day's budget —
- * a limit that exists and bounds nothing.
- */
-export const MAX_USER_DAILY_USD = 5;
 
 /** The shape stored at `aiConfig/live`, minus the audit stamp. */
 export interface AiConfigFields {

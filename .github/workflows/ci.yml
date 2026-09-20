@@ -40,3 +40,21 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # The Firestore rules are the only thing standing between a browser and the data, and until
+      # 2026-09-20 nothing in CI ran a single one of the 207 tests that probe them. They needed a
+      # JDK and an emulator, so they stayed a local-only gate — which means they only ran when
+      # somebody remembered, on the change where they mattered least.
+      #
+      # The concrete thing this catches: `rules-tests/ai-config.test.ts` exists to refuse an
+      # ADMIN write to `aiConfig`, because a future contributor adding `exists(/admins/$(uid))`
+      # there would look like they were fixing something and would quietly move a money control
+      # behind a door any admin can open. Nothing would have noticed.
+      - name: Set up JDK for the Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Rules tests
+        run: npm run test:rules

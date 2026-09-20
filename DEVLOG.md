@@ -7290,3 +7290,64 @@ Regulile refuză `aiConfig` și `aiConfigLog` **inclusiv adminilor**, și testul
 golul pe care `games.test.ts` îl avea la `warlordConfig`, unde se afirmă doar că
 **ne**-adminii sunt refuzați, ceea ce un `allow write: if false` trece neschimbat.
 
+---
+
+## 2026-09-20 · Ce a mai rămas din recenzia adversarială
+
+**Prompt (Andrei):** „Continua si verific alta data”. **Model:** Claude Opus 5.
+
+Cele trei blocante au plecat la deploy. Astea sunt constatările pe care judecătorul le-a lăsat
+ca „pot aștepta” — și câteva n-ar fi trebuit să aștepte.
+
+### Un comentariu care susținea ceva ce codul nu făcea
+
+Scrisesem, lângă cache-ul de rezervă, că **întrerupătorul e cazul asimetric** — o limită veche nu
+poate cheltui peste, dar un întrerupător vechi poate să nu oprească. Apoi `catch`-ul de dedesubt
+le trata identic. **Un comentariu care argumentează o asimetrie pe care codul n-o implementează e
+mai rău decât niciun comentariu:** se citește ca și cum raționamentul ar fi fost aplicat.
+
+Acum spune ce dă de fapt: golul rămas e **un apel, pe instanță, pe citire eșuată**, doar dacă
+întrerupătorul a fost apăsat DUPĂ ultima citire reușită a acelei instanțe, și e mărginit de plafonul
+global, care se aplică tot timpul. Îngustat cu **o reîncercare** înainte de rezervă. Ce NU fac,
+deliberat: să refuz tot când configurația nu se poate citi — asta transformă o scăpare de rețea
+într-o oprire totală, și factura e oricum mărginită.
+
+### Trei găuri tăcute
+
+* **`MAX_USER_DAILY_USD` era folosită la rândul 110 și declarată la 133.** `const` e ridicat
+  dar nu inițializat: citit înainte de atribuire e `undefined`, iar `50 > undefined` e **fals**
+  — deci plafonul pe om ar fi dispărut cu `clamped: []`, fără eroare și fără urmă. Mutată sus.
+* **`Math.max(0, NaN)` e `NaN`**, deci o estimare non-finită trecea de **ambele** verificări
+  și scria `microUsd: NaN` în contor — pe care următoarea citire, `(u.microUsd || 0)`, îl face
+  **zero**. Cheltuiala zilei, resetată tăcut. Nicio cale nu ajunge acolo azi; garda e o comparație.
+* **Avertismentul „schimbat în afara adminului” nu putea detecta cazul pentru care fusese scris.**
+  Compara UID-uri, iar o editare din consola Firebase nu atinge `updatedBy` — deci uid-urile
+  se potriveau, niciun avertisment, și ecranul spunea mai departe „Last changed ‹data veche› by
+  ‹e-mail vechi›”, **afirmând cu încredere o proveniență falsă**. Compară acum VALORILE, și regula
+  a ieșit într-un `aiConfigProvenance.ts` testabil.
+
+### Constantele de bani supraviețuiau unei editări de un token
+
+Paisprezece afirmații din `aiLimits.test.ts` se compară cu constanta importată **din modulul
+testat** — deci urmează codul oriunde s-ar duce. Schimbi 50 în 500 și toate rămân verzi. Patru
+rânduri noi fixează valorile pe **literali**: schimbarea unei limite cere acum atingerea acestui
+fișier, ceea ce e tocmai ideea — e o decizie, nu o refactorizare.
+
+### Și cele 207 teste de reguli nu rulau în CI
+
+Cereau JDK și emulator, deci au rămas o poartă **doar locală** — adică rulau când își amintea
+cineva, pe schimbarea unde contează cel mai puțin. Concret, ce prinde acum: `ai-config.test.ts`
+există ca să refuze scrierea unui ADMIN pe `aiConfig`, fiindcă cineva care adăugă mai târziu
+un `exists(/admins/$(uid))` acolo ar părea că repară ceva și ar muta tăcut un control pe bani
+în spatele unei uși pe care orice admin o deschide.
+
+### Probe
+
+**8 mutații din 8**, cu control negativ. `npx tsc -b` verde · poartă de lint verde ·
+**1657 de teste** · **207 teste de reguli** · build verde · build de functions verde.
+
+**Rămase, cu motivul:** un refuz de întrerupător în trigger șterge definitiv `ai_assistant`
+(gol de produs, nu de corectitudine — cere o poveste de reluare); fiecare încercare refuzată arde
+una din cele 50 de apeluri zilnice; și `AI_KILL_SWITCH=1` nu pornește (doar `true`),
+ceea ce e sigur ca direcție.
+

@@ -57,8 +57,18 @@ export function priceUsd(model: string, inTokens: number, outTokens: number): nu
   return (inTokens / 1_000_000) * p.inPerM + (outTokens / 1_000_000) * p.outPerM;
 }
 
-/** Stored as micro-USD integers: floats accumulate error and Firestore has no decimal type. */
-const toMicro = (usd: number) => Math.max(0, Math.round(usd * 1_000_000));
+/**
+ * Stored as micro-USD integers: floats accumulate error and Firestore has no decimal type.
+ *
+ * `Math.max(0, NaN)` is `NaN`, not 0 — so without the guard a non-finite estimate produced a
+ * non-finite hold, `spent + NaN > limit` was FALSE on both checks, the call went through, and
+ * `microUsd: NaN` was written to the counter. The next read does `(u.microUsd || 0)`, which turns
+ * that NaN into **zero**: the day's spend silently reset. No path reaches it today — every
+ * estimate is a finite length times a guarded ratio — but the failure is invisible and the guard
+ * is one comparison.
+ */
+const toMicro = (usd: number) =>
+  Number.isFinite(usd) ? Math.max(0, Math.round(usd * 1_000_000)) : 0;
 
 /**
  * Resolved ONCE, at module load, through `clampAiLimits`.
@@ -129,8 +139,26 @@ export const AI_CONFIG_PATH = "aiConfig/live";
  * A FALLBACK for when the read throws, never a way to skip the read. Staleness is asymmetric: a
  * stale LIMIT cannot overspend, because you can never exceed `max(old, new)` and the old figure
  * was one the day was already allowed to reach. A stale KILL SWITCH is the opposite — it is
- * pressed precisely because something is spending, and a switch that cannot report its own state
- * turns "is it off?" into a guess at the moment you most need a fact.
+ * pressed precisely because something is spending.
+ *
+ * ── What this actually gives you, stated honestly ──────────────────────────────────────
+ *
+ * The paragraph above used to end there, and the code beneath treated both the same. A comment
+ * that argues for an asymmetry the code does not implement is worse than no comment: it reads as
+ * though the reasoning had been applied.
+ *
+ * The residual gap is ONE call, per warm instance, per read failure, and only when the switch was
+ * pressed AFTER that instance's last successful read. It is bounded by the global cap, which
+ * still applies throughout. Two things narrow it further:
+ *
+ *   * the read is RETRIED once before falling back — a transient blip is the overwhelmingly
+ *     likely cause, and one retry converts most of them into a success;
+ *   * the cached switch is STICKY: once a successful read has said ON, a later read failure keeps
+ *     it on, because nothing but a successful read saying otherwise should turn it off.
+ *
+ * What is deliberately NOT done: treating any unreadable config as "off limits, refuse
+ * everything". That converts a Firestore blip into a total AI outage, and the bill is already
+ * bounded by the global cap. Failing closed here would buy very little and cost a lot.
  */
 let lastGoodLimits: AiLimits | null = null;
 
@@ -155,7 +183,16 @@ export interface EffectiveLimits {
  */
 export async function effectiveLimits(): Promise<EffectiveLimits> {
   try {
-    const snap = await admin.firestore().doc(AI_CONFIG_PATH).get();
+    let snap;
+    try {
+      snap = await admin.firestore().doc(AI_CONFIG_PATH).get();
+    } catch (first) {
+      // One retry. The thing being guarded costs a thousand times the read, and a blip is the
+      // likeliest reason a single `get()` on one document fails.
+      console.error("aiConfig read failed, retrying once",
+        (first as { message?: string })?.message || first);
+      snap = await admin.firestore().doc(AI_CONFIG_PATH).get();
+    }
     if (!snap.exists) return { limits: AI_LIMITS, source: LIMITS_SOURCE };
     // Clamped at the READER, not only at the writer. This document can also arrive from a restore,
     // an emulator export, or the Firebase console — which uses the Admin SDK and bypasses both the
@@ -169,6 +206,8 @@ export async function effectiveLimits(): Promise<EffectiveLimits> {
     // Never fall back to "no limit". The per-user cap is denominated in accounts and sign-up is
     // open, so an unbounded global is genuinely unbounded.
     if (lastGoodLimits) return { limits: lastGoodLimits, source: "cache (read failed)" };
+    // Never read successfully on this instance: today's behaviour, plus the switch STAYS ON if the
+    // environment says so. Sticky in the one direction that costs nothing to be wrong about.
     return { limits: AI_LIMITS, source: LIMITS_SOURCE };
   }
 }

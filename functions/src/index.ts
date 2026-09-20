@@ -15,6 +15,7 @@ import {
   effectiveLimits, AI_CONFIG_PATH, AI_LIMITS, LIMITS_SOURCE,
 } from "./aiLedger";
 import { clampAiLimits, configChangeAllowed, type AiConfigFields } from "./aiLimits";
+import { changedOutsideAdmin } from "./aiConfigProvenance";
 import { mergeRollups } from "./aiSpendMerge";
 import { readFriendship } from "./friendship";
 import { notify } from "./notify";
@@ -2824,14 +2825,29 @@ export const adminGetAiConfig = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, a
   });
 
   const stored = snap.exists ? snap.data() || {} : null;
-  const newestLoggedBy = rows.length > 0 ? (logSnap!.docs[0].data()?.by?.uid || "") : "";
-  const outsideAdmin = !!stored && !!stored.updatedBy && rows.length > 0
-    && stored.updatedBy !== newestLoggedBy;
+
+  // Compare the VALUES, not the uids.
+  //
+  // The uid comparison could not detect the case it was written for: editing `globalDailyUsd` in
+  // the Firebase console leaves `updatedBy` and `updatedAt` untouched, so the uids still match,
+  // no warning appears — and the screen then states "Last changed <old date> by <old email>",
+  // actively asserting a provenance that is false. The newest log row records what the callable
+  // last wrote; if the document no longer says that, something else wrote it.
+  const newestTo = rows.length > 0 ? (logSnap!.docs[0].data()?.to || null) : null;
+  const outsideAdmin = changedOutsideAdmin(stored, newestTo);
 
   const eff = await effectiveLimits();
   return {
     exists: snap.exists,
     effective: { ...eff.limits, source: eff.source },
+    // The RAW stored values, beside the clamped ones. Without this there is no field on the
+    // screen through which a document disagreeing with what is enforced could ever be seen: a
+    // console-written 500 displays as 50 and looks like somebody typed 50.
+    stored: stored ? {
+      globalDailyUsd: stored.globalDailyUsd ?? null,
+      userDailyUsd: stored.userDailyUsd ?? null,
+      killSwitch: stored.killSwitch ?? null,
+    } : null,
     updatedAt: stored?.updatedAt && typeof stored.updatedAt.toDate === "function"
       ? stored.updatedAt.toDate().toISOString() : null,
     updatedByEmail: stored?.updatedByEmail || "",
@@ -2897,7 +2913,7 @@ export const adminSetAiConfig = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, a
   let from: AiConfigFields;
   let fromSource: string;
   try {
-    from = await db.runTransaction(async (tx) => {
+    const outcome = await db.runTransaction(async (tx) => {
       const snap = await tx.get(configRef);
       const stored = snap.exists ? (snap.data() || {}) : null;
       // The RAW stored values, clamped only for comparison. A console-written 500 must not be
@@ -2909,7 +2925,7 @@ export const adminSetAiConfig = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, a
             userDailyUsd: AI_LIMITS.userDailyUsd,
             killSwitch: AI_LIMITS.killSwitch,
           });
-      fromSource = stored ? "aiConfig/live" : LIMITS_SOURCE;
+      const seenSource = stored ? "aiConfig/live" : LIMITS_SOURCE;
       const before: AiConfigFields = {
         globalDailyUsd: prev.globalDailyUsd,
         userDailyUsd: prev.userDailyUsd,
@@ -2933,7 +2949,7 @@ export const adminSetAiConfig = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, a
         by: { uid, email },
         actor,
         from: before,
-        fromSource,
+        fromSource: seenSource,
         to,
         // What the form SENT, beside what the server stored. If somebody types 10000 and the
         // ceiling brings it to 50, the screen, the log and the bill must not tell three stories.
@@ -2944,8 +2960,10 @@ export const adminSetAiConfig = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, a
         },
         clamped: clamped.clamped,
       });
-      return before;
+      return { before, seenSource };
     });
+    from = outcome.before;
+    fromSource = outcome.seenSource;
   } catch (err) {
     if (err instanceof HttpsError) throw err;
     // Refuse rather than guess. Nothing is written, and the operator is told to try again — which
@@ -2953,6 +2971,14 @@ export const adminSetAiConfig = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, a
     console.error("adminSetAiConfig transaction failed", (err as { message?: string })?.message || err);
     throw new HttpsError("unavailable", "Could not read the current configuration. Nothing was changed.");
   }
+
+  // Cloud Logging, so the money change is visible where the FALLBACK already is. Without it,
+  // `aiLedger.ts` logs a failed config read while the change itself leaves no trace in the
+  // function log at all — the wrong way round. Same JSON-line shape as ERROR_DIGEST.
+  console.log(JSON.stringify({
+    evt: "AI_CONFIG_CHANGE", by: email, actor, from, fromSource, to,
+    requested: request.data, clamped: clamped.clamped,
+  }));
 
   return { saved: to, previous: from, clamped: clamped.clamped, actor };
 });
