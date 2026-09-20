@@ -204,6 +204,24 @@ export const canAttachToMeld = (meldCards: RummyCard[], card: RummyCard): { isVa
   return { isValid: false };
 };
 
+/**
+ * The cards a player has selected, out of a hand whose slots can be EMPTY.
+ *
+ * A hand is a fixed set of positions, not a list: attaching a card to a meld leaves a `null`
+ * behind so the remaining cards do not shuffle under the player's fingers. That is deliberate,
+ * and `calculatePenaltyPoints` below already declares it in its signature.
+ *
+ * This exists because the component wrote the same filter in three places and got it right in
+ * two. The third — `localHand.filter(c => selectedCards.includes(c.id))`, in `stageMeld` — read
+ * `.id` off the empty slot and threw. To reach it you only had to attach a card to a meld (which
+ * creates the gap) and then try to lay down another meld: mid-game, mid-turn, with the state on
+ * screen lost. One expression, one place, and the omission stops being possible.
+ */
+export const selectedFrom = (
+  hand: readonly (RummyCard | null)[],
+  selectedIds: readonly string[],
+): RummyCard[] => hand.filter((c): c is RummyCard => !!c && selectedIds.includes(c.id));
+
 export const calculatePenaltyPoints = (hand: (RummyCard | null)[]): number => {
   let pts = 0;
   for (const c of hand) {

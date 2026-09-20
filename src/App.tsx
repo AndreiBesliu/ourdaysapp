@@ -235,7 +235,20 @@ function App() {
             const detected = localZone();
             if (isValidZone(detected)) profileUpdate.timezone = detected;
           }
-          await setDoc(userDocRef, profileUpdate, { merge: true });
+          // ── NOT awaited, and that is the fix ────────────────────────────────────────
+          //
+          // A Firestore write resolves on SERVER acknowledgement. With IndexedDB persistence on
+          // (firebase.ts), an offline write applies to the local cache immediately and its promise
+          // simply never settles — there is no error, no timeout, nothing to catch. Awaiting it
+          // here held `setLoading(false)` for ever, so opening the app with no connection showed
+          // the loading spinner and nothing else, on top of a complete local cache that could have
+          // rendered the whole calendar.
+          //
+          // Nothing below reads what these writes produce: they are bookkeeping — a lastLogin
+          // stamp, the public mirror, an empty array. So they are started and left to finish
+          // whenever the network returns, which is exactly what the offline queue is for.
+          void setDoc(userDocRef, profileUpdate, { merge: true })
+            .catch((e) => reportError(e instanceof Error ? e.message : String(e), { context: 'App.profileUpdate' }));
 
           // Mirror non-sensitive fields to the public `profiles` collection so
           // other group members can render this user's name/photo/birthday
@@ -254,7 +267,7 @@ function App() {
           // Omitting the key on a merge leaves whatever is there, so the order of the two
           // writes stops mattering. A profile with no name still renders: the readers fall
           // back per viewer, which is transient, rather than persisting a guess.
-          await setDoc(
+          void setDoc(
             doc(db, 'profiles', currentUser.uid),
             publicMirrorFor(src, currentUser.displayName),
             { merge: true },
@@ -263,7 +276,7 @@ function App() {
           // If the document was just created, it won't have familyMembers, 
           // but we can initialize it if it's completely missing
           if (!userDocSnap?.exists() || !userDocSnap.data()?.familyMembers) {
-            await updateDoc(userDocRef, { familyMembers: [] }).catch(() => {});
+            void updateDoc(userDocRef, { familyMembers: [] }).catch(() => {});
           }
         } catch (error) {
           reportError(error instanceof Error ? error.message : String(error), { context: 'App.userDocSetup' });
@@ -274,6 +287,10 @@ function App() {
 
         // Initialize Push Notifications if running natively
         if (Capacitor.isNativePlatform()) {
+          // Detached for the same reason as the writes above: this waits on a person tapping a
+          // system permission dialog, and the app has no business holding its loading screen for
+          // that. Push registration is not a precondition for showing a calendar.
+          void (async () => {
           try {
             const permStatus = await PushNotifications.requestPermissions();
             if (permStatus.receive === 'granted') {
@@ -304,6 +321,7 @@ function App() {
             reportError(e instanceof Error ? e.message : String(e), { context: 'App.pushSetup' });
             console.error("Push notification setup failed:", e);
           }
+          })();
         }
       } else {
         // The store is module-scope and signing out is an SPA navigate, not a reload, so without

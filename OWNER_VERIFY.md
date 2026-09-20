@@ -1,3 +1,26 @@
+## ⭐ Cele două GRAVE din audit (reparate 20.09)
+
+- [ ] **Pune telefonul pe modul avion și deschide aplicația.** Trebuie să se încarce și să-ți
+      arate calendarul din memoria locală. **Până azi rămânea pe cercul de încărcare la
+      nesfârșit** — nu cădea, nu dădea eroare, doar aștepta, deși avea toate datele local.
+      *Dacă tot se blochează, spune-mi imediat: înseamnă că mai așteaptă ceva ce n-am găsit.*
+- [ ] **La Rummy: pune o carte pe o combinație de pe masă** (așa se creează un loc gol în mână),
+      **apoi selectează alte cărți și încearcă să lași o combinație nouă.** Până azi jocul
+      **crapa** acolo, în mijlocul turei, cu tot ce era pe ecran pierdut.
+
+**Fapte, nu sarcini:**
+
+1. **Blocarea offline n-avea nimic de prins.** O scriere Firestore se consideră terminată abia
+   când RăSPUNDE SERVERUL. Offline, scrierea intră în memoria locală imediat, dar promisiunea ei
+   nu se încheie niciodată — nu e eroare, deci un `try/catch` nu ajută cu nimic.
+   Aplicația aștepta trei astfel de scrieri înainte să se arate.
+2. **Ele erau doar evidență** (ora ultimei conectări, oglinda publică, un tablou gol). Nimic din
+   ce urmează nu le citește, deci acum pornesc și se termină când revine rețeaua — exact pentru
+   asta există coada offline.
+3. **Și pe Android nu mai așteptăm dialogul de notificări.** Cerea permisiunea înainte să arate
+   ecranul, deci aplicația stătea pe încărcare până apăsai Permite sau Refuză.
+
+---
 ## ⭐ Butoanele au căpătat nume (20.09)
 
 Nimic de bifat pentru ochi — schimbarea e pentru cititoarele de ecran și pentru comanda vocală.

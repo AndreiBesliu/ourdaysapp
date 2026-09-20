@@ -12,7 +12,7 @@ interface RummyGameProps {
   onBack: () => void;
 }
 
-import { validateMeld, canAttachToMeld, calculatePenaltyPoints, canSwapJoker, VALUE_ORDER } from './RummyEngine';
+import { validateMeld, canAttachToMeld, calculatePenaltyPoints, canSwapJoker, selectedFrom, VALUE_ORDER } from './RummyEngine';
 import { writeGame } from '../gameWrite';
 
 export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
@@ -335,7 +335,8 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
   };
 
   const stageMeld = () => {
-    const cardsToMeld = localHand.filter(c => selectedCards.includes(c.id));
+    // `selectedFrom`, not a bare filter: an empty slot has no `.id`, and this line threw.
+    const cardsToMeld = selectedFrom(localHand, selectedCards);
     const result = validateMeld(cardsToMeld);
     
     if (!result.isValid) {
@@ -406,7 +407,7 @@ export default function RummyGame({ game, userMap, onBack }: RummyGameProps) {
   // and track first-meld (opening 45-pt) progress so the player isn't guessing.
   const myPlayer = auth.currentUser ? game.state.players?.[auth.currentUser.uid] : null;
   const hasMelded = !!myPlayer?.hasMelded;
-  const selectedCardObjs = localHand.filter(c => c && selectedCards.includes(c.id));
+  const selectedCardObjs = selectedFrom(localHand, selectedCards);
   const selectionValidation = selectedCardObjs.length >= 3 ? validateMeld(selectedCardObjs) : null;
   const stagedTotal = stagedMelds.reduce((sum, m) => sum + m.points, 0);
   const stagedHasRun = stagedMelds.some(m => m.type === 'run');

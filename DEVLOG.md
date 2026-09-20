@@ -7102,3 +7102,66 @@ Cheile React duplicate, poarta de butoane, cheile de traducere lipsă — toate 
 nimic; un parser nu. Și fiecare poartă are nevoie de o întrebare despre **ea însăși** — cât a
 examinat, nu cât exista.
 
+---
+
+## 2026-09-20 · Cele două grave: o pornire care aștepta la infinit, și o mână cu goluri
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+Cele două constatări GRAVE ale auditului, rămase din 19.09.
+
+### 1. Offline, aplicația nu pornea
+
+O scriere Firestore se rezolvă la **confirmarea SERVERULUI**. `firebase.ts` pornește
+persistența IndexedDB, deci offline scrierea intră în cache-ul local imediat și se pune la coadă
+— iar promisiunea ei **nu se încheie niciodată**. Nu e respinsă. N-are timeout. Rămâne în
+așteptare, la nesfârșit.
+
+`App.tsx` aștepta **trei** dintre ele în `onAuthStateChanged`, înainte de
+`setLoading(false)`. Deschideai aplicația fără conexiune și vedeai cercul de încărcare și
+nimic altceva, **peste un cache local complet** care ar fi putut desena tot calendarul. Exista un
+`try/catch` în jur — dar **nu e nimic de prins**: promisiunea nu eșuează, doar nu se termină.
+
+Scrierile sunt evidență contabilă (ora conectării, oglinda publică, un tablou gol) și **nimic de
+sub ele nu le citește**, deci pornesc și se încheie când revine rețeaua. Plus: blocul de push de
+pe Android aștepta `requestPermissions()` — adică **un om care apasă un dialog de sistem** —
+tot înainte de primul ecran.
+
+### 2. Rummy crapa când mâna avea un gol
+
+O mână e un șir de **poziții**, nu o listă: când pui o carte pe o combinație, locul rămâne `null`,
+ca să nu-ți fugă cărțile sub degete în mijlocul turei. Motorul spunea asta de la început în
+semnătura lui `calculatePenaltyPoints(hand: (RummyCard | null)[])`.
+
+Componenta scria însă **același filtru în trei locuri și îl păzea în două**. Al treilea:
+`localHand.filter(c => selectedCards.includes(c.id))` — `.id` pe un loc gol aruncă.
+Drumul până acolo e joc obișnuit: pui o carte pe o combinație (**exact asta creează golul**), apoi
+selectezi și încerci să lași alta.
+
+**Reparația nu e un `c &&`.** E ștergerea duplicării care a făcut omisiunea posibilă:
+un `selectedFrom(hand, ids)` în motor, folosit de ambele locuri.
+
+### Porți
+
+`bootNotBlocked.test.ts` — niciun `await` pe o **scriere** Firestore înăuntrul
+callback-ului de autentificare. Vede prin `.catch()`/`.then()` (două din cele trei
+livrate arătau exact așa) și **se oprește la granița de funcție**: un `await` dintr-un
+callback imbricat rulează pe stiva lui și nu ține pornirea. Poarta a găsit chiar ea un al patrulea
+`await updateDoc` — în ascultătorul de token FCM — iar ăla era **fals pozitiv**, ceea ce a
+schimbat regula: o poartă care urlă degeaba e o poartă pe care cineva o închide.
+
+`rummyHand.test.ts` — selecția dintr-o mână cu goluri, inclusiv mâna numai din goluri.
+
+**7 mutații din 7**, cu control negativ; două dintre ele repun exact cele două regresii.
+
+`npx tsc -b` verde · poartă de lint verde · **1615 de teste** (+14) · build verde.
+
+### Notă de proces: a treia restaurare eșuată tăcut
+
+Harness-ul de mutații a scris octeții originali, `assert`-ul de imediat după a TRECUT, iar
+fișierul s-a întors la varianta mutată **după aceea** — a treia oară azi, pe două fișiere
+diferite. Repo-ul stă în Google Drive și clientul de sync pare să rescrie asincron. Verificarea
+de la **sfârșitul** rulării a prins-o de fiecare dată; o dată a scăpat și de ea, și a prins-o
+`npm test` de dinainte de commit, cu 4 teste roșii. **mtime nu e probă, și nici un
+`assert` imediat după scriere. Doar conținutul, citit târziu.**
+
