@@ -18,6 +18,7 @@ import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-p
 import { t, getDateLocale } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { localZone } from '../utils/eventTime';
+import { eventDayAsLocalDate, dayAsLocalDate } from '../utils/dayLabel';
 import { spanRangeLabel } from '../utils/spanLabel';
 import { generateChecklistForTask } from '../ai';
 import { checklistReasonKey, checklistWorthRetrying } from '../utils/aiErrorKey';
@@ -588,12 +589,18 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                   // The whole extent: "Monday 15 → Wednesday 17", and the clocks beside it. Days are
                   // parsed as LOCAL dates from their label — `new Date('…T00:00Z')` formatted locally
                   // is the previous day west of Greenwich, which is what this line used to do.
-                  const asLocal = (day: string) => { const [y, mo, dd] = day.split('-').map(Number); return new Date(y, mo - 1, dd); };
+                  const asLocal = dayAsLocalDate;
                   const r = spanRangeLabel(event, timezone || localZone());
-                  if (!r) return format(new Date(event.date), 'EEEE, d MMMM yyyy', { locale: dateLocale });
+                  if (!r) {
+                    // Reached only when `date` is missing or unparseable — `spanOf` returns null on
+                    // nothing else. The old line handed that same value to `format`, which prints
+                    // the words "Invalid Date" at somebody in six languages. Nothing is better.
+                    const only = eventDayAsLocalDate(event.date);
+                    return only ? format(only, 'EEEE, d MMMM yyyy', { locale: dateLocale }) : null;
+                  }
                   const days = r.sameDay
-                    ? format(asLocal(r.startDay), 'EEEE, d MMMM yyyy', { locale: dateLocale })
-                    : `${format(asLocal(r.startDay), 'EEEE, d MMMM', { locale: dateLocale })} → ${format(asLocal(r.endDay), 'EEEE, d MMMM yyyy', { locale: dateLocale })}`;
+                    ? format(asLocal(r.startDay)!, 'EEEE, d MMMM yyyy', { locale: dateLocale })
+                    : `${format(asLocal(r.startDay)!, 'EEEE, d MMMM', { locale: dateLocale })} → ${format(asLocal(r.endDay)!, 'EEEE, d MMMM yyyy', { locale: dateLocale })}`;
                   return (
                     <>
                       {days}

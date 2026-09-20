@@ -6,6 +6,7 @@ import { deleteGroupCascade } from '../serverActions';
 import { reportError } from '../reportError';
 import { useDialog } from '../hooks/useDialog';
 import { format } from 'date-fns';
+import { eventDayAsLocalDate } from '../utils/dayLabel';
 import { t, getDateLocale } from '../utils/i18n';
 import { useThemeStore } from '../store';
 
@@ -199,8 +200,12 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
                       <p className={`text-sm font-medium ${selectedEventIds.has(ev.id) ? 'text-zinc-900 dark:text-white' : 'text-zinc-700 dark:text-zinc-300'}`}>
                         {ev.title}
                       </p>
-                      {ev.date && (
-                        <p className="text-xs text-zinc-500">{format(new Date(ev.date), 'd MMM yyyy', { locale: getDateLocale(language) })}</p>
+                      {/* The last live instance of the oldest entry on the roadmap: a stored
+                          `…T00:00:00Z` handed to a LOCAL formatter prints the previous day for
+                          every reader west of Greenwich. Ten of the twelve sites listed in May
+                          were fixed by the span work in September; this list was missed. */}
+                      {eventDayAsLocalDate(ev.date) && (
+                        <p className="text-xs text-zinc-500">{format(eventDayAsLocalDate(ev.date)!, 'd MMM yyyy', { locale: getDateLocale(language) })}</p>
                       )}
                     </div>
                   </div>

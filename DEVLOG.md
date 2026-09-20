@@ -60,9 +60,9 @@
   - Motivul: *„ma dor ochii incercand sa testez, dar sa mai si joc"*. Warlord n-are temă dark, iar `src/screens/Warlord.tsx` o dezactivează explicit (`bg-white text-zinc-900 [color-scheme:light]`) pentru că jocul folosește doar clase Tailwind deschise, fără variante `dark:` — deci și cu aplicația pe dark, jocul e o placă albă. Lacătul se scoate ULTIMUL, după ce jocul suportă dark.
   - Observațiile complete (suprafețe albe, costuri ca șiruri de iconițe fără etichetă, „Cannot afford" care nu spune ce lipsește, antet înghesuit, 9 taburi plate, culoarea ramurilor care nu coboară în arbore, log brut, nemăsurat pe telefon) sunt în `Apps/games/warlord/DEVLOG.md`, secțiunea *Revamp UI/UX + temă dark*.
   - Fundația: tokenuri semantice de culoare în locul claselor stock, aplicate în AMBELE copii ale codului de joc. De decis cu Andrei: tema urmează store-ul OurDaysApp sau are comutator propriu; păstrăm direcția medievală sau trecem pe plat/modern; felii vs. prototip pe un singur tab.
-- **Auto-update pentru sesiuni lungi 🔄** (ridicat 2026-08-01): `index.html` înregistrează service worker-ul dar nu cheamă niciodată `registration.update()` și nu ascultă `updatefound`; gate-ul de versiune rulează doar când se parsează un index.html PROASPĂT, ceea ce într-un tab deschis de ore nu se întâmplă. Owner-ul a rulat ore întregi un bundle dinaintea deploy-ului (lipseau tabul Research și butonul Admin) deși live-ul servea codul curent. Fix propus: `update()` pe `visibilitychange` + pastilă „versiune nouă — reîncarcă" (cere traduceri în cele 6 limbi). Workaround curent: hard-reload.
+- ~~**Auto-update pentru sesiuni lungi 🔄**~~ ✅ DONE — re-măsurat 20.09.2026 și găsit deja livrat. `NewVersionNotice` (montat în `App.tsx`) verifică periodic ȘI pe `visibilitychange` — exact momentul interesant, tabul la care te întorci dimineața, când un cronometru de fundal a fost sugrumat. Compară **hash-ul bundle-ului de intrare** servit cu cel pe care rulează tabul (`src/utils/appVersion.ts`), nu un literal `app_version` pe care trebuia să-l ridice cineva de mână — și care e exact motivul pentru care poarta veche n-a prins nimic. Nu reîncarcă niciodată singur: un reload în mijlocul unui mesaj îl aruncă.
 - **Infrastructure & UX ⚙️**
-  - **Event Date Timezone Shift 🟠**: Event dates are stored via `new Date(eventDate).toISOString()` where `eventDate` is a `'yyyy-MM-dd'` string from an `<input type="date">`. `new Date('yyyy-MM-dd')` parses as **UTC midnight**, so for users in timezones *behind* UTC (the Americas) the stored day shifts forward by one when re-parsed/compared. Pervasive: storage (`AddEventModal.tsx` ~274/604/608/612/621), comparisons (`CalendarGrid.tsx` ~206/363, `CalendarHome.tsx` ~546/555/564/867), recurrence expansion (`utils/recurrence.ts` ~68/84), display (`EventDetailsModal.tsx` ~336). NB: **latent for UTC+ users** (e.g. Europe/Bucharest is unaffected) — only bites UTC-negative timezones. Fix: store/compare dates as local `yyyy-MM-dd` (or parse with explicit local time), and handle already-stored UTC values. (Found during the weekday-alignment fix sweep, 2026-05-26.)
+  - ~~**Event Date Timezone Shift 🟠**~~ ✅ DONE (2026-09-20) — **re-măsurat înainte de a fi repetat**, fiindcă intrarea era din 26.05 și descria o problemă „pervasivă" cu vreo douăsprezece locuri. Zece erau deja închise de munca pe intervale din septembrie, care a mutat stocarea și comparațiile pe `dayOf`/`occursOn` (ziua e partea UTC a instantului, citită UTC peste tot, deci ziua tastată și ziua stocată coincid în orice fus). Al unsprezecelea era o ramură de rezervă din `EventDetailsModal` pe care `spanOf` o atinge doar când data e necitibilă — acolo linia veche nu scria ziua greșită, scria cuvintele „Invalid Date" în fața omului. **Rămăsese exact UNUL viu**: lista de evenimente din `LeaveGroupModal`, unde `format(new Date(ev.date), …)` tipărea ziua precedentă pentru orice cititor de la vest de Greenwich. Reparat cu `eventDayAsLocalDate` (`src/utils/dayLabel.ts` — deliberat NU în `eventTime.ts`, care există în două copii byte-identice pentru app și `functions/`: e prezentare, iar serverul n-are cititor și n-are fusul cititorului), plus o gardă cu parser care refuză orice `format(new Date(x.date))` nou. Probat prin mutație **sub TZ=America/Los_Angeles** — la UTC versiunea stricată și cea bună tipăresc la fel, deci o suită verde acasă n-ar fi spus nimic. Latent la noi dintotdeauna: Europe/Bucharest e UTC+.
   - **Emoji Event Icons 🎭**: Support choosing an Emoji instead of standard Lucide icons for event categories, with the emoji background/highlight affected by the custom event color.
   - **Offline-First Support**: Enable Firestore local persistence and disk caching for seamless offline calendar/chat navigation.
   - **Event Templates**: Save commonly used event structures and re-use them in one tap.
@@ -95,7 +95,7 @@
 - ~~**Email verification (toEmail trust)**~~ ✅ DONE (2026-09-20) — impersonation closed 2026-05-26, the residual read-disclosure closed today. Details in the session log for 2026-09-20.
   - DONE: sign-up now calls `sendEmailVerification`; a `VerifyEmailBanner` lets email/password users resend + recheck (reload + `getIdToken(true)` to refresh the claim). The **accept** path is gated: `respondToFriendRequest` and `acceptGroupInvite` require `request.auth.token.email_verified === true` to honor an email-addressed (`toEmail`) match — so you can no longer **accept** an invite/request sent to an address you don't own (the account-takeover/impersonation vector). uid-addressed (`toId`) flows — friend-invites to groups, group-member friend-adds — are unaffected (uid can't be spoofed), so the common cases work without verification. Google users are already verified.
   - CLOSED (2026-09-20): the `toEmail` read branch of `canAccessInvite` / `canAccessFriendReq` now requires `email_verified`, and compares both sides lowercased (a capital letter in an address used to refuse the whole listener). The client listeners ask with the TOKEN CLAIM via `useVerifiedEmail()` and skip when it is absent, so an unverified account gets a sentence rather than a refused query. Proved on the emulator: `rules-tests/email-addressed.test.ts`.
-- **`assets` — shared visibility** 🟠 `sharedWithFamily` assets owned by other users are no longer readable (asset listeners scoped to `ownerId == uid` to satisfy the rule). Restoring cross-user shared wallet assets needs a real sharing model: e.g. an `allowedUserIds` array on the asset + a read rule `request.auth.uid in resource.data.allowedUserIds`, and queries split into "mine" + "shared with me".
+- ~~**`assets` — shared visibility**~~ ✅ DONE — re-measured 2026-09-20 and found already closed, differently and better than the `allowedUserIds` sketch here. An asset names ONE group in `sharedGroupId`, and membership is resolved AT READ (`sharedWithMe` in `firestore.rules`), so access cannot go stale: leaving a group revokes it in the same instant, with no Cloud Function rewriting documents and no window where the revocation has not landed. The Wallet runs one listener per group (`Wallet.sharedAssets.<groupId>`) beside the owned one, which is the "mine + shared with me" split this entry asked for.
 - ~~**Housekeeping** 🟢 `.firebase/` deploy cache is git-tracked~~ ✅ DONE (2026-05-26) Added `.firebase/` to `.gitignore` and `git rm --cached` the tracked `hosting.*.cache`. (`functions/lib/` left tracked — it's the deployed artifact and there's no predeploy build hook.)
 
 ---
@@ -7602,3 +7602,57 @@ reguli** (de la 223) · build verde.
 (functions → rules → hosting) există ca să nu rămână clientul chemând ceva ce nu există încă. Aici
 dependența e pe dos: dacă regulile se strâng primele, clientul VECHI al unui utilizator neverificat
 continuă să pună o întrebare care acum se refuză.
+
+## 2026-09-20 · Trei intrări vechi, măsurate în loc să fie repetate
+
+**Prompt (Andrei):** „Continua”. **Model:** Claude Opus 5.
+
+Nu o funcție nouă. Am luat trei intrări rămase în urmă din registre și le-am **verificat față de
+cod** în loc să le cred.
+
+### Două erau deja făcute
+
+**Asseturile partajate din portofel** (deschisă din 26.05, marcată 🟠): cerea „un model real de
+partajare, de exemplu un tablou `allowedUserIds`”. S-a construit între timp, și mai bine decât
+schița: un asset numește **UN grup**, iar apartenența se rezolvă **la citire**. Deci accesul nu
+poate îmbătrâni — ieșirea din grup îl retrage în aceeași clipă, fără nicio funcție care să rescrie
+documente și fără fereastră în care retragerea n-a ajuns încă. Un tablou de uid-uri ar fi avut exact
+groapa aia.
+
+**Auto-update în taburi lăsate deschise** (ridicată 01.08): cerea `registration.update()` și o
+pastilă „versiune nouă”. Livrată — și cu o ancoră mai bună decât cea propusă: compară **hash-ul
+bundle-ului** servit cu cel pe care rulează tabul, nu un număr de versiune pe care trebuia să-l
+ridice cineva de mână. Ăla e chiar motivul pentru care poarta veche n-a prins niciodată nimic:
+`app_version` a rămas la `v1.0.2` pentru totdeauna.
+
+**De ce contează că le-am închis:** o listă la care doar adaugi ajunge să ceară lucruri făcute, iar
+atunci nu mai poți deosebi ce e real de ce e vechi. Amândouă stăteau acolo ca sarcini deschise.
+
+### Una era reală, dar de doisprezece ori mai mică decât scria
+
+„Event Date Timezone Shift”, din 26.05, descrisă ca pervazivă, cu vreo douăsprezece locuri
+enumerate. Măsurat:
+
+- **Zece** închise de munca pe intervale din septembrie. Ziua e partea UTC a instantului și se
+  citește UTC peste tot (`dayOf`/`occursOn`), deci ziua tastată și cea stocată coincid în orice fus.
+- **Unul** era o ramură de rezervă la care `spanOf` ajunge doar când data e necitibilă. Acolo linia
+  veche nu scria ziua greșită — scria cuvintele **„Invalid Date”** în fața omului, în șase limbi.
+- **Unul singur viu**: lista de evenimente din fereastra de ieșire din grup. `format(new
+  Date(ev.date), …)` ia un instant de miezul nopții UTC și îl formatează în fusul CITITORULUI, deci
+  la vest de Greenwich tipărea ziua precedentă.
+
+Trei rânduri, nu o rescriere. **Asta e toată diferența dintre a măsura și a repeta.**
+
+### Proba a trebuit mutată la Los Angeles
+
+Testul nu poate rula acasă. La UTC versiunea stricată și cea bună tipăresc **exact la fel**, deci o
+suită verde în Bucureşti nu spune nimic despre bug. Mutațiile rulează sub
+`TZ=America/Los_Angeles`: **6 din 6 prinse**, între care ambele forme puse la loc.
+
+Plus o gardă cu parser care refuză orice `format(new Date(<ceva>.date))` nou — un regex ar fi fost
+mulțumit de un comentariu, cum s-a mai întâmplat de două ori în repo-ul ăsta.
+
+`npx tsc -b` verde · poarta de lint verde · **1695 de teste** (de la 1689) · build verde.
+
+**Nimic pentru OWNER_VERIFY:** reparația e invizibilă la Bucureşti, fiindcă e UTC+. N-am ce să-i cer
+lui Andrei să se uite, deci n-am adăugat o bifă care ar fi arătat a sarcină fără să fie.
