@@ -1,3 +1,28 @@
+## ⭐ Chatul care nu se mai închidea (reparat 20.09)
+
+- [ ] **Deschide chatul într-un grup, apoi apasă pastila altui grup.** Fereastra de chat trebuie
+      să **dispară**, iar jos-dreapta să rămână **un singur** buton rotund de chat. Repetă de
+      cinci ori, apoi deschide chatul și apasă X: trebuie să se închidă.
+      **Înainte de reparație** rămâneau cinci ferestre suprapuse și **niciun** X nu funcționa.
+- [ ] **Dacă ai înregistrat vreodată un mesaj vocal și ai schimbat grupul în timpul înregistrării:**
+      verifică dacă indicatorul de microfon din browser s-a stins. De azi se stinge la închiderea
+      ferestrei; până azi rămânea aprins până închideai tabul.
+
+**Fapte, nu sarcini:**
+
+1. **Cauza a fost o cheie React duplicată.** Fereastra de chat și modalul de jocuri erau frați în
+   același vector de copii și purtau amândouă `key={activeGroupId}`. React ține copiii vechi
+   într-un `Map` după cheie, deci al **doilea** îl șterge pe primul din hartă — iar pasul de
+   ștergere șterge doar ce a rămas în hartă. Fereastra de chat nu era **niciodată** ștearsă.
+2. **Fiecare comutare de grup cu chatul deschis lăsa în urmă un widget întreg**, cu două
+   ascultători Firestore neopriți. Dacă ai ieșit dintr-un grup al cărui widget orfan mai asculta,
+   în panoul `/erori` au apărut refuzuri de permisiune pentru un grup din care nu mai faci
+   parte — **nu erau un defect nou, erau ecoul ăstuia**.
+3. **React avertizează despre cheia duplicată doar în modul dezvoltare**, deci pe live nu spunea
+   nimic. Acum există o poartă în teste care parcurge arborele JSX și refuză doi frați cu aceeași
+   cheie — probată punând regresia la loc în fișierul real.
+
+---
 ## ⭐ AI Center — de verificat PRIMUL (20.09)
 
 Ecranul ăsta e în spatele autentificării, deci eu nu-l pot deschide deloc. Typecheck, 1578 de

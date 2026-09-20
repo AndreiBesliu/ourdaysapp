@@ -1050,7 +1050,15 @@ export default function CalendarHome() {
           // list, an AI digest, a draft and a reply target, and without a key a tab switch points
           // the listener at another conversation while all of that survives — one group's chat
           // under another group's name, which is the defect this screen was just fixed for.
-          key={activeGroupId}
+          // NAMESPACED, and that is the whole bug. `GamesHubModal` below is a SIBLING in this
+          // same children array and carried the identical key. React builds a Map of the old
+          // children keyed by `key` (`mapRemainingChildren`), so the LATER duplicate overwrote
+          // this one, and the deletion pass only deletes what is still in that Map. This widget
+          // was therefore never deleted: on a group switch its DOM stayed painted, its effect
+          // cleanups never ran, and its X set state on a fiber React no longer renders — a pane
+          // showing one group under another group's pill, with a dead close button. Which of the
+          // two leaked was decided purely by source order.
+          key={`chat-${activeGroupId}`}
           convId={activeGroupId}
           convKind="group"
           // No „Chat de grup ·” prefix. It costs 97px of a 174px title column, and what gets
@@ -1229,7 +1237,10 @@ export default function CalendarHome() {
       <GamesHubModal
         // Same again: the hub is hidden rather than unmounted, and its active games, leaderboard
         // and in-progress game are per GROUP.
-        key={activeGroupId}
+        // Namespaced too, even though only one of the two needs to change to break the
+        // collision: leaving this bare would make the behaviour depend on JSX source order, so
+        // reordering the file would silently move the leak here.
+        key={`games-${activeGroupId}`}
         isOpen={isGamesHubOpen}
         onClose={() => setIsGamesHubOpen(false)}
         groupId={activeGroupId !== 'personal' ? activeGroupId : ''}

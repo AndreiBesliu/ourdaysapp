@@ -579,6 +579,30 @@ export default function GroupChatWidget({
     setVoiceSendFailed(false);
   };
 
+  // ── The microphone must not outlive this component ─────────────────────────────────────
+  //
+  // The stream is stopped in `onstop` and in `cancelRecording`, and in NO cleanup — so a widget
+  // that goes away mid-recording leaves the track live and the browser's recording indicator lit
+  // until the tab closes. Nothing in the app can reach it afterwards: the handlers that would
+  // stop it belong to the instance that is gone.
+  //
+  // Until 20.09 this screen never unmounted the widget on a group switch — a duplicate React key
+  // leaked it instead — so the leak was real but reached by a different route. Fixing the key
+  // makes the switch a REAL unmount, which would have made this bite more often, not less.
+  //
+  // Refs only, no dependencies: this must run on the way out and never re-run.
+  useEffect(() => () => {
+    const rec = mediaRecorderRef.current;
+    if (rec) {
+      // Detach first: `stop()` fires `onstop`, which would try to SEND on an unmounted component.
+      rec.ondataavailable = null;
+      rec.onstop = null;
+      if (rec.state !== 'inactive') { try { rec.stop(); } catch { /* already gone */ } }
+      rec.stream?.getTracks().forEach((t) => t.stop());
+    }
+    if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+  }, []);
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });

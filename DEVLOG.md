@@ -6946,3 +6946,86 @@ produs. Plus: eșecurile defalcate pe `errorCode`, și **refuzurile care n-au de
 care azi nu se înregistrează nicăieri — o limită care respinge invizibil nu se deosebește de una
 care nu leagă niciodată.
 
+---
+
+## 2026-09-20 · Două chei identice, și o fereastră pe care React n-o mai ștergea
+
+**Prompt (Andrei):** „daca deschid chat-ul intr-un grup si ma duc in alt grup, nu mai pot sa
+inchid chat-ul de la grupul initial”. **Model:** Claude Opus 5.
+
+### Contradicția
+
+Captura arăta pastila **Family** selectată și fereastra de chat deschisă cu titlul **B&D**. Dar
+pastilele și titlul citesc **aceeași** variabilă, iar widget-ul e cheiat pe ea — deci o comutare
+ar fi trebuit să-l distrugă. Trei premise, toate păreau adevărate, iar ecranul le contrazicea pe
+toate. Cititul n-a rezolvat-o; a rezolvat-o **măsurarea**.
+
+### Cauza
+
+`CalendarHome` dădea **aceeași cheie la doi frați**: `<GroupChatWidget key={activeGroupId}>` și,
+180 de rânduri mai jos, `<GamesHubModal key={activeGroupId}>`. Sunt frați fiindcă
+`{cond && <X/>}` **nu e un înveliș** — e o expresie care se evaluează la element, deci elementul
+ajunge direct în același vector de copii.
+
+Verificat în sursa React din `node_modules`, nu pe încredere:
+
+```js
+// react-dom-client.development.js:6188  — mapRemainingChildren
+existingChildren.set(currentFirstChild.key, currentFirstChild)
+// :6724 — se șterge DOAR ce a rămas în hartă
+oldFiber.forEach(function (child) { return deleteChild(returnFiber, child); });
+```
+
+Un `Map.set` simplu: al doilea frate cu aceeași cheie îl **evacuează** pe primul din hartă,
+iar pasul de ștergere nu-l mai vede. Fibra ferestrei de chat **nu era niciodată ștearsă**: DOM-ul
+rămânea desenat, curățările de efect nu rulau niciodată, iar X-ul chema `setIsOpen(false)` pe o
+fibră pe care React n-o mai rendează. **Care dintre cele două se scurgea era decis pur și simplu
+de ordinea din fișier** — chatul e primul.
+
+Șase comutări cu chatul deschis → cinci ferestre suprapuse, cinci X-uri, **zero închideri**. Exact
+propoziția lui Andrei.
+
+**React avertizează `Encountered two children with the same key` — doar în DEV.** Pe live,
+tăcere. Nici typecheck-ul, nici poarta de lint, nici cele 1578 de teste n-aveau cum: nu e o
+eroare de tip, nu e o regulă ESLint din poartă, iar ecranul e în spatele autentificării.
+
+### Ce mai rupea aceeași cauză
+
+Fiecare scurgere ținea un widget întreg pe viață: **două `onSnapshot` nedezabonate**, o intrare
+de istoric care nu se mai derula (Back mort pe Android), ascultătorul de Escape rămas pe
+`window`, și focusul pierdut pe `body` la fiecare comutare. Iar dacă ieșeai dintr-un grup
+al cărui orfan mai asculta, panoul de erori se umplea cu refuzuri de permisiune pentru un grup
+din care nu mai făceai parte — **nu un defect separat, ecoul ăstuia**.
+
+### Și microfonul
+
+Fluxul audio se oprește în `onstop` și în `cancelRecording`, și în **nicio** curățare de
+demontare. Deci un widget care dispare în timpul înregistrării lasă pista vie și indicatorul de
+microfon aprins până la închiderea tabului. **Reparația cheii ar fi făcut asta să muște mai des,
+nu mai rar** — fiindcă abia acum comutarea chiar demontează. Adăugată curățarea, care detasează
+handlerele înainte de `stop()` ca `onstop` să nu încerce să trimită de pe un component mort.
+
+### Poarta
+
+Cauza e o proprietate **statică** a sursei, deci se poate proba fără DOM.
+`src/utils/siblingKeys.test.ts` parcurge fiecare `JSXElement`/`JSXFragment` cu parserul
+TypeScript (deja dependență), rezolvă sloturile prin `&&`, `||`, `??`, ternar și
+paranteze — **dar nu prin `.map()`**, ale cărui chei trăiesc într-un vector propriu și n-au
+voie să fie raportate.
+
+**5 mutații din 5**, cu control negativ. Prima rulare a dat două „ratate” care erau **vina
+fixturii, nu a porții**: reveneam la o singură cheie o dată, iar atunci nu există nicio coliziune
+de prins. Fixtura trebuie să reproducă **condiția**, nu forma. Cu ambele chei puse la loc în
+fișierul REAL, poarta se face roșie.
+
+`npx tsc -b` verde · poartă de lint verde · **1586 de teste** (+8) · build verde.
+
+### Note de proces
+
+* **Prima mea probă a fost instrumentul greșit.** Am încercat să confirm coliziunea cu
+  `renderToString` — zero avertismente. Calea cheilor duplicate rulează la **reconcilierea unei
+  actualizări**, iar un render de server n-are copii anteriori. Un zero de la un instrument care
+  nu putea răspunde nu e o infirmare.
+* **O restaurare de mutație a eșuat iarăși tăcut** și a lăsat fișierul mutat. Harness-ul rescrie
+  acum până când octeții se potrivesc.
+
