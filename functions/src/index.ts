@@ -10,7 +10,8 @@ import type { BattleState, Command } from "./warlordCombat/combat/types";
 import { deriveScope } from "./aiScope";
 import { fetchAssets, fetchChat, fetchEvents, fetchExpenses } from "./aiSources";
 import { dayRangePeriod, monthPeriod, periodDays, isRealDay } from "./period";
-import { charsPerToken, estimateUsdFor, usageOf, withLedger, textOf } from "./aiLedger";
+import { charsPerToken, estimateUsdFor, usageOf, withLedger, textOf, AI_LIMITS, LIMITS_SOURCE } from "./aiLedger";
+import { mergeRollups } from "./aiSpendMerge";
 import { readFriendship } from "./friendship";
 import { notify } from "./notify";
 import { groupErrors, fingerprint } from "./errorGrouping";
@@ -2698,12 +2699,20 @@ export const aiPreviewScope = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
 export const adminGetAiSpend = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   await assertAdmin(request);
   const db = admin.firestore();
+
+  // The window is CHOSEN from a fixed set, never taken from the wire. Each day costs one read per
+  // subcollection, so an attacker-supplied 3650 would be seven thousand reads on one callable.
+  const asked = Number((request.data || {}).days);
+  const window = asked === 7 ? 7 : 30;
+
   const days: string[] = [];
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < window; i++) {
     days.push(new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
   }
 
   const snaps = await Promise.all(days.map((d) => db.doc(`aiSpendDaily/${d}`).get()));
+  // NEWEST first. `GrowthChart` in the admin draws left-to-right as given and labels the first
+  // entry on the left, so the caller must reverse this or the axis lies about which end is today.
   const daily = snaps.map((s, i) => {
     const d = s.exists ? s.data() || {} : {};
     return {
@@ -2717,26 +2726,47 @@ export const adminGetAiSpend = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, as
   });
 
   const sum = (n: number) => daily.slice(0, n).reduce((a, r) => a + r.usd, 0);
-  const today = days[0];
-  const [featureSnap, userSnap] = await Promise.all([
-    db.collection(`aiSpendDaily/${today}/features`).get(),
-    db.collection(`aiSpendDaily/${today}/users`).orderBy("microUsd", "desc").limit(10).get(),
+
+  // EVERY row for EVERY day in the window, with no per-day `orderBy`/`limit`.
+  //
+  // The cheap version — reuse the old per-day top ten and merge thirty of them — ranks the wrong
+  // people: somebody eleventh every day for a month outspends somebody first once, and a
+  // truncated merge never sees them. The cost is bounded by the WINDOW instead, which is why the
+  // window is capped rather than offered as a year. See `aiSpendMerge.ts`.
+  //
+  // A day whose read fails becomes `null`, not an empty array — absent and zero are different
+  // answers, and `complete` below is what lets the screen say which it is showing.
+  const readDay = (path: string) => db.collection(path).get()
+    .then((s) => s.docs.map((x) => ({ id: x.id, ...(x.data() as Record<string, unknown>) })))
+    .catch((err) => { console.error("aiSpend day read failed", path, err?.message || err); return null; });
+
+  const [featureDays, userDays] = await Promise.all([
+    Promise.all(days.map((d) => readDay(`aiSpendDaily/${d}/features`))),
+    Promise.all(days.map((d) => readDay(`aiSpendDaily/${d}/users`))),
   ]);
+  const complete = !featureDays.includes(null) && !userDays.includes(null);
+
+  // Today against the limit, read from the document the limit is actually enforced against —
+  // NOT from the daily rollup. The two differ by whatever is in flight: `holdBudget` pre-charges
+  // a ceiling before the call and reconciles downward after it, so this one is the number that
+  // decides whether the next call is refused, which is the number worth showing.
+  const budgetSnap = await db.doc("ai_budget/_global").get().catch(() => null);
+  const b = budgetSnap && budgetSnap.exists ? budgetSnap.data() || {} : {};
+  const todayGlobalUsd = b.date === days[0] ? (b.microUsd || 0) / 1_000_000 : 0;
 
   return {
+    days: window,
     daily,
-    totals: { today: sum(1), week: sum(7), month: sum(30) },
-    byFeature: featureSnap.docs.map((d) => ({
-      feature: d.id,
-      calls: d.data().calls || 0,
-      failures: d.data().failures || 0,
-      usd: (d.data().microUsd || 0) / 1_000_000,
-    })).sort((a, b) => b.usd - a.usd),
-    topUsers: userSnap.docs.map((d) => ({
-      uid: d.id,
-      calls: d.data().calls || 0,
-      usd: (d.data().microUsd || 0) / 1_000_000,
+    totals: { today: sum(1), week: sum(Math.min(7, window)), month: sum(window) },
+    byFeature: mergeRollups(featureDays).map((r) => ({
+      feature: r.id, calls: r.calls, failures: r.failures, usd: r.usd,
     })),
+    topUsers: mergeRollups(userDays).slice(0, 20).map((r) => ({
+      uid: r.id, calls: r.calls, failures: r.failures, usd: r.usd,
+    })),
+    limits: { ...AI_LIMITS, source: LIMITS_SOURCE },
+    todayGlobalUsd,
+    complete,
   };
 });
 
@@ -2751,7 +2781,24 @@ export const adminGetAiLedger = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, a
   let q: FirebaseFirestore.Query = admin.firestore().collection("aiLedger").where("date", "==", day);
   if (typeof uid === "string" && uid) q = q.where("uid", "==", uid);
 
-  const snap = await q.limit(200).get();
+  // ── `orderBy("at")`, and why it is not cosmetic ────────────────────────────────────────────
+  //
+  // There was no ordering at all. Firestore's implicit order is by document id, and these ids come
+  // from `.doc()` — random. So on a day with more than two hundred calls the cap returned a
+  // deterministic ARBITRARY two hundred: not the newest, not the costliest, not the failures, and
+  // with no cursor the rest were unreachable through this callable at all. `truncated` said rows
+  // were missing; it did not say the ones on screen were a random sample, which is the part that
+  // makes a number on a cost screen untrustworthy.
+  //
+  // This costs two composite indexes — (date, at desc) and (date, uid, at desc), both in
+  // `firestore.indexes.json`. A MISSING index here does not return less, it throws
+  // FAILED_PRECONDITION and kills the call, so the indexes deploy BEFORE these functions.
+  //
+  // Filtering by feature or by outcome is deliberately NOT done here: each equality filter
+  // alongside an `orderBy` on a different field needs its own composite index, and eight of them
+  // to serve four chips is a bad trade. The admin filters the returned rows, which is honest now
+  // that they are the newest two hundred rather than an arbitrary two hundred.
+  const snap = await q.orderBy("at", "desc").limit(200).get();
   return {
     date: day,
     rows: snap.docs.map((d) => {
@@ -2767,6 +2814,8 @@ export const adminGetAiLedger = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, a
         completionTokens: r.completionTokens || 0,
         costUsd: r.costUsd || 0,
         computeMs: r.computeMs || 0,
+        // A Firestore Timestamp does not survive the callable wire as anything useful.
+        at: r.at && typeof r.at.toDate === "function" ? r.at.toDate().toISOString() : null,
       };
     }),
     truncated: snap.size >= 200,

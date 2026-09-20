@@ -35,6 +35,7 @@
 
 import * as admin from "firebase-admin";
 import { providerErrorCode } from "./aiProviderError";
+import { clampAiLimits, type AiLimits } from "./aiLimits";
 export { usageOf, textOf, type Usage } from "./aiResponse";
 import type { Usage } from "./aiResponse";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -59,11 +60,37 @@ export function priceUsd(model: string, inTokens: number, outTokens: number): nu
 /** Stored as micro-USD integers: floats accumulate error and Firestore has no decimal type. */
 const toMicro = (usd: number) => Math.max(0, Math.round(usd * 1_000_000));
 
-export const AI_KILL_SWITCH = process.env.AI_KILL_SWITCH === "true";
+/**
+ * Resolved ONCE, at module load, through `clampAiLimits`.
+ *
+ * It used to be `Number(process.env.AI_GLOBAL_DAILY_USD || 5)`, and that was a live bug rather
+ * than a tidiness question: mistype the variable and `Number()` yields `NaN`, `toMicro(NaN)` is
+ * `NaN`, and `spent + held > NaN` is **false** — so the line that refuses the call never ran. The
+ * ceiling did not fail, did not log and did not look any different. It just stopped existing.
+ * See `aiLimits.ts`.
+ */
+export const AI_LIMITS: AiLimits = clampAiLimits({
+  globalDailyUsd: process.env.AI_GLOBAL_DAILY_USD,
+  userDailyUsd: process.env.AI_USER_DAILY_USD,
+  killSwitch: process.env.AI_KILL_SWITCH,
+});
+
+/**
+ * Where the numbers came from, so the admin screen can say it.
+ *
+ * "built-in defaults" and "environment" are very different things to be looking at when a bill
+ * surprises you, and a screen that shows 5.00 without saying which is inviting the wrong guess.
+ */
+export const LIMITS_SOURCE: "environment" | "built-in defaults" =
+  process.env.AI_GLOBAL_DAILY_USD || process.env.AI_USER_DAILY_USD || process.env.AI_KILL_SWITCH
+    ? "environment"
+    : "built-in defaults";
+
+export const AI_KILL_SWITCH = AI_LIMITS.killSwitch;
 /** Whole-app ceiling for one UTC day, in USD. The only limit an attacker cannot widen. */
-const GLOBAL_DAILY_USD = Number(process.env.AI_GLOBAL_DAILY_USD || 5);
+const GLOBAL_DAILY_USD = AI_LIMITS.globalDailyUsd;
 /** Per-account ceiling for one UTC day, in USD. */
-const USER_DAILY_USD = Number(process.env.AI_USER_DAILY_USD || 0.25);
+const USER_DAILY_USD = AI_LIMITS.userDailyUsd;
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -213,6 +240,12 @@ export async function closeLedgerRow(
     completionTokens: inc(usage.completionTokens),
     microUsd: inc(toMicro(costUsd)),
   };
+  // ── A rule for whoever adds the second model ───────────────────────────────────────────
+  // `model` is on the raw ledger row and in NONE of these three rollups. That is harmless only
+  // while `AI_MODEL` is a single hard-coded constant, so every row in the database carries one
+  // value and a per-model report would be a column of identicals. The moment a second model
+  // exists, the `models` rollup path ships in the SAME commit — added afterwards, it can only
+  // describe calls made after it, and the history it would have explained is unreconstructable.
   batch.set(db.doc(`aiSpendDaily/${date}`), { date, ...roll }, { merge: true });
   batch.set(db.doc(`aiSpendDaily/${date}/users/${handle.entry.uid}`), { date, ...roll }, { merge: true });
   batch.set(db.doc(`aiSpendDaily/${date}/features/${handle.entry.feature}`), { date, ...roll }, { merge: true });

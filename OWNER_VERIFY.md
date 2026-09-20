@@ -1,3 +1,45 @@
+## ⭐ AI Center — de verificat PRIMUL (20.09)
+
+Ecranul ăsta e în spatele autentificării, deci eu nu-l pot deschide deloc. Typecheck, 1578 de
+teste și build pot fi toate verzi cu el căzut pe ErrorBoundary — s-a mai întâmplat de două ori.
+
+- [ ] **Deschide `/admin` și apasă fila `AI Center`.** Dacă ecranul rămâne gol sau apare
+      „Something went wrong”, **oprește-te și spune-mi** — restul punctelor nu mai contează.
+      Fila trebuie să scrie **„AI Center”**, nu „Ai”.
+- [ ] **Uită-te la cartela „Today against the limit”.** Trebuie să scrie o sumă *din* alta
+      (ex. `$0.02 of $5.00 for the whole app`) și, în dreapta, **„built-in defaults”** sau
+      **„environment”**. *De ce contează:* asta e cifra care lipsea cu totul — până azi vedeai
+      cât s-a cheltuit, niciodată **din cât**. Dacă scrie „environment” deși tu n-ai setat nimic,
+      înseamnă că există variabile puse pe serviciu despre care nu știu.
+- [ ] **Dacă apare o casetă galbenă „Configured values were refused and replaced”, spune-mi ce
+      scrie în ea.** Înseamnă că o limită configurată e nefolosibilă — iar până azi un astfel de
+      caz făcea plafonul să **dispară tăcut**, nu să se întoarcă la implicit.
+- [ ] **Comută între `7 days` și `30 days`.** Cele trei secțiuni de dedesubt (pe funcție, pe om,
+      graficul) trebuie să se schimbe împreună. Până azi „pe funcție” și „pe om” arătau **doar
+      ziua curentă**, orice ai fi vrut să întrebi.
+- [ ] **În graficul „Cost per day”, capătul din DREAPTA trebuie să fie ziua de azi.** Dacă e
+      invers, seria n-a fost întoarsă și eticheta axei minte — e genul de greșeală pe care niciun
+      test nu-l prinde.
+- [ ] **Apasă pe un nume din „By person”.** Lista de apeluri de jos trebuie să se filtreze pe
+      omul ăla, cu un buton care-l arată și un `x` care-l scoate.
+- [ ] **Alege o zi veche din selectorul de dată.** Dacă apare o eroare de tipul
+      „requires an index”, **indexul nu s-a terminat de construit** — așteaptă câteva minute și
+      reîncearcă; dacă persistă, spune-mi.
+
+**Fapte, nu sarcini:**
+
+1. **Lista de apeluri dădea până azi 200 de rânduri LA îNTÂMPLARE.** N-avea nicio ordonare, iar
+   Firestore ordonează atunci după id-ul documentului — care aici e aleatoriu. Într-o zi cu peste
+   200 de apeluri vedeai un eșantion arbitrar, fără nicio cale să ajungi la restul. Acum sunt
+   **cele mai recente** 200.
+2. **`aiLedger` crește la nesfârșit.** Nimic nu șterge din el, nici măcar ștergerea unui cont.
+   E o chestiune de cost de stocare, nu de viteză — dar cineva trebuie s-o decidă cândva.
+3. **Un cont șters rămâne în rapoarte pentru totdeauna**, fiindcă ștergerea contului nu atinge
+   `aiSpendDaily`. Apare scris **„(deleted account)”**, nu un cod hexazecimal.
+4. **Butonul de kill switch și bugetul editabil vin în faza 2.** Azi limitele sunt variabile de
+   mediu citite la pornirea funcțiilor, deci schimbarea lor cere redeploy.
+
+---
 # De verificat de Andrei
 
 > **Starea listei, 19.09 seara:** 296 de căsuțe nebifate, 8 bifate. Dimineață erau 262 —

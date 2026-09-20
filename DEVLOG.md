@@ -6859,3 +6859,90 @@ fiindcă e aceeași pereche de culori. Titlul încape întreg la 286px cu opt av
   doar „nu s-a putut genera” și apasă din nou.
 * `App.tsx` dublează aritmetica din `themeContrast.ts`, netestată, deși o importă deja.
 
+---
+
+## 2026-09-20 · AI Center, faza 1 — și un plafon care dispărea tăcut
+
+**Prompt (Andrei):** „Si vreau in admin sa am un AI Center, cum am si la alte proiecte ca
+Presto sau Dataread” → „Continua cu faza 1”. **Model:** Claude Opus 5.
+
+### Ce exista deja, și ce nu
+
+Partea grea era făcută: `aiLedger.ts` scrie un rând pe apel plătit, tarifat la scriere, cu
+pre-încărcare pesimistă într-o tranzacție ca plafonul să țină la concurență, plus rollup-uri zilnice.
+Lipsea ecranul — și, mai rău, `adminGetAiSpend` era **complet și nechemat de nicăieri**.
+Toată API-ul de cheltuială exista și nimic nu-l randa.
+
+### Plafonul care dispărea
+
+Limitele erau `Number(process.env.AI_GLOBAL_DAILY_USD || 5)`, folosite ca
+`spent + held > toMicro(LIMIT)`. Scrie variabila greșit — `"5 USD"`, un spațiu în plus —
+și devine **NaN**. `toMicro(NaN)` e NaN, iar orice comparație cu NaN e **falsă**: linia care
+refuză apelul nu se mai executa niciodată. Plafonul nu eșua, nu loga, nu arăta altfel. Pur și
+simplu **înceta să existe**, iar singurul simptom era factura.
+
+Plus, `|| 5` făcea ca `AI_GLOBAL_DAILY_USD=0` să însemne 5. Zero e o setare
+legitimă — „niciun apel plătit azi” — și era singura care nu se putea exprima.
+
+Acum trec prin `clampAiLimits` (`functions/src/aiLimits.ts`, pur, fără niciun import):
+orice nu e număr cade pe implicit **și o spune pe ecran**, globalul e plafonat la 50 $/zi de
+SERVER, iar limita pe om nu poate depăși globalul.
+
+### Fereastra, și scurtătura care rankă greșit
+
+„Pe funcție” și „pe om” arătau doar ziua curentă. Scurtătura evidentă — refolosești top-10-ul
+zilnic și contopești treizeci — **rankează pe cine nu trebuie**: cine e al **unsprezecelea** în
+fiecare zi cheltuie mai mult decât cine a fost primul o dată, și nu apare niciodată. Deci se
+citesc toate rândurile din toate zilele ferestrei, iar **fereastra** e plafonată, nu istoria.
+`aiSpendMerge.ts` e pur și are cazul ăsta ca test, cu control negativ care arată că
+scurtătura chiar greșește.
+
+### Lista de apeluri dădea 200 de rânduri la întâmplare
+
+N-avea `orderBy` deloc. Firestore ordonează atunci după id-ul documentului, iar aici id-urile
+vin din `.doc()` — aleatorii. Într-o zi cu peste 200 de apeluri primeai un eșantion arbitrar,
+fără cursor, deci restul erau **inaccesibile prin callable**. `truncated` spunea că lipsesc
+rânduri; nu spunea că cele arătate sunt la nimereală. Acum `orderBy("at","desc")`, cu două
+indexuri compuse noi — **publicate înaintea funcțiilor**, fiindcă un index lipsă aici nu
+întoarce mai puțin, ci **aruncă**.
+
+### Ce am respins din cele unsprezece blocuri ale Presto
+
+PanelGrid (rearanjabil) — e un proiect separat, cu un ordin de mărime mai mare, și rezolvă o
+problemă pe care ecranul ăsta n-o are la șapte cartele. Numele asistentului și stilul FAB-ului —
+n-au analog într-un calendar de familie. Defalcarea pe MODEL — `AI_MODEL` e o constantă,
+deci ar fi o coloană de valori identice; am scris în schimb regula în `aiLedger.ts`: calea de
+rollup pe modele se livrează în ACELAȘI commit cu al doilea model, fiindcă adăugată după nu poate
+descrie decât apelurile de după ea.
+
+### Probe
+
+**8 mutații din 8**, cu control negativ. Una a găsit un gol REAL pe care nu-l scrisesem: patru
+sute de cifre de 9 trec de verificarea de „doar cifre”, iar `Number()` le face **Infinity** —
+un plafon infinit e același defect ca unul NaN, cu altă față. O a doua mutaț­ie a ieșit
+**echivalentă** (verificarea de șir gol e acoperită oricum de regex) — e un fapt despre linie,
+nu un gol în teste, și scrie asta în cod.
+
+`npx tsc -b` verde · poartă de lint verde · **1578 de teste** (+22) · build verde · build de
+functions verde · **202 teste de reguli** verzi.
+
+### Corecții la propriile presupuneri
+
+* **I-am spus agenților că adminul trece prin `t()`. Nu trece.** `SKIP_FILES` din
+  `i18nCoverage.test.ts` conține `Admin.tsx` și `Warlord.tsx`, cu comentariul
+  „admin is Andrei's own console”. Fila nouă n-are **nicio** cheie de traducere, iar cele șapte
+  chei `aiSpend*` existente erau moarte — scrise pentru un ecran care n-a fost livrat
+  niciodată. Șterse din toate cele șase limbi.
+* **Un test de reguli proba o cale pe care nimeni n-o scrie:** semința folosea
+  `aiSpendDaily/{zi}/byUser/{uid}`, iar writer-ul scrie `users`. Regula e un catch-all
+  `{sub=**}`, deci testul trecea oricum — refuza o cale inexistentă.
+
+### Rămas pentru faza 2
+
+Kill switch-ul și bugetul editabile din admin: `aiConfig/live` scris doar prin callable, cu
+plafoanele pe SERVER (`clampAiLimits` e deja scris pentru asta), jurnal de cine-ce-a-schimbat,
+și citire necachată înainte de tranzacție — un kill switch care mușcă peste cinci minute e alt
+produs. Plus: eșecurile defalcate pe `errorCode`, și **refuzurile care n-au devenit apel**,
+care azi nu se înregistrează nicăieri — o limită care respinge invizibil nu se deosebește de una
+care nu leagă niciodată.
+

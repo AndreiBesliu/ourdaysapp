@@ -36,7 +36,10 @@ beforeEach(async () => {
     await setDoc(doc(db, 'aiLedger', 'l1'), { uid: ALICE, cost: 0.01 });
     await setDoc(doc(db, 'ai_budget', 'b1'), { limit: 5 });
     await setDoc(doc(db, 'aiSpendDaily', '2026-09-19'), { total: 0.42 });
-    await setDoc(doc(db, 'aiSpendDaily', '2026-09-19', 'byUser', ALICE), { total: 0.42 });
+    // `users`, not `byUser`. The rule is a `{sub=**}` catch-all so the test passed either way —
+    // it was refusing a path the writer never writes, which proves nothing about the real one.
+    // See `aiLedger.ts`: the rollup goes to `aiSpendDaily/{date}/users/{uid}`.
+    await setDoc(doc(db, 'aiSpendDaily', '2026-09-19', 'users', ALICE), { total: 0.42 });
     await setDoc(doc(db, 'errorGroups', 'grp1'), { status: 'open', count: 3 });
     await setDoc(doc(db, 'warlordPlayers', ALICE), { name: 'Alice', rank: 1, wins: 2, losses: 0 });
   });
@@ -179,8 +182,8 @@ describe('the last two server-only collections', () => {
     // The subcollection matters separately: its `{sub=**}` is the only catch-all in the file,
     // and a catch-all that granted instead of refusing would be invisible from the parent.
     await assertFails(getDoc(doc(as(ALICE), 'aiSpendDaily', '2026-09-19')));
-    await assertFails(getDoc(doc(as(ALICE), 'aiSpendDaily', '2026-09-19', 'byUser', ALICE)));
-    await assertFails(setDoc(doc(as(ALICE), 'aiSpendDaily', '2026-09-19', 'byUser', ALICE), { total: 0 }));
+    await assertFails(getDoc(doc(as(ALICE), 'aiSpendDaily', '2026-09-19', 'users', ALICE)));
+    await assertFails(setDoc(doc(as(ALICE), 'aiSpendDaily', '2026-09-19', 'users', ALICE), { total: 0 }));
   });
 
   it('and the error-group state an admin console writes', async () => {

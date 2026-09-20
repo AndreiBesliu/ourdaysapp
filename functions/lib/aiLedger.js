@@ -34,7 +34,7 @@
 // second, unregulated copy of exactly the private data the rest of this design is careful
 // about — and it would sit in a collection whose whole point is that operators read it.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AI_KILL_SWITCH = exports.MODEL_PRICING = exports.textOf = exports.usageOf = void 0;
+exports.AI_KILL_SWITCH = exports.LIMITS_SOURCE = exports.AI_LIMITS = exports.MODEL_PRICING = exports.textOf = exports.usageOf = void 0;
 exports.priceUsd = priceUsd;
 exports.holdBudget = holdBudget;
 exports.settleBudget = settleBudget;
@@ -45,6 +45,7 @@ exports.withLedger = withLedger;
 exports.estimateUsdFor = estimateUsdFor;
 const admin = require("firebase-admin");
 const aiProviderError_1 = require("./aiProviderError");
+const aiLimits_1 = require("./aiLimits");
 var aiResponse_1 = require("./aiResponse");
 Object.defineProperty(exports, "usageOf", { enumerable: true, get: function () { return aiResponse_1.usageOf; } });
 Object.defineProperty(exports, "textOf", { enumerable: true, get: function () { return aiResponse_1.textOf; } });
@@ -65,11 +66,34 @@ function priceUsd(model, inTokens, outTokens) {
 }
 /** Stored as micro-USD integers: floats accumulate error and Firestore has no decimal type. */
 const toMicro = (usd) => Math.max(0, Math.round(usd * 1000000));
-exports.AI_KILL_SWITCH = process.env.AI_KILL_SWITCH === "true";
+/**
+ * Resolved ONCE, at module load, through `clampAiLimits`.
+ *
+ * It used to be `Number(process.env.AI_GLOBAL_DAILY_USD || 5)`, and that was a live bug rather
+ * than a tidiness question: mistype the variable and `Number()` yields `NaN`, `toMicro(NaN)` is
+ * `NaN`, and `spent + held > NaN` is **false** — so the line that refuses the call never ran. The
+ * ceiling did not fail, did not log and did not look any different. It just stopped existing.
+ * See `aiLimits.ts`.
+ */
+exports.AI_LIMITS = (0, aiLimits_1.clampAiLimits)({
+    globalDailyUsd: process.env.AI_GLOBAL_DAILY_USD,
+    userDailyUsd: process.env.AI_USER_DAILY_USD,
+    killSwitch: process.env.AI_KILL_SWITCH,
+});
+/**
+ * Where the numbers came from, so the admin screen can say it.
+ *
+ * "built-in defaults" and "environment" are very different things to be looking at when a bill
+ * surprises you, and a screen that shows 5.00 without saying which is inviting the wrong guess.
+ */
+exports.LIMITS_SOURCE = process.env.AI_GLOBAL_DAILY_USD || process.env.AI_USER_DAILY_USD || process.env.AI_KILL_SWITCH
+    ? "environment"
+    : "built-in defaults";
+exports.AI_KILL_SWITCH = exports.AI_LIMITS.killSwitch;
 /** Whole-app ceiling for one UTC day, in USD. The only limit an attacker cannot widen. */
-const GLOBAL_DAILY_USD = Number(process.env.AI_GLOBAL_DAILY_USD || 5);
+const GLOBAL_DAILY_USD = exports.AI_LIMITS.globalDailyUsd;
 /** Per-account ceiling for one UTC day, in USD. */
-const USER_DAILY_USD = Number(process.env.AI_USER_DAILY_USD || 0.25);
+const USER_DAILY_USD = exports.AI_LIMITS.userDailyUsd;
 const today = () => new Date().toISOString().slice(0, 10);
 /**
  * A refusal is raised HERE, as the wire error, rather than as a custom class each of the five
@@ -180,6 +204,12 @@ async function closeLedgerRow(handle, outcome) {
         completionTokens: inc(usage.completionTokens),
         microUsd: inc(toMicro(costUsd)),
     };
+    // ── A rule for whoever adds the second model ───────────────────────────────────────────
+    // `model` is on the raw ledger row and in NONE of these three rollups. That is harmless only
+    // while `AI_MODEL` is a single hard-coded constant, so every row in the database carries one
+    // value and a per-model report would be a column of identicals. The moment a second model
+    // exists, the `models` rollup path ships in the SAME commit — added afterwards, it can only
+    // describe calls made after it, and the history it would have explained is unreconstructable.
     batch.set(db.doc(`aiSpendDaily/${date}`), Object.assign({ date }, roll), { merge: true });
     batch.set(db.doc(`aiSpendDaily/${date}/users/${handle.entry.uid}`), Object.assign({ date }, roll), { merge: true });
     batch.set(db.doc(`aiSpendDaily/${date}/features/${handle.entry.feature}`), Object.assign({ date }, roll), { merge: true });

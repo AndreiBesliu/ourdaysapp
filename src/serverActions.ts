@@ -237,21 +237,41 @@ export async function aiPreviewScope(
 
 // ── AI spend (admin) ───────────────────────────────────────────────────────────────────
 export interface AiSpend {
+  /** The window actually served. The server chooses from a fixed set, so this may not be what was asked. */
+  days: number;
+  /** NEWEST first. Reverse it before a left-to-right chart or the axis labels lie. */
   daily: { date: string; calls: number; failures: number; promptTokens: number; completionTokens: number; usd: number }[];
   totals: { today: number; week: number; month: number };
   byFeature: { feature: string; calls: number; failures: number; usd: number }[];
-  topUsers: { uid: string; calls: number; usd: number }[];
+  topUsers: { uid: string; calls: number; failures: number; usd: number }[];
+  /** What the budget actually resolved to, and where it came from — see functions/src/aiLimits.ts. */
+  limits: {
+    globalDailyUsd: number; userDailyUsd: number; killSwitch: boolean;
+    /** Inputs that were refused and replaced. Non-empty means somebody configured something unusable. */
+    clamped: string[];
+    source: 'environment' | 'built-in defaults';
+  };
+  /**
+   * Today's spend as the BUDGET sees it — from `ai_budget/_global`, not the daily rollup. It is
+   * the number that decides whether the next call is refused, and it runs slightly ahead of the
+   * rollup because a call is pre-charged at its ceiling and reconciled down afterwards.
+   */
+  todayGlobalUsd: number;
+  /** False when a day's rollup could not be read. The breakdowns below are then INCOMPLETE. */
+  complete: boolean;
 }
 
-export async function adminGetAiSpend(): Promise<AiSpend> {
+export async function adminGetAiSpend(days: 7 | 30 = 30): Promise<AiSpend> {
   const fn = httpsCallable(getFunctions(app), "adminGetAiSpend");
-  return (await fn({})).data as AiSpend;
+  return (await fn({ days })).data as AiSpend;
 }
 
 export interface AiLedgerRow {
   id: string; uid: string; feature: string; model: string;
   ok: boolean | null; errorCode: string | null;
   promptTokens: number; completionTokens: number; costUsd: number; computeMs: number;
+  /** ISO. Null only for a row written before the column existed. Rows arrive newest-first. */
+  at: string | null;
 }
 
 export async function adminGetAiLedger(

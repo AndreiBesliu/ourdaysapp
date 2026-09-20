@@ -13,10 +13,29 @@ import { errorStatusOf, inErrorState, landingErrorFilter, type ErrorFilter } fro
 import {
   adminCheck, adminGetStats, adminListProfiles, adminListAdmins, adminSetAdmin,
   adminGetHealth, adminSetErrorStatus, adminGetAiLedger, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
-  adminBackfillExpenses,
+  adminBackfillExpenses, adminGetAiSpend, type AiSpend,
 } from '../serverActions';
 
-type Tab = 'overview' | 'profiles' | 'groups' | 'admins' | 'health' | 'broadcast';
+type Tab = 'overview' | 'profiles' | 'groups' | 'admins' | 'ai' | 'health' | 'broadcast';
+
+// The tab button carries `capitalize`, which turns the raw value 'ai' into "Ai". Every other
+// tab happens to read correctly as its own key; this one does not, so the labels are named.
+const TAB_LABEL: Record<Tab, string> = {
+  overview: 'Overview', profiles: 'Profiles', groups: 'Groups', admins: 'Admins',
+  ai: 'AI Center', health: 'Health', broadcast: 'Broadcast',
+};
+
+/**
+ * Money, at the two magnitudes this screen actually shows.
+ *
+ * One call costs ten-thousandths of a dollar and a month costs a few dollars; `toFixed(2)`
+ * renders the first as $0.00 and `toFixed(4)` renders the second as a wall of zeroes. A cost
+ * screen whose small numbers all read $0.00 is a cost screen nobody believes.
+ */
+const usd = (n: number | undefined | null) => {
+  const v = typeof n === 'number' && Number.isFinite(n) ? n : 0;
+  return v === 0 ? '$0' : v < 1 ? `$${v.toFixed(4)}` : `$${v.toFixed(2)}`;
+};
 
 const fmtDate = (iso?: string | null) => {
   if (!iso) return '—';
@@ -35,7 +54,9 @@ function Stat({ label, value, accent }: { label: string; value: any; accent?: st
   );
 }
 
-function Breakdown({ title, data }: { title: string; data: Record<string, number> }) {
+// `format` exists because this renders bare integers, and the AI Center needs dollars. The
+// default keeps every existing call site byte-identical on screen.
+function Breakdown({ title, data, format }: { title: string; data: Record<string, number>; format?: (n: number) => string }) {
   const entries = Object.entries(data || {}).sort((a, b) => b[1] - a[1]);
   const max = Math.max(1, ...entries.map(([, v]) => v));
   if (entries.length === 0) return null;
@@ -49,7 +70,7 @@ function Breakdown({ title, data }: { title: string; data: Record<string, number
             <div className="flex-1 h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
               <div className="h-full bg-primary rounded-full" style={{ width: `${(v / max) * 100}%` }} />
             </div>
-            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 w-10 text-right tabular-nums">{v}</span>
+            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 w-16 text-right tabular-nums">{format ? format(v) : v}</span>
           </div>
         ))}
       </div>
@@ -67,7 +88,10 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
 }
 
 // 30-day mini bar chart. `series` = [{date:'YYYY-MM-DD', count:n}].
-function GrowthChart({ label, series, color }: { label: string; series: { date: string; count: number }[]; color: string }) {
+function GrowthChart({ label, series, color, format, totalSuffix }: {
+  label: string; series: { date: string; count: number }[]; color: string;
+  format?: (n: number) => string; totalSuffix?: string;
+}) {
   const data = series || [];
   const max = Math.max(1, ...data.map(d => d.count));
   const total = data.reduce((s, d) => s + d.count, 0);
@@ -75,11 +99,11 @@ function GrowthChart({ label, series, color }: { label: string; series: { date: 
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
       <div className="flex items-baseline justify-between mb-3">
         <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider">{label}</p>
-        <p className="text-sm font-black text-zinc-900 dark:text-zinc-100 tabular-nums">{total} <span className="text-[10px] font-medium text-zinc-400">/ 30d</span></p>
+        <p className="text-sm font-black text-zinc-900 dark:text-zinc-100 tabular-nums">{format ? format(total) : total} <span className="text-[10px] font-medium text-zinc-400">{totalSuffix || '/ 30d'}</span></p>
       </div>
       <div className="flex items-end gap-[2px] h-20">
         {data.map(d => (
-          <div key={d.date} className="flex-1 flex flex-col justify-end group relative" title={`${d.date}: ${d.count}`}>
+          <div key={d.date} className="flex-1 flex flex-col justify-end group relative" title={`${d.date}: ${format ? format(d.count) : d.count}`}>
             <div className={`${color} rounded-sm transition-all`} style={{ height: `${Math.max(d.count ? 6 : 0, (d.count / max) * 100)}%` }} />
           </div>
         ))}
@@ -118,6 +142,13 @@ export default function Admin() {
   const [errorBusy, setErrorBusy] = useState<string | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [ledger, setLedger] = useState<any>(null);
+  const [aiSpend, setAiSpend] = useState<AiSpend | null>(null);
+  const [aiDays, setAiDays] = useState<7 | 30>(30);
+  // '' means today, resolved by the server. Kept as the string the date input speaks.
+  const [aiDate, setAiDate] = useState('');
+  const [aiUid, setAiUid] = useState('');
+  const [aiFailuresOnly, setAiFailuresOnly] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
   const [groups, setGroups] = useState<any[]>([]);
   const [growth, setGrowth] = useState<any>(null);
   const [detail, setDetail] = useState<any>(null); // open user drill-down
@@ -226,9 +257,11 @@ export default function Admin() {
       // being written to errorLogs, this is the ONLY place they are kept — and it had no screen, so
       // they were being recorded nowhere anybody looks.
       adminGetAiLedger(),
+      adminGetAiSpend(aiDays),
     ]);
-    const [s, p, a, h, g, gr, led] = results;
+    const [s, p, a, h, g, gr, led, spend] = results;
     if (led.status === 'fulfilled') setLedger(led.value);
+    if (spend.status === 'fulfilled') setAiSpend(spend.value);
     if (s.status === 'fulfilled') setStats(s.value);
     if (p.status === 'fulfilled') setProfiles(p.value.profiles || []);
     if (a.status === 'fulfilled') setAdmins(a.value.admins || []);
@@ -237,6 +270,28 @@ export default function Admin() {
     if (gr.status === 'fulfilled') setGrowth(gr.value);
     if (results.some(r => r.status === 'rejected')) { setLoadError(true); console.error('Some admin data failed to load'); }
     setLoading(false);
+  };
+
+  /**
+   * Re-fetch only the two AI calls, for a window or day or person change.
+   *
+   * Deliberately NOT a re-run of `refresh()`: that reloads six other callables to answer a
+   * question about one tab. And deliberately not a `useEffect` keyed on the filters — an effect
+   * would also fire on mount, duplicating what `refresh()` already did.
+   */
+  const loadAi = async (days: 7 | 30, date: string, uid: string) => {
+    setAiBusy(true);
+    const [spend, led] = await Promise.allSettled([
+      adminGetAiSpend(days),
+      adminGetAiLedger({ ...(date ? { date } : {}), ...(uid ? { uid } : {}) }),
+    ]);
+    if (spend.status === 'fulfilled') setAiSpend(spend.value);
+    if (led.status === 'fulfilled') setLedger(led.value);
+    if (spend.status === 'rejected' || led.status === 'rejected') {
+      setLoadError(true);
+      console.error('AI Center reload failed', spend, led);
+    }
+    setAiBusy(false);
   };
 
   const sendBroadcast = async () => {
@@ -332,9 +387,11 @@ export default function Admin() {
       <main className="max-w-5xl w-full mx-auto p-4 flex flex-col gap-5">
         {/* Tabs */}
         <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800/50 p-1 rounded-xl w-fit overflow-x-auto max-w-full">
-          {(['overview', 'profiles', 'groups', 'admins', 'health', 'broadcast'] as Tab[]).map(t => (
+          {/* A SECOND list beside the `Tab` union. A value added to the type and not to this
+              array is a tab that exists in TypeScript and nowhere on screen. */}
+          {(['overview', 'profiles', 'groups', 'admins', 'ai', 'health', 'broadcast'] as Tab[]).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`relative px-4 py-2 rounded-lg text-sm font-bold capitalize whitespace-nowrap transition-all ${tab === t ? 'bg-white dark:bg-zinc-700 shadow-sm text-primary' : 'text-zinc-500'}`}>
-              {t}{t === 'profiles' && profiles.length ? ` (${profiles.length})` : ''}{t === 'groups' && groups.length ? ` (${groups.length})` : ''}{t === 'admins' && admins.length ? ` (${admins.length})` : ''}
+              {TAB_LABEL[t]}{t === 'profiles' && profiles.length ? ` (${profiles.length})` : ''}{t === 'groups' && groups.length ? ` (${groups.length})` : ''}{t === 'admins' && admins.length ? ` (${admins.length})` : ''}
               {t === 'health' && health?.errors?.length > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{health.errorTotal}</span>}
             </button>
           ))}
@@ -841,6 +898,177 @@ export default function Admin() {
             </Section>
 
 
+          </div>
+        )}
+
+        {/* ── AI CENTER ──────────────────────────────────────────────────────────────────
+            Everything the AI costs, in one place. It used to be three rows at the bottom of
+            Health, which answered "how much" and never "out of how much" — and a number with no
+            denominator is why nobody opens a cost panel twice. */}
+        {tab === 'ai' && (
+          <div className="flex flex-col gap-5">
+
+            {/* The window. Shared by the three breakdowns below, because comparing them over
+                different periods is the one thing nobody wants to do. Capped at 30 deliberately:
+                each day costs one read per subcollection, so the price is the WINDOW, never the
+                history. */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {([[7, '7 days'], [30, '30 days']] as const).map(([d, label]) => (
+                <button
+                  key={d}
+                  onClick={() => { setAiDays(d); loadAi(d, aiDate, aiUid); }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                    aiDays === d
+                      ? 'bg-primary text-white'
+                      : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+              {aiBusy && <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-400" />}
+              {/* An incomplete answer says so. A day whose rollup could not be read is absent,
+                  not zero, and the difference is invisible in a bar chart. */}
+              {aiSpend && !aiSpend.complete && (
+                <span className="text-[11px] text-amber-600 dark:text-amber-400">
+                  Some days could not be read — the breakdowns below are incomplete.
+                </span>
+              )}
+            </div>
+
+            <Section icon={<TrendingUp className="w-4 h-4 text-primary" />} title="Spend">
+              <div className="grid grid-cols-3 gap-3">
+                <Stat label="Today" value={usd(aiSpend?.totals?.today)} accent="text-primary" />
+                <Stat label="7 days" value={usd(aiSpend?.totals?.week)} />
+                <Stat label={`${aiSpend?.days ?? aiDays} days`} value={usd(aiSpend?.totals?.month)} />
+              </div>
+            </Section>
+
+            {/* ── Today against the limit ──────────────────────────────────────────────────
+                The missing number. `todayGlobalUsd` comes from the document the budget is
+                actually enforced against, not from the daily rollup — it runs slightly ahead,
+                because a call is pre-charged at its ceiling and reconciled down afterwards, and
+                it is the value that decides whether the NEXT call is refused. */}
+            {aiSpend?.limits && (
+              <Section icon={<ShieldAlert className="w-4 h-4 text-primary" />} title="Today against the limit">
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex flex-col gap-3">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 tabular-nums">
+                      {usd(aiSpend.todayGlobalUsd)} <span className="text-xs font-medium text-zinc-400">of {usd(aiSpend.limits.globalDailyUsd)} for the whole app</span>
+                    </span>
+                    <span className="text-[11px] text-zinc-400">{aiSpend.limits.source}</span>
+                  </div>
+                  <div className="h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${
+                        aiSpend.limits.globalDailyUsd > 0 && aiSpend.todayGlobalUsd / aiSpend.limits.globalDailyUsd > 0.8
+                          ? 'bg-red-500' : 'bg-primary'
+                      }`}
+                      style={{ width: `${Math.min(100, aiSpend.limits.globalDailyUsd > 0
+                        ? (aiSpend.todayGlobalUsd / aiSpend.limits.globalDailyUsd) * 100 : 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-500">
+                    <span>Per person, per day: <span className="tabular-nums text-zinc-700 dark:text-zinc-300">{usd(aiSpend.limits.userDailyUsd)}</span></span>
+                    {aiSpend.limits.killSwitch
+                      ? <span className="text-red-500 font-bold">KILL SWITCH ON — every paid call is being refused</span>
+                      : <span>Kill switch off</span>}
+                  </div>
+                  {/* A rejected input is SAID, not swallowed. Until today a mistyped variable made
+                      the ceiling NaN, every comparison against it false, and the limit silently
+                      stopped existing — the one failure mode a budget must not have. */}
+                  {aiSpend.limits.clamped.length > 0 && (
+                    <div className="bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 text-[11px] rounded-lg p-2 flex flex-col gap-0.5">
+                      <span className="font-bold">Configured values were refused and replaced:</span>
+                      {aiSpend.limits.clamped.map(c => <span key={c}>· {c}</span>)}
+                    </div>
+                  )}
+                </div>
+              </Section>
+            )}
+
+            {aiSpend?.daily?.length ? (
+              <GrowthChart
+                label="Cost per day"
+                /* REVERSED. The callable returns newest-first; this chart draws left to right and
+                   labels the first entry on the left, so feeding it straight in puts today on the
+                   left under a label that says otherwise. Not the kind of bug a test catches. */
+                series={[...aiSpend.daily].reverse().map(d => ({ date: d.date, count: d.usd }))}
+                color="bg-primary"
+                format={usd}
+                totalSuffix={`/ ${aiSpend.days ?? aiDays}d`}
+              />
+            ) : null}
+
+            {aiSpend?.byFeature?.length ? (
+              <Breakdown
+                title={`By feature · ${aiSpend.days ?? aiDays} days`}
+                data={Object.fromEntries(aiSpend.byFeature.map(f => [f.feature, f.usd]))}
+                format={usd}
+              />
+            ) : null}
+
+            {/* ── By person ────────────────────────────────────────────────────────────────
+                Summed across every day in the window, from every row — not from thirty truncated
+                top-tens, which rank somebody eleventh-every-day below somebody first-once. */}
+            {aiSpend?.topUsers?.length ? (
+              <Section icon={<Users className="w-4 h-4 text-primary" />} title={`By person · ${aiSpend.days ?? aiDays} days`}>
+                <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col gap-1.5">
+                  {aiSpend.topUsers.map(u => (
+                    <button
+                      key={u.uid}
+                      onClick={() => { setAiUid(u.uid); loadAi(aiDays, aiDate, u.uid); }}
+                      className="flex items-center justify-between text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 rounded-lg px-1 py-0.5 text-left"
+                    >
+                      {/* A deleted account keeps its rollup rows for ever — nothing removes them,
+                          and the account-deletion path does not touch aiSpendDaily. Say so, rather
+                          than showing a hex stub that reads like a live person. */}
+                      <span className="text-zinc-700 dark:text-zinc-300 truncate">
+                        {profiles.some(p => p.uid === u.uid) ? nameOf(u.uid) : '(deleted account)'}
+                      </span>
+                      <span className="flex items-center gap-3 shrink-0">
+                        {u.failures > 0 && <span className="text-[11px] text-red-500 tabular-nums">{u.failures} failed</span>}
+                        <span className="text-[11px] text-zinc-400 tabular-nums">{u.calls} calls</span>
+                        <span className="font-bold text-zinc-900 dark:text-zinc-100 tabular-nums w-16 text-right">{usd(u.usd)}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </Section>
+            ) : null}
+
+            {/* ── The rows ─────────────────────────────────────────────────────────────────
+                Moved here from Health. Now ordered newest-first, which is what makes the 200-row
+                cap honest: before, with no orderBy at all, Firestore ordered by document id and
+                those ids are random — so a busy day returned an arbitrary two hundred, and there
+                was no way to reach the rest. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                value={aiDate}
+                onChange={(e) => { setAiDate(e.target.value); loadAi(aiDays, e.target.value, aiUid); }}
+                className="px-2.5 py-1 rounded-lg text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 border-0"
+              />
+              <button
+                onClick={() => setAiFailuresOnly(!aiFailuresOnly)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  aiFailuresOnly
+                    ? 'bg-primary text-white'
+                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                }`}
+              >
+                Failures only
+              </button>
+              {aiUid && (
+                <button
+                  onClick={() => { setAiUid(''); loadAi(aiDays, aiDate, ''); }}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium bg-primary text-white flex items-center gap-1"
+                >
+                  {profiles.some(p => p.uid === aiUid) ? nameOf(aiUid) : '(deleted account)'} <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
             {/* One row per AI call, failures included. Worth its own section rather than a number
                 on a tile: a cost total tells you how much was spent, and this tells you what for —
                 and, since today, it is the only record of the provider refusing on quota. */}
@@ -852,14 +1080,14 @@ export default function Admin() {
               ) : (
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden">
                   <div className="flex items-center gap-3 px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 text-[11px] text-zinc-500">
-                    <span className="flex-1">{ledger.rows.length} call(s)</span>
+                    <span className="flex-1">{ledger.rows.length} call(s){aiFailuresOnly ? ` · showing ${ledger.rows.filter((r: any) => r.ok === false).length}` : ''}</span>
                     <span>{ledger.rows.filter((r: any) => r.ok === false).length} failed</span>
                     <span className="tabular-nums">
                       ${ledger.rows.reduce((t: number, r: any) => t + (r.costUsd || 0), 0).toFixed(4)}
                     </span>
                   </div>
                   <div className="max-h-72 overflow-y-auto divide-y divide-zinc-100 dark:divide-zinc-800">
-                    {ledger.rows.map((r: any) => (
+                    {ledger.rows.filter((r: any) => !aiFailuresOnly || r.ok === false).map((r: any) => (
                       <div key={r.id} className="flex items-center gap-2 px-3 py-2 text-[11px]">
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${r.ok === false ? 'bg-red-500' : 'bg-emerald-500'}`} />
                         <span className="font-medium text-zinc-700 dark:text-zinc-300 w-36 truncate">{r.feature}</span>
@@ -874,7 +1102,7 @@ export default function Admin() {
                   </div>
                   {ledger.truncated && (
                     <p className="px-3 py-2 text-[11px] text-zinc-400 border-t border-zinc-100 dark:border-zinc-800">
-                      More rows exist than are shown.
+                      More than 200 calls this day. These are the 200 most recent.
                     </p>
                   )}
                 </div>
@@ -882,13 +1110,12 @@ export default function Admin() {
             </Section>
 
             {health?.ai?.top?.length > 0 && (
-              <Section icon={<Activity className="w-4 h-4 text-primary" />} title="Top AI usage today">
+              <Section icon={<Activity className="w-4 h-4 text-primary" />} title="Calls today, against the per-person daily quota">
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-col gap-1.5">
                   {health.ai.top.map((tp: any) => {
-                    const prof = profiles.find(p => p.uid === tp.uid);
                     return (
                       <div key={tp.uid} className="flex items-center justify-between text-sm">
-                        <span className="text-zinc-700 dark:text-zinc-300 truncate">{prof?.name || prof?.email || tp.uid.slice(0, 8)}</span>
+                        <span className="text-zinc-700 dark:text-zinc-300 truncate">{nameOf(tp.uid)}</span>
                         <span className="font-bold text-zinc-900 dark:text-zinc-100 tabular-nums">{tp.count} / {health.ai.dailyLimitPerUser}</span>
                       </div>
                     );
