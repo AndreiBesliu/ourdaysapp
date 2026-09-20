@@ -8,7 +8,7 @@ import { uploadFile } from '../utils/uploadFile';
 import { db, auth } from '../firebase';
 import { playTone } from '../utils/sounds';
 import { triggerHaptic } from '../utils/haptics';
-import { generateGroupDigestAI } from '../ai';
+import { generateGroupDigestAI, aiErrorKey } from '../ai';
 import { t, getDateLocale } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { dialogDepth } from '../utils/dialogStack';
@@ -144,7 +144,9 @@ export default function GroupChatWidget({
   const [isGeneratingDigest, setIsGeneratingDigest] = useState(false);
   const [digestText, setDigestText] = useState<string | null>(null);
   const [digestTruncated, setDigestTruncated] = useState(false);
-  const [digestError, setDigestError] = useState(false);
+  // The MESSAGE, not a boolean. A boolean can only render one sentence, and the server
+  // distinguishes “you are over your daily budget” from “something went wrong”.
+  const [digestError, setDigestError] = useState<string | null>(null);
 
   const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -671,9 +673,17 @@ export default function GroupChatWidget({
     audioChunksRef.current = [];
   };
 
+  /** Clear ALL THREE pieces of digest state. Dismissing one and leaving the others is how a stale
+   *  "covers only part of it" note survived under a fresh answer. */
+  const clearDigest = () => {
+    setDigestText(null);
+    setDigestTruncated(false);
+    setDigestError(null);
+  };
+
   const handleGenerateDigest = async () => {
     setIsGeneratingDigest(true);
-    setDigestError(false);
+    setDigestError(null);
     try {
       const { digest, truncated } = await generateGroupDigestAI(convId);
       setDigestText(digest || t('digestNothing', language));
@@ -681,8 +691,13 @@ export default function GroupChatWidget({
     } catch (e) {
       // Was a raw English alert() on a screen that otherwise goes through t(), and one that said
       // nothing about WHY — including when the failure is simply the daily AI budget.
+      //
+      // The server refuses a paid call with a stable CODE, and `aiErrorKey` turns the three it
+      // knows into i18n keys. Everything else stays the generic sentence: a raw provider string
+      // is not something to put in front of somebody's family.
       reportError(e instanceof Error ? e.message : String(e), { context: 'GroupChatWidget.digest' });
-      setDigestError(true);
+      const key = aiErrorKey(e);
+      setDigestError(t(key || 'digestFailed', language));
     } finally {
       setIsGeneratingDigest(false);
     }
@@ -793,9 +808,20 @@ export default function GroupChatWidget({
           </div>
 
           {/* AI Digest Bar */}
+          {/* Dismissible, and it says WHICH failure. It used to render one fixed sentence with no
+              way to get rid of it: the banner sat there until the next attempt succeeded, and
+              somebody who had simply spent their daily AI budget was told only that it “could not
+              be generated” and pressed again. */}
           {digestError && (
-            <div role="alert" className="mx-3 mt-2 rounded-lg bg-rose-50 dark:bg-rose-500/10 px-3 py-2">
-              <p className="text-xs text-rose-700 dark:text-rose-300">{t('digestFailed', language)}</p>
+            <div role="alert" className="mx-3 mt-2 rounded-lg bg-rose-50 dark:bg-rose-500/10 px-3 py-2 flex items-start gap-2">
+              <p className="text-xs text-rose-700 dark:text-rose-300 flex-1">{digestError}</p>
+              <button
+                onClick={() => setDigestError(null)}
+                aria-label={t('closeAction', language)}
+                className="p-0.5 -mt-0.5 text-rose-400 hover:text-rose-600 dark:hover:text-rose-300 shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
             {/* `role="status"`: the FAILURE path has announced itself since the day it was
@@ -805,7 +831,7 @@ export default function GroupChatWidget({
           {digestText && (
             <div role="status" className="shrink-0 bg-indigo-50 dark:bg-indigo-500/10 border-b border-indigo-200 dark:border-indigo-500/20 p-3 relative shadow-inner z-10">
               <button 
-                onClick={() => setDigestText(null)} 
+                onClick={clearDigest} 
                 aria-label={t('closeRecap', language)}
                 className="absolute top-2 right-2 p-1 text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 rounded-full"
               >

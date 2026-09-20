@@ -7165,3 +7165,60 @@ de la **sfârșitul** rulării a prins-o de fiecare dată; o dată a scăpat și
 `npm test` de dinainte de commit, cu 4 teste roșii. **mtime nu e probă, și nici un
 `assert` imediat după scriere. Doar conținutul, citit târziu.**
 
+---
+
+## 2026-09-20 · Trei locuri în care codul știa ceva și nu-l spunea
+
+**Prompt (Andrei):** „Continua”. **Model:** Claude Opus 5.
+
+### 1. Refuzul care nu-și spunea motivul
+
+Serverul refuză un apel plătit cu un **cod stabil** — `ai-budget/user-budget` și celelalte
+două — niciodată cu o propoziție: cele șase limbi rămân treaba clientului. `aiErrorMessage`
+traducea codul direct într-o frază, ceea ce lăsa apelantul **incapabil să deosebească** un refuz
+recunoscut de o eroare brută de la furnizor: ambele se întorceau ca `string`.
+
+Deci fereastra de chat arunca tot și afișa „rezumatul nu a putut fi generat”. Cine își consumase
+pur și simplu bugetul zilnic apăsa din nou. Și din nou.
+
+Acum `aiErrorKey` întoarce **cheia**, iar `null` pentru orice altceva — dinadins: alternativa
+e să pui un URL sau un cod HTTP în engleză în fața familiei cuiva. Textul brut merge tot în
+jurnalul de erori, unde chiar folosește. Mutat într-un modul pur, fiindcă `ai.ts` importă
+Firebase și nimic din el nu poate fi atins de un test.
+
+Plus: banner-ul roșu **nu se putea închide**, iar închiderea rezumatului lăsa în urmă steagul de
+„intervalul a fost scurtat” — care putea apărea apoi sub un rezumat complet. Acum se sting toate
+trei odată.
+
+### 2. Aritmetica scrisă de două ori, și NaN-ul care alegea alb
+
+`App.tsx` avea propria conversie HSL→RGB și propria sumă de luminanță, scrise inline lângă
+copia din `themeContrast.ts`. Două implementări ale unei singure aritmetici, iar cea inline
+**nu era atinsă de niciun test**.
+
+Și își credea intrarea. `parseFloat('#3b82f6')` e `NaN`, tot ce urmează devine `NaN`,
+iar `NaN > 0.179` e **fals** — deci un accent stricat alegea tăcut textul DESCHIS. Și, în
+același timp, același șir intra în `--primary`, iar `hsl(var(--primary))` e invalid,
+deci **fundalul colorat dispărea din toată aplicația**. Text aproape alb pe nimic — singura
+combinație din care nu se mai revine.
+
+Nu e ipotetic: ambele căi de înscriere au scris cândva `theme.primaryColor` ca **hex**, iar
+`App.tsx` avea deja un comentariu care avertiza despre exact forma asta.
+
+### Probe
+
+**8 mutații din 8**, cu control negativ. Și două lucruri pe care le-am greșit eu, prinse de
+propriile teste:
+
+* **Am ancorat o culoare din memorie.** Am scris că `hsl(43 96% 50%)` dă `g=182`.
+  Testul a picat pe `181`. Socotit pe hârtie: `0,5 − 0,48 × (−0,4333) = 0,708 → 180,54`,
+  deci **181**. Verificat apoi și cu formula din specificația CSS Color 4, scrisă separat — trei
+  derivări independente, același număr. *Ancora se socotește, nu se ghicește.*
+* **Testul de contract era mulțumit de o declarație de tip.** Verifica dacă `"user-budget"`
+  apare în `aiLedger.ts` — și apare, în uniunea de tipuri de pe linia funcției. O mutație care
+  redenumea doar apelul lăsa poarta verde. Acum cere `refuse("user-budget")`, adică **apelul**.
+  (Iar prima mea mutație era nerealistă: o redenumire adevărată atinge și uniunea, și apelul —
+  altfel nici nu compilează.)
+
+`npx tsc -b` verde · poartă de lint verde · **1634 de teste** (+19) · build verde.
+

@@ -1,3 +1,21 @@
+## ⭐ Mesaje care spun ce știu (20.09)
+
+- [ ] **Dacă apeși Rezumat și ți-ai consumat bugetul AI pe ziua aia**, banner-ul roșu trebuie să
+      spună **de ce** (că s-a atins limita), nu doar „nu s-a putut genera”. Și trebuie să aibă un
+      **x** cu care să-l închizi. Până azi rămânea pe ecran până când o încercare reușea.
+      *Cum ajungi acolo dinadins:* apasă Rezumat de multe ori într-o zi. Limita e 0,25 $ pe om.
+- [ ] **În portofel/chat, dacă ai închis vreodată un rezumat care avea nota „Intervalul a fost
+      scurtat”**, nota trebuie să dispară odată cu el. Până azi rămânea și putea apărea sub
+      următorul rezumat, care era complet.
+
+**Fapt, nu sarcină:** culoarea de accent a aplicației avea o cale prin care putea rămâne
+**invizibilă**. Dacă valoarea salvată nu era în formatul așteptat — de exemplu un cod hex, cum
+scria înscrierea odată — toată aritmetica devenea `NaN`, iar `NaN > prag` e **fals**, deci se
+alegea textul DESCHIS; și, în același timp, fundalul colorat dispărea cu totul. Text aproape alb
+pe nimic. Acum valoarea e verificată și, dacă nu e bună, se folosește albastrul implicit și se
+scrie în jurnalul de erori.
+
+---
 ## ⭐ Cele două GRAVE din audit (reparate 20.09)
 
 - [ ] **Pune telefonul pe modul avion și deschide aplicația.** Trebuie să se încarce și să-ți

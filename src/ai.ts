@@ -3,17 +3,19 @@ import { reportError } from './reportError';
 import { app } from "./firebase";
 import { useThemeStore } from "./store";
 import { t } from "./utils/i18n";
+import { aiErrorKey } from "./utils/aiErrorKey";
 
 // The server refuses a paid call with a stable CODE (`ai-budget/user-budget`, `/global-budget`,
 // `/kill-switch`) and never with a sentence — the six languages stay the client's job. Anything
 // that is not one of those codes keeps its old behaviour.
+// Re-exported: callers import it from here alongside the callables it describes.
+export { aiErrorKey };
+
 export function aiErrorMessage(error: any): string {
   const lang = useThemeStore.getState().language || 'en-US';
-  const raw = String(error?.message || '');
-  if (raw.includes('ai-budget/user-budget')) return t('aiBudgetUser', lang);
-  if (raw.includes('ai-budget/global-budget')) return t('aiBudgetGlobal', lang);
-  if (raw.includes('ai-budget/kill-switch')) return t('aiBudgetOff', lang);
-  return raw || 'Unknown error';
+  const key = aiErrorKey(error);
+  if (key) return t(key, lang);
+  return String(error?.message || '') || 'Unknown error';
 }
 
 export async function generateChecklistForTask(title: string, description: string): Promise<string[]> {
@@ -48,9 +50,14 @@ export async function suggestEventCategoryAI(title: string, description: string 
 }
 
 /**
- * `truncated` means the 48-hour window held more than fifty messages, so the digest covers only
- * part of it. The server reads the NEWEST fifty (it used to read the oldest, while the prompt
- * asked about what happened recently), but "the newest fifty of a busy day" is still not the day.
+ * `truncated` means the digest covers only PART of what it was asked about.
+ *
+ * Two causes now, not one. Either the 48-hour chat window held more than fifty messages — the
+ * server reads the newest fifty, having once read the oldest while the prompt asked what happened
+ * recently — or the event list was cut. It became one flag for both on 19.09, and the sentence
+ * shown to the user said “more than 50 messages” in all six languages until it was reworded. A
+ * boolean that means two things needs its description updated in BOTH places, and this was the
+ * one that was missed.
  */
 export async function generateGroupDigestAI(groupId: string): Promise<{ digest: string; truncated: boolean }> {
   const functions = getFunctions(app);

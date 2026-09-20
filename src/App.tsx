@@ -24,7 +24,7 @@ installGlobalErrorHandlers();
 const Warlord = lazy(() => import('./screens/Warlord')); // large embedded game → lazy chunk
 const PeriodLog = lazy(() => import('./screens/PeriodLog'));
 import { useThemeStore } from './store';
-import { shouldUseLightText } from './utils/themeContrast';
+import { shouldUseLightText, primaryTokens } from './utils/themeContrast';
 import { isValidZone, localZone } from './utils/eventTime';
 
 function App() {
@@ -55,30 +55,18 @@ function App() {
   }, [isDarkMode, customThemeIsDark, backgroundColor, overlayColor, backgroundOverlay, backgroundImage]);
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--primary', primaryColor);
-
-    // Auto-contrast: compute WCAG-compliant foreground color for text on primary backgrounds
-    // primaryColor is "H S% L%" format
-    const parts = primaryColor.split(' ');
-    const h = parseFloat(parts[0]);
-    const s = parseFloat(parts[1]) / 100;
-    const l = parseFloat(parts[2]) / 100;
-
-    // Convert HSL → RGB using standard formula
-    const a = s * Math.min(l, 1 - l);
-    const toRgb = (n: number) => {
-      const k = (n + h / 30) % 12;
-      return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
-    };
-    const r = toRgb(0), g = toRgb(8), b = toRgb(4);
-
-    // Convert to linear light values (WCAG)
-    const toLinear = (c: number) => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-    const luminance = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
-
-    // WCAG: luminance > 0.179 → use dark text; otherwise use light text
-    const foreground = luminance > 0.179 ? '20 14% 10%' : '210 40% 98%';
-    document.documentElement.style.setProperty('--primary-foreground', foreground);
+    // Both accent properties come from ONE function now, in `themeContrast.ts`, beside the
+    // luminance it uses. This used to be a second copy of that arithmetic written out inline, and
+    // it trusted its input: `parseFloat('#3b82f6')` is NaN, every number after it is NaN, and
+    // `NaN > 0.179` is FALSE — so a malformed accent quietly chose the LIGHT foreground while
+    // `--primary` itself became invalid and the accent background vanished. Near-white text on no
+    // background. Both signup paths once wrote this value as a hex, so the shape was real.
+    const tokens = primaryTokens(primaryColor);
+    document.documentElement.style.setProperty('--primary', tokens.primary);
+    document.documentElement.style.setProperty('--primary-foreground', tokens.foreground);
+    if (tokens.fellBack) {
+      reportError(`Unusable primaryColor: ${JSON.stringify(primaryColor)}`, { context: 'App.primaryTokens' });
+    }
     
     // Apply background image and overlay
     if (isDarkMode) {

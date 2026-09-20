@@ -163,3 +163,83 @@ export const AA_TEXT = 4.5;
 export function isUnreadableBackground(t: ThemeInput): boolean {
   return effectiveTextContrast(t) < AA_TEXT;
 }
+
+// ── The accent colour, and the text that must read on it ──────────────────────────────
+//
+// `App.tsx` had its own HSL→RGB conversion and its own luminance sum, written out inline beside
+// the copy in this file. Two implementations of one piece of arithmetic, and the inline one was
+// reachable by no test at all.
+//
+// It also trusted its input. `parseFloat('#3b82f6')` is `NaN`, every number downstream becomes
+// `NaN`, and `NaN > 0.179` is **false** — so a malformed accent silently selected the LIGHT
+// foreground. Worse, the same malformed string went into `--primary`, and `hsl(#3b82f6)` is
+// invalid at computed-value time, so the accent background disappeared app-wide. Near-white text
+// on no background is the one combination nothing recovers from.
+//
+// That is not hypothetical here: both signup paths once wrote `theme.primaryColor` as a HEX, and
+// `App.tsx` carries a comment warning about precisely that shape.
+
+/** The shipped accent, used whenever the stored one cannot be trusted. */
+export const DEFAULT_PRIMARY = '221.2 83.2% 53.3%';
+
+/** Near-black and near-white, in the `H S% L%` form `--primary-foreground` is assigned. */
+export const FG_DARK = '20 14% 10%';
+export const FG_LIGHT = '210 40% 98%';
+
+/**
+ * Parse the `"H S% L%"` triplet Tailwind consumes as `hsl(var(--primary))`.
+ *
+ * Returns null for anything that is not that shape — a hex, an `hsl(...)` wrapper, a missing
+ * component, a non-finite number. The caller falls back rather than propagating `NaN`.
+ */
+export function hslTripletToRgb(value: unknown): Rgb | null {
+  if (typeof value !== 'string') return null;
+  const parts = value.trim().split(/\s+/);
+  if (parts.length !== 3) return null;
+  const h = Number(parts[0]);
+  const s = Number(parts[1].endsWith('%') ? parts[1].slice(0, -1) : NaN);
+  const l = Number(parts[2].endsWith('%') ? parts[2].slice(0, -1) : NaN);
+  if (![h, s, l].every((n) => Number.isFinite(n))) return null;
+  if (s < 0 || s > 100 || l < 0 || l > 100) return null;
+
+  const sat = s / 100;
+  const lum = l / 100;
+  const a = sat * Math.min(lum, 1 - lum);
+  const ch = (n: number) => {
+    const k = (n + h / 30) % 12;
+    return Math.round(255 * (lum - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
+  };
+  return { r: ch(0), g: ch(8), b: ch(4) };
+}
+
+export interface PrimaryTokens {
+  /** What to assign to `--primary`. Always a usable triplet. */
+  primary: string;
+  /** What to assign to `--primary-foreground`, so text on the accent reads. */
+  foreground: string;
+  /** True when the stored value was unusable and the default was substituted. */
+  fellBack: boolean;
+}
+
+/**
+ * Both accent custom properties, from whatever is stored.
+ *
+ * The 0.179 threshold is the WCAG luminance at which black text overtakes white; it is the same
+ * number the inline version used, now sitting next to the `relativeLuminance` it depends on.
+ */
+export function primaryTokens(stored: unknown): PrimaryTokens {
+  const rgb = hslTripletToRgb(stored);
+  if (!rgb) {
+    const fallback = hslTripletToRgb(DEFAULT_PRIMARY)!;
+    return {
+      primary: DEFAULT_PRIMARY,
+      foreground: relativeLuminance(fallback) > 0.179 ? FG_DARK : FG_LIGHT,
+      fellBack: true,
+    };
+  }
+  return {
+    primary: (stored as string).trim(),
+    foreground: relativeLuminance(rgb) > 0.179 ? FG_DARK : FG_LIGHT,
+    fellBack: false,
+  };
+}
