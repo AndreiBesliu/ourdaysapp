@@ -536,6 +536,12 @@ export const generateAIChecklist = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   try {
     const key = process.env.GEMINI_API_KEY_LOCAL;
     if (!key) {
+      // Nothing reached the model — there is no model to reach. The unit was taken at the door
+      // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
+      // of the caller's fifty per attempt, and a misconfiguration nobody can see from the app
+      // burns the whole day's allowance for free. Fixed in the trigger first; these four were
+      // the same bug and were missed.
+      await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
       throw new HttpsError('failed-precondition', 'AI is not configured on the server.');
     }
     const ai = new GoogleGenAI({ apiKey: key });
@@ -602,6 +608,12 @@ export const suggestEventCategory = onCall({ enforceAppCheck: ENFORCE_APP_CHECK 
   try {
     const key = process.env.GEMINI_API_KEY_LOCAL;
     if (!key) {
+      // Nothing reached the model — there is no model to reach. The unit was taken at the door
+      // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
+      // of the caller's fifty per attempt, and a misconfiguration nobody can see from the app
+      // burns the whole day's allowance for free. Fixed in the trigger first; these four were
+      // the same bug and were missed.
+      await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
       throw new HttpsError('failed-precondition', 'AI is not configured on the server.');
     }
     const ai = new GoogleGenAI({ apiKey: key });
@@ -670,6 +682,12 @@ export const generateGroupDigest = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   try {
     const key = process.env.GEMINI_API_KEY_LOCAL;
     if (!key) {
+      // Nothing reached the model — there is no model to reach. The unit was taken at the door
+      // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
+      // of the caller's fifty per attempt, and a misconfiguration nobody can see from the app
+      // burns the whole day's allowance for free. Fixed in the trigger first; these four were
+      // the same bug and were missed.
+      await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
       throw new HttpsError('failed-precondition', 'AI is not configured on the server.');
     }
 
@@ -837,6 +855,12 @@ export const suggestAssetForText = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   try {
     const key = process.env.GEMINI_API_KEY_LOCAL;
     if (!key) {
+      // Nothing reached the model — there is no model to reach. The unit was taken at the door
+      // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
+      // of the caller's fifty per attempt, and a misconfiguration nobody can see from the app
+      // burns the whole day's allowance for free. Fixed in the trigger first; these four were
+      // the same bug and were missed.
+      await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
       throw new HttpsError('failed-precondition', 'AI is not configured on the server.');
     }
 

@@ -485,6 +485,12 @@ exports.generateAIChecklist = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
     try {
         const key = process.env.GEMINI_API_KEY_LOCAL;
         if (!key) {
+            // Nothing reached the model — there is no model to reach. The unit was taken at the door
+            // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
+            // of the caller's fifty per attempt, and a misconfiguration nobody can see from the app
+            // burns the whole day's allowance for free. Fixed in the trigger first; these four were
+            // the same bug and were missed.
+            await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
         }
         const ai = new genai_1.GoogleGenAI({ apiKey: key });
@@ -543,6 +549,12 @@ exports.suggestEventCategory = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_AP
     try {
         const key = process.env.GEMINI_API_KEY_LOCAL;
         if (!key) {
+            // Nothing reached the model — there is no model to reach. The unit was taken at the door
+            // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
+            // of the caller's fifty per attempt, and a misconfiguration nobody can see from the app
+            // burns the whole day's allowance for free. Fixed in the trigger first; these four were
+            // the same bug and were missed.
+            await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
         }
         const ai = new genai_1.GoogleGenAI({ apiKey: key });
@@ -602,6 +614,12 @@ exports.generateGroupDigest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
     try {
         const key = process.env.GEMINI_API_KEY_LOCAL;
         if (!key) {
+            // Nothing reached the model — there is no model to reach. The unit was taken at the door
+            // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
+            // of the caller's fifty per attempt, and a misconfiguration nobody can see from the app
+            // burns the whole day's allowance for free. Fixed in the trigger first; these four were
+            // the same bug and were missed.
+            await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
         }
         const db = admin.firestore();
@@ -750,6 +768,12 @@ exports.suggestAssetForText = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
     try {
         const key = process.env.GEMINI_API_KEY_LOCAL;
         if (!key) {
+            // Nothing reached the model — there is no model to reach. The unit was taken at the door
+            // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
+            // of the caller's fifty per attempt, and a misconfiguration nobody can see from the app
+            // burns the whole day's allowance for free. Fixed in the trigger first; these four were
+            // the same bug and were missed.
+            await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
         }
         const ai = new genai_1.GoogleGenAI({ apiKey: key });

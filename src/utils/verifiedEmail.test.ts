@@ -102,13 +102,54 @@ describe('no listener asks the old way', () => {
     return out;
   }
 
-  /** Every `where('toEmail', …)` call in the app, with the expression it filters by. */
-  function toEmailFilters(): { file: string; line: number; arg: string }[] {
-    const found: { file: string; line: number; arg: string }[] = [];
+  /**
+   * Every `where('toEmail', …)` call in the app: what it filters by, AND what guards it.
+   *
+   * The guard matters as much as the filter and was not being collected. `verifiedEmail` is
+   * `string | null`; filtering by it proves nothing on its own, because passing null still sends
+   * the query and still gets the whole LIST refused. What actually prevents that is the
+   * surrounding `if (verifiedEmail)`. Pinning only the argument left the thing doing the work
+   * unpinned — delete the branch and the old rule stayed green.
+   */
+  function toEmailFilters(): { file: string; line: number; arg: string; guard: string }[] {
+    const found: { file: string; line: number; arg: string; guard: string }[] = [];
     for (const file of sourceFiles(SRC)) {
       const sf = ts.createSourceFile(
         file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX,
       );
+      // TWO shapes count as guarded, and insisting on one would be the guard bullying the code
+      // into a style rather than holding a property:
+      //
+      //   wrapped      if (verifiedEmail) { …subscribe… }
+      //   early return if (!verifiedEmail) { …; return; }  …subscribe…
+      //
+      // The first version only understood the wrapper and reported the invite listener — which is
+      // correctly guarded, by a return at the top of its effect. A guard that cries wolf gets
+      // switched off, so it has to know both.
+      const guardOf = (n: ts.Node): string => {
+        let fn: ts.Node | undefined;
+        for (let p: ts.Node | undefined = n.parent; p; p = p.parent) {
+          if (ts.isIfStatement(p)) return p.expression.getText(sf);
+          if (ts.isFunctionDeclaration(p) || ts.isArrowFunction(p) || ts.isFunctionExpression(p)) {
+            fn = p;
+            break;
+          }
+        }
+        if (!fn) return '';
+        // An earlier statement in the same function that tests the value and leaves.
+        let found = '';
+        const at = n.getStart(sf);
+        const scan = (m: ts.Node): void => {
+          if (found) return;
+          if (ts.isIfStatement(m) && m.getStart(sf) < at
+              && /\breturn\b/.test(m.thenStatement.getText(sf))) {
+            found = m.expression.getText(sf);
+          }
+          ts.forEachChild(m, scan);
+        };
+        ts.forEachChild(fn, scan);
+        return found;
+      };
       const visit = (n: ts.Node): void => {
         if (ts.isCallExpression(n)
             && n.expression.getText(sf) === 'where'
@@ -119,6 +160,7 @@ describe('no listener asks the old way', () => {
             file: file.slice(SRC.length + 1).replace(/\\/g, '/'),
             line: sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1,
             arg: n.arguments[2].getText(sf),
+            guard: guardOf(n),
           });
         }
         ts.forEachChild(n, visit);
@@ -147,6 +189,18 @@ describe('no listener asks the old way', () => {
       "Filter by the value from useVerifiedEmail(). A LIST is validated against the rule without "
       + 'reading documents, so an unverified address does not return fewer rows — it refuses the '
       + 'whole listener and logs an error every time the screen mounts.',
+    ).toEqual([]);
+  });
+
+  it('and none of them runs unless that address exists', () => {
+    // The half that does the work. `verifiedEmail` is `string | null`: filtering by it while it
+    // is null still SENDS the query and still gets the whole listener refused. Only the branch
+    // around it stops that, and pinning the argument alone left the branch free to be deleted.
+    const unguarded = filters.filter((f) => !f.guard.includes('verifiedEmail'));
+    expect(
+      unguarded.map((f) => `${f.file}:${f.line} — guard was ${f.guard || '(none)'}`),
+      'Wrap the subscription in `if (verifiedEmail)`. Without it the query is sent with null and '
+      + 'refused wholesale, which is the exact cost this rule exists to avoid.',
     ).toEqual([]);
   });
 });

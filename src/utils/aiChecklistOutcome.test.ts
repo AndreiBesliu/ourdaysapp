@@ -158,9 +158,15 @@ describe('every reason has a sentence, in every language', () => {
     }
   });
 
-  it('does not give two different reasons the same sentence', () => {
-    // A generic fallback for everything would pass the check above while telling nobody anything.
-    // `unconfigured` and `error` must not read alike; nor may the two budget limits.
+  it('gives each reason its own KEY — which is not the same as its own sentence', () => {
+    // What this checks is key uniqueness, and the comment used to claim it checked that no two
+    // reasons "read alike". They are different things, and since the provider-rationing sentence
+    // was deliberately made identical to the global-budget one, the stronger claim is now FALSE
+    // by design — so stating it here would have been a test lying about its own subject.
+    //
+    // Key uniqueness is still worth holding: it is what stops a generic fallback swallowing every
+    // reason, which is the failure mode that would make all of this decorative. The test directly
+    // above pins the one place two keys are meant to share wording.
     const keys = CHECKLIST_REASONS.map(checklistReasonKey);
     expect(new Set(keys).size).toBe(CHECKLIST_REASONS.length);
   });

@@ -90,32 +90,29 @@ describe('no component builds a Date out of a stored event date', () => {
   }
 
   /**
-   * Every `new Date(<expr>.date)` outside `src/utils`.
+   * Every `new Date(<expr>.date)` in the given sources.
    *
-   * The rule is architectural rather than a shape-match, which is the whole point: the previous
-   * version asked "is a Date literal being handed to `format`?" and a one-line variable binding
-   * defeated it. This asks "did a component construct one at all?", which has no such hole —
-   * whatever you do with it afterwards, you should not have built it.
+   * Takes its input rather than reading the disk itself, for one reason: the negative control
+   * below can then run THIS function on a synthetic file. The first version of that control
+   * hand-copied the visitor and walked its own probe — so it proved the copy worked, and would
+   * have stayed green while the real predicate rotted underneath it. Autoconsistency is not
+   * evidence.
    *
-   * `src/utils` is exempt because that is where the legitimate uses live: `dayOf` reads the day in
-   * UTC, `recurrence.ts` steps a series in UTC milliseconds, and `dayLabel.ts` is the sanctioned
-   * conversion. Those are the model; components are presentation.
+   * The rule is architectural rather than a shape-match, which is the point: an earlier version
+   * asked "is a Date literal handed to `format`?" and a one-line variable binding defeated it.
+   * This asks "did a component construct one at all?", which has no such hole.
    */
-  function offenders(): string[] {
+  function offendersIn(sources: { name: string; text: string }[]): string[] {
     const hits: string[] = [];
-    for (const file of sourceFiles(SRC)) {
-      if (file.startsWith(UTILS)) continue;
-      const sf = ts.createSourceFile(
-        file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX,
-      );
+    for (const { name, text } of sources) {
+      const sf = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
       const visit = (n: ts.Node): void => {
         if (ts.isNewExpression(n)
             && n.expression.getText(sf) === 'Date'
             && (n.arguments?.length ?? 0) === 1
             && ts.isPropertyAccessExpression(n.arguments![0])
             && n.arguments![0].name.getText(sf) === 'date') {
-          hits.push(`${file.slice(SRC.length + 1).replace(/\\/g, '/')}`
-            + `:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`
+          hits.push(`${name}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`
             + ` — new Date(${n.arguments![0].getText(sf)})`);
         }
         ts.forEachChild(n, visit);
@@ -125,9 +122,23 @@ describe('no component builds a Date out of a stored event date', () => {
     return hits;
   }
 
+  /**
+   * The app's components — everything outside `src/utils`.
+   *
+   * `src/utils` is exempt because that is where the legitimate uses live: `dayOf` reads the day in
+   * UTC, `recurrence.ts` steps a series in UTC milliseconds, `dayLabel.ts` is the sanctioned
+   * conversion. Those are the model; components are presentation. The exemption is on the
+   * DIRECTORY, which an expression rewrite cannot slip past.
+   */
+  function componentSources(): { name: string; text: string }[] {
+    return sourceFiles(SRC)
+      .filter((f) => !f.startsWith(UTILS))
+      .map((f) => ({ name: f.slice(SRC.length + 1).replace(/\\/g, '/'), text: readFileSync(f, 'utf8') }));
+  }
+
   it('finds none', () => {
     expect(
-      offenders(),
+      offendersIn(componentSources()),
       'A stored date is midnight UTC. Constructing a Date from it in a component means the next '
       + 'person to format it prints the PREVIOUS day for every reader west of Greenwich — which '
       + 'has now happened twice. Use eventDayAsLocalDate(ev.date) to display it, or dayOf(ev.date) '
@@ -135,23 +146,21 @@ describe('no component builds a Date out of a stored event date', () => {
     ).toEqual([]);
   });
 
-  it('and would find one if it were there, which the last guard could not', () => {
-    // The negative control for the guard itself. The shape that defeated the previous version —
-    // a Date bound to a variable, formatted later — must be the shape this one reports.
-    const probe = ts.createSourceFile(
-      'probe.tsx', 'const d = new Date(ev.date); const s = format(d, "d MMM");',
-      ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX,
-    );
-    let found = 0;
-    const visit = (n: ts.Node): void => {
-      if (ts.isNewExpression(n)
-          && n.expression.getText(probe) === 'Date'
-          && (n.arguments?.length ?? 0) === 1
-          && ts.isPropertyAccessExpression(n.arguments![0])
-          && n.arguments![0].name.getText(probe) === 'date') found++;
-      ts.forEachChild(n, visit);
-    };
-    visit(probe);
-    expect(found).toBe(1);
+  it('looked at a real number of files, so an empty pass cannot be a silent pass', () => {
+    expect(componentSources().length).toBeGreaterThan(20);
+  });
+
+  it('and would find one if it were there — proved by RUNNING it, not by copying it', () => {
+    // The shape that defeated the previous guard: a Date bound to a variable, formatted later.
+    // Passed through the same function the check above uses, so a change to that function shows
+    // up here instead of quietly being duplicated.
+    const probe = [{
+      name: 'probe.tsx',
+      text: 'const d = new Date(ev.date); const s = format(d, "d MMM");',
+    }];
+    expect(offendersIn(probe)).toEqual(['probe.tsx:1 — new Date(ev.date)']);
+    // And that it does not fire on the things it must not.
+    expect(offendersIn([{ name: 'ok.tsx', text: 'const now = new Date(); const t = new Date(row.at);' }]))
+      .toEqual([]);
   });
 });

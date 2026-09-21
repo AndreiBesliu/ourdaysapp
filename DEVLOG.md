@@ -7948,3 +7948,59 @@ inainte de prima scriere, si ambele setari de stare dupa ultima.
 
 `npx tsc -b` verde · poarta de lint verde · **1710 teste** · **236 teste de reguli** (de la 228) ·
 build verde.
+
+## 2026-09-21 · Coada, a doua oara — si poarta de deploy care nu pazea regulile
+
+**Prompt (Andrei):** „Continua”. **Model:** Claude Opus 5.
+
+Cele noua constatari neverificate din recenzia a doua, intoarse anume in rezultat ca sa nu se mai
+piarda. Triate la sursa. Cea mai importanta e o gaura in ceva construit **acum cateva ore**.
+
+### Poarta de deploy sarea peste reguli
+
+`scripts/tree-clean.mjs` — scris azi ca sa refuze un deploy dintr-un arbore care nu e identic cu
+commit-ul — era legat la `hosting.predeploy` si `functions.predeploy`. **Blocurile `firestore` si
+`storage` n-aveau `predeploy` deloc.**
+
+Deci **cele trei deploy-uri de reguli de azi au trecut fara nicio verificare** — exact tinta pentru
+care conteaza cel mai mult, fiindca acolo se livreaza securitatea, si singura pe care Drive n-o
+poate repara la urmatorul build. Poarta acoperea ce era usor de observat ca lipseste si rata ce nu
+era. Acum e pe toate patru.
+
+### Propozitia anume nu putea ajunge niciodata pe cartela
+
+`generateChecklistForTask` arunca `new Error(aiErrorMessage(error))` — adica, pentru un refuz pe
+care-l recunoastem, **propozitia deja tradusa**. Iar catch-ul meu rula `aiErrorKey` peste mesajul
+prins, cautand un COD intr-o PROPOZITIE: null de fiecare data. Deci la Reincearca se afisa mereu
+randul generic, inclusiv in locul lui „ti-ai folosit portia de AI pe ziua de azi", care e singurul
+pe care omul chiar poate actiona. Acum eroarea poarta si cheia, nu doar textul.
+
+### Si restul
+
+- **Cele patru callable-uri taxau o unitate cand lipseste cheia API** — aceeasi reparatie pe care
+  o facusem in trigger acum cateva ore, ratata pe partea cealalta. O configurare gresita pe care
+  n-o vezi din aplicatie manca porția zilei, per incercare.
+- **Cache-ul de override se golea neconditionat la esec**, deci un esec pe o aparitie stergea
+  promisiunea altei aparitii si urmatoarea atingere pornea a doua materializare.
+
+### Doua porti care se autoverificau
+
+- **Controlul negativ al scanerului de date isi rescria predicatul de mana** in loc sa-l ruleze.
+  Proba ca o COPIE merge, nu ca originalul merge — si ar fi ramas verde in timp ce originalul
+  putrezea. Acum controlul cheama exact functia pe care o cheama si verificarea reala.
+- **Regula ascultatoarelor fixa EXPRESIA de filtrare, dar nu si poarta care opreste interogarea.**
+  `verifiedEmail` e `string | null`; filtrat cu null, LIST-ul tot pleaca si tot e refuzat intreg.
+  Ce impiedica asta e ramura din jur, si aia era libera sa dispara. Acum se verifica si ea — in
+  **ambele** forme, ramura care inconjoara si return-ul devreme, fiindca prima versiune a raportat
+  o ascultatoare corect pazita. **O poarta care striga degeaba e o poarta care se stinge.**
+
+Plus o corectura de afirmatie: un test al carui comentariu spunea ca „doua motive nu citesc la fel"
+compara de fapt CHEI — iar de azi doua chei impart deliberat aceeasi propozitie, deci afirmatia
+devenise falsa prin constructie.
+
+**4 din 4 mutatii prinse.** `npx tsc -b` verde · poarta de lint verde · **1712 teste** · build verde.
+
+**Nota de metoda:** cinci esecuri de escaping intr-o singura zi, toate prin heredoc sau `python -c`
+— ultimul a scris doua caractere BACKSPACE acolo unde trebuia `\b`, fiindca fiecare strat mananca
+un nivel si `\b` e un escape Python valid care da un caracter de control in loc sa strige. Orice
+continut cu backslash se scrie de acum intr-un FISIER, cu string brut.

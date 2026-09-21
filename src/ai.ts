@@ -30,7 +30,19 @@ export async function generateChecklistForTask(title: string, description: strin
   } catch (error: any) {
     reportError(error instanceof Error ? error.message : String(error), { context: 'ai.generateChecklistForTask' });
     console.error("AI Generation Error", error);
-    throw new Error(aiErrorMessage(error));
+    // The sentence AND the key that produced it.
+    //
+    // This threw `new Error(aiErrorMessage(error))`, which for a refusal we recognise is the
+    // finished translated sentence — so a caller that ran `aiErrorKey` over the message it caught
+    // got null every time, because it was looking for a code in a sentence. The retry card
+    // therefore showed its generic line for every refusal, including "you have used today's AI
+    // allowance", which is the one the person can actually act on.
+    //
+    // Carrying the key as well lets a caller tell "we know what this is" from "this is the
+    // provider's own English", without parsing anything.
+    const failure = new Error(aiErrorMessage(error)) as Error & { aiKey?: string | null };
+    failure.aiKey = aiErrorKey(error);
+    throw failure;
   }
 }
 

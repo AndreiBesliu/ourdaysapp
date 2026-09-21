@@ -54,10 +54,16 @@
     ]
   },
   "firestore": {
+    "predeploy": [
+      "node scripts/tree-clean.mjs"
+    ],
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
   "storage": {
+    "predeploy": [
+      "node scripts/tree-clean.mjs"
+    ],
     "rules": "storage.rules"
   },
   "functions": {

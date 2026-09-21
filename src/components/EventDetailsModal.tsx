@@ -21,7 +21,7 @@ import { localZone, localDayKey } from '../utils/eventTime';
 import { eventDayAsLocalDate, dayAsLocalDate } from '../utils/dayLabel';
 import { spanRangeLabel } from '../utils/spanLabel';
 import { generateChecklistForTask } from '../ai';
-import { aiErrorKey, checklistReasonKey, checklistWorthRetrying } from '../utils/aiErrorKey';
+import { checklistReasonKey, checklistWorthRetrying } from '../utils/aiErrorKey';
 
 
 interface EventDetailsModalProps {
@@ -287,7 +287,11 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       // Clear the ref on failure. Caching a REJECTED promise would make one bad network moment
       // permanent for the life of the modal: every later tap would reject instantly, without ever
       // trying again, and look exactly like the dead button this whole change exists to fix.
-      materialising.current = null;
+      // Only if it is still OURS. Clearing unconditionally lets a failure for one occurrence
+      // wipe another occurrence's in-flight promise, so the next tap on that one starts a second
+      // materialisation — two override documents for one day, which is what the cache exists to
+      // prevent.
+      if (materialising.current?.key === key) materialising.current = null;
       throw err;
     });
     materialising.current = { key, promise: pending };
@@ -432,7 +436,11 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       const raw = e instanceof Error ? e.message : String(e);
       reportError(raw, { context: 'EventDetailsModal.retryGenerate' });
       if (stillHere()) {
-        const known = aiErrorKey(raw);
+        // `aiKey` comes from `generateChecklistForTask`, which knows the server's CODE. Running
+        // `aiErrorKey` over `raw` here found nothing, ever: by the time it arrives, a recognised
+        // refusal has already been turned into a sentence, and a code cannot be read back out of
+        // one. Anything without a key is the provider's own English and stays out of the card.
+        const known = (e as { aiKey?: string | null })?.aiKey;
         setAiRetryError(known ? t(known, language) : t('aiChecklistFailed', language));
         setAiRetrying(false);
       }
