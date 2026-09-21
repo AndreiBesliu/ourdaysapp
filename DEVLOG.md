@@ -7889,3 +7889,62 @@ merită o felie proprie, nu un petic.
 
 `npx tsc -b` verde · poarta de lint verde · **1708 teste** (de la 1704) · 228 teste de reguli ·
 build verde.
+
+## 2026-09-21 · Doua gauri de securitate vechi, si patru defecte in reparatiile de azi
+
+**Prompt (Andrei):** „Continua”. **Model:** Claude Opus 5.
+
+A doua recenzie adversariala, de data asta peste **reparatiile** livrate azi (33 de agenti, 5
+lentile). Cod scris repede, ca raspuns la o recenzie, e exact locul unde se ascunde al doilea defect.
+17 constatari, **10 au supravietuit, 8 amandurora**. Plus 9 din coada, intoarse anume in rezultat ca
+sa nu se mai piarda.
+
+### Doua gauri de securitate care NU erau de azi
+
+**1. Orice membru se putea face proprietarul grupului.** `delete` e owner-only — dar nimic nu
+impiedica un membru obisnuit sa scrie `ownerId: <uid-ul lui>` lasand `members` neatins, ceea ce
+satisface ramura „nu atinge cine e inauntru”. O actualizare ca sa devii proprietar, a doua ca sa
+stergi grupul cu tot ce e in el, sau ca sa dai afara pe cine l-a facut.
+
+**A PATRA oara cand forma asta apare in fisierul asta.** Regula de `events`, doua sute de randuri
+mai jos, are un comentariu care o numeste a treia si enumera `assets` si `notifications` ca primele
+doua — iar asta a fost ratata, in aceeasi sesiune, de mine. **O regula care citeste doar `resource`
+verifica documentul CUM ESTE si il lasa pe scriitor sa rescrie ce este.**
+
+**2. Garda anti-injectie era doar pe CREATE.** Deci nu cumpara nimic: faci un eveniment personal
+curat, apoi il **actualizezi** ca sa numesti un strain. Regula de citire da acces cui e numit, deci
+text arbitrar ajunge in calendarul acelui om exact ca si cum regula de create n-ar fi existat.
+Uid-urile nu sunt secrete — `warlordPlayers/{uid}` e cheiat pe uid si citibil de oricine autentificat.
+
+Amandoua reparate, cu teste care probeaza si ca fluxurile legitime merg mai departe (un grup fara
+`ownerId` se poate edita in continuare; pe un eveniment de grup poti numi un coleg).
+
+### Patru defecte in ce am reparat azi
+
+- **Generarea platita se arunca daca cititorul inchidea fereastra.** `if (!stillHere()) return;`
+  ajunsese prima instructiune a scrierii, deci sarea **scrierea**, nu doar starea de pe ecran — iar
+  comentariul de douazeci de randuri mai jos spunea exact pe dos. Inchizi modalul cat se genereaza
+  (ce comentariul insusi numeste „lucrul obisnuit de facut”) si pierzi apelul, cartela ramane, si
+  esti invitat sa mai platesti unul.
+- **Baza listei o luam din `event.checklistItems`** — un prop capturat in aceeasi clipa cu starea pe
+  care o inlocuia. Nu mai proaspata, adesea mai veche. Acum vine dintr-un ref scris la randare.
+- **`checklistNotSaved` nu putea fi afisat niciodata:** `setAiOutcomeDone(true)` ascunde chiar
+  cartela in care se randeaza mesajul, si rula inainte de scriere.
+- **Trigger-ul scria inapoi liste calculate din documentul de la CREARE**, deci orice s-a intamplat
+  in secundele cat gandea modelul disparea. Acum `arrayUnion`/`arrayRemove`: atomic, fara citire.
+
+### Poarta care IMPUNEA bug-ul
+
+Garda scrisa azi pentru handler-ul de reincercare **numara** apariti ile lui `stillHere()` dupa await
+(„cel putin trei”) — iar plasarea care cauzeaza bug-ul o satisface perfect. Poarta recompensa
+defectul.
+
+Prima rescriere a cautat in **textul** functiei si a potrivit **comentariul care descrie bug-ul**,
+patru randuri deasupra codului. A treia oara cand un scaner e multumit de propria proza. Acum
+intrebarea se pune **parserului**, pe pozitii de noduri: niciun `return` pazit de `stillHere`
+inainte de prima scriere, si ambele setari de stare dupa ultima.
+
+**5 din 5 mutatii pe reguli · 4 din 4 pe cod**, cu control negativ.
+
+`npx tsc -b` verde · poarta de lint verde · **1710 teste** · **236 teste de reguli** (de la 228) ·
+build verde.

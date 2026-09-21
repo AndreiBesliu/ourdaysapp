@@ -91,15 +91,34 @@ service cloud.firestore {
       // A group created before `ownerId` was required has none, so the comparison is false
       // and it can no longer be deleted from the UI. Its members can still edit it and still
       // leave. That is the safe direction to fail.
-      allow update: if isSignedIn() && request.auth.uid in resource.data.members && (
-        // the owner may change anything, including the member list
-        resource.data.ownerId == request.auth.uid ||
-        // anyone else may edit the group as long as they do not touch who is in it…
-        request.resource.data.members.toSet() == resource.data.members.toSet() ||
-        // …except to remove THEMSELVES, which is leaving.
-        request.resource.data.members.toSet() ==
-          resource.data.members.toSet().difference([request.auth.uid].toSet())
-      );
+      //
+      // ── `ownerId` is PINNED, and without that line the rule below was theatre ───────────
+      //
+      // `delete` is owner-only. But nothing stopped a plain member from writing `ownerId: <their
+      // own uid>` while leaving `members` exactly as it was — which satisfies the "does not touch
+      // who is in it" branch. One update to become the owner, a second to delete the group and
+      // everything in it, or to eject the person who created it.
+      //
+      // FOURTH time this shape has been found in this file. The `events` rule two hundred lines
+      // down carries a comment calling it the third, and names `assets` and `notifications` as the
+      // first two — and then this one was missed, in the same session, by me. A rule that reads
+      // only `resource` checks the document as it STANDS and lets the writer rewrite what it
+      // stands for. The pin has to be on EVERY branch, which is why it sits outside the OR.
+      //
+      // `.get(…, null)` rather than a bare read because a group created before `ownerId` existed
+      // has none, and reading a missing field raises — which would refuse every edit to those
+      // groups instead of protecting them. Two absent owners compare equal, so they keep working.
+      allow update: if isSignedIn() && request.auth.uid in resource.data.members
+        && request.resource.data.get('ownerId', null) == resource.data.get('ownerId', null)
+        && (
+          // the owner may change anything, including the member list
+          resource.data.ownerId == request.auth.uid ||
+          // anyone else may edit the group as long as they do not touch who is in it…
+          request.resource.data.members.toSet() == resource.data.members.toSet() ||
+          // …except to remove THEMSELVES, which is leaving.
+          request.resource.data.members.toSet() ==
+            resource.data.members.toSet().difference([request.auth.uid].toSet())
+        );
       allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
 
       // Chat messages subcollection
@@ -339,6 +358,32 @@ service cloud.firestore {
         !('groupId' in request.resource.data) ||
         request.resource.data.groupId == null ||
         isMemberOfGroup(request.resource.data.groupId)
+      )
+      // The injection guard was on CREATE alone, so it bought nothing: create a clean personal
+      // event, then UPDATE it to name a stranger. The read rule grants access to whoever is
+      // named, so arbitrary text lands in that person's calendar exactly as if the create rule
+      // had never existed. Uids are not secret — `warlordPlayers/{uid}` is keyed by uid and
+      // readable by anyone signed in.
+      //
+      // Same shape as the create clause and deliberately written the same way, so the two cannot
+      // drift: on a group event you are in, name whom you like; anywhere else, only yourself and
+      // the assistant, which is not a person.
+      && (
+        !('inviteeId' in request.resource.data) ||
+        request.resource.data.inviteeId == null
+      )
+      && (
+        (request.resource.data.groupId != null &&
+          isMemberOfGroup(request.resource.data.groupId)) ||
+        (
+          (!('assigneeIds' in request.resource.data) ||
+            request.resource.data.assigneeIds == null ||
+            request.resource.data.assigneeIds.hasOnly([request.auth.uid, 'ai_assistant'])) &&
+          (!('assigneeId' in request.resource.data) ||
+            request.resource.data.assigneeId == null ||
+            request.resource.data.assigneeId == request.auth.uid ||
+            request.resource.data.assigneeId == 'ai_assistant')
+        )
       );
       allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }

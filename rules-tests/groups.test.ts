@@ -67,6 +67,35 @@ describe('updating a group — the three branches', () => {
     await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1), { members: [ALICE] }));
   });
 
+  it('a plain member may NOT make themselves the owner', async () => {
+    // THE hole, and it made owner-only delete a formality. `members` is untouched, so the "does
+    // not touch who is in it" branch is satisfied; only the pin on `ownerId` refuses this.
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1), { ownerId: BOB }));
+  });
+
+  it('and cannot smuggle it in beside a legitimate edit', async () => {
+    // The shape somebody would actually use: rename the group AND take it.
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1), { name: 'Ours now', ownerId: BOB }));
+  });
+
+  it('not even the owner hands it to somebody else through this path', async () => {
+    // There is no transfer feature. If one is ever built it goes through a Cloud Function, where
+    // the other side can be told; a silent rewrite of one field is not a transfer.
+    await assertFails(updateDoc(doc(as(ALICE), 'groups', G1), { ownerId: BOB }));
+  });
+
+  it('a legacy group with no ownerId can still be edited', async () => {
+    // The pin compares `.get('ownerId', null)` on both sides rather than reading the field,
+    // because reading a missing one RAISES — which would have refused every edit to these groups
+    // in the name of protecting them.
+    await seed(async (db) => {
+      await setDoc(doc(db, 'groups', 'g-legacy'), { name: 'Old', members: [ALICE, BOB] });
+    });
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', 'g-legacy'), { name: 'Old renamed' }));
+    // …and still cannot be claimed.
+    await assertFails(updateDoc(doc(as(BOB), 'groups', 'g-legacy'), { ownerId: BOB }));
+  });
+
   it('an outsider may not touch it at all', async () => {
     await assertFails(updateDoc(doc(as(DAVE), 'groups', G1), { name: 'x' }));
   });

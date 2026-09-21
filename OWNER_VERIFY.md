@@ -1,3 +1,21 @@
+## ⚠️ Doua gauri de securitate reparate (21.09) — fapte, nu de bifat
+
+Le scriu fiindca amandoua au fost reale pe live pana azi. **Nu ai ce face**, sunt reparate si
+probate pe emulator; e important sa stii ca au existat.
+
+1. **Orice membru al unui grup se putea face proprietarul lui** — si de-acolo putea sterge grupul
+   cu tot ce era in el, sau putea da afara pe cine l-a creat. Stergerea era deja „doar
+   proprietarul", dar nimic nu oprea pe cineva sa DEVINA proprietar dintr-o singura editare.
+   *Daca cineva iti spune ca a disparut un grup sau ca nu mai e proprietar pe al lui, asta ar fi
+   explicatia — dar nu am niciun motiv sa cred ca s-a intamplat.*
+2. **Se putea baga text in calendarul altcuiva.** Regula oprea asta la CREARE, dar nu si la
+   EDITARE: faci un eveniment al tau, apoi il editezi ca sa-l numesti pe altcineva, si aparea in
+   calendarul lui. Uid-urile nu sunt secrete in aplicatia asta, deci nu cerea nimic special.
+
+Amandoua sunt din familia „regula care se uita doar la cum E documentul, nu si la ce DEVINE" — a
+patra oara in acelasi fisier. Am pus teste care le refuza explicit.
+
+---
 ## ⭐ Asistentul AI pe calendarul PERSONAL — era rupt de tot (21.09)
 
 **Cea mai importantă de azi.** Nu „lista nu se genera” — **evenimentul nu se crea deloc.**

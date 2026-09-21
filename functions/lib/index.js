@@ -204,11 +204,14 @@ async function usersShareGroup(a, b) {
 // the trigger firing again, which it cannot, but the person choosing to.
 async function recordChecklistOutcome(snapshot, data, reason) {
     try {
-        const ids = Array.isArray(data === null || data === void 0 ? void 0 : data.assigneeIds) ? data.assigneeIds : [];
         await snapshot.ref.update({
             // Removed in every case: an assignee advertising work that can never run is the STICK
             // ending, and it is the thing this whole path exists to stop.
-            assigneeIds: ids.filter((id) => id !== "ai_assistant"),
+            //
+            // `arrayRemove` rather than a filtered copy of the create-time array, for the same reason
+            // the success path uses it: `data` is seconds old by now, and writing it back would
+            // un-assign anybody added while the model was being asked.
+            assigneeIds: admin.firestore.FieldValue.arrayRemove("ai_assistant"),
             aiChecklist: { status: "failed", reason, at: new Date().toISOString() },
         });
     }
@@ -272,10 +275,18 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
         assetUrl: null,
         assetId: null
     }));
+    // ATOMIC, because `data` is the document as it was CREATED and the model has been thinking
+    // for several seconds since. Writing whole arrays computed from it reverts anything that
+    // happened meanwhile: a checklist item somebody typed while the skeleton spun would vanish the
+    // moment the AI answered, and a person assigned in those seconds would be un-assigned. Neither
+    // failure leaves a trace — the work is simply gone, replaced by an older copy of itself.
+    //
+    // `arrayUnion` appends without reading, and each item carries a fresh id so none collide.
+    // `arrayRemove` takes out exactly the one value that needs to go.
     await snapshot.ref.update({
-        checklistItems: [...(data.checklistItems || []), ...newItems],
+        checklistItems: admin.firestore.FieldValue.arrayUnion(...newItems),
         // Removed because the work is DONE, which is the one ending that needs no explanation.
-        assigneeIds: data.assigneeIds.filter((id) => id !== "ai_assistant"),
+        assigneeIds: admin.firestore.FieldValue.arrayRemove("ai_assistant"),
     });
     console.log(`Successfully generated checklist for: ${title}`);
 }

@@ -17,7 +17,7 @@ import { getFrequencyKey } from '../utils/recurrence';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { t, getDateLocale } from '../utils/i18n';
 import { useThemeStore } from '../store';
-import { localZone } from '../utils/eventTime';
+import { localZone, localDayKey } from '../utils/eventTime';
 import { eventDayAsLocalDate, dayAsLocalDate } from '../utils/dayLabel';
 import { spanRangeLabel } from '../utils/spanLabel';
 import { generateChecklistForTask } from '../ai';
@@ -154,6 +154,11 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   // problem. Written during render rather than in the effect so it is never a tick behind.
   const eventIdRef = useRef<string | undefined>(event?.id);
   eventIdRef.current = event?.id;
+  // The live checklist, for code that must append to it AFTER an await. Reading the state
+  // variable there reads the closure's copy, which is the whole problem; reading `event`
+  // is no better, because that is a prop captured at the same moment.
+  const checklistRef = useRef<any[]>([]);
+  checklistRef.current = checklist;
   useEffect(() => {
     setAiRetrying(false);
     setAiRetryError(null);
@@ -434,13 +439,13 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       return;
     }
 
+    if (!suggestions.length) {
+      // A refusal states itself; an empty answer would otherwise look like a broken button.
+      if (stillHere()) { setAiRetryError(t('aiChecklistNothing', language)); setAiRetrying(false); }
+      return;
+    }
+
     try {
-      if (!stillHere()) return;
-      if (!suggestions.length) {
-        // A refusal states itself; an empty answer would otherwise look like a broken button.
-        setAiRetryError(t('aiChecklistNothing', language));
-        return;
-      }
       const newItems = suggestions.map((text, i) => ({
         id: `${Date.now()}${i}`,
         text: String(text),
@@ -448,15 +453,27 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
         assetUrl: null,
         assetId: null,
       }));
-      // From the event, not from the `checklist` closed over when the button was pressed: the
-      // generation takes seconds and a snapshot may have replaced the list in between, in which
-      // case writing the old one back would silently undo somebody else's edit.
-      const base = Array.isArray(event.checklistItems) ? event.checklistItems : checklist;
+      // The freshest list for the event being WRITTEN TO. If the reader is still on it, that is
+      // the live state, which the `[event]` effect keeps in step with every snapshot. If they
+      // have moved on, the ref now holds somebody else's checklist, so the closure's copy is the
+      // best that exists. My previous attempt read `event.checklistItems` unconditionally, which
+      // is a prop captured at the same instant as the state it replaced — no fresher, and often
+      // staler, since it misses optimistic local edits.
+      const base = stillHere()
+        ? checklistRef.current
+        : (Array.isArray(event.checklistItems) ? event.checklistItems : []);
       const merged = [...base, ...newItems];
-      setChecklist(merged);
-      setAiOutcomeDone(true);
-      // The WRITE still goes to the event it was asked for, even if the reader has moved on — the
-      // call was paid for and the items belong to that event. Only the on-screen state is guarded.
+      // The WRITE is UNCONDITIONAL, and that is the whole point of the two-try split.
+      //
+      // It said so already, twenty lines below a `if (!stillHere()) return;` that sat at the head
+      // of this try and skipped the entire write. Closing the modal while the model was thinking —
+      // which this handler's own comment calls the ordinary thing to do — threw away a generation
+      // somebody had just spent one of their fifty daily calls on, left the failure card in place,
+      // and invited them to spend another. The comment was right and the code was not.
+      //
+      // Nothing addressed here comes from the screen: `resolveWriteTarget` and `noteHome` both
+      // derive from the closure's `event`, so the write cannot land on the wrong document however
+      // long it takes.
       //
       // TWO documents for a repeating event, and they are not the same question.
       //
@@ -474,6 +491,15 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           // The items are already saved; a failure here costs a stale card, not the work.
           reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.clearAiChecklistNote' });
         });
+
+      // Only now, and only if the reader is still looking at this event. `setAiOutcomeDone(true)`
+      // hides the amber card — which is where `aiRetryError` is rendered — so setting it BEFORE
+      // the write made the "could not be saved" message unreachable by construction: the only
+      // element that could show it had just been removed.
+      if (stillHere()) {
+        setChecklist(merged);
+        setAiOutcomeDone(true);
+      }
     } catch (e) {
       // Only the WRITE can reach this now. The items exist and were paid for, so they stay on
       // screen and the message says what actually failed — saving — rather than blaming the AI
@@ -1074,6 +1100,28 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
               <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
                 {t(checklistReasonKey(event.aiChecklist.reason), language)}
               </p>
+              {/* When the note is not from today, say when it IS from.
+
+                  Four of the sentences above were written for the moment of refusal and say
+                  "today" and "tomorrow" — true when the trigger ran, and a lie every day after.
+                  An event created last week still advised waiting until tomorrow, while Retry
+                  would have worked immediately. The timestamp was already being stored and simply
+                  never shown.
+
+                  `at` is an INSTANT, unlike an event's `date`, so formatting it in the reader's
+                  own zone is the correct thing to do rather than the trap. */}
+              {(() => {
+                const at = event.aiChecklist.at;
+                const when = typeof at === 'string' ? new Date(at) : null;
+                if (!when || Number.isNaN(when.getTime())) return null;
+                if (localDayKey(when) === localDayKey(new Date())) return null;
+                return (
+                  <p className="text-xs text-amber-600/80 dark:text-amber-400/70 mt-0.5">
+                    {t('aiChecklistNotedOn', language)
+                      .replace('{date}', format(when, 'd MMM', { locale: dateLocale }))}
+                  </p>
+                );
+              })()}
               {aiRetryError && (
                 <p className="text-xs text-red-700 dark:text-red-400 mt-1.5">{aiRetryError}</p>
               )}

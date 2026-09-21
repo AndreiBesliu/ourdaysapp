@@ -140,6 +140,50 @@ describe('creating — the injection path', () => {
     }));
   });
 
+  it('the injection guard survives an UPDATE, not just a create', async () => {
+    // It was on create alone, which bought nothing: make a clean personal event, then update it
+    // to name a stranger. The read rule grants access to whoever is named, so arbitrary text
+    // lands in that person's calendar exactly as if the create rule had never existed.
+    await assertSucceeds(setDoc(doc(as(ALICE), 'events', 'inj-1'), {
+      ownerId: ALICE, title: 'Mine', groupId: null, assigneeIds: [ALICE], assigneeId: ALICE,
+    }));
+    await assertFails(updateDoc(doc(as(ALICE), 'events', 'inj-1'), {
+      title: 'You owe me money', assigneeIds: [DAVE], assigneeId: DAVE,
+    }));
+    // The same for the vestigial invite field, which nothing in the app ever writes.
+    await assertFails(updateDoc(doc(as(ALICE), 'events', 'inj-1'), { inviteeId: DAVE }));
+  });
+
+  it('including through the LEGACY single field on its own', async () => {
+    // Setting both assignee fields together is caught by the list clause alone, so a test that
+    // does that proves nothing about `assigneeId` — a mutation removing its clause walked
+    // straight past. The read rule keys on `resource.data.assigneeId == request.auth.uid`, so
+    // this one field is a complete injection by itself.
+    await assertSucceeds(setDoc(doc(as(ALICE), 'events', 'inj-legacy'), {
+      ownerId: ALICE, title: 'Mine', groupId: null, assigneeIds: [ALICE], assigneeId: ALICE,
+    }));
+    await assertFails(updateDoc(doc(as(ALICE), 'events', 'inj-legacy'), { assigneeId: DAVE }));
+  });
+
+  it('but editing your own personal event is untouched', async () => {
+    await assertSucceeds(setDoc(doc(as(ALICE), 'events', 'inj-2'), {
+      ownerId: ALICE, title: 'Mine', groupId: null, assigneeIds: [ALICE], assigneeId: ALICE,
+    }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'inj-2'), { title: 'Mine, renamed' }));
+    // Including handing it to the assistant, which is the flow fixed earlier today.
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'inj-2'), {
+      assigneeIds: [ALICE, 'ai_assistant'],
+    }));
+  });
+
+  it('and naming a fellow member on a GROUP event still works', async () => {
+    // The clause must not bite the case it was never about.
+    await assertSucceeds(setDoc(doc(as(ALICE), 'events', 'inj-3'), {
+      ownerId: ALICE, title: 'Ours', groupId: G1, assigneeIds: [ALICE],
+    }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'inj-3'), { assigneeIds: [BOB] }));
+  });
+
   it('the AI assistant may be named on a PERSONAL event', async () => {
     // The clause above is about PEOPLE — it exists so nobody can make text appear in a stranger's
     // calendar. `ai_assistant` is not a person, and until 21.09 the rule did not know that: the

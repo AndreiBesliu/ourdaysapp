@@ -41,10 +41,44 @@ function declOf(name: string): string | null {
   return out;
 }
 
-/** The full text of an arrow function assigned to `const <name> = ...`. */
+/** The CODE of an arrow function assigned to `const <name> = ...`. */
 function bodyOf(name: string): string | null {
-  const init = declOf(name);
-  return init;
+  return declOf(name);
+}
+
+/** The arrow-function NODE for `const <name> = async () => {...}`. */
+function nodeOf(name: string): ts.Node | null {
+  let out: ts.Node | null = null;
+  const visit = (n: ts.Node): void => {
+    if (ts.isVariableDeclaration(n) && n.name.getText(sf) === name && n.initializer) {
+      out = n.initializer;
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+/** Every node inside `root` matching `pred`, in source order. */
+function nodesIn(root: ts.Node, pred: (n: ts.Node) => boolean): ts.Node[] {
+  const out: ts.Node[] = [];
+  const visit = (n: ts.Node): void => {
+    if (pred(n)) out.push(n);
+    ts.forEachChild(n, visit);
+  };
+  visit(root);
+  return out.sort((a, b) => a.getStart(sf) - b.getStart(sf));
+}
+
+const isCallTo = (name: string) => (n: ts.Node) =>
+  ts.isCallExpression(n) && n.expression.getText(sf) === name;
+
+/** The nearest enclosing `if` condition, as text — or '' when unguarded. */
+function guardText(n: ts.Node, root: ts.Node): string {
+  for (let p: ts.Node | undefined = n.parent; p && p !== root; p = p.parent) {
+    if (ts.isIfStatement(p)) return p.expression.getText(sf);
+  }
+  return '';
 }
 
 describe('the override cache can only answer for the occurrence it was made for', () => {
@@ -85,13 +119,54 @@ describe('a retry that outlives its event does not write to the next one', () =>
     expect(body!).toMatch(/eventIdRef\.current/);
   });
 
-  it('checks it before every state write that follows the await', () => {
-    // The await is the line that makes this necessary; every setState after it needs the guard
-    // in front of it, on the success path and on the failure path alike.
-    const after = body!.slice(body!.indexOf('await generateChecklistForTask'));
-    expect(after, 'no guard between the await and what follows').toContain('stillHere()');
-    const guards = (after.match(/stillHere\(\)/g) || []).length;
-    expect(guards, 'the success path, the error path and the finally each need one')
-      .toBeGreaterThanOrEqual(3);
+  it('does NOT guard the write — the call was paid for and belongs to that event', () => {
+    // The rule this replaces COUNTED: "at least 3 occurrences of stillHere() after the await".
+    // A count cannot say WHERE, and the placement that caused the bug — the guard as the first
+    // statement of the write try — satisfied it perfectly. The gate was enforcing the defect.
+    //
+    // Then the first rewrite searched the body TEXT and matched the comment describing the bug,
+    // four lines above the code. Positions on the AST cannot be confused by prose at all, which
+    // is why this asks the parser rather than the string.
+    const fn = nodeOf('handleRetryAiChecklist')!;
+    const writes = nodesIn(fn, isCallTo('updateDoc'));
+    expect(writes.length, 'no updateDoc in the retry handler').toBeGreaterThan(0);
+    const firstWrite = writes[0].getStart(sf);
+
+    const earlyExits = nodesIn(fn, (n) => ts.isReturnStatement(n))
+      .filter((n) => n.getStart(sf) < firstWrite)
+      .filter((n) => guardText(n, fn).includes('stillHere'));
+
+    expect(
+      earlyExits.map((n) => sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1),
+      'A stillHere()-guarded return before the first updateDoc skips the WRITE, not just the '
+      + 'on-screen state: closing the modal mid-generation then discards the suggestions and '
+      + 'leaves the failure card in place, inviting a second paid call.',
+    ).toEqual([]);
+  });
+
+  it('but DOES guard what it puts on screen', () => {
+    // The other half. Writing another event's checklist into the open modal is the hazard the
+    // guard exists for, so those two setters must stay behind it.
+    const fn = nodeOf('handleRetryAiChecklist')!;
+    for (const setter of ['setChecklist', 'setAiOutcomeDone']) {
+      const calls = nodesIn(fn, isCallTo(setter));
+      expect(calls.length, `${setter} is not called at all`).toBeGreaterThan(0);
+      const unguarded = calls.filter((n) => !guardText(n, fn).includes('stillHere'));
+      expect(
+        unguarded.map((n) => `${setter} @ ${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`),
+        `${setter} must be behind stillHere(), or it lands on whatever event is open now`,
+      ).toEqual([]);
+    }
+  });
+
+  it('never shows a message on a card it has already hidden', () => {
+    // `setAiOutcomeDone(true)` removes the amber card, and `aiRetryError` renders INSIDE it. Set
+    // before the write, it made the "could not be saved" sentence unreachable by construction.
+    const fn = nodeOf('handleRetryAiChecklist')!;
+    const lastWrite = nodesIn(fn, isCallTo('updateDoc')).slice(-1)[0].getStart(sf);
+    const done = nodesIn(fn, isCallTo('setAiOutcomeDone'))
+      .filter((n) => (n as ts.CallExpression).arguments[0]?.getText(sf) === 'true');
+    expect(done.length, 'setAiOutcomeDone(true) not found').toBe(1);
+    expect(done[0].getStart(sf)).toBeGreaterThan(lastWrite);
   });
 });
