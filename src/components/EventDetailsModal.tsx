@@ -416,8 +416,25 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
 
     setAiRetrying(true);
     setAiRetryError(null);
+    // TWO tries, and the line between them is the same one `withLedger` draws on the server: once
+    // `generateChecklistForTask` has returned, the call has been PAID FOR. They shared one try, so
+    // a refused write sent control to a catch that reverted the checklist — throwing away
+    // suggestions somebody had just spent one of their fifty on, and blaming the AI for it.
+    let suggestions: string[];
     try {
-      const suggestions = await generateChecklistForTask(event.title, event.description || '');
+      suggestions = await generateChecklistForTask(event.title, event.description || '');
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : String(e);
+      reportError(raw, { context: 'EventDetailsModal.retryGenerate' });
+      if (stillHere()) {
+        const known = aiErrorKey(raw);
+        setAiRetryError(known ? t(known, language) : t('aiChecklistFailed', language));
+        setAiRetrying(false);
+      }
+      return;
+    }
+
+    try {
       if (!stillHere()) return;
       if (!suggestions.length) {
         // A refusal states itself; an empty answer would otherwise look like a broken button.
@@ -431,7 +448,11 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
         assetUrl: null,
         assetId: null,
       }));
-      const merged = [...checklist, ...newItems];
+      // From the event, not from the `checklist` closed over when the button was pressed: the
+      // generation takes seconds and a snapshot may have replaced the list in between, in which
+      // case writing the old one back would silently undo somebody else's edit.
+      const base = Array.isArray(event.checklistItems) ? event.checklistItems : checklist;
+      const merged = [...base, ...newItems];
       setChecklist(merged);
       setAiOutcomeDone(true);
       // The WRITE still goes to the event it was asked for, even if the reader has moved on — the
@@ -454,22 +475,13 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.clearAiChecklistNote' });
         });
     } catch (e) {
-      // A refusal WE made arrives as a code and becomes a sentence in the reader's language.
-      // Anything else — a cold start, a 503, a safety block — arrives as the provider's own
-      // English, often `AI Error: [GoogleGenerativeAIFetchError] ...` with a URL in it, and that
-      // was being printed into the card in front of somebody's family. `aiErrorKey` returning
-      // null is exactly the signal that we do not recognise it; the raw text goes to the error
-      // log, where it is useful, and the screen says the generic thing.
+      // Only the WRITE can reach this now. The items exist and were paid for, so they stay on
+      // screen and the message says what actually failed — saving — rather than blaming the AI
+      // and deleting the answer.
       const raw = e instanceof Error ? e.message : String(e);
-      if (!stillHere()) {
-        reportError(raw, { context: 'EventDetailsModal.handleRetryAiChecklist' });
-        return;
-      }
-      setAiOutcomeDone(false);
-      setChecklist(event.checklistItems || []);
-      const known = aiErrorKey(raw);
-      setAiRetryError(known ? t(known, language) : t('aiChecklistFailed', language));
-      reportError(raw, { context: 'EventDetailsModal.handleRetryAiChecklist' });
+      reportError(raw, { context: 'EventDetailsModal.retrySave' });
+      if (!stillHere()) return;
+      setAiRetryError(t('checklistNotSaved', language));
     } finally {
       if (stillHere()) setAiRetrying(false);
     }

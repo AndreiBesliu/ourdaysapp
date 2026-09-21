@@ -213,8 +213,16 @@ async function recordChecklistOutcome(snapshot, data, reason) {
         });
     }
     catch (err) {
-        // Best effort by design: this runs on failure paths, where another write may also fail.
+        // Best effort by design: this runs on failure paths, where another write may also fail. But
+        // "best effort" was being spent on `console.error` alone, and this is the ONLY thing that ends
+        // the trigger's failure path — so when it failed, the event kept `ai_assistant`, the skeleton
+        // spun forever, no reason was written, and nothing anywhere recorded that it had happened.
+        // The STICK ending, restored by the very function written to abolish it.
+        //
+        // It goes in the health panel because, unlike the conditions this function RECORDS, a failure
+        // to record is not an operating condition: there is no burst, and there is something to fix.
         console.error("could not record the checklist outcome", (err === null || err === void 0 ? void 0 : err.message) || err);
+        void logServerError(`could not record the checklist outcome (${reason}): ${(err === null || err === void 0 ? void 0 : err.message) || err}`, "ai:generateChecklist", { uid: typeof (data === null || data === void 0 ? void 0 : data.ownerId) === "string" ? data.ownerId : undefined });
     }
 }
 /**

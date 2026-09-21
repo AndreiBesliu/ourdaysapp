@@ -126,13 +126,23 @@ function checklistReason(err) {
 /**
  * Does this reason mean the owner was charged one of their fifty for nothing?
  *
- * The trigger consumes a quota unit at the door, before the budget is consulted — the same order
- * the callables use, and the same consequence: a call refused by OUR budget never reached the
- * model and must not cost anything. Fixed at the four callable sites already; the trigger is the
- * fifth and was missed, because it does not throw to a caller and so had no refusal branch at all.
+ * The trigger consumes a quota unit at the door, before anything else — the same order the
+ * callables use, and the same consequence: a call that never reached the model must not cost
+ * anything. Fixed at the four callable sites already; the trigger was the fifth, because it does
+ * not throw to a caller and so had no refusal branch at all.
+ *
+ * `unconfigured` belongs here for exactly the same reason, and was missed because it is not an
+ * `ai-budget/` code. There is no API key on the service, and the check is the FIRST statement of
+ * the generation — strictly after the unit was taken. So every event created while the key is
+ * missing quietly spent one of the owner's fifty on a call that provably never happened, and a
+ * misconfiguration nobody can see from the app would eat the day's allowance for free.
+ *
+ * `quota` is deliberately absent: `tryConsumeQuota` returning false means nothing was consumed,
+ * and refunding there would hand back an allowance nobody spent.
  */
 function refundsQuota(reason) {
-    return BUDGET_CODES.includes(reason);
+    return BUDGET_CODES.includes(reason)
+        || reason === exports.CHECKLIST_UNCONFIGURED;
 }
 /**
  * Is retrying worth offering?

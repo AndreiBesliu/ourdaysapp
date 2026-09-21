@@ -40,7 +40,7 @@ export default function Friends() {
 
   const myEmail = auth.currentUser?.email?.toLowerCase() || '';
   // The address the RULES will accept, which is not always the one the user record shows.
-  const { email: verifiedEmail, ready: verifiedReady } = useVerifiedEmail();
+  const { email: verifiedEmail, status: verifiedStatus } = useVerifiedEmail();
 
   // My own user doc → friends array + name.
   useEffect(() => {
@@ -271,16 +271,20 @@ export default function Friends() {
               {incoming.length === 0 ? (
                 // "Nobody asked" and "we could not check" are the same picture otherwise, and the
                 // person waiting on an answer is the one who pays for the confusion.
-                // A third case joins the two: we are not LOOKING at the email-addressed ones,
-                // because the address is not confirmed. Saying "nobody asked" there would be a
-                // guess dressed as a fact. Held until `verifiedReady`, so a verified user never
-                // sees this flash during the tick before the token is read.
-                <p className={`text-sm ${incomingLoadError ? 'text-rose-500' : 'text-zinc-500'}`}>
+                // Four states, not two, because "nobody asked" is a claim and the other three
+                // are not. The listener failed; we could not read the token so we did not look;
+                // we looked and the address is unconfirmed so we deliberately did not subscribe;
+                // or we did look and there is genuinely nothing. `pending` falls through to the
+                // last one for the one tick before the token resolves, which is what it was
+                // before any of this and is not worth a flash of its own.
+                <p className={`text-sm ${incomingLoadError || verifiedStatus === 'failed' ? 'text-rose-500' : 'text-zinc-500'}`}>
                   {incomingLoadError
                     ? t('requestsLoadFailed', language)
-                    : (verifiedReady && !verifiedEmail && myEmail)
-                      ? t('emailRequestsHidden', language)
-                      : t('noRequestsYet', language)}
+                    : (verifiedStatus === 'failed' && myEmail)
+                      ? t('requestsCheckFailed', language)
+                      : (verifiedStatus === 'ready' && !verifiedEmail && myEmail)
+                        ? t('emailRequestsHidden', language)
+                        : t('noRequestsYet', language)}
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">

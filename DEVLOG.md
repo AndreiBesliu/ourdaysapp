@@ -7826,3 +7826,66 @@ n-a dovedit-o, adică fix poarta de ieri. Ar fi desfăcut-o tăcut. Motivul e sc
 **5 din 5 mutații prinse**, între care „poarta redevine oarbă” și „o limbă iese din acord”.
 
 `npx tsc -b` verde · poarta de lint verde · **1703 teste** (de la 1702) · build verde.
+
+## 2026-09-21 · Coada nevăzută a recenziei — și două porți de-ale mele care minţeau
+
+**Prompt (Andrei):** „Continua”. **Model:** Claude Opus 5.
+
+Workflow-ul de dimineață verifica doar **primele trei constatări pe lentilă**, după gravitate.
+Restul de nouă n-au fost niciodată probate de nimeni — plătite, găsite, și lăsate în jurnal. Le-am
+citit și le-am triat eu la sursă. **Trei erau despre porți pe care le scrisesem chiar eu.**
+
+### 1. O gardă care NUMĂRA în loc să compare
+
+`expect(returnsIn(body).length).toBe(2)` — și cele două `return` legitime numite doar în comentariu.
+Înlocuiește unul dintre ele cu un `return` tăcut de eșec: numărătoarea rămâne 2, suita rămâne verde.
+Exact defectul despre care repo-ul ăsta are deja o notă. **Acum compară**: fiecare `return` e
+identificat după condiția `if`-ului care-l păzește, iar mulțimea trebuie să fie exact cele două.
+
+Probat: mutația care substituie un `return` a trecut pe lângă versiunea veche și e **prinsă** acum.
+
+### 2. O gardă care căuta un ȘIR în fișier
+
+`expect(src).toContain('await recordChecklistOutcome(...)')` — un substring pe tot fișierul, în
+chiar suita al cărei antet argumentează împotriva substring-urilor. **Comentează apelul și textul e
+tot acolo.** Acum e AST: apelul trebuie să existe **în `catch`-ul trigger-ului**, cu trei argumente,
+iar funcția trebuie să scrie chiar câmpul pe care-l citește ecranul.
+
+Probat: „apelul e comentat” și „câmpul e redenumit” — ambele trec de versiunea veche, ambele prinse
+acum.
+
+### 3. „Nu sunt cereri” spus când nu știam
+
+Hook-ul meu avea `ready: boolean`, deci **„n-am verificat încă” și „am verificat și n-am putut afla”
+erau aceeași valoare** — iar ecranul de Prieteni cădea pe „Nu sunt cereri încă” la orice eșec de
+citire a tokenului. O afirmație falsă spusă cu încredere, produsă fix de codul al cărui comentariu
+zice că cele două nu trebuie să citească la fel.
+
+Trei stări acum (`pending` / `ready` / `failed`), iar decizia a ieșit din hook într-o funcție pură
+(`verifiedEmailState`) tocmai fiindcă starea nouă **n-avea cum să fie testată** într-o suită fără
+DOM. Trei mutații pe ea, toate prinse.
+
+### Și trei din codul livrat
+
+- **O generare plătită era aruncată dacă SCRIEREA eșua.** Apelul AI și scrierea împărțeau un `try`,
+  deci un refuz la scriere trimitea în `catch`-ul care revenea la lista veche — aruncând sugestii pe
+  care cineva tocmai plătise unul din cele cincizeci de apeluri, și dând vina pe AI. Două `try`-uri
+  acum, cu linia între ele exact unde o pune `withLedger` pe server.
+- **Lista se construia din starea închisă la apăsarea butonului**, nu din cea mai nouă — deci o
+  editare concurentă se suprascria tăcut. Acum baza vine din eveniment.
+- **`unconfigured` mânca o unitate din cotă** pentru un apel care demonstrabil n-a avut loc: cheia
+  lipsește, iar verificarea e prima instrucțiune a generării, strict după ce unitatea s-a luat. O
+  configurare greșită pe care n-o vezi din aplicație mânca porția zilei pe gratis.
+- **Dacă scrierea rezultatului eșua, nu se înregistra nicăieri nimic** — nici măcar în panoul de
+  sănătate. Sfârșitul RĂMÂNE, readus chiar de funcția scrisă ca să-l desființeze.
+
+### Ce am respins
+
+Constatarea despre `toId` în `canAccessInvite` (vezi intrarea anterioară) și cea despre „azi/mâine”
+pe o cartelă veche — a doua e reală, dar cere să arăți vechimea notei, iar `at` e deja stocat;
+merită o felie proprie, nu un petic.
+
+**8 din 8 mutații prinse**, între care **cele două pe care porțile vechi le lăsau să treacă**.
+
+`npx tsc -b` verde · poarta de lint verde · **1708 teste** (de la 1704) · 228 teste de reguli ·
+build verde.

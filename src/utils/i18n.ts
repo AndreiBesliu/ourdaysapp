@@ -701,6 +701,8 @@ export const translations: Translations = {
     aiChecklistFailed: "Something went wrong while generating it.",
     aiChecklistNothing: "The AI had nothing to add for this one.",
     emailRequestsHidden: "Requests sent to your email address stay hidden until you confirm it.",
+    requestsCheckFailed: "We could not check for requests sent to your email address.",
+    checklistNotSaved: "The checklist was generated but could not be saved. Please try again.",
   },
   'ro-RO': {
     todayOverview: "Prezentare generală",
@@ -1391,6 +1393,8 @@ export const translations: Translations = {
     aiChecklistFailed: "Ceva n-a mers la generare.",
     aiChecklistNothing: "AI-ul n-a avut ce să adauge aici.",
     emailRequestsHidden: "Cererile trimise pe adresa ta de e-mail rămân ascunse până o confirmi.",
+    requestsCheckFailed: "Nu am putut verifica cererile trimise pe adresa ta de e-mail.",
+    checklistNotSaved: "Lista a fost făcută, dar nu a putut fi salvată. Încearcă din nou.",
   },
   'fr-FR': {
     todayOverview: "Aperçu d'aujourd'hui",
@@ -2081,6 +2085,8 @@ export const translations: Translations = {
     aiChecklistFailed: "Quelque chose s'est mal passé pendant la génération.",
     aiChecklistNothing: "L'IA n'avait rien à ajouter ici.",
     emailRequestsHidden: "Les demandes envoyées à votre adresse e-mail restent masquées jusqu'à ce que vous la confirmiez.",
+    requestsCheckFailed: "Nous n'avons pas pu vérifier les demandes envoyées à votre adresse e-mail.",
+    checklistNotSaved: "La liste a été générée mais n'a pas pu être enregistrée. Réessayez.",
   },
   'es-ES': {
     todayOverview: "Resumen de hoy",
@@ -2771,6 +2777,8 @@ export const translations: Translations = {
     aiChecklistFailed: "Algo salió mal al generarla.",
     aiChecklistNothing: "La IA no tenía nada que añadir aquí.",
     emailRequestsHidden: "Las solicitudes enviadas a tu correo permanecen ocultas hasta que lo confirmes.",
+    requestsCheckFailed: "No hemos podido comprobar las solicitudes enviadas a tu correo.",
+    checklistNotSaved: "La lista se generó pero no se pudo guardar. Inténtalo de nuevo.",
   },
   'it-IT': {
     todayOverview: "Panoramica di oggi",
@@ -3461,6 +3469,8 @@ export const translations: Translations = {
     aiChecklistFailed: "Qualcosa è andato storto durante la generazione.",
     aiChecklistNothing: "L'IA non aveva nulla da aggiungere qui.",
     emailRequestsHidden: "Le richieste inviate al tuo indirizzo e-mail restano nascoste finché non lo confermi.",
+    requestsCheckFailed: "Non siamo riusciti a controllare le richieste inviate al tuo indirizzo e-mail.",
+    checklistNotSaved: "L'elenco è stato generato ma non è stato possibile salvarlo. Riprova.",
   },
   'de-DE': {
     todayOverview: "Heute im Überblick",
@@ -4151,6 +4161,8 @@ export const translations: Translations = {
     aiChecklistFailed: "Beim Erstellen ist etwas schiefgelaufen.",
     aiChecklistNothing: "Die KI hatte hier nichts hinzuzufügen.",
     emailRequestsHidden: "Anfragen an deine E-Mail-Adresse bleiben verborgen, bis du sie bestätigst.",
+    requestsCheckFailed: "Wir konnten Anfragen an deine E-Mail-Adresse nicht prüfen.",
+    checklistNotSaved: "Die Liste wurde erstellt, konnte aber nicht gespeichert werden. Bitte versuche es erneut.",
   }
 };
 

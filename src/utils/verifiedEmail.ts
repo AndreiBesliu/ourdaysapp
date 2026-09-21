@@ -37,6 +37,28 @@ export interface TokenClaims {
  * string `"false"` is not a hypothetical shape — and it must not read as yes. The rule compares
  * with `== true` as well, so strictness here is also what keeps the two sides agreeing.
  */
+export type VerifiedEmailStatus = 'pending' | 'ready' | 'failed';
+
+/**
+ * What the screen should believe, given how the token read ended.
+ *
+ * Extracted from the hook because the hook is React and this suite has no DOM — so the THIRD
+ * state, the one that exists precisely because it was missing, had no test. It was added to stop
+ * `useVerifiedEmail` reporting "have not looked yet" and "looked and could not tell" as the same
+ * value, which made the Friends screen answer a question it had not asked: it said "No requests
+ * yet" whenever the token read failed.
+ *
+ * `failed` is deliberately NOT `ready`: an unread token is not a verdict about somebody's address.
+ */
+export function verifiedEmailState(
+  outcome: { kind: 'no-user' } | { kind: 'claims'; claims: TokenClaims } | { kind: 'error' },
+): { email: string | null; status: VerifiedEmailStatus } {
+  if (outcome.kind === 'error') return { email: null, status: 'failed' };
+  // Signed out is an ANSWER — there is no address to prove — so it is `ready`, not `failed`.
+  if (outcome.kind === 'no-user') return { email: null, status: 'ready' };
+  return { email: verifiedEmailFrom(outcome.claims), status: 'ready' };
+}
+
 export function verifiedEmailFrom(claims: TokenClaims | null | undefined): string | null {
   if (!claims || claims.email_verified !== true) return null;
   const email = claims.email;

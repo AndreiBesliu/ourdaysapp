@@ -15,25 +15,32 @@ import { useEffect, useState } from 'react';
 import { onIdTokenChanged } from 'firebase/auth';
 import { auth } from '../firebase';
 import { reportError } from '../reportError';
-import { verifiedEmailFrom } from '../utils/verifiedEmail';
+import { verifiedEmailState, type VerifiedEmailStatus } from '../utils/verifiedEmail';
 
 /**
  * `email`: the lowercased address this account has proved, or null.
- * `ready`: whether the token has been read yet.
+ * `status`: `pending` before the token has been read, `ready` once it has, `failed` if it could
+ *           not be.
  *
- * The two are separate on purpose. A listener only needs `email` — starting null and resolving on
- * the next tick means it subscribes a moment after mount rather than immediately, which is the
- * right way round: subscribing first and discovering the refusal afterwards is the thing being
- * avoided. But a SCREEN that wants to explain why an email-addressed list is empty must not say so
- * during the tick before the answer arrives, or every verified user sees the sentence flash.
+ * THREE states, and the third is not decoration. The first version had a boolean `ready`, so
+ * "have not looked yet" and "looked and could not tell" were the SAME value — and the Friends
+ * screen, which gates its honest sentence on that boolean, therefore fell through to "No requests
+ * yet" whenever the token read failed. A confident false statement, produced by the very code
+ * whose comment says that "nobody asked" and "we could not check" must not read alike.
+ *
+ * A listener only needs `email`: starting null and resolving on the next tick means it subscribes
+ * a moment after mount rather than immediately, which is the right way round. But a SCREEN
+ * explaining an empty list has to tell those three apart.
  *
  * `false` for `refresh` reads the token the SDK already holds. It is refreshed on sign-in, on
  * reload, and by `VerifyEmailBanner` the moment somebody confirms — forcing it here would put a
  * network round trip in front of every mount of the calendar to learn something that has not
  * changed.
  */
-export function useVerifiedEmail(): { email: string | null; ready: boolean } {
-  const [state, setState] = useState<{ email: string | null; ready: boolean }>({ email: null, ready: false });
+export function useVerifiedEmail(): { email: string | null; status: VerifiedEmailStatus } {
+  const [state, setState] = useState<{ email: string | null; status: VerifiedEmailStatus }>(
+    { email: null, status: 'pending' },
+  );
 
   // ── Why this SUBSCRIBES instead of reading once ──────────────────────────────────────
   //
@@ -51,18 +58,19 @@ export function useVerifiedEmail(): { email: string | null; ready: boolean } {
   useEffect(() => {
     let alive = true;
     const apply = (user: { getIdTokenResult: (f: boolean) => Promise<{ claims: unknown }> } | null) => {
-      if (!user) { if (alive) setState({ email: null, ready: true }); return; }
+      if (!user) { if (alive) setState(verifiedEmailState({ kind: 'no-user' })); return; }
       user.getIdTokenResult(false)
         .then((result) => {
-          if (alive) setState({ email: verifiedEmailFrom(result.claims as never), ready: true });
+          if (alive) setState(verifiedEmailState({ kind: 'claims', claims: result.claims as never }));
         })
         .catch((e) => {
           // Reported rather than swallowed: the consequence of failing to read this is invitations
           // that are never shown, which is indistinguishable from invitations nobody sent.
           reportError(e instanceof Error ? e.message : String(e), { context: 'useVerifiedEmail' });
-          // NOT `ready: true`. An unread token is not a verdict, and claiming one would tell the
-          // person their address is unconfirmed on the strength of a network failure.
-          if (alive) setState({ email: null, ready: false });
+          // NOT `ready`. An unread token is not a verdict, and claiming one would tell the person
+          // their address is unconfirmed on the strength of a network failure. `failed` is its own
+          // answer so a screen can say "could not check" instead of inventing one.
+          if (alive) setState(verifiedEmailState({ kind: 'error' }));
         });
     };
     apply(auth.currentUser);

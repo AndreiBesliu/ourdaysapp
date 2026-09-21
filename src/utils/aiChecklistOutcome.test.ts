@@ -74,22 +74,30 @@ describe('which reason gets recorded', () => {
 });
 
 describe('what a reason implies', () => {
-  it('refunds the quota unit only when OUR budget refused', () => {
-    // The trigger consumes a unit at the door, before the budget is consulted. A call our own
-    // budget refused never reached the model and must not cost one of the owner's fifty.
+  it('refunds the quota unit whenever the call never reached the model', () => {
+    // The trigger consumes a unit at the door, before anything else. A call our own budget refused
+    // never reached the model and must not cost one of the owner's fifty.
     expect(refundsQuota('ai-budget/kill-switch')).toBe(true);
     expect(refundsQuota('ai-budget/user-budget')).toBe(true);
     expect(refundsQuota('ai-budget/global-budget')).toBe(true);
+
+    // And the one that was missed, because it is not an `ai-budget/` code: there is no API key on
+    // the service, and that check is the FIRST statement of the generation — strictly after the
+    // unit was taken. Without this, every event created while the key is missing spends one of the
+    // owner's fifty on a call that provably never happened, and a misconfiguration nobody can see
+    // from the app eats the whole day's allowance for free.
+    expect(refundsQuota(CHECKLIST_UNCONFIGURED)).toBe(true);
   });
 
-  it('does NOT refund when the quota is what stopped it', () => {
+  it('does NOT refund when the call really happened, or when nothing was taken', () => {
     // `tryConsumeQuota` returning false means nothing was consumed. Refunding there would hand
     // back an allowance nobody spent — one free call per event created, for as long as it lasted.
     expect(refundsQuota(CHECKLIST_QUOTA)).toBe(false);
+    // These two reached the provider. The model answered badly, or the provider refused us after
+    // taking the request — either way the attempt was made and the allowance is spent.
     expect(refundsQuota(CHECKLIST_BAD_OUTPUT)).toBe(false);
     expect(refundsQuota(CHECKLIST_BUSY)).toBe(false);
     expect(refundsQuota(CHECKLIST_ERROR)).toBe(false);
-    expect(refundsQuota(CHECKLIST_UNCONFIGURED)).toBe(false);
   });
 
   it('offers a retry for everything except a server with no key', () => {
@@ -202,9 +210,11 @@ describe('the trigger has no ending that tells nobody', () => {
     ).toEqual([]);
   });
 
-  it('the trigger keeps exactly the two returns that mean "not my job"', () => {
-    // `if (!snapshot)` and `if (!assigneeIds.includes("ai_assistant"))`. Nothing has been promised
-    // to anybody at either point. A third return would be a failure path that records nothing.
+  it('the trigger keeps exactly the two returns that mean "not my job" — by NAME', () => {
+    // COMPARED, not counted. The first version asserted `returnsIn(body).length === 2` and named
+    // the two legitimate guards only in this comment — so substituting a silent failure return for
+    // one of them keeps the count at two and the suite stays green, which is the precise defect
+    // this repo has a memory about. A count answers "how many"; the question is "which".
     let trigger: ts.Node | null = null;
     const visit = (n: ts.Node): void => {
       if (ts.isVariableDeclaration(n) && n.name.getText(sf) === 'autoSuggestChecklist') trigger = n;
@@ -221,13 +231,63 @@ describe('the trigger has no ending that tells nobody', () => {
     };
     findArrow(handler);
     expect(body, 'no handler body').not.toBeNull();
-    expect(returnsIn(body!, body!).length).toBe(2);
+
+    /** The `if` condition a return is guarded by, normalised to one line. */
+    const guardOf = (r: ts.Node): string => {
+      for (let p: ts.Node | undefined = r.parent; p && p !== body; p = p.parent) {
+        if (ts.isIfStatement(p)) return p.expression.getText(sf).replace(/\s+/g, ' ').trim();
+      }
+      return '<unguarded>';
+    };
+
+    const guards = returnsIn(body!, body!).map(guardOf).sort();
+    expect(guards).toEqual([
+      '!data.assigneeIds || !data.assigneeIds.includes("ai_assistant")',
+      '!snapshot',
+    ].sort());
   });
 
-  it('records an outcome on the failure path', () => {
-    // The counterpart to the two rules above: having thrown, something must write the reason.
-    const src = readFileSync(INDEX, 'utf8');
-    expect(src).toContain('await recordChecklistOutcome(snapshot, data, reason);');
-    expect(src).toContain('aiChecklist: { status: "failed", reason, at:');
+  it('records an outcome on the failure path, as a CALL', () => {
+    // Also rewritten. This was `expect(readFileSync(INDEX)).toContain('await recordChecklistOutcome(…)')`
+    // — a raw substring over the whole file, in the one suite whose header argues against exactly
+    // that. A comment describing the call, or a string literal quoting it, satisfies it; deleting
+    // the call while leaving the comment does not break it. This repo has shipped that twice.
+    let trigger: ts.VariableDeclaration | null = null;
+    const findTrigger = (n: ts.Node): void => {
+      if (ts.isVariableDeclaration(n) && n.name.getText(sf) === 'autoSuggestChecklist') {
+        trigger = n as ts.VariableDeclaration;
+      }
+      ts.forEachChild(n, findTrigger);
+    };
+    findTrigger(sf);
+    expect(trigger, 'autoSuggestChecklist not found').not.toBeNull();
+
+    // The catch clause of the trigger must CALL the recorder.
+    let inCatch = 0;
+    const walkCatch = (n: ts.Node): void => {
+      if (ts.isCatchClause(n)) {
+        const calls = (m: ts.Node): void => {
+          if (ts.isCallExpression(m) && m.expression.getText(sf) === 'recordChecklistOutcome'
+              && m.arguments.length === 3) inCatch++;
+          ts.forEachChild(m, calls);
+        };
+        calls(n.block);
+      }
+      ts.forEachChild(n, walkCatch);
+    };
+    walkCatch(trigger!.initializer!);
+    expect(inCatch, 'the trigger’s catch must call recordChecklistOutcome(snapshot, data, reason)')
+      .toBe(1);
+
+    // And the recorder must actually write the field the screen reads.
+    let writesField = false;
+    const fn = functionNamed('recordChecklistOutcome');
+    expect(fn, 'recordChecklistOutcome not found').not.toBeNull();
+    const findProp = (n: ts.Node): void => {
+      if (ts.isPropertyAssignment(n) && n.name.getText(sf) === 'aiChecklist') writesField = true;
+      ts.forEachChild(n, findProp);
+    };
+    findProp(fn!);
+    expect(writesField, 'recordChecklistOutcome must write an aiChecklist field').toBe(true);
   });
 });

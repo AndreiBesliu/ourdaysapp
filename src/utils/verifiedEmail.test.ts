@@ -15,7 +15,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import ts from 'typescript';
-import { verifiedEmailFrom } from './verifiedEmail';
+import { verifiedEmailFrom, verifiedEmailState } from './verifiedEmail';
 
 describe('what counts as an address this account has proved', () => {
   it('returns the address when the token says verified', () => {
@@ -51,6 +51,41 @@ describe('what counts as an address this account has proved', () => {
     expect(verifiedEmailFrom({ email: 42, email_verified: true })).toBeNull();
     expect(verifiedEmailFrom(null)).toBeNull();
     expect(verifiedEmailFrom(undefined)).toBeNull();
+  });
+});
+
+describe('three outcomes, three answers', () => {
+  // The state this exists for is `failed`. Before it, the hook reported "have not looked yet" and
+  // "looked and could not tell" as one boolean — so the Friends screen fell through to "No
+  // requests yet" on a token-read failure, which is a confident false statement produced by the
+  // very code whose comment says those two must not read alike.
+
+  it('a read that failed is its own answer, not "not yet" and not "unverified"', () => {
+    expect(verifiedEmailState({ kind: 'error' })).toEqual({ email: null, status: 'failed' });
+  });
+
+  it('signed out IS an answer — there is no address to prove', () => {
+    // `ready`, deliberately. Nothing failed and nothing is pending; there is simply nobody.
+    expect(verifiedEmailState({ kind: 'no-user' })).toEqual({ email: null, status: 'ready' });
+  });
+
+  it('a token that was read gives the address it proves, or none', () => {
+    expect(verifiedEmailState({ kind: 'claims', claims: { email: 'Dave@Example.test', email_verified: true } }))
+      .toEqual({ email: 'dave@example.test', status: 'ready' });
+    expect(verifiedEmailState({ kind: 'claims', claims: { email: 'dave@example.test', email_verified: false } }))
+      .toEqual({ email: null, status: 'ready' });
+  });
+
+  it('never reports pending — that is the hook’s initial value, not an outcome', () => {
+    // If this function could return `pending`, a real outcome could be mistaken for "still
+    // waiting" and the screen would show nothing at all, forever.
+    for (const outcome of [
+      { kind: 'error' as const },
+      { kind: 'no-user' as const },
+      { kind: 'claims' as const, claims: {} },
+    ]) {
+      expect(verifiedEmailState(outcome).status, JSON.stringify(outcome)).not.toBe('pending');
+    }
   });
 });
 
