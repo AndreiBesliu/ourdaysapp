@@ -10,14 +10,22 @@
 // ── Why this is a small file and not a big one ────────────────────────────────────────────
 //
 // "Event Date Timezone Shift" has been on the roadmap since 26.05, described as pervasive, with
-// about a dozen sites named. Re-measured today: ten of them were closed by the span work in
-// September, which moved storage and comparison onto `dayOf`/`occursOn`. One was a fallback that
-// `spanOf` can only reach when the date is unparseable, where the old line printed the words
-// "Invalid Date" at somebody rather than the wrong day. That left exactly ONE live instance — the
-// event list in `LeaveGroupModal`.
+// about a dozen sites named. Re-measured on 20.09: ten were closed by the span work in September,
+// which moved storage and comparison onto `dayOf`/`occursOn`. One was a fallback that `spanOf` can
+// only reach when the date is unparseable, where the old line printed the words "Invalid Date" at
+// somebody rather than the wrong day.
 //
-// Repeating a four-month-old finding without re-measuring would have made this a rewrite of a
-// dozen call sites. It is three lines.
+// I concluded "that leaves exactly ONE live instance" and wrote it here and in the DEVLOG. THAT WAS
+// WRONG, and the guard below is why I could not see it. There were TWO: `LeaveGroupModal`, and the
+// recurring-series panel, which does
+//
+//     const startDate = new Date(ev.date);          // …then format(startDate, …) two lines later
+//
+// The first version of this guard looked for `format(new Date(x.date))` as one expression. Binding
+// the Date to a variable first walks straight past it — and a guard that is blind BY CONSTRUCTION
+// is the failure this repo keeps repeating, so the fix is not a wider pattern but a different
+// question. It now asks an ARCHITECTURAL one: no component builds a Date out of a stored `.date`
+// at all. There is exactly one right way to do it and it lives in `dayLabel.ts`.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -67,8 +75,9 @@ describe('a stored day as something a local formatter can print', () => {
   });
 });
 
-describe('nothing hands a stored instant to a local formatter', () => {
+describe('no component builds a Date out of a stored event date', () => {
   const SRC = resolve(process.cwd(), 'src');
+  const UTILS = join(SRC, 'utils');
 
   function sourceFiles(dir: string, out: string[] = []): string[] {
     for (const entry of readdirSync(dir)) {
@@ -80,26 +89,34 @@ describe('nothing hands a stored instant to a local formatter', () => {
     return out;
   }
 
-  /** `format(new Date(<anything>.date), …)` — the exact shape that moves the day. */
+  /**
+   * Every `new Date(<expr>.date)` outside `src/utils`.
+   *
+   * The rule is architectural rather than a shape-match, which is the whole point: the previous
+   * version asked "is a Date literal being handed to `format`?" and a one-line variable binding
+   * defeated it. This asks "did a component construct one at all?", which has no such hole —
+   * whatever you do with it afterwards, you should not have built it.
+   *
+   * `src/utils` is exempt because that is where the legitimate uses live: `dayOf` reads the day in
+   * UTC, `recurrence.ts` steps a series in UTC milliseconds, and `dayLabel.ts` is the sanctioned
+   * conversion. Those are the model; components are presentation.
+   */
   function offenders(): string[] {
     const hits: string[] = [];
     for (const file of sourceFiles(SRC)) {
+      if (file.startsWith(UTILS)) continue;
       const sf = ts.createSourceFile(
         file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX,
       );
       const visit = (n: ts.Node): void => {
-        if (ts.isCallExpression(n)
-            && n.expression.getText(sf) === 'format'
-            && n.arguments.length >= 1
-            && ts.isNewExpression(n.arguments[0])
-            && n.arguments[0].expression.getText(sf) === 'Date'
-            && (n.arguments[0].arguments?.length ?? 0) === 1) {
-          const arg = n.arguments[0].arguments![0].getText(sf);
-          // `format(new Date(), …)` is "now", which is genuinely a local instant and correct.
-          if (/\.date\b|\bdate\b|dateIso/.test(arg)) {
-            hits.push(`${file.slice(SRC.length + 1).replace(/\\/g, '/')}`
-              + `:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1} — format(new Date(${arg}))`);
-          }
+        if (ts.isNewExpression(n)
+            && n.expression.getText(sf) === 'Date'
+            && (n.arguments?.length ?? 0) === 1
+            && ts.isPropertyAccessExpression(n.arguments![0])
+            && n.arguments![0].name.getText(sf) === 'date') {
+          hits.push(`${file.slice(SRC.length + 1).replace(/\\/g, '/')}`
+            + `:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`
+            + ` — new Date(${n.arguments![0].getText(sf)})`);
         }
         ts.forEachChild(n, visit);
       };
@@ -108,12 +125,33 @@ describe('nothing hands a stored instant to a local formatter', () => {
     return hits;
   }
 
-  it('finds no site formatting a stored date in the reader’s zone', () => {
+  it('finds none', () => {
     expect(
       offenders(),
-      'A stored date is midnight UTC. date-fns `format` renders in the reader’s zone, so west of '
-      + 'Greenwich this prints the PREVIOUS day. Use eventDayAsLocalDate(ev.date) — it reads the '
-      + 'day in UTC and rebuilds it as a local Date, which formats as itself everywhere.',
+      'A stored date is midnight UTC. Constructing a Date from it in a component means the next '
+      + 'person to format it prints the PREVIOUS day for every reader west of Greenwich — which '
+      + 'has now happened twice. Use eventDayAsLocalDate(ev.date) to display it, or dayOf(ev.date) '
+      + 'to compare it.',
     ).toEqual([]);
+  });
+
+  it('and would find one if it were there, which the last guard could not', () => {
+    // The negative control for the guard itself. The shape that defeated the previous version —
+    // a Date bound to a variable, formatted later — must be the shape this one reports.
+    const probe = ts.createSourceFile(
+      'probe.tsx', 'const d = new Date(ev.date); const s = format(d, "d MMM");',
+      ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX,
+    );
+    let found = 0;
+    const visit = (n: ts.Node): void => {
+      if (ts.isNewExpression(n)
+          && n.expression.getText(probe) === 'Date'
+          && (n.arguments?.length ?? 0) === 1
+          && ts.isPropertyAccessExpression(n.arguments![0])
+          && n.arguments![0].name.getText(probe) === 'date') found++;
+      ts.forEachChild(n, visit);
+    };
+    visit(probe);
+    expect(found).toBe(1);
   });
 });

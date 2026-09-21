@@ -129,6 +129,19 @@ service cloud.firestore {
     // NB this gates `update` and `delete` as well as `read`, so declining an email-addressed
     // invitation now needs the same verified address. That is the intended pair: an invitation
     // you may not see is not one you may answer.
+    //
+    // There is deliberately NO `request.auth.uid == resource.data.toId` branch here, unlike the
+    // friend-request helper below, and a reviewer was right to ask.
+    //
+    // Every group invitation carries a real address: `InviteFamilyModal.createInvite` always writes
+    // `toEmail: toEmail.toLowerCase()`, and its friends branch only offers people who have one. So
+    // a uid branch would grant nothing that the email branch does not already grant — except the
+    // one thing it must not: it would let somebody read an invitation addressed to an address they
+    // have not proved, simply because they were also named by uid, which is precisely the gate
+    // above. Adding it would quietly undo 20.09.
+    //
+    // If a uid-ONLY invitation is ever introduced, this needs revisiting together with a listener,
+    // because nothing queries `group_invites` by `toId` either.
     function canAccessInvite() {
       return isSignedIn() && (
         addressedToVerifiedEmail(resource.data.toEmail) ||

@@ -1,5 +1,6 @@
 import { X, Repeat, Trash2, Edit2, Calendar as CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
+import { eventDayAsLocalDate } from '../utils/dayLabel';
 import { deleteDoc, doc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { useState } from 'react';
@@ -126,7 +127,13 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
                   </div>
                   <div className="flex flex-col gap-2">
                     {items.map((ev: any) => {
-                      const startDate = new Date(ev.date);
+                      // NOT `new Date(ev.date)`. That is the stored midnight-UTC instant, and both
+                      // `format` calls below render in the READER's zone — so west of Greenwich the
+                      // series printed as starting the day before it does, and the computed end date
+                      // with it. This is the second live instance of the bug `dayLabel.ts` exists to
+                      // fix; the guard written alongside it could not see this one, because the Date
+                      // is bound to a variable before it reaches `format`.
+                      const startDate = eventDayAsLocalDate(ev.date) ?? new Date(NaN);
                       const endDate = getRecurrenceEndDate(startDate, freq as any);
                       const isOwner = ev.ownerId === auth.currentUser?.uid;
                       

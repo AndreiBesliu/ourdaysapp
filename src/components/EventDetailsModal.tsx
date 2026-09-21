@@ -21,7 +21,7 @@ import { localZone } from '../utils/eventTime';
 import { eventDayAsLocalDate, dayAsLocalDate } from '../utils/dayLabel';
 import { spanRangeLabel } from '../utils/spanLabel';
 import { generateChecklistForTask } from '../ai';
-import { checklistReasonKey, checklistWorthRetrying } from '../utils/aiErrorKey';
+import { aiErrorKey, checklistReasonKey, checklistWorthRetrying } from '../utils/aiErrorKey';
 
 
 interface EventDetailsModalProps {
@@ -454,16 +454,22 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.clearAiChecklistNote' });
         });
     } catch (e) {
-      // `generateChecklistForTask` already turns a refusal into a translated sentence, so this
-      // says WHICH limit bit rather than "could not generate".
+      // A refusal WE made arrives as a code and becomes a sentence in the reader's language.
+      // Anything else — a cold start, a 503, a safety block — arrives as the provider's own
+      // English, often `AI Error: [GoogleGenerativeAIFetchError] ...` with a URL in it, and that
+      // was being printed into the card in front of somebody's family. `aiErrorKey` returning
+      // null is exactly the signal that we do not recognise it; the raw text goes to the error
+      // log, where it is useful, and the screen says the generic thing.
+      const raw = e instanceof Error ? e.message : String(e);
       if (!stillHere()) {
-        reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.handleRetryAiChecklist' });
+        reportError(raw, { context: 'EventDetailsModal.handleRetryAiChecklist' });
         return;
       }
       setAiOutcomeDone(false);
       setChecklist(event.checklistItems || []);
-      setAiRetryError(e instanceof Error ? e.message : String(e));
-      reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.handleRetryAiChecklist' });
+      const known = aiErrorKey(raw);
+      setAiRetryError(known ? t(known, language) : t('aiChecklistFailed', language));
+      reportError(raw, { context: 'EventDetailsModal.handleRetryAiChecklist' });
     } finally {
       if (stillHere()) setAiRetrying(false);
     }

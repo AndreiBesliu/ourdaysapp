@@ -44,7 +44,22 @@ export const CHECKLIST_QUOTA = "ai-checklist/quota";
 export const CHECKLIST_UNCONFIGURED = "ai-checklist/unconfigured";
 /** The model answered, but not with a list of items. Paid for, and unusable. */
 export const CHECKLIST_BAD_OUTPUT = "ai-checklist/bad-output";
-/** The provider rationed us. Nothing is wrong here; later will probably work. */
+/**
+ * The provider rationed us.
+ *
+ * Its own code, NOT an alias of the callables' `AI_QUOTA_CODE`, though they come from the same
+ * predicate. Aliasing them was my first attempt at fixing the contradiction below and it was
+ * wrong: `AI_QUOTA_CODE` is an `ai-budget/` code, so `refundsQuota` would have started returning
+ * true for it — a silent change to who gets charged, smuggled inside a wording fix. The ledger and
+ * the health panel also want to know WHICH limit it was.
+ *
+ * What did need fixing is what the PERSON reads. The card used to say "the AI was busy, try again
+ * in a minute" while pressing Retry — which runs the callable — said "the app has reached today's
+ * AI limit, try again tomorrow". Same condition, same screen, one minute apart. The callables are
+ * the ones telling the truth: the dominant cause of this predicate firing is the project's
+ * free-tier allowance for the DAY being spent, which put 74 of 95 rows in the health panel. So the
+ * sentence behind this code now says the same thing as theirs; only the code stays distinct.
+ */
 export const CHECKLIST_BUSY = "ai-checklist/provider";
 /** Anything else. Deliberately the fallback, never the guess. */
 export const CHECKLIST_ERROR = "ai-checklist/error";

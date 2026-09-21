@@ -7637,7 +7637,10 @@ enumerate. Măsurat:
   citește UTC peste tot (`dayOf`/`occursOn`), deci ziua tastată și cea stocată coincid în orice fus.
 - **Unul** era o ramură de rezervă la care `spanOf` ajunge doar când data e necitibilă. Acolo linia
   veche nu scria ziua greșită — scria cuvintele **„Invalid Date”** în fața omului, în șase limbi.
-- **Unul singur viu**: lista de evenimente din fereastra de ieșire din grup. `format(new
+- **Unul singur viu**: lista de evenimente din fereastra de ieșire din grup.
+  - ⚠️ **CORECTAT 21.09 — afirmația asta era GREȘITĂ.** Erau **trei**, iar poarta pe care o
+    scrisesem alături era oarbă exact la celelalte două: `format(new Date(x.date))` ca o
+    singură expresie nu vede o dată legată întâi de o variabilă. Vezi intrarea de pe 21.09. `format(new
   Date(ev.date), …)` ia un instant de miezul nopții UTC și îl formatează în fusul CITITORULUI, deci
   la vest de Greenwich tipărea ziua precedentă.
 
@@ -7756,3 +7759,70 @@ Fișierele neurmărite sunt ignorate deliberat (nimic nu importă un fișier nec
 
 Când poarta pică, **citește diferența**. Un fișier murdar după o rulare de mutații e o mutație până
 la proba contrarie — dar dacă e munca ta, comite-o. Nu restaura orbește.
+
+## 2026-09-21 · Ce a mai rămas din recenzie — și o poartă de-a mea, oarbă prin construcție
+
+**Prompt (Andrei):** „Continua”. **Model:** Claude Opus 5.
+
+Recenzia de dimineață a dat 17 constatări; am reparat ieri cele 5 care au trecut de **amândoi**
+refutatorii. Au rămas 9 cu verdict împărțit — le-am triat eu, la sursă. Patru erau deja reparate de
+munca de dimineață. Una avea premisa falsă. **Trei erau reale**, și prima e a mea.
+
+### 1. Poarta pe care am scris-o ieri nu vedea două din trei locuri
+
+Ieri am scris, aici și în testul însuși: *„a rămas exact UNUL viu”.* **Era fals.**
+
+Poarta căuta `format(new Date(x.date))` **ca o singură expresie**. Panoul de serii face:
+
+```
+const startDate = new Date(ev.date);      // …și format(startDate, …) două rânduri mai jos
+```
+
+O legare de variabilă și poarta trece pe lângă. **Oarbă prin construcție** — exact eșecul pe care
+repo-ul ăsta îl repetă, a treia oară.
+
+Reparat nu cu un tipar mai larg, ci cu **altă întrebare**. Nu „se dă un Date literal lui `format`?”,
+ci una **arhitecturală**: *nicio componentă nu construiește un Date dintr-un `.date` stocat.* Există
+un singur mod corect și stă în `dayLabel.ts`; `src/utils` e scutit, fiindcă acolo trăiesc folosirile
+legitime (`dayOf` citește ziua în UTC, `recurrence.ts` pășește seria în milisecunde UTC).
+
+Întrebarea nouă a găsit imediat **al treilea** loc, pe care nu-l căuta nimeni: comparatorul de
+sortare din fereastra de ieșire din grup. Ăla nu afișa greșit — ordinea pe instant e aceeași în
+orice fus — dar construia exact lucrul interzis. Acum sortează pe **eticheta zilei**, cum spune deja
+`occursOn`: ordinea șirurilor E ordinea datelor pentru `yyyy-MM-dd`, exact și fără fus.
+
+Și poarta are acum **control negativ**: o probă cu forma care o păcălea înainte, care trebuie să fie
+raportată. O poartă fără așa ceva e o afirmație despre ea însăși.
+
+### 2. Aceeași condiție, două propoziții care se contrazic
+
+Cartela spunea „AI-ul era ocupat, încearcă peste un minut”; apeși **Reîncearcă**, care rulează
+callable-ul, și primești „aplicația a atins limita pe ziua de azi, încearcă mâine”. **Același
+predicat** (`isProviderQuotaError`), același ecran, la un minut distanță. Callable-ul are dreptate:
+cauza dominantă e porția gratuită pe **ZI** a proiectului — aia a pus 74 din 95 de rânduri în panoul
+de sănătate.
+
+**Prima mea reparație a fost greșită și am prins-o la teste.** Am făcut codul un alias al celui din
+callable — și, fiindcă ăla e un cod `ai-budget/`, `refundsQuota` a început să întoarcă `true` pentru
+el: **o schimbare tăcută a cui se taxează, strecurată într-o reparație de text.** Codurile rămân
+distincte (registrul și panoul vor să știe CARE limită); s-a schimbat **propoziția**, în șase limbi,
+plus un invariant care cere ca cele două căi să spună același lucru.
+
+### 3. Engleza brută a furnizorului, în fața familiei
+
+La un Reîncearcă eșuat, cartela tipărea `e.message` verbatim — adică, pentru orice nu e un refuz
+de-al nostru, `AI Error: [GoogleGenerativeAIFetchError] …` cu tot cu URL. `aiErrorKey` returnând
+`null` e chiar semnalul că nu recunoaștem eroarea: acum textul brut merge în jurnalul de erori, unde
+folosește, iar ecranul spune propoziția generică.
+
+### Ce am respins, și de ce
+
+Constatarea cu cel mai mare scor pe securitate cerea o ramură `toId` în `canAccessInvite`. Am
+verificat: `InviteFamilyModal.createInvite` scrie **întotdeauna** o adresă reală, deci nicio
+invitație nu e doar-pe-uid și ramura n-ar da nimic în plus — **în afară de exact lucrul pe care nu
+are voie să-l dea**: cine e numit și pe uid ar putea citi o invitație trimisă la o adresă pe care
+n-a dovedit-o, adică fix poarta de ieri. Ar fi desfăcut-o tăcut. Motivul e scris acum în regulă.
+
+**5 din 5 mutații prinse**, între care „poarta redevine oarbă” și „o limbă iese din acord”.
+
+`npx tsc -b` verde · poarta de lint verde · **1703 teste** (de la 1702) · build verde.

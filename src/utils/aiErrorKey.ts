@@ -37,9 +37,9 @@ const CODES: ReadonlyArray<readonly [string, string]> = [
   ['ai-budget/global-budget', 'aiBudgetGlobal'],
   ['ai-budget/kill-switch', 'aiBudgetOff'],
   ['ai-checklist/quota', 'aiChecklistQuota'],
+  ['ai-checklist/provider', 'aiChecklistBusy'],
   ['ai-checklist/unconfigured', 'aiChecklistUnavailable'],
   ['ai-checklist/bad-output', 'aiChecklistBadOutput'],
-  ['ai-checklist/provider', 'aiChecklistBusy'],
   ['ai-checklist/error', 'aiChecklistFailed'],
 ];
 

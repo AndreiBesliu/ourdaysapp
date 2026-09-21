@@ -132,6 +132,24 @@ describe('every reason has a sentence, in every language', () => {
     expect(missing).toEqual([]);
   });
 
+  it('says the same thing about provider rationing as the callable does', () => {
+    // The trigger and the callable classify with the SAME predicate, `isProviderQuotaError`, and
+    // the person meets both within one gesture: the card shows the trigger's sentence, and Retry
+    // runs the callable. They used to disagree — "the AI was busy, try again in a minute" against
+    // "the app has reached today's AI limit, try again tomorrow" — which is not a wording nit,
+    // it is the screen telling somebody two different things about one condition.
+    //
+    // Two codes, deliberately: the ledger and the health panel want to know WHICH limit. One
+    // sentence, equally deliberately: the reader does not.
+    const fromTrigger = checklistReasonKey(CHECKLIST_BUSY);
+    const fromCallable = checklistReasonKey('ai-budget/global-budget');
+    expect(fromTrigger).not.toBe(fromCallable);
+    for (const lang of LANGS) {
+      expect(translations[lang]?.[fromTrigger], `${lang}: the trigger's wording`)
+        .toBe(translations[lang]?.[fromCallable]);
+    }
+  });
+
   it('does not give two different reasons the same sentence', () => {
     // A generic fallback for everything would pass the check above while telling nobody anything.
     // `unconfigured` and `error` must not read alike; nor may the two budget limits.

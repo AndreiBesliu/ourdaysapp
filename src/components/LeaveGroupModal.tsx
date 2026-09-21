@@ -7,6 +7,7 @@ import { reportError } from '../reportError';
 import { useDialog } from '../hooks/useDialog';
 import { format } from 'date-fns';
 import { eventDayAsLocalDate } from '../utils/dayLabel';
+import { dayOf } from '../utils/eventTime';
 import { t, getDateLocale } from '../utils/i18n';
 import { useThemeStore } from '../store';
 
@@ -61,11 +62,20 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
         return isOwnerOfEvent || isAssignee;
       });
 
-      // Sort by date
+      // Sort by date.
+      //
+      // On the day labels, not on parsed instants. Ordering by the instant was not WRONG — every
+      // stored date is midnight UTC, so the order is the same in every zone — but it builds a Date
+      // out of a stored `.date` in a component, which is the one construction that has now printed
+      // the previous day twice in this app. `occursOn` already states the rule this follows:
+      // string order is date order for `yyyy-MM-dd`, so the comparison is exact and zone-free with
+      // nothing to parse.
       involved.sort((a: any, b: any) => {
-        if (!a.date) return 1;
-        if (!b.date) return -1;
-        return new Date(a.date).getTime() - new Date(b.date).getTime();
+        const da = dayOf(typeof a.date === 'string' ? a.date : '');
+        const db = dayOf(typeof b.date === 'string' ? b.date : '');
+        if (!da) return 1;
+        if (!db) return -1;
+        return da < db ? -1 : da > db ? 1 : 0;
       });
 
       setInvolvedEvents(involved);
