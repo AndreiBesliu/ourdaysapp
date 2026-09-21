@@ -12,6 +12,7 @@
 // when the answer is null.
 
 import { useEffect, useState } from 'react';
+import { onIdTokenChanged } from 'firebase/auth';
 import { auth } from '../firebase';
 import { reportError } from '../reportError';
 import { verifiedEmailFrom } from '../utils/verifiedEmail';
@@ -34,21 +35,39 @@ import { verifiedEmailFrom } from '../utils/verifiedEmail';
 export function useVerifiedEmail(): { email: string | null; ready: boolean } {
   const [state, setState] = useState<{ email: string | null; ready: boolean }>({ email: null, ready: false });
 
+  // ── Why this SUBSCRIBES instead of reading once ──────────────────────────────────────
+  //
+  // The first version read the token in an effect with an empty dependency array and never looked
+  // again. `VerifyEmailBanner.recheck` — the "I verified" button — calls `reload()` and
+  // `getIdToken(true)`, then hides itself. The hook's state stayed `{email: null}`, so the invite
+  // and friend-request listeners kept bailing out for the REST OF THE SESSION.
+  //
+  // That is worse than the hole it was closing. The person confirms their address, the prompt
+  // telling them to disappears, and their invitations still do not arrive — with nothing left on
+  // screen to explain it, and no reason to suspect a reload would help.
+  //
+  // `onIdTokenChanged` fires on sign-in, on sign-out, and whenever the token is refreshed, which
+  // is exactly what `getIdToken(true)` does. So the button now completes the flow it promises.
   useEffect(() => {
     let alive = true;
-    const user = auth.currentUser;
-    if (!user) { setState({ email: null, ready: true }); return; }
-    user.getIdTokenResult(false)
-      .then((result) => { if (alive) setState({ email: verifiedEmailFrom(result.claims), ready: true }); })
-      .catch((e) => {
-        // Reported rather than swallowed: the consequence of failing to read this is invitations
-        // that are never shown, which is indistinguishable from invitations nobody sent.
-        reportError(e instanceof Error ? e.message : String(e), { context: 'useVerifiedEmail' });
-        // NOT `ready: true`. An unread token is not a verdict, and claiming one would tell the
-        // person their address is unconfirmed on the strength of a network failure.
-        if (alive) setState({ email: null, ready: false });
-      });
-    return () => { alive = false; };
+    const apply = (user: { getIdTokenResult: (f: boolean) => Promise<{ claims: unknown }> } | null) => {
+      if (!user) { if (alive) setState({ email: null, ready: true }); return; }
+      user.getIdTokenResult(false)
+        .then((result) => {
+          if (alive) setState({ email: verifiedEmailFrom(result.claims as never), ready: true });
+        })
+        .catch((e) => {
+          // Reported rather than swallowed: the consequence of failing to read this is invitations
+          // that are never shown, which is indistinguishable from invitations nobody sent.
+          reportError(e instanceof Error ? e.message : String(e), { context: 'useVerifiedEmail' });
+          // NOT `ready: true`. An unread token is not a verdict, and claiming one would tell the
+          // person their address is unconfirmed on the strength of a network failure.
+          if (alive) setState({ email: null, ready: false });
+        });
+    };
+    apply(auth.currentUser);
+    const unsub = onIdTokenChanged(auth, apply);
+    return () => { alive = false; unsub(); };
   }, []);
 
   return state;

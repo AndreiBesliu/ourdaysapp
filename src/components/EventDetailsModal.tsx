@@ -148,6 +148,12 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
 
   // Keyed on the event ID, NOT on `event`: that object gets a new identity on every Firestore
   // snapshot, and resetting there would wipe the error sentence before it could be read.
+  //
+  // The ref carries the same id for code that must ask "is this still the event I started on?"
+  // AFTER an await — reading `event.id` there would read the closure's copy, which is the whole
+  // problem. Written during render rather than in the effect so it is never a tick behind.
+  const eventIdRef = useRef<string | undefined>(event?.id);
+  eventIdRef.current = event?.id;
   useEffect(() => {
     setAiRetrying(false);
     setAiRetryError(null);
@@ -198,7 +204,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   // appears and disappears between renders of the same instance. CalendarHome keeps this modal
   // permanently mounted and toggles `isOpen`, so a closed render ran eight hooks and an open one
   // ran nine: React error #310, thrown on EVERY event anybody opened.
-  const materialising = useRef<Promise<string> | null>(null);
+  const materialising = useRef<{ key: string; promise: Promise<string> } | null>(null);
 
   if (!isOpen || !event) return null;
 
@@ -256,10 +262,19 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   //
   // The promise is held in a ref, not awaited twice: two quick taps must not create two overrides.
   // That ref is declared with the other hooks, ABOVE the early return — see the note there.
+  //
+  // KEYED, and that is not a detail. The ref was a bare promise, set on success and cleared only
+  // on failure, in a modal CalendarHome never unmounts — it only toggles `isOpen`. So once any
+  // occurrence had been materialised, every later occurrence of every series reused that same
+  // promise and wrote into the FIRST one's override: tick a checklist item on next week's
+  // rehearsal and it lands on last week's. Keyed on the parent and the date, a cached promise can
+  // only ever answer for the occurrence it was created for.
   const resolveWriteTarget = async (): Promise<string> => {
     const plan = planEventWrite(event as any);
     if (plan.kind === 'direct') return plan.id;
-    const pending = materialising.current ?? createEventOverride({
+    const key = `${plan.parentId}_${plan.overrideDate}`;
+    const cached = materialising.current;
+    const pending = (cached && cached.key === key ? cached.promise : null) ?? createEventOverride({
       parentId: plan.parentId,
       overrideDate: plan.overrideDate,
       data: plan.data,
@@ -270,7 +285,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       materialising.current = null;
       throw err;
     });
-    materialising.current = pending;
+    materialising.current = { key, promise: pending };
     return pending;
   };
 
@@ -391,10 +406,19 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
    */
   const handleRetryAiChecklist = async () => {
     if (!canEdit || aiRetrying) return;
+    // The event this retry is FOR. A generation takes seconds, this modal is never unmounted, and
+    // closing it and opening something else is the ordinary thing to do while waiting — so without
+    // this the returned items were written into whatever event happened to be open, and the error
+    // sentence appeared under an event that had never asked for anything. The two fetch effects
+    // above guard the same hazard the same way; this handler was written without it.
+    const startedFor = event.id;
+    const stillHere = () => startedFor === eventIdRef.current;
+
     setAiRetrying(true);
     setAiRetryError(null);
     try {
       const suggestions = await generateChecklistForTask(event.title, event.description || '');
+      if (!stillHere()) return;
       if (!suggestions.length) {
         // A refusal states itself; an empty answer would otherwise look like a broken button.
         setAiRetryError(t('aiChecklistNothing', language));
@@ -410,21 +434,38 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       const merged = [...checklist, ...newItems];
       setChecklist(merged);
       setAiOutcomeDone(true);
-      await updateDoc(doc(db, 'events', await resolveWriteTarget()), {
-        checklistItems: merged,
-        // Removed rather than set to a "succeeded" value: the question this field answers is
-        // "why is there no checklist", and there is one now.
-        aiChecklist: deleteField(),
-      });
+      // The WRITE still goes to the event it was asked for, even if the reader has moved on — the
+      // call was paid for and the items belong to that event. Only the on-screen state is guarded.
+      //
+      // TWO documents for a repeating event, and they are not the same question.
+      //
+      //   the items  — belong to the DAY you retried, so they go to the occurrence, materialising
+      //                an override if there is not one yet, exactly as ticking a box does.
+      //   the note   — belongs to the SERIES. The trigger fired once, on the parent, and every
+      //                occurrence inherits the parent's fields, so clearing it on the occurrence
+      //                left every other occurrence still showing the card and still offering a
+      //                Retry that costs another call. Clearing the parent answers it once.
+      const plan = planEventWrite(event as any);
+      await updateDoc(doc(db, 'events', await resolveWriteTarget()), { checklistItems: merged });
+      const noteHome = plan.kind === 'override' ? plan.parentId : plan.id;
+      await updateDoc(doc(db, 'events', noteHome), { aiChecklist: deleteField() })
+        .catch((e) => {
+          // The items are already saved; a failure here costs a stale card, not the work.
+          reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.clearAiChecklistNote' });
+        });
     } catch (e) {
       // `generateChecklistForTask` already turns a refusal into a translated sentence, so this
       // says WHICH limit bit rather than "could not generate".
+      if (!stillHere()) {
+        reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.handleRetryAiChecklist' });
+        return;
+      }
       setAiOutcomeDone(false);
       setChecklist(event.checklistItems || []);
       setAiRetryError(e instanceof Error ? e.message : String(e));
       reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.handleRetryAiChecklist' });
     } finally {
-      setAiRetrying(false);
+      if (stillHere()) setAiRetrying(false);
     }
   };
 

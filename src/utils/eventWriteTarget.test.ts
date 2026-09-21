@@ -84,6 +84,18 @@ describe('an occurrence becomes its own document', () => {
     }
   });
 
+  it('leaves the AI failure note on the SERIES, where it can be answered once', () => {
+    // `aiChecklist` says "the checklist for this event was not generated, and here is why". The
+    // trigger is onDocumentCreated and fired once, on the parent; `expandRecurringEvents` spreads
+    // the parent onto every occurrence, so the card appeared on all of them. Copied onto an
+    // override it would outlive the retry that answered it — you would clear Tuesday's card and
+    // still be offered it, and charged a call for it, on every other Tuesday of the series.
+    const failed = { ...occurrence, aiChecklist: { status: 'failed', reason: 'ai-checklist/provider', at: 'x' } };
+    const p = planEventWrite(failed);
+    if (p.kind !== 'override') throw new Error('expected override');
+    expect(p.data).not.toHaveProperty('aiChecklist');
+  });
+
   it('never emits an undefined value — Firestore refuses the whole write over one', () => {
     const withHoles = { ...occurrence, location: undefined, notes: undefined };
     const p = planEventWrite(withHoles);

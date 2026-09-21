@@ -1,3 +1,30 @@
+## ⭐ Asistentul AI pe calendarul PERSONAL — era rupt de tot (21.09)
+
+**Cea mai importantă de azi.** Nu „lista nu se genera” — **evenimentul nu se crea deloc.**
+
+Dacă ai bifat vreodată butonul *AI Assistant* pe un eveniment **fără grup** (calendarul personal e
+selectat din start), salvarea era refuzată de reguli și primeai doar „nu s-a putut adăuga
+evenimentul”. Nimic nu-ți spunea că butonul e cauza. Se întâmpla de fiecare dată, pentru oricine.
+
+- [ ] **Fă un eveniment pe calendarul personal cu butonul AI Assistant bifat.** Trebuie să se
+      salveze, și în câteva secunde să apară lista generată.
+      *Ce se strică dacă greșesc:* revii la evenimentul pierdut — spune-mi imediat.
+- [ ] **Verifică și că restricția n-a fost slăbită prea mult:** pe un eveniment personal NU trebuie
+      să poți atribui pe altcineva (doar pe tine, plus asistentul). Butoanele cu membri nici nu se
+      desenează când calendarul e „personal”, deci e greu de probat din UI — dar dacă vezi vreodată
+      un eveniment personal cu numele altcuiva pe el, ăsta e locul de raportat.
+
+## ⭐ „Am confirmat” chiar termină acum ce promite (21.09)
+
+Ieri am livrat gardarea invitațiilor pe e-mail verificat. Butonul **„Am confirmat”** din banner
+ascundea bannerul, dar ascultătoarele de invitații rămâneau oprite **tot restul sesiunii** — deci
+confirmai adresa, mesajul dispărea, și invitațiile tot nu apăreau, fără nimic pe ecran care să explice.
+
+- [ ] **Dacă ai un cont pe e-mail+parolă neconfirmat:** confirmă adresa, apasă „Am confirmat”, și
+      invitațiile trimise pe e-mail trebuie să apară **fără să reîncarci pagina**.
+      *Ce se strică dacă greșesc:* dacă tot cer reîncărcare, abonamentul nu se reface — vreau să știu.
+
+---
 ## ⭐ Invitațiile trimise pe e-mail cer acum adresa confirmată (20.09)
 
 **De citit dacă cineva spune „nu-mi mai apar invitațiile”.** Sunt două schimbări, în direcții

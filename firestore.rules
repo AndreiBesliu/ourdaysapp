@@ -274,12 +274,30 @@ service cloud.firestore {
           (request.resource.data.groupId != null &&
             isMemberOfGroup(request.resource.data.groupId)) ||
           (
+            // `ai_assistant` is not a person, and this clause is about PEOPLE.
+            //
+            // The rule above exists so nobody can create an event naming a stranger and have text
+            // appear in that stranger's calendar. It said "on a personal event the only name you
+            // may write is your own" — and its comment concluded "Personal events assign nobody,
+            // so this costs no real flow". That was wrong the day the AI Assistant chip shipped:
+            // the chip is rendered unconditionally (AddEventModal), including with the calendar
+            // select on `personal`, which is its DEFAULT.
+            //
+            // So the whole `addDoc` was refused and the person got `alert(eventAddFailed)` — no
+            // event, no checklist, and no hint that the chip they tapped was the cause. Every
+            // time, for everybody, on every personal event. The AI checklist feature could not be
+            // started at all outside a group, which is also why the failure card and Retry shipped
+            // yesterday could never appear there.
+            //
+            // Allowing the literal grants nothing: the read rule keys on `request.auth.uid in
+            // assigneeIds`, and no account holds the uid "ai_assistant".
             (!('assigneeIds' in request.resource.data) ||
               request.resource.data.assigneeIds == null ||
-              request.resource.data.assigneeIds.hasOnly([request.auth.uid])) &&
+              request.resource.data.assigneeIds.hasOnly([request.auth.uid, 'ai_assistant'])) &&
             (!('assigneeId' in request.resource.data) ||
               request.resource.data.assigneeId == null ||
-              request.resource.data.assigneeId == request.auth.uid)
+              request.resource.data.assigneeId == request.auth.uid ||
+              request.resource.data.assigneeId == 'ai_assistant')
           )
         );
       // WHO may write is the list below. WHAT they may not change is the two lines after it.

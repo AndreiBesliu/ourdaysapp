@@ -140,6 +140,36 @@ describe('creating — the injection path', () => {
     }));
   });
 
+  it('the AI assistant may be named on a PERSONAL event', async () => {
+    // The clause above is about PEOPLE — it exists so nobody can make text appear in a stranger's
+    // calendar. `ai_assistant` is not a person, and until 21.09 the rule did not know that: the
+    // AI chip is drawn unconditionally in AddEventModal, the calendar select defaults to
+    // `personal`, and the whole addDoc was therefore REFUSED. Not a missing checklist — a lost
+    // event, with only `alert(eventAddFailed)` to explain it, every time, for everybody.
+    await assertSucceeds(setDoc(doc(as(ALICE), 'events', 'ai-personal'), {
+      ownerId: ALICE, title: 'Cumparaturi', groupId: null,
+      assigneeIds: ['ai_assistant'], assigneeId: 'ai_assistant',
+    }));
+    // And alongside yourself, which is what the chip actually produces when both are tapped.
+    await assertSucceeds(setDoc(doc(as(ALICE), 'events', 'ai-personal-2'), {
+      ownerId: ALICE, title: 'Cumparaturi', groupId: null,
+      assigneeIds: [ALICE, 'ai_assistant'], assigneeId: ALICE,
+    }));
+  });
+
+  it('and widening it for the assistant did NOT reopen the injection', async () => {
+    // The whole point of the clause. A stranger must still be unnameable on a personal event,
+    // with or without the assistant beside them.
+    await assertFails(setDoc(doc(as(ALICE), 'events', 'ai-inject-1'), {
+      ownerId: ALICE, title: 'Hello', groupId: null,
+      assigneeIds: ['ai_assistant', DAVE], assigneeId: DAVE,
+    }));
+    await assertFails(setDoc(doc(as(ALICE), 'events', 'ai-inject-2'), {
+      ownerId: ALICE, title: 'Hello', groupId: null,
+      assigneeIds: [DAVE], assigneeId: 'ai_assistant',
+    }));
+  });
+
   it('inside a group you belong to, naming other members is allowed', async () => {
     await assertSucceeds(setDoc(doc(as(BOB), 'events', 'new-group'), {
       ownerId: BOB, title: 'Shopping', groupId: G1, assigneeIds: [ALICE],

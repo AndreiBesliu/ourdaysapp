@@ -7656,3 +7656,103 @@ mulțumit de un comentariu, cum s-a mai întâmplat de două ori în repo-ul ăs
 
 **Nimic pentru OWNER_VERIFY:** reparația e invizibilă la Bucureşti, fiindcă e UTC+. N-am ce să-i cer
 lui Andrei să se uite, deci n-am adăugat o bifă care ar fi arătat a sarcină fără să fie.
+
+## 2026-09-21 · Cinci constatări pe cod livrat ieri, și una care ștergea evenimentul
+
+**Prompt (Andrei):** „continua”. **Model:** Claude Opus 5.
+
+Recenzie adversarială cu 40 de agenți peste cele trei commit-uri livrate ieri pe live (6 lentile
+independente → 17 constatări → câte 2 refutatori pe fiecare). **14 au supraviețuit unui refutator,
+5 amândurora.** Le-am verificat eu la sursă înainte să ating ceva. Toate cinci erau reale.
+
+### 1. HIGH — pe calendarul personal, asistentul AI ȘTERGEA evenimentul
+
+Nu o listă lipsă. **Evenimentul nu se crea deloc.**
+
+Regula de `create` pentru `events` spunea: pe un eveniment fără grup, singurul nume pe care ai voie
+să-l scrii e al tău (`assigneeIds.hasOnly([request.auth.uid])`). Comentariul ei concluziona
+„Personal events assign nobody, so this costs no real flow”. Era fals din ziua în care a apărut
+butonul **AI Assistant**: butonul se desenează necondiționat, iar selectorul de calendar e pe
+**`personal`** din start. Deci `addDoc` era refuzat întreg, iar omul primea `alert(eventAddFailed)`
+— fără eveniment, fără listă, și fără nici cel mai mic indiciu că butonul pe care l-a apăsat e
+cauza. **De fiecare dată, pentru toată lumea, pe orice eveniment personal.**
+
+Și consecința pentru munca de ieri: cartela cu motivul și butonul Reîncearcă **nu puteau apărea
+niciodată** în afara unui grup, fiindcă funcția nici nu putea porni acolo.
+
+`ai_assistant` **nu e o persoană**, iar clauza aia e despre persoane. Acum e permis literalul, lângă
+uid-ul tău. Nu deschide nimic: regula de citire se uită la `request.auth.uid in assigneeIds`, și
+niciun cont nu deține uid-ul „ai_assistant”. Două teste noi: unul că merge, **unul că injecția tot
+nu merge** — un străin rămâne de nescris pe un eveniment personal, cu sau fără asistent lângă el.
+
+### 2. HIGH — un singur override răspundea pentru toate aparițiile
+
+`resolveWriteTarget` materializează o apariție dintr-o serie într-un document real și ține promisiunea
+în cache ca două atingeri rapide să nu creeze două documente. Cache-ul era **o promisiune goală**,
+pusă la succes și ștearsă doar la eșec — într-un modal pe care `CalendarHome` nu-l demontează
+niciodată, doar îi comută `isOpen`. Deci, după ce o apariție fusese materializată o dată, **fiecare
+apariție a fiecărei serii refolosea acea promisiune**: bifezi un punct pe repetiția de săptămâna
+viitoare și aterizează pe cea de săptămâna trecută. Acum cache-ul e **cheiat** pe părinte + zi.
+
+### 3. HIGH — „Am confirmat” ascundea bannerul și nu repara nimic
+
+Asta era a mea, de ieri. `useVerifiedEmail` citea tokenul o dată, într-un efect cu listă goală de
+dependențe. Butonul „Am confirmat” cheamă `getIdToken(true)` și **se ascunde pe el însuși** — dar
+starea hook-ului rămânea `{email: null}`, deci ascultătoarele de invitații se abțineau **tot restul
+sesiunii**.
+
+Mai rău decât gaura pe care o închideam: omul își confirmă adresa, mesajul care-i cerea asta dispare,
+invitațiile tot nu vin — și nu mai rămâne nimic pe ecran care să explice, nici vreun motiv să bănuiască
+că o reîncărcare ar ajuta. Acum hook-ul **se abonează** (`onIdTokenChanged`), deci butonul chiar
+termină ce promite.
+
+### 4. MEDIUM — pe o serie, cartela de eșec era permanentă și se plătea de fiecare dată
+
+`aiChecklist` e un fapt despre **serie** — trigger-ul a pornit o dată, pe părinte — iar expandarea
+împrăștie câmpurile părintelui pe fiecare apariție. Reîncercarea ștergea nota pe **apariție**, deci
+toate celelalte continuau să arate cartela și să ofere un Reîncearcă care costă încă un apel. Acum
+nota nu se mai copiază pe override și se șterge **pe părinte**: se răspunde o singură dată.
+
+### 5. MEDIUM — reîncercarea ateriza pe evenimentul următor
+
+Generarea durează secunde, modalul nu se demontează, iar să închizi și să deschizi altceva în timpul
+ăsta e lucrul obișnuit. Fără gardă, rezultatul se scria în starea oricărui eveniment era deschis când
+se întorcea. Cele două efecte de încărcare de deasupra păzeau exact același pericol, în același fișier,
+cu același tipar — pe ăsta îl scrisesem fără. **Scrierea** merge tot la evenimentul care a cerut-o
+(apelul e plătit, punctele îi aparțin); doar starea de pe ecran e păzită.
+
+### Plasa
+
+**8 din 8 mutații prinse**, cu control negativ — între care „prea larg”: dacă regula ar fi permis și
+un uid străin lângă asistent, testul de injecție pică. Două invariante ale modalului care n-au cum să
+fie atinse de un test unitar (nu există DOM aici) sunt ținute **structural, cu parser**, în
+`src/utils/modalWriteGuards.test.ts`.
+
+`npx tsc -b` verde · poarta de lint verde · **1702 teste** (de la 1695) · **228 teste de reguli**
+(de la 226) · build verde.
+
+---
+
+## 2026-09-21 · Drive a înviat cinci mutații, și acum deploy-ul refuză un arbore murdar
+
+Nu e o notă de subsol. **De cinci ori în două zile**, o mutație de test a reapărut pe disc **după**
+ce harnașamentul o restaurase și **verificase citind fișierul înapoi**: `CalendarHome.tsx`,
+`aiErrorKey.ts`, `aiLedgerShape.test.ts`, `verifiedEmail.ts` și — în câteva minute, nu ore — garda
+de reîncercare din `EventDetailsModal.tsx`. Repo-ul stă în Google Drive, iar clientul de sync
+rejoacă versiuni pe care le-a prins în fereastra de mutații.
+
+**Niciuna dintre plasele existente nu vede asta.** Testele trec în clipa în care rulează, iar
+fișierul se schimbă după. `git status` e curat când te uiți și murdar peste o oră. CI verifică
+**commit-ul**, care a fost mereu corect.
+
+**A ajuns ceva pe live?** Nu, și e măsurat, nu presupus: am restaurat, am **reconstruit**, iar
+bundle-ul de intrare a ieșit `index-Ds7hTYoD.js` — exact hash-ul pe care-l servește live-ul. Vite
+numește după CONȚINUT, deci artefactul livrat a fost construit din sursa corectă.
+
+**Mecanism, nu vigilență:** `scripts/tree-clean.mjs` e acum `predeploy` și pe hosting, și pe
+functions. **Refuză deploy-ul dacă arborele nu e identic cu commit-ul**, și scrie de ce — fiindcă
+deploy-ul e singurul moment în care o înviere poate face rău: un build citește ce e pe disc atunci.
+Fișierele neurmărite sunt ignorate deliberat (nimic nu importă un fișier necomis).
+
+Când poarta pică, **citește diferența**. Un fișier murdar după o rulare de mutații e o mutație până
+la proba contrarie — dar dacă e munca ta, comite-o. Nu restaura orbește.

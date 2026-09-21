@@ -1,6 +1,7 @@
 {
   "hosting": {
     "predeploy": [
+      "node scripts/tree-clean.mjs",
       "node scripts/check-bundle.mjs"
     ],
     "public": "dist",
@@ -62,6 +63,7 @@
   "functions": {
     "source": "functions",
     "predeploy": [
+      "node scripts/tree-clean.mjs",
       "npm --prefix \"$RESOURCE_DIR\" run build"
     ]
   },

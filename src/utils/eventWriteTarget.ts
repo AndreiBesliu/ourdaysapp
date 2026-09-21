@@ -38,6 +38,13 @@ export type WritePlan =
  * `id` is the synthetic key. `recurrenceRule` would make the override a series of its own.
  * `recurrenceExceptions` belongs to the parent. `ownerId`/`groupId`/`overrideOfParent` are set
  * server-side and are not the client's to state — see createEventOverride.
+ *
+ * `aiChecklist` is a fact about the SERIES, not about one day of it. The checklist trigger is
+ * `onDocumentCreated` and fired once, on the parent; `expandRecurringEvents` then spreads the
+ * parent onto every occurrence, so a failure note reached all of them. Copying it onto an
+ * override would make the note outlive the retry that answered it — you would clear the card on
+ * Tuesday and still be offered it, and charged for it, on every other Tuesday of the series.
+ * It lives on the parent, and the parent is where clearing it belongs.
  */
 const NOT_COPIED = new Set([
   'id',
@@ -49,6 +56,7 @@ const NOT_COPIED = new Set([
   'overrideOfParent',
   'ownerId',
   'groupId',
+  'aiChecklist',
 ]);
 
 /**
