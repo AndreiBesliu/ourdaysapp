@@ -67,10 +67,40 @@ describe('the seven paths the app actually writes', () => {
     await assertFails(uploadBytes(ref(s, `chat-audio/group-one/${BOB}_1758000000000.webm`), PNG, audio));
   });
 
-  it('nor an unattributed one, which is what every upload used to be', async () => {
+  it('nor one where my uid merely APPEARS, which is what anchoring buys', async () => {
+    // `matches()` takes a REGEX with the uid interpolated into it. The whole scheme rests on that
+    // pattern being anchored: if it matched anywhere in the name, `<victim>_<me>_x.png` would
+    // satisfy it and the object would read as the victim's while being mine. Measured on the
+    // emulator before this was relied on — it is a FULL match, at both ends.
     const s = filesAs(ALICE);
-    await assertFails(uploadBytes(ref(s, 'chat-images/group-one/1758000000000_pic.png'), PNG, image));
-    await assertFails(uploadBytes(ref(s, 'chat-audio/group-one/1758000000000.webm'), PNG, audio));
+    await assertFails(uploadBytes(ref(s, `chat-images/group-one/${BOB}_${ALICE}_pic.png`), PNG, image));
+    // And a uid that is a prefix of mine does not let me write in their name either.
+    await assertFails(uploadBytes(ref(s, `chat-images/group-one/${ALICE.slice(0, 5)}_pic.png`), PNG, image));
+  });
+
+  it('an UNATTRIBUTED name is still accepted — deliberately, and not for ever', async () => {
+    // The shape the previous bundle writes. I was about to refuse it, and a pre-deploy review
+    // caught what that would do: this app is also a native Android build, `capacitor.config.ts`
+    // sets `webDir: 'dist'` with no `server` block, so the APK carries a FROZEN copy of the
+    // bundle. A hosting deploy cannot reach it. Refusing the old shape would break every chat
+    // photo sent from an installed phone, silently, until somebody built and installed a new APK.
+    //
+    // So both shapes are accepted for now. This test is the record of that being a TRANSITION,
+    // not the intended end state.
+    //
+    // TO CLOSE IT: rebuild the APK (`npx cap sync android` + a build), install it on every phone
+    // that has one, then drop the second branch in storage.rules and invert these two lines.
+    const s = filesAs(ALICE);
+    await assertSucceeds(uploadBytes(ref(s, 'chat-images/group-one/1758000000000_pic.png'), PNG, image));
+    await assertSucceeds(uploadBytes(ref(s, 'chat-audio/group-one/1758000000000.webm'), PNG, audio));
+  });
+
+  it('but a name that is neither attributed nor the old shape is refused', async () => {
+    // The transition widens the door by exactly one known shape, not into a hole: an arbitrary
+    // name still fails, so the rule has not simply become "anything goes".
+    const s = filesAs(ALICE);
+    await assertFails(uploadBytes(ref(s, 'chat-images/group-one/whatever.png'), PNG, image));
+    await assertFails(uploadBytes(ref(s, `chat-images/group-one/${BOB}x_pic.png`), PNG, image));
   });
 });
 

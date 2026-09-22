@@ -68,12 +68,29 @@ service firebase.storage {
     // Single segment `{fileName}`, not `{path=**}`: the pattern has to see the whole name to
     // anchor on it. The client sanitises the original filename for exactly that reason.
     //
-    // ORDER OF DEPLOY MATTERS: hosting FIRST, then these rules. Tightening first refuses uploads
-    // from every client still running the previous bundle.
+    // ── NOT TIGHTENED YET, AND THE REASON IS THE POINT ────────────────────────────────
+    //
+    // I wrote "deploy hosting first, then these rules" and believed it made the change safe. It
+    // does not. This app is ALSO a native Android build: `capacitor.config.ts` sets
+    // `webDir: 'dist'` with no `server` block, so the APK carries a FROZEN COPY of the bundle
+    // inside itself. A hosting deploy cannot reach it. Requiring the prefix today would refuse
+    // every chat photo sent from an installed phone, silently and permanently, until somebody
+    // builds and installs a new APK on that phone.
+    //
+    // So the rule accepts BOTH shapes for now. That is still strictly better than before this
+    // week: uploads are CREATE-only, so nobody can overwrite anybody's photo in place, and every
+    // new client attributes what it writes. What is not yet bought is the guarantee that a file
+    // could not have been written by someone else.
+    //
+    // TIGHTENING IS A SEPARATE, DELIBERATE STEP: drop the second branch below, once the APK has
+    // been rebuilt (`npx cap sync android` + a build) and installed on every phone that has one.
+    // That is a question for the owner, and it is written into OWNER_VERIFY.md.
     match /chat-images/{groupId}/{fileName} {
       allow get: if isSignedIn();
       allow create: if isSignedIn() && isImage()
-        && fileName.matches(request.auth.uid + '_.*');
+        && (fileName.matches(request.auth.uid + '_.*')
+            // Transitional: the shape the previous bundle writes, `<millis>_<name>`.
+            || fileName.matches('[0-9]+_.*'));
       allow update, delete: if false;
     }
     match /chat-audio/{groupId}/{fileName} {
@@ -89,10 +106,12 @@ service firebase.storage {
       //
       // CREATE-only, for the same reason as the images above: without it any signed-in account
       // could replace a recording anybody had sent, keeping the same download URL.
+      // Both shapes, for the same reason as the images above — see the note there.
       allow create: if isSignedIn() &&
         request.resource.contentType.matches('audio/.*') &&
         request.resource.size < 15 * 1024 * 1024 &&
-        fileName.matches(request.auth.uid + '_.*');
+        (fileName.matches(request.auth.uid + '_.*')
+         || fileName.matches('[0-9]+\\.webm'));
       allow update, delete: if false;
     }
 

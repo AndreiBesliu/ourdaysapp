@@ -8205,3 +8205,54 @@ build verde.
 - **`removeFriend`** se bazeaza pe lista de prieteni a APELANTULUI — aceeasi forma ca
   `openDirectChat`, reparata ieri. Efectul e insa doar sa stergi o intrare care oricum nu exista,
   deci nu e acelasi calibru; merita totusi aceeasi intoarcere a intrebarii.
+
+## 2026-09-22 · Recenzia INAINTE de livrare, si ce a prins din prima
+
+**Prompt (Andrei):** „Continua". **Model:** Claude Opus 5.
+
+Prima data cand rulez recenzia adversariala **inainte** sa livrez, nu dupa. A meritat din prima.
+
+### Trei din coada, implementate
+
+- **`removeFriend`** se autoriza citind lista APELANTULUI — exact forma reparata ieri la
+  `openDirectChat`. Acum stergerea din documentul CELUILALT cere ca el sa ma listeze; curatarea
+  listei mele ramane neconditionata, fiindca o intrare veche intr-un singur sens e chiar ce trebuie
+  sa poti sterge.
+- **Cererile de prietenie erau un megafon gratuit:** `create` nu constrange `toId`, n-are dedupe si
+  n-are plafon. Fan-out-ul consuma acum acelasi contor `notif_usage` ca `notifyUsers` (deci nu pot
+  fi combinate ca sa-l dubleze), prin **constanta comuna**, nu printr-un 100 scris de mana. Refuzul
+  opreste NOTIFICAREA, nu cererea, si se **raporteaza** — un clopotel care n-a mai sunat nu se
+  deosebeste altfel de unul pe care nu l-a tras nimeni.
+- **Incarcarile din chat poarta uid-ul celui care le face**, construit intr-un singur loc, cu o
+  garda care refuza orice al doilea loc scris de mana.
+
+### Ce am MASURAT inainte sa ma bazez pe ea
+
+Regula interpoleaza uid-ul intr-un **regex**. Daca `matches()` n-ar fi ancorat, `<victima>_<eu>_x.png`
+l-ar satisface si obiectul ar citi ca al victimei. Probat pe emulator: e potrivire **completa**, la
+ambele capete. Fixat acum in testele reale, nu doar crezut.
+
+### Si ce a prins recenzia: „hosting intai" NU ajunge la telefon
+
+Scrisesem „livrez hosting intai, apoi regulile, deci orice client trimite deja nume cu prefix". E
+adevarat **doar pentru browsere**. Aplicatia e si build nativ Android: `capacitor.config.ts` are
+`webDir: 'dist'` **fara bloc `server`**, deci APK-ul poarta o **copie inghetata** a bundle-ului
+inauntrul lui. Un deploy de hosting nu ajunge la el niciodata.
+
+Deci, in clipa in care regula s-ar fi strans, **orice poza trimisa in chat de pe un telefon cu
+aplicatia instalata ar fi fost refuzata** — tacut, permanent, pana cand cineva construieste si
+instaleaza un APK nou pe acel telefon. Trei lentile independente au ajuns la aceeasi concluzie.
+
+**Deci regula NU se strange azi.** Accepta ambele forme, si testul care o descrie spune explicit ca
+e o **TRANZITIE** si ce trebuie sa fie adevarat ca s-o inchizi. E in continuare mai bine decat
+saptamana trecuta: incarcarile sunt `create`-only, deci nimeni nu mai suprascrie poza nimanui, iar
+orice client nou atribuie ce scrie.
+
+### Si un defect vechi, gasit de aceeasi recenzie
+
+**O trimitere esuata de mesaj nu spunea absolut nimic.** Textul ramanea in casuta, poza ramanea
+atasata, nimic nu aparea in conversatie — de nedeosebit de o retea lenta. Calea de voce avea steag
+de eroare de zile intregi; asta n-a avut niciodata. Acum are, in sase limbi.
+
+`npx tsc -b` verde · poarta de lint verde · **1719 teste** · **257 de teste de reguli** (de la 255) ·
+build verde.

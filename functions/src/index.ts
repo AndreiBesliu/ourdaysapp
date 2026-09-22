@@ -474,8 +474,19 @@ export const onFriendRequestCreated = onDocumentCreated("friend_requests/{reques
     // same counter so the two cannot be combined to double it. A refusal stops the NOTIFICATION,
     // never the request: it still appears on the recipient's Friends screen when they look, which
     // is where a genuine request is answered anyway.
-    if (!(await tryConsumeQuota(fromId, "notif_usage", 100))) {
-      console.log(`friend-request notification quota exhausted for ${fromId}; row kept, bell skipped.`);
+    if (!(await tryConsumeQuota(fromId, "notif_usage", NOTIF_DAILY_LIMIT))) {
+      // The shared constant, not a second literal 100. `notifyUsers` already reads it from the
+      // environment, so a hardcoded twin here would silently ignore any change the owner makes
+      // and put the two features on different ceilings while sharing one counter.
+      //
+      // Reported, not merely logged: a bell that stopped ringing is otherwise indistinguishable
+      // from a bell nobody rang, and this is the one path where a person's request reaches
+      // somebody without a notification to announce it.
+      void logServerError(
+        `friend-request notification suppressed: daily limit ${NOTIF_DAILY_LIMIT} reached`,
+        "friends:notifyQuota",
+        { uid: fromId },
+      );
       return;
     }
 

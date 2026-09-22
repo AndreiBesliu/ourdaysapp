@@ -111,6 +111,9 @@ export default function GroupChatWidget({
   // The recorded blob lives in a ref and nowhere else. Losing it is losing the message, so a
   // failed upload has to be visible AND recoverable rather than just visible.
   const [voiceSendFailed, setVoiceSendFailed] = useState(false);
+  // The same flag for the message path, which had none: a refused send left the text in the
+  // box and said nothing, so it read as a slow network rather than a failure.
+  const [sendFailed, setSendFailed] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -362,6 +365,7 @@ export default function GroupChatWidget({
     if ((!newMessage.trim() && !imageFile) || !auth.currentUser) return;
 
     setUploading(true);
+    setSendFailed(false);
     try {
       let imageUrl: string | null = null;
       if (imageFile) {
@@ -425,8 +429,14 @@ export default function GroupChatWidget({
       deleteDoc(doc(db, `${basePath}/typing`, auth.currentUser.uid)).catch(console.error);
       
     } catch (err) {
+      // The message did not send, and until now the screen said so in no way whatsoever: the
+      // text stayed in the box, the picture stayed attached, and nothing appeared in the
+      // conversation. Indistinguishable from a slow network, and the person has no reason to
+      // suspect anything but their own patience. The voice path has had a failure flag for
+      // days; this one never did.
       reportError(err instanceof Error ? err.message : String(err), { context: 'GroupChatWidget.handleSend' });
       console.error('Failed to send message:', err);
+      setSendFailed(true);
     } finally {
       setUploading(false);
     }
@@ -1247,6 +1257,14 @@ export default function GroupChatWidget({
             </div>
           ) : (
             <>
+            {sendFailed && (
+              <div role="alert" className="px-3 py-2 border-t border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 flex items-center gap-2 shrink-0">
+                <span className="text-xs text-rose-700 dark:text-rose-300 flex-1">{t('messageSendFailed', language)}</span>
+                <button type="button" onClick={() => setSendFailed(false)} aria-label={t('dismissAction', language)} className="text-xs font-medium text-rose-700 dark:text-rose-300 underline">
+                  {t('dismissAction', language)}
+                </button>
+              </div>
+            )}
             {voiceSendFailed && (
               <div role="alert" className="px-3 py-2 border-t border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 flex items-center gap-2 shrink-0">
                 <span className="text-xs text-rose-700 dark:text-rose-300 flex-1">{t('voiceSendFailed', language)}</span>

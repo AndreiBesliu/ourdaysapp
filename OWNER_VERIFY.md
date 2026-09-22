@@ -61,6 +61,27 @@ Trei variante, si oricare e in regula — dar alege tu:
 si nici text de orice lungime (era randat in aplicatia tuturor si ajungea si in notificari push).
 
 ---
+## ❓ O INTREBARE care blocheaza o reparatie: mai foloseste cineva aplicatia INSTALATA?
+
+Am pregatit o intarire pentru pozele din chat — fiecare fisier incarcat sa poarte numele celui
+care l-a pus, ca sa nu se mai poata incarca ceva atribuit altcuiva. **N-am livrat-o**, fiindca ar
+strica ceva daca raspunsul la intrebarea asta e „da".
+
+**Aplicatia e si un APK Android, iar APK-ul isi poarta propria copie a codului.** Un deploy normal
+(hosting) **nu ajunge** la un telefon cu aplicatia instalata — doar reconstruirea si reinstalarea
+APK-ului o face. Daca strang regula acum, orice poza trimisa in chat **de pe un telefon cu
+aplicatia instalata** ar fi refuzata, tacut, pana la un APK nou.
+
+- [ ] **Spune-mi daca mai e cineva care foloseste aplicatia INSTALATA pe telefon** (nu prin browser
+      sau prin scurtatura adaugata pe ecranul principal).
+      - **Daca NU** — strang regula la urmatoarea sesiune, e o linie.
+      - **Daca DA** — strangerea vine dupa un `npx cap sync android` + build + instalare pe acele
+        telefoane, si iti spun cand e momentul.
+
+*Pana atunci:* pozele din chat nu se mai pot **suprascrie** (asta e deja livrat si e partea care
+conta cel mai mult), dar inca se poate incarca un fisier fara semnatura.
+
+---
 ## ⭐ DACA AI CINCI MINUTE, ASTEA SUNT
 
 Trei lucruri, toate din ultimele doua zile, toate cu o consecinta clara daca raspunsul e gresit.
