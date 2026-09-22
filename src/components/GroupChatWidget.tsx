@@ -6,6 +6,7 @@ import { liveQuery } from '../utils/liveQuery';
 import { reportError } from '../reportError';
 import { uploadFile } from '../utils/uploadFile';
 import { db, auth } from '../firebase';
+import { chatUploadPath } from '../utils/uploadName';
 import { playTone } from '../utils/sounds';
 import { triggerHaptic } from '../utils/haptics';
 import { generateGroupDigestAI, aiErrorKey } from '../ai';
@@ -365,7 +366,13 @@ export default function GroupChatWidget({
       let imageUrl: string | null = null;
       if (imageFile) {
         imageUrl = await uploadFile(
-          `chat-images/${convId}/${Date.now()}_${imageFile.name}`,
+          // The uploader's uid leads the filename so the Storage rules can ask WHO wrote this.
+          // They cannot read Firestore, so group membership is unknowable there — but ownership
+          // of a name is not, and it is the difference between "any signed-in account may write
+          // into any conversation's folder" and "may write only files that are theirs".
+          // `sanitiseUploadName` keeps the original name recognisable without letting it break
+          // the prefix the rule matches on.
+          chatUploadPath('chat-images', convId, auth.currentUser?.uid || '', imageFile.name, Date.now()),
           imageFile,
         );
       }
@@ -548,7 +555,7 @@ export default function GroupChatWidget({
     setVoiceSendFailed(false);
     try {
       const audioUrl = await uploadFile(
-        `chat-audio/${convId}/${Date.now()}.webm`,
+        chatUploadPath('chat-audio', convId, auth.currentUser?.uid || '', 'note.webm', Date.now()),
         audioBlob,
       );
 

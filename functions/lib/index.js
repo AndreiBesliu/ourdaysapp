@@ -415,9 +415,29 @@ exports.onFriendRequestCreated = (0, firestore_1.onDocumentCreated)("friend_requ
         }
         if (!toId || toId === fromId)
             return;
+        // A bell and a push, to any uid, as many times as you like.
+        //
+        // `friend_requests` create constrains `fromId` and `status` and nothing else: `toId` is free,
+        // there is no relationship test, no dedupe and no ceiling. So one account could deliver an
+        // unlimited stream of notifications to anybody — uids are public — with the text under its
+        // own control through the sender name. The ROW is harmless; this fan-out is the megaphone.
+        //
+        // The same shape `notifyUsers` already uses (`notif_usage/{uid}`, 100 a day), sharing the very
+        // same counter so the two cannot be combined to double it. A refusal stops the NOTIFICATION,
+        // never the request: it still appears on the recipient's Friends screen when they look, which
+        // is where a genuine request is answered anyway.
+        if (!(await tryConsumeQuota(fromId, "notif_usage", 100))) {
+            console.log(`friend-request notification quota exhausted for ${fromId}; row kept, bell skipped.`);
+            return;
+        }
         const prof = await db.doc(`profiles/${fromId}`).get();
-        const senderName = ((_b = prof.data()) === null || _b === void 0 ? void 0 : _b.name)
-            || (typeof fr.fromEmail === "string" ? fr.fromEmail.split("@")[0] : "")
+        const rawSender = (_b = prof.data()) === null || _b === void 0 ? void 0 : _b.name;
+        // Clamped here as well as in the rules: this string becomes a push notification on somebody
+        // else's phone, and a value that arrives from another document is not this function's to
+        // trust however tightly another file promises to hold it.
+        const senderName = (typeof rawSender === "string" && rawSender.trim()
+            ? rawSender.trim().slice(0, 40)
+            : (typeof fr.fromEmail === "string" ? fr.fromEmail.split("@")[0].slice(0, 40) : ""))
             || "Someone";
         await (0, notify_1.notify)({
             userIds: [toId],
@@ -1216,15 +1236,29 @@ exports.removeFriend = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK 
     const meRef = db.doc(`users/${uid}`);
     const themRef = db.doc(`users/${friendUid}`);
     return db.runTransaction(async (tx) => {
-        var _a, _b;
+        var _a, _b, _c;
         const [meSnap, themSnap] = await Promise.all([tx.get(meRef), tx.get(themRef)]);
+        // Each side's own document decides what happens to it.
+        //
+        // The guard was `myFriends.some(...)` alone — a read of the CALLER's document, which the
+        // caller may write. So pushing `{ uid: <anyone> }` into your own friends array bought a write
+        // into that person's `users/{uid}` document, which nothing else in the app permits. The
+        // content of that write was harmless (they were not in your list, so the filter changed
+        // nothing) but the shape is the same one that made `openDirectChat` a way to message any
+        // account, and an unbounded write channel into strangers' documents is worth closing on its
+        // own terms.
+        //
+        // Cleaning up MY side stays unconditional-ish: a stale one-way entry is exactly what somebody
+        // needs to be able to remove. Touching THEIR side now requires that they list me too.
         const myFriends = ((_a = meSnap.data()) === null || _a === void 0 ? void 0 : _a.friends) || [];
         if (!myFriends.some((f) => f && f.uid === friendUid)) {
             throw new https_1.HttpsError("failed-precondition", "You aren't friends with this user.");
         }
         tx.set(meRef, { friends: myFriends.filter((f) => f && f.uid !== friendUid) }, { merge: true });
-        if (themSnap.exists) {
-            const theirFriends = (((_b = themSnap.data()) === null || _b === void 0 ? void 0 : _b.friends) || []).filter((f) => f && f.uid !== uid);
+        const theyListMe = (((_b = themSnap.data()) === null || _b === void 0 ? void 0 : _b.friends) || [])
+            .some((f) => f && f.uid === uid);
+        if (themSnap.exists && theyListMe) {
+            const theirFriends = (((_c = themSnap.data()) === null || _c === void 0 ? void 0 : _c.friends) || []).filter((f) => f && f.uid !== uid);
             tx.set(themRef, { friends: theirFriends }, { merge: true });
         }
         return { ok: true };

@@ -57,12 +57,26 @@ service firebase.storage {
     // path through a Cloud Function or the uploader's uid in the filename — the latter is two
     // lines here plus a client change, and must ship HOSTING FIRST or every client still running
     // the old bundle has its uploads refused.
-    match /chat-images/{groupId}/{path=**} {
+    // OWNED, at last. The header above has always said these rules cannot read Firestore, so
+    // group membership is unknowable here — and it still is. But ownership of a NAME is knowable,
+    // and the client now leads every chat upload with the uploader's uid (`chatUploadPath` in
+    // src/utils/uploadName.ts). So a signed-in account may still write into a conversation it is
+    // not part of, which only a Cloud Function upload path could stop — but it can no longer put
+    // a file there attributed to anybody else, and every object in the bucket is traceable to the
+    // account that wrote it.
+    //
+    // Single segment `{fileName}`, not `{path=**}`: the pattern has to see the whole name to
+    // anchor on it. The client sanitises the original filename for exactly that reason.
+    //
+    // ORDER OF DEPLOY MATTERS: hosting FIRST, then these rules. Tightening first refuses uploads
+    // from every client still running the previous bundle.
+    match /chat-images/{groupId}/{fileName} {
       allow get: if isSignedIn();
-      allow create: if isSignedIn() && isImage();
+      allow create: if isSignedIn() && isImage()
+        && fileName.matches(request.auth.uid + '_.*');
       allow update, delete: if false;
     }
-    match /chat-audio/{groupId}/{path=**} {
+    match /chat-audio/{groupId}/{fileName} {
       allow get: if isSignedIn();
       // Gated on the TYPE as well as the size, since 19.09. The comment that used to sit here
       // said MediaRecorder's MIME varies and left the type unchecked entirely — so this folder
@@ -77,7 +91,8 @@ service firebase.storage {
       // could replace a recording anybody had sent, keeping the same download URL.
       allow create: if isSignedIn() &&
         request.resource.contentType.matches('audio/.*') &&
-        request.resource.size < 15 * 1024 * 1024;
+        request.resource.size < 15 * 1024 * 1024 &&
+        fileName.matches(request.auth.uid + '_.*');
       allow update, delete: if false;
     }
 

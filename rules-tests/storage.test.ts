@@ -52,10 +52,25 @@ describe('the seven paths the app actually writes', () => {
     await assertSucceeds(uploadBytes(ref(s, `backgrounds/${ALICE}_1758000000000`), PNG, image));
   });
 
-  it('a chat picture and a voice note', async () => {
+  it('a chat picture and a voice note, named by their uploader', async () => {
+    // The uid leads the filename so the rules can ask WHO wrote this. They cannot read Firestore,
+    // so membership stays unknowable — but ownership of a name does not, and that is the
+    // difference between "any account may write anything here" and "only files that are theirs".
     const s = filesAs(ALICE);
-    await assertSucceeds(uploadBytes(ref(s, 'chat-images/group-one/1758000000000_pic.png'), PNG, image));
-    await assertSucceeds(uploadBytes(ref(s, 'chat-audio/group-one/1758000000000.webm'), PNG, audio));
+    await assertSucceeds(uploadBytes(ref(s, `chat-images/group-one/${ALICE}_1758000000000_pic.png`), PNG, image));
+    await assertSucceeds(uploadBytes(ref(s, `chat-audio/group-one/${ALICE}_1758000000000.webm`), PNG, audio));
+  });
+
+  it('but NOT one attributed to somebody else', async () => {
+    const s = filesAs(ALICE);
+    await assertFails(uploadBytes(ref(s, `chat-images/group-one/${BOB}_1758000000000_pic.png`), PNG, image));
+    await assertFails(uploadBytes(ref(s, `chat-audio/group-one/${BOB}_1758000000000.webm`), PNG, audio));
+  });
+
+  it('nor an unattributed one, which is what every upload used to be', async () => {
+    const s = filesAs(ALICE);
+    await assertFails(uploadBytes(ref(s, 'chat-images/group-one/1758000000000_pic.png'), PNG, image));
+    await assertFails(uploadBytes(ref(s, 'chat-audio/group-one/1758000000000.webm'), PNG, audio));
   });
 });
 
@@ -105,11 +120,12 @@ describe('what may be uploaded, not just where', () => {
   it('a voice note folder takes audio and nothing else', async () => {
     // The recorder wraps its chunks in `new Blob(chunks, { type: 'audio/webm' })`, so the type the
     // app sends is not the recorder's guess — it is exactly this.
+    // Names carry the uploader's uid since 22.09; the type check is what this test is about.
     const s = filesAs(ALICE);
-    await assertSucceeds(uploadBytes(ref(s, 'chat-audio/group-one/1.webm'), PNG, audio));
-    await assertFails(uploadBytes(ref(s, 'chat-audio/group-one/2.html'), PNG,
+    await assertSucceeds(uploadBytes(ref(s, `chat-audio/group-one/${ALICE}_1.webm`), PNG, audio));
+    await assertFails(uploadBytes(ref(s, `chat-audio/group-one/${ALICE}_2.html`), PNG,
       { contentType: 'text/html' }));
-    await assertFails(uploadBytes(ref(s, 'chat-audio/group-one/3.exe'), PNG,
+    await assertFails(uploadBytes(ref(s, `chat-audio/group-one/${ALICE}_3.exe`), PNG,
       { contentType: 'application/x-msdownload' }));
   });
 });
@@ -120,7 +136,13 @@ describe('what the rules cannot ask, written down so it stays a decision', () =>
     // cannot pose. Bob writing into a conversation he is not part of is therefore ALLOWED, and
     // that is a known trade recorded in storage.rules — pinned here so that changing it has to be
     // a deliberate act rather than a silent drift.
-    await assertSucceeds(uploadBytes(ref(filesAs(BOB), 'chat-images/a-group-bob-is-not-in/x.png'),
+    //
+    // What DID change on 22.09 is the other half: he must write under his own name. So the file
+    // lands where he should not be able to put it, but it is unmistakably his. Membership is
+    // still unknowable here; attribution no longer is.
+    await assertSucceeds(uploadBytes(ref(filesAs(BOB), `chat-images/a-group-bob-is-not-in/${BOB}_x.png`),
+      PNG, image));
+    await assertFails(uploadBytes(ref(filesAs(BOB), `chat-images/a-group-bob-is-not-in/${ALICE}_x.png`),
       PNG, image));
   });
 
