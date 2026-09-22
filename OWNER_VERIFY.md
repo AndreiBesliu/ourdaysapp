@@ -1,3 +1,41 @@
+# Ce am de verificat
+
+> ## ⚠️ STAREA LISTEI, masurata azi (22.09)
+>
+> **343 de casute nebifate, 8 bifate.** Pe 19.09 erau 262 si 8 — si atunci s-a scris
+> regula „o lista la care doar adaugi inceteaza sa fie o lista". De atunci **eu am mai adaugat 81 si
+> tu n-ai avut cand sa bifezi niciuna.** Regula a fost scrisa si apoi incalcata, de mine, de patru
+> ori doar ieri.
+>
+> **318 dintre ele sunt mai vechi decat saptamana asta.** Sunt verificari reale, nu umplutura —
+> dar 46 de puncte despre cheltuieli, scrise acum sase zile, nu sunt o lista pe care s-o inceapa
+> cineva. Le las acolo fiindca nu sunt ale mele de sters; **nu sunt insa ceva ce astept de la tine.**
+>
+> **Ce astept de la tine e blocul urmator.** Tot restul e adancime, pentru cand ai o ora.
+
+---
+
+## ⭐ DACA AI CINCI MINUTE, ASTEA SUNT
+
+Trei lucruri, toate din ultimele doua zile, toate cu o consecinta clara daca raspunsul e gresit.
+
+- [ ] **Fa un eveniment pe calendarul PERSONAL cu butonul AI Assistant bifat.** Trebuie sa se
+      salveze si sa apara lista in cateva secunde.
+      *Pana ieri: evenimentul nu se crea DELOC si primeai doar „nu s-a putut adauga".* Daca vezi
+      iar asta, spune-mi imediat — e cea mai grava regresie posibila aici.
+- [ ] **Daca ai un cont pe e-mail+parola neconfirmat:** confirma adresa, apasa „Am confirmat", si
+      invitatiile trimise pe e-mail trebuie sa apara **fara reincarcare**.
+      *Daca tot cere reincarcare, abonamentul nu se reface — vreau sa stiu.*
+- [ ] **Deschide `/admin` → AI Center si apasa Save o data pe valorile deja afisate.** Nu schimba
+      nimic, dar muta sursa limitelor pe document si le scoate din variabilele de mediu, pe care eu
+      nu le pot vedea.
+      *Pana faci asta, limitele care se aplica pot fi altele decat cele scrise pe ecran.*
+
+**Doua lucruri care NU sunt de bifat, doar de stiut:** ieri s-au inchis doua gauri de securitate
+reale — orice membru al unui grup se putea face proprietarul lui (si apoi sa-l stearga), si se
+putea baga text in calendarul altcuiva printr-o editare. Detaliile sunt in sectiunea de mai jos.
+
+---
 ## ⚠️ Doua gauri de securitate reparate (21.09) — fapte, nu de bifat
 
 Le scriu fiindca amandoua au fost reale pe live pana azi. **Nu ai ce face**, sunt reparate si
