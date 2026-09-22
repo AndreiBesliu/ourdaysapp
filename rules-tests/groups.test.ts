@@ -126,6 +126,19 @@ describe('updating a group — the three branches', () => {
     await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', G1), { members: [ALICE] }));
   });
 
+  it('the conversation preview is not a member\u2019s to write', async () => {
+    // `lastMessageText` / `lastMessageBy` are written by `onMessageCreated` on the Admin SDK.
+    // Left client-writable, any member could put words into every other member's group list,
+    // attributed to whoever they chose. The `chats` block already says why, and concluded
+    // `allow update: if false` there.
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1), { lastMessageText: 'I quit' }));
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1), { lastMessageBy: ALICE }));
+    // And not smuggled beside a legitimate rename.
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1), {
+      name: 'Family', lastMessageText: 'I quit',
+    }));
+  });
+
   it('an outsider may not touch it at all', async () => {
     await assertFails(updateDoc(doc(as(DAVE), 'groups', G1), { name: 'x' }));
   });
@@ -155,6 +168,14 @@ describe('chat messages inside a group', () => {
         senderId: ALICE, text: 'hello', seenBy: [ALICE], reactions: {}, isPinned: false,
       });
     });
+  });
+
+  it('only a member says they are typing', async () => {
+    // The write rule proved only that the writer owned the document id, never that they belonged
+    // here — unlike the read one line above. So a stranger could make every member's screen say
+    // somebody was typing, in a group they have nothing to do with.
+    await assertFails(setDoc(doc(as(DAVE), 'groups', G1, 'typing', DAVE), { at: 1 }));
+    await assertSucceeds(setDoc(doc(as(BOB), 'groups', G1, 'typing', BOB), { at: 1 }));
   });
 
   it('members read them, outsiders do not', async () => {

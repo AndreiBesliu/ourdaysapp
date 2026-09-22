@@ -220,6 +220,50 @@ describe('creating — the injection path', () => {
     }));
   });
 
+  it('and NOT somebody who is not in that group', async () => {
+    // The assignee clause was skipped entirely on the group branch — it asked whether the WRITER
+    // belonged, never whether the people named did. The read rule grants access to whoever is
+    // named, so this put text straight into a stranger's calendar. Dave is in no group at all.
+    await assertFails(setDoc(doc(as(BOB), 'events', 'name-stranger'), {
+      ownerId: BOB, title: 'You owe me money', groupId: G1, assigneeIds: [DAVE],
+    }));
+    await assertFails(setDoc(doc(as(BOB), 'events', 'name-stranger-2'), {
+      ownerId: BOB, title: 'x', groupId: G1, assigneeIds: [ALICE, DAVE],
+    }));
+    // The legacy single field is the same injection on its own.
+    await assertFails(setDoc(doc(as(BOB), 'events', 'name-stranger-3'), {
+      ownerId: BOB, title: 'x', groupId: G1, assigneeId: DAVE,
+    }));
+  });
+
+  it('nor by EDITING an event into naming them', async () => {
+    await assertSucceeds(setDoc(doc(as(BOB), 'events', 'name-later'), {
+      ownerId: BOB, title: 'Ours', groupId: G1, assigneeIds: [ALICE],
+    }));
+    await assertFails(updateDoc(doc(as(BOB), 'events', 'name-later'), { assigneeIds: [DAVE] }));
+  });
+
+  it('and the assistant still rides along beside a real member', async () => {
+    // It is not a person, so it is not in `members` — the check has to allow it explicitly.
+    await assertSucceeds(setDoc(doc(as(BOB), 'events', 'ai-in-group'), {
+      ownerId: BOB, title: 'Shopping', groupId: G1, assigneeIds: [ALICE, 'ai_assistant'],
+    }));
+  });
+
+  it('a member answers an RSVP for themselves, not for anybody else', async () => {
+    // `rsvps` is keyed by uid and the update rule said nothing about it, so any member could
+    // overwrite anybody's reply — including accepting on their behalf.
+    await assertSucceeds(setDoc(doc(as(ALICE), 'events', 'party'), {
+      ownerId: ALICE, title: 'Party', groupId: G1, rsvps: { [ALICE]: 'yes' },
+    }));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'party'), {
+      rsvps: { [ALICE]: 'yes', [BOB]: 'no' },
+    }));
+    await assertFails(updateDoc(doc(as(BOB), 'events', 'party'), {
+      rsvps: { [ALICE]: 'no' },
+    }));
+  });
+
   it('but not into a group you do not belong to', async () => {
     await assertFails(setDoc(doc(as(DAVE), 'events', 'new-foreign'), {
       ownerId: DAVE, title: 'x', groupId: G1,

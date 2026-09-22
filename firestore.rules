@@ -16,6 +16,44 @@ service cloud.firestore {
         request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members;
     }
 
+    // Is everyone named on this event actually IN the group it belongs to?
+    //
+    // The assignee clause below is skipped entirely on the group branch, and nothing there ever
+    // asked whether the people named are members. So a member of any group could write
+    // `assigneeIds: [<a stranger>]` on one of its events — and the read rule grants access to
+    // whoever is named, so the text lands in that stranger's calendar. Exactly what the comment
+    // beside the personal branch says the rule exists to prevent, one branch over.
+    //
+    // `ai_assistant` rides along because it is not a person; see the create rule.
+    //
+    // The `get()` is the same document `isMemberOfGroup` already fetched, and this is only ever
+    // evaluated after that call has returned true — so the group exists and the read is warm.
+    function namedAreInGroup(gid) {
+      return (!('assigneeIds' in request.resource.data)
+              || request.resource.data.assigneeIds == null
+              || request.resource.data.assigneeIds.hasOnly(
+                   get(/databases/$(database)/documents/groups/$(gid)).data.members
+                     .concat(['ai_assistant'])))
+        && (!('assigneeId' in request.resource.data)
+            || request.resource.data.assigneeId == null
+            || request.resource.data.assigneeId == 'ai_assistant'
+            || request.resource.data.assigneeId in
+                 get(/databases/$(database)/documents/groups/$(gid)).data.members);
+    }
+
+    // Each person answers for THEMSELVES.
+    //
+    // `rsvps` is a map keyed by uid holding each person's reply, and the events update rule said
+    // nothing about it — so any member of the group could overwrite anybody's answer, including
+    // accepting on their behalf. A per-person field that anybody may write is not a per-person
+    // field.
+    function rsvpsOnlyMine() {
+      return !('rsvps' in request.resource.data)
+        || !('rsvps' in resource.data)
+        || request.resource.data.rsvps.diff(resource.data.rsvps)
+             .affectedKeys().hasOnly([request.auth.uid]);
+    }
+
     // Is this document addressed to an email address the caller has PROVED is theirs?
     //
     // Used by group invitations and friend requests, which can be addressed either to a uid
@@ -165,6 +203,16 @@ service cloud.firestore {
         // Removing is untouched: the owner may still eject, and anyone may still leave.
         && request.resource.data.members.toSet()
              .difference(resource.data.members.toSet()).size() == 0
+        // The conversation preview is written by `onMessageCreated`, on the Admin SDK. Leaving it
+        // client-writable let any member put words into every other member's group list,
+        // attributed to whoever they chose. The reasoning is already in this file, twenty lines
+        // into the `chats` block — "a writable `lastMessageText` is a way to put words in the
+        // other person's list" — where the conclusion drawn was `allow update: if false`. Groups
+        // needed the same sentence and never got it.
+        && request.resource.data.get('lastMessageText', null)
+             == resource.data.get('lastMessageText', null)
+        && request.resource.data.get('lastMessageBy', null)
+             == resource.data.get('lastMessageBy', null)
         && (
           // the owner may change anything else, and may remove members
           resource.data.ownerId == request.auth.uid ||
@@ -195,9 +243,13 @@ service cloud.firestore {
       }
 
       // Typing indicators subcollection
+      // Membership, not just "I am naming myself". The write rule proved only that the writer
+      // owned the document id, never that they belonged here — unlike the read one line above. So
+      // a stranger could make every member's screen say somebody was typing, in a group they have
+      // nothing to do with.
       match /typing/{userId} {
         allow read: if isMemberOfGroup(groupId);
-        allow write: if isSignedIn() && request.auth.uid == userId;
+        allow write: if isMemberOfGroup(groupId) && request.auth.uid == userId;
       }
     }
 
@@ -314,9 +366,11 @@ service cloud.firestore {
         allow delete: if false; // soft-delete only, like a group's
       }
 
+      // Same as the group's, and the chat id is derivable: it is the two uids sorted and joined,
+      // so a stranger needs nothing but a uid from the public roster to find the path.
       match /typing/{userId} {
         allow read: if inChat();
-        allow write: if isSignedIn() && request.auth.uid == userId;
+        allow write: if inChat() && request.auth.uid == userId;
       }
     }
 
@@ -381,7 +435,8 @@ service cloud.firestore {
           request.resource.data.inviteeId == null
         ) && (
           (request.resource.data.groupId != null &&
-            isMemberOfGroup(request.resource.data.groupId)) ||
+            isMemberOfGroup(request.resource.data.groupId) &&
+            namedAreInGroup(request.resource.data.groupId)) ||
           (
             // `ai_assistant` is not a person, and this clause is about PEOPLE.
             //
@@ -449,9 +504,11 @@ service cloud.firestore {
         !('inviteeId' in request.resource.data) ||
         request.resource.data.inviteeId == null
       )
+      && rsvpsOnlyMine()
       && (
         (request.resource.data.groupId != null &&
-          isMemberOfGroup(request.resource.data.groupId)) ||
+          isMemberOfGroup(request.resource.data.groupId) &&
+          namedAreInGroup(request.resource.data.groupId)) ||
         (
           (!('assigneeIds' in request.resource.data) ||
             request.resource.data.assigneeIds == null ||

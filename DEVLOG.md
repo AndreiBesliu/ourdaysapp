@@ -8144,3 +8144,64 @@ a functiei asteia sa aiba incredere in ea, orice promite alt fisier.
 
 **5 din 5 mutatii prinse.** `npx tsc -b` verde · poarta de lint verde · **1712 teste** ·
 **247 de teste de reguli** (de la 242) · build verde.
+
+## 2026-09-22 · Coada recenziei de securitate: patru locuri unde scriai in numele altcuiva
+
+**Prompt (Andrei):** „Continua". **Model:** Claude Opus 5.
+
+Cele 13 constatari neverificate din recenzia de securitate, triate la sursa. Trei erau deja inchise
+de munca de ieri (autorul mesajelor, de doua ori, si suprascrierea media). **Patru erau reale.**
+
+### Injectia care supravietuise inchiderii radacinii
+
+Ieri am inchis crearea de grupuri cu victima inauntru. Dar clauza de persoane din `events` **se
+sarea cu totul pe ramura de grup**: intreba daca SCRIITORUL e membru, niciodata daca oamenii
+numiti sunt. Deci orice membru al oricarui grup putea scrie `assigneeIds: [<un strain>]` pe un
+eveniment al acelui grup — iar regula de citire da acces cui e numit, deci textul ajungea direct in
+calendarul strainului.
+
+Comentariul de langa ramura personala spune, cu litere, ca regula exista **exact ca sa nu se
+intample asta**. Se intampla, cu o ramura mai incolo. Acum se verifica si cine e numit, cu
+`ai_assistant` lasat sa treaca fiindca nu e o persoana.
+
+### Un raspuns personal pe care-l putea da oricine
+
+`rsvps` e o harta cheiata pe uid — raspunsul fiecarui om la „vii?". Regula de update nu spunea
+nimic despre ea, deci orice membru putea rescrie raspunsul oricui, inclusiv sa accepte in locul lui.
+**Un camp per-persoana pe care poate scrie oricine nu e un camp per-persoana.**
+
+### Randul de sub numele grupului
+
+`lastMessageText` / `lastMessageBy` sunt scrise de `onMessageCreated`, pe Admin SDK. Lasate
+scriibile din client, orice membru putea pune cuvinte in lista de grupuri a tuturor celorlalti,
+atribuite cui voia. Rationamentul e deja scris in acelasi fisier, in blocul `chats` — „un
+`lastMessageText` scriibil e o cale de a pune vorbe in lista celuilalt" — unde concluzia trasa a
+fost `allow update: if false`. La grupuri nu ajunsese propozitia aia niciodata.
+
+### „Cineva scrie…" de la cineva care nu e acolo
+
+Regula de scriere pe `typing` verifica doar ca scriitorul detine id-ul documentului, niciodata ca
+apartine — spre deosebire de regula de CITIRE de deasupra ei. Deci un strain putea face ecranul
+fiecarui membru sa spuna ca cineva scrie, intr-un grup cu care n-are nicio legatura. La chatul
+direct e si mai usor: id-ul e cele doua uid-uri sortate si lipite, iar uid-urile sunt publice.
+
+**6 din 6 mutatii prinse** — inclusiv „asistentul nu mai e permis", fiindca o reparatie de
+securitate care rupe fluxul legitim nu e o reparatie.
+
+`npx tsc -b` verde · poarta de lint verde · **1712 teste** · **253 de teste de reguli** (de la 247) ·
+build verde.
+
+### Ce ramane din coada, si de ce
+
+- **`reactions` / `seenBy` sunt verificate pe CHEI, nu pe valori:** un membru poate inlocui toata
+  harta de reactii de pe mesajul altuia. Ca sa se poata exprima „poti adauga sau scoate doar
+  PROPRIUL uid" ar trebui schimbata forma datelor (o subcolectie per-reactie), nu o linie de regula.
+  E o felie proprie.
+- **`friend_requests` create e un canal de notificari fara plafon catre orice uid.** Reparatia e un
+  contor per-expeditor, ca `notif_usage` pentru `notifyUsers` — cod, nu reguli.
+- **Incarcarile in Storage raman fara verificare de apartenenta** (doar tip si marime). Scris deja
+  in capul fisierului si in intrarea de ieri: cere upload printr-o Cloud Function sau uid-ul in
+  numele fisierului, si a doua varianta trebuie livrata HOSTING PRIMUL.
+- **`removeFriend`** se bazeaza pe lista de prieteni a APELANTULUI — aceeasi forma ca
+  `openDirectChat`, reparata ieri. Efectul e insa doar sa stergi o intrare care oricum nu exista,
+  deci nu e acelasi calibru; merita totusi aceeasi intoarcere a intrebarii.
