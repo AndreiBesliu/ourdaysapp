@@ -37,6 +37,30 @@ putea **inlocui** o poza trimisa in orice conversatie, pastrand acelasi link.
       *Daca e, il poti parasi singur — dar vreau sa stiu, fiindca ar insemna ca s-a si folosit.*
 
 ---
+## ❓ O DECIZIE care e a ta: data nasterii e publica in aplicatie
+
+Nu e o verificare si nu e un bug — e un compromis pe care l-a facut modelul de date, si vreau sa
+stii de el fiindca **alegerea e a ta, nu a mea.**
+
+`profiles` e „oglinda publica": nume, poza si **data nasterii**, citibila de orice cont autentificat
+din aplicatie — inclusiv de cineva care nu e in niciun grup cu tine. Asa merg aniversarile: ca sa
+le vada membrii grupului fara sa citeasca documentul tau sensibil de alaturi.
+
+**Suita de teste chiar noteaza ca lista se poate parcurge toata**, ca pret constient al oglinzii,
+si spune ca oglinda „trebuie sa ramana ne-sensibila". Data nasterii completa e la limita.
+
+Trei variante, si oricare e in regula — dar alege tu:
+
+1. **Lasam asa.** Opt oameni care se cunosc; riscul e teoretic.
+2. **Pastram doar ziua si luna** (`04-01` in loc de `1990-04-01`). Aniversarile merg identic, anul
+   — partea din care se deduce varsta — nu mai pleaca nicaieri. Cere o migrare mica.
+3. **Scoatem data nasterii din oglinda** si o citim doar pentru membrii grupului, printr-un
+   callable. Cel mai curat, si cel mai mult de lucru.
+
+*Spune-mi care si o fac.* Pana atunci am inchis restul: profilul nu mai poate avea campuri in plus
+si nici text de orice lungime (era randat in aplicatia tuturor si ajungea si in notificari push).
+
+---
 ## ⭐ DACA AI CINCI MINUTE, ASTEA SUNT
 
 Trei lucruri, toate din ultimele doua zile, toate cu o consecinta clara daca raspunsul e gresit.

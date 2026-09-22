@@ -93,6 +93,38 @@ describe('the public profile mirror', () => {
     await assertSucceeds(getDocs(collection(as(BOB), 'profiles')));
   });
 
+  it('extra fields are refused, whatever they are', async () => {
+    // `allow write: if isOwner(userId)` had no whitelist, on a document EVERY signed-in account
+    // reads and five screens bulk-fetch. The same collection's neighbour `warlordPlayers` has had
+    // a shape check for weeks, for the reason written there.
+    await assertFails(setDoc(doc(as(ALICE), 'profiles', ALICE), {
+      name: 'Alice', beacon: 'https://attacker.example/x.png',
+    }, { merge: true }));
+  });
+
+  it('and a name long enough to be a message is refused', async () => {
+    // This string is handed to `createWarlordChallenge` as the body of a PUSH NOTIFICATION that
+    // may be sent to any uid with no relationship at all.
+    await assertFails(setDoc(doc(as(ALICE), 'profiles', ALICE), {
+      name: 'x'.repeat(200),
+    }, { merge: true }));
+    await assertFails(setDoc(doc(as(ALICE), 'profiles', ALICE), {
+      photoURL: 'https://e.test/' + 'y'.repeat(600),
+    }, { merge: true }));
+  });
+
+  it('but the three real writes still work, one field at a time', async () => {
+    // Exactly what Login.tsx and Settings.tsx send, with { merge: true }.
+    await assertSucceeds(setDoc(doc(as(ALICE), 'profiles', ALICE), { name: 'Alice B' }, { merge: true }));
+    await assertSucceeds(setDoc(doc(as(ALICE), 'profiles', ALICE), { photoURL: 'https://e.test/a.png' }, { merge: true }));
+    await assertSucceeds(setDoc(doc(as(ALICE), 'profiles', ALICE), { birthday: '1990-04-01' }, { merge: true }));
+    await assertSucceeds(setDoc(doc(as(ALICE), 'profiles', ALICE), { birthday: null }, { merge: true }));
+  });
+
+  it('and nobody else may write mine', async () => {
+    await assertFails(setDoc(doc(as(BOB), 'profiles', ALICE), { name: 'not Alice' }, { merge: true }));
+  });
+
   it('only the owner writes their own profile', async () => {
     await assertSucceeds(updateDoc(doc(as(ALICE), 'profiles', ALICE), { name: 'Alice A.' }));
     await assertFails(updateDoc(doc(as(BOB), 'profiles', ALICE), { name: 'Not Alice' }));

@@ -2482,8 +2482,13 @@ export const createWarlordChallenge = onCall({ enforceAppCheck: ENFORCE_APP_CHEC
   // In-app notification for the opponent. Written here (Admin SDK) rather than via
   // notifyUsers, which only allows notifying users you share a GROUP with — global
   // challenges have no group. Mirrors respondToFriendRequest's direct write.
+  // Clamped, and belt-and-braces on purpose: `profiles` now caps `name` at 60 characters in the
+  // rules, but this string becomes a PUSH NOTIFICATION on a stranger's phone — a challenge may be
+  // sent to any uid with no group, no friendship and no prior contact. A value that arrives from
+  // another document is not this function's to trust, whatever another file promises about it.
+  const rawName = (await db.doc(`profiles/${uid}`).get()).data()?.name;
   const challengerName =
-    (await db.doc(`profiles/${uid}`).get()).data()?.name || "A challenger";
+    (typeof rawName === "string" && rawName.trim() ? rawName.trim().slice(0, 40) : "A challenger");
   await batch.commit();
 
   // One call instead of a hand-written row plus a hand-written push that had drifted into saying

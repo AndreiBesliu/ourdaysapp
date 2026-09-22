@@ -187,6 +187,21 @@ describe('group invites', () => {
     await assertSucceeds(getDoc(doc(as(BOB), 'group_invites', 'i-to-dave')));
   });
 
+  it('an invitation may only have its STATUS changed', async () => {
+    // `create` pins `fromId` and the group; `update` pinned nothing, and `canAccessInvite` reads
+    // only `resource.data`. So: create a clean invitation you own, then edit it into a forged one
+    // and hand it to `acceptGroupInvite`. With a groupId you join that group; with `groupId: null`
+    // you force a FRIENDSHIP, which writes `users/{victim}.friends` — an owner-only document —
+    // and returns their private email into your own list.
+    await assertFails(updateDoc(doc(as(ALICE), 'group_invites', 'i-to-dave'), { fromId: BOB }));
+    await assertFails(updateDoc(doc(as(ALICE), 'group_invites', 'i-to-dave'), { groupId: G2 }));
+    await assertFails(updateDoc(doc(as(ALICE), 'group_invites', 'i-to-dave'), { toId: ALICE }));
+    // Not smuggled alongside the one field that IS allowed, either.
+    await assertFails(updateDoc(doc(as(ALICE), 'group_invites', 'i-to-dave'), {
+      status: 'declined', groupId: G2,
+    }));
+  });
+
   it('an unrelated person does not', async () => {
     await assertFails(getDoc(doc(as(CAROL), 'group_invites', 'i-to-dave')));
   });

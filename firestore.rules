@@ -67,9 +67,37 @@ service cloud.firestore {
     // Mirror of {name, photoURL, birthday} so group members can render names /
     // avatars / birthdays without reading the full (sensitive) user doc.
     // Readable by any signed-in user; writable only by the profile owner.
+    //
+    // The same shape check `warlordPlayers` has had for weeks, for the reason written there:
+    // this document is bulk-fetched into other people's screens. `allow write: if isOwner(userId)`
+    // put no whitelist and no length anywhere, so an account could write a name of any size, any
+    // extra fields it liked, and a `photoURL` pointing anywhere — all of it rendered by five call
+    // sites in everybody else's app, and handed to `createWarlordChallenge` as the body of a push
+    // notification that may be sent to any uid with no relationship at all.
+    //
+    // The whitelist is safe because the field names were MEASURED on live before it was written
+    // (`scripts/profile-shape.mjs`): three documents, exactly `name`, `photoURL`, `birthday`, no
+    // legacy keys. `hasOnly` is evaluated against the MERGED document, so an unremembered field
+    // would have locked its owner out of editing their own profile — a rule that protects people
+    // by breaking them.
+    //
+    // Every field is optional: the client writes them one at a time with `{ merge: true }`.
+    function profileShapeOk() {
+      return request.resource.data.keys().hasOnly(['name', 'photoURL', 'birthday'])
+        && (!('name' in request.resource.data)
+            || (request.resource.data.name is string && request.resource.data.name.size() <= 60))
+        && (!('photoURL' in request.resource.data)
+            || request.resource.data.photoURL == null
+            || (request.resource.data.photoURL is string
+                && request.resource.data.photoURL.size() <= 500))
+        && (!('birthday' in request.resource.data)
+            || request.resource.data.birthday == null
+            || (request.resource.data.birthday is string
+                && request.resource.data.birthday.size() <= 10));
+    }
     match /profiles/{userId} {
       allow read: if isSignedIn();
-      allow write: if isOwner(userId);
+      allow write: if isOwner(userId) && profileShapeOk();
     }
 
     // ── Groups ──
@@ -218,7 +246,20 @@ service cloud.firestore {
         request.resource.data.fromId == request.auth.uid &&
         (request.resource.data.groupId == null ||
          isMemberOfGroup(request.resource.data.groupId));
-      allow update, delete: if canAccessInvite();
+      // Only `status` may change — SEVENTH instance of a rule that decides on `resource` while
+      // letting the writer rewrite what `resource` says.
+      //
+      // `create` pins `fromId` and the group. `update` pinned nothing at all, and `canAccessInvite`
+      // reads only `resource.data` — so: create a clean invitation you legitimately own, then edit
+      // it into a forged one. `acceptGroupInvite` then honours it. With a `groupId` you join that
+      // group. With `groupId: null` you force a FRIENDSHIP, which writes `users/{victim}.friends`
+      // — an owner-only document — and hands their private email back to you in your own list.
+      //
+      // Declining is the only update any client makes (`CalendarHome` writes `status: 'declined'`),
+      // and accepting happens server-side on the Admin SDK, which this file does not constrain.
+      allow update: if canAccessInvite()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow delete: if canAccessInvite();
     }
 
     // ── Events ──

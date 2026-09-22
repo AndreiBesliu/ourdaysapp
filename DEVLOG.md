@@ -8093,3 +8093,54 @@ Le scriu ca sa nu se piarda: `group_invites` update rescrie tot documentul si `a
 are incredere in `fromId`/`groupId`; `createWarlordChallenge` trimite text liber catre orice uid
 fara nicio relatie; `profiles` e enumerabil de orice strain si contine data nasterii; `profiles`
 write n-are lista alba de campuri; plus 13 constatari neverificate in coada.
+
+## 2026-09-22 · Ce mai ramasese din recenzia de securitate, si o masuratoare inainte de regula
+
+**Prompt (Andrei):** „Continua". **Model:** Claude Opus 5.
+
+Cele trei constatari pe care le scrisesem ieri ca „ramase, neremediate". Le-am inchis.
+
+### A SAPTEA oara: `create` fixa totul, `update` nu fixa nimic
+
+`group_invites`. La creare, regula pineaza `fromId` si grupul. La **actualizare** nu pineaza nimic,
+iar `canAccessInvite` citeste doar `resource.data` — deci: creezi o invitatie curata, a ta, apoi o
+**editezi** intr-una falsificata, si i-o dai lui `acceptGroupInvite`.
+
+Cu un `groupId`, intri in acel grup. Cu `groupId: null`, **fortezi o prietenie** — ceea ce scrie in
+`users/{victima}.friends`, un document pe care doar proprietarul lui are voie sa scrie, si iti
+intoarce **e-mailul ei privat** in propria ta lista.
+
+Acum se poate schimba **doar `status`**, adica exact ce face clientul cand refuzi o invitatie.
+Acceptarea e pe Admin SDK si nu trece pe-aici.
+
+A saptea instanta a aceleiasi clase, in trei zile. Nota din memorie zice „cand inchizi una, cauta
+imediat celelalte, in ACEEASI sarcina". Asta am facut de data asta, si de-aia a iesit.
+
+### Am MASURAT inainte sa scriu regula
+
+`profiles` n-avea nicio constrainta de forma: orice camp, orice lungime, pe un document pe care
+**oricine autentificat il citeste** si pe care cinci ecrane il aduc in bloc si il randeaza. Vecinul
+lui, `warlordPlayers`, are de saptamani exact verificarea care lipsea aici — si comentariul de
+acolo spune de ce: „e adus in bloc in ecranele altora".
+
+Dar o lista alba e periculoasa daca nu numeste toate campurile care exista de fapt: `hasOnly` se
+evalueaza pe documentul **DUPA merge**, deci un camp vechi si uitat ar fi blocat un om din a-si mai
+edita propriul profil. **O regula care te apara blocandu-te.**
+
+Deci am masurat, cu un script nou de citire (`scripts/profile-shape.mjs`, cheie read-only, nu
+tipareste nici valori nici uid-uri): **trei documente, exact `name`, `photoURL`, `birthday`, zero
+campuri vechi.** Lista alba e scrisa pe masuratoarea aia.
+
+*Si o observatie care iese din aceeasi masuratoare:* exista **trei** profiluri, nu opt. Ele se
+creeaza singure la prima autentificare, deci cinci conturi n-au nume si poza pentru ceilalti.
+
+### Numele care ajungea notificare pe telefonul unui strain
+
+`createWarlordChallenge` citea `profiles/{apelant}.name` si il punea in corpul unei **notificari
+push** — iar o provocare poate fi trimisa **oricui**, fara grup, fara prietenie, fara niciun
+contact. Cu profilul neconstrans, aia era o cale de a scrie 200 de caractere pe telefonul cuiva.
+Acum numele e taiat la 40 si pe server, nu doar in reguli: o valoare venita din alt document nu e
+a functiei asteia sa aiba incredere in ea, orice promite alt fisier.
+
+**5 din 5 mutatii prinse.** `npx tsc -b` verde · poarta de lint verde · **1712 teste** ·
+**247 de teste de reguli** (de la 242) · build verde.
