@@ -15,6 +15,28 @@
 
 ---
 
+## ⚠️ Cineva putea sa te bage intr-un grup fara sa te intrebe (reparat 22.09)
+
+**Fapt, nu de bifat.** A fost real pe live pana azi.
+
+Oricine isi facea cont putea crea un grup **cu tine deja inauntru** — fara invitatie, fara
+acceptare. Grupul aparea imediat in comutatorul tau de calendar, in lista de chat si in portofel,
+cu un nume ales de el. Din el putea sa-ti scrie in chat (**cu notificare push**), sa-ti puna
+evenimente in calendar si imagini in portofel.
+
+*Daca ai vazut vreodata un grup pe care nu-l recunosti, asta ar fi explicatia.* Nu am niciun motiv
+sa cred ca s-a intamplat — aplicatia e folosita de opt oameni care se cunosc — dar era posibil,
+si nu cerea nimic special.
+
+**Ce s-a mai inchis azi, tot fapte:** un membru putea rescrie AUTORUL unui mesaj mai vechi (al lui
+sau al altuia) si sa faca sa para ca a zis altcineva altceva; un strain putea deschide un chat
+privat cu oricine, trecand printr-o lista de prieteni pe care si-o scria singur; si orice cont
+putea **inlocui** o poza trimisa in orice conversatie, pastrand acelasi link.
+
+- [ ] **Uita-te o data prin lista ta de grupuri** si spune-mi daca e vreunul pe care nu-l recunosti.
+      *Daca e, il poti parasi singur — dar vreau sa stiu, fiindca ar insemna ca s-a si folosit.*
+
+---
 ## ⭐ DACA AI CINCI MINUTE, ASTEA SUNT
 
 Trei lucruri, toate din ultimele doua zile, toate cu o consecinta clara daca raspunsul e gresit.

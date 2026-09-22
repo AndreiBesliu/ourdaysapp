@@ -61,6 +61,25 @@ describe('who can see a conversation', () => {
 });
 
 describe('a client cannot conjure a conversation', () => {
+  it('the author of a message cannot be rewritten', async () => {
+    // "Sender pinned to the caller" was on CREATE only, so it bought nothing: send a message,
+    // then edit it and set `senderId` to somebody else. The read rule shows the whole
+    // conversation, so what everyone sees is a message another person appears to have written.
+    // In a direct chat there are only two people, so the forgery is unambiguous.
+    // The fixture in beforeEach already has the chat and `m1` from ALICE.
+    await assertFails(updateDoc(doc(as(ALICE), 'chats', AB, 'messages', 'm1'), { senderId: BOB }));
+    // Not even alongside a legitimate edit, which is the shape somebody would actually send.
+    await assertFails(updateDoc(doc(as(ALICE), 'chats', AB, 'messages', 'm1'), {
+      text: 'I owe you nothing', senderId: BOB,
+    }));
+    // Editing your own text is untouched.
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'chats', AB, 'messages', 'm1'), { text: 'hi' }));
+    // And so is the reaction path, which the other person needs.
+    await assertSucceeds(updateDoc(doc(as(BOB), 'chats', AB, 'messages', 'm1'), {
+      reactions: { up: [BOB] },
+    }));
+  });
+
   it('not with somebody who never agreed to it', async () => {
     // The whole reason `openDirectChat` exists. Without this denial, anybody could open a channel
     // to any uid they could guess — and uids are enumerable in this app.

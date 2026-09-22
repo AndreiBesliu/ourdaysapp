@@ -44,9 +44,23 @@ service firebase.storage {
     }
 
     // ── Group chat media (auth + size/type gated) ──
+    // `resource == null` makes these CREATE-only.
+    //
+    // Without it, `allow write` covers overwriting an object that already exists — and there is no
+    // owner in the path to compare against, so any signed-in account could replace any photo
+    // anybody had ever sent in any conversation, keeping the same download URL. The message would
+    // still be there, with a different picture under it.
+    //
+    // What remains, and is NOT fixed here: anyone signed in may still upload a NEW file into any
+    // conversation's folder, because Storage rules cannot read Firestore group membership. The
+    // comment at the top of this file has always said so. Closing that needs either an upload
+    // path through a Cloud Function or the uploader's uid in the filename — the latter is two
+    // lines here plus a client change, and must ship HOSTING FIRST or every client still running
+    // the old bundle has its uploads refused.
     match /chat-images/{groupId}/{path=**} {
       allow get: if isSignedIn();
-      allow write: if isSignedIn() && isImage();
+      allow create: if isSignedIn() && isImage();
+      allow update, delete: if false;
     }
     match /chat-audio/{groupId}/{path=**} {
       allow get: if isSignedIn();
@@ -58,9 +72,13 @@ service firebase.storage {
       // The premise was wrong rather than the conclusion: the app does not send the recorder's
       // guess. `sendRecording` wraps the chunks in `new Blob(chunks, { type: 'audio/webm' })`,
       // so what arrives is that, always, on every browser.
-      allow write: if isSignedIn() &&
+      //
+      // CREATE-only, for the same reason as the images above: without it any signed-in account
+      // could replace a recording anybody had sent, keeping the same download URL.
+      allow create: if isSignedIn() &&
         request.resource.contentType.matches('audio/.*') &&
         request.resource.size < 15 * 1024 * 1024;
+      allow update, delete: if false;
     }
 
     // ── Default deny ──

@@ -96,6 +96,36 @@ describe('updating a group — the three branches', () => {
     await assertFails(updateDoc(doc(as(BOB), 'groups', 'g-legacy'), { ownerId: BOB }));
   });
 
+  it('a group of one is the only group you may create', async () => {
+    // THE hole. `uid in members` is membership, not equality, so a stranger could mint a group
+    // with any victim already inside — and uids are public (`warlordPlayers` is keyed by uid and
+    // readable by anyone signed in). Every client lists groups by `members array-contains uid`
+    // with no acceptance flag, so it appeared at once in the victim's calendar, chat and wallet,
+    // with an attacker-chosen name, and made `usersShareGroup` true for three callables.
+    await assertFails(setDoc(doc(as(DAVE), 'groups', 'g-forced'), {
+      name: 'See message', ownerId: DAVE, members: [DAVE, ALICE],
+    }));
+    // Everyone at once was the same request with a longer array.
+    await assertFails(setDoc(doc(as(DAVE), 'groups', 'g-forced-all'), {
+      name: 'See message', ownerId: DAVE, members: [DAVE, ALICE, BOB, CAROL],
+    }));
+    // And the legitimate thing still works: CreateGroupModal writes exactly this.
+    await assertSucceeds(setDoc(doc(as(DAVE), 'groups', 'g-mine'), {
+      name: 'Mine', ownerId: DAVE, members: [DAVE],
+    }));
+  });
+
+  it('nobody ADDS a member from a client, the owner included', async () => {
+    // The same attack one step later: mint a group of one, then add victims to it. Joining is
+    // `acceptGroupInvite` only — Admin SDK, which these rules do not constrain.
+    await assertFails(updateDoc(doc(as(ALICE), 'groups', G1), { members: [ALICE, BOB, DAVE] }));
+  });
+
+  it('but the owner may still eject, and anyone may still leave', async () => {
+    // The half that must not break. Removal is untouched.
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', G1), { members: [ALICE] }));
+  });
+
   it('an outsider may not touch it at all', async () => {
     await assertFails(updateDoc(doc(as(DAVE), 'groups', G1), { name: 'x' }));
   });
@@ -141,6 +171,28 @@ describe('chat messages inside a group', () => {
   it('a member may NOT post as somebody else', async () => {
     await assertFails(setDoc(doc(as(BOB), 'groups', G1, 'messages', 'm3'), {
       senderId: ALICE, text: 'a thing Alice never said',
+    }));
+  });
+
+  it('a member may NOT rewrite the author of a message afterwards', async () => {
+    // "A member may NOT post as somebody else" was enforced on CREATE only, so it bought
+    // nothing: post as yourself, then edit and set `senderId` to another member. Everyone in the
+    // group reads the message, so what they see is something that person appears to have said.
+    //
+    // This had no test at all until a mutation that removed the pin walked past the whole suite —
+    // the direct-chat twin was covered and this one was not.
+    await assertFails(updateDoc(doc(as(ALICE), 'groups', G1, 'messages', 'm1'), { senderId: BOB }));
+    // Nor alongside a legitimate edit, which is the shape somebody would actually send.
+    await assertFails(updateDoc(doc(as(ALICE), 'groups', G1, 'messages', 'm1'), {
+      text: 'a thing Bob never said', senderId: BOB,
+    }));
+  });
+
+  it('but may still edit their own text, and others may still react', async () => {
+    // The two paths that must not break.
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', G1, 'messages', 'm1'), { text: 'hi' }));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm1'), {
+      reactions: { up: [BOB] },
     }));
   });
 

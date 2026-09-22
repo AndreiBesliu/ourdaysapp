@@ -52,11 +52,22 @@ async function shareAGroup(db: admin.firestore.Firestore, a: string, b: string):
   });
 }
 
-/** Is `b` on `a`'s friend list? `friends` holds objects, hence the shape check. */
-async function areFriends(db: admin.firestore.Firestore, a: string, b: string): Promise<boolean> {
-  const snap = await db.doc(`users/${a}`).get();
+/**
+ * Does `owner` list `other` as a friend? `friends` holds objects, hence the shape check.
+ *
+ * The DIRECTION is the whole point. This was called as `areFriends(db, caller, otherUid)` — a read
+ * of `users/{caller}`, which the caller owns and may write freely (`allow read, write: if
+ * isOwner(userId)`). So the authorisation was "am I allowed? let me check the note I wrote
+ * myself": push `{ uid: <anyone> }` into your own `friends` array and open a direct chat with any
+ * account in the app.
+ *
+ * Asking the TARGET's document instead makes the fact one the caller cannot manufacture. A real
+ * friendship is written to both users by `respondToFriendRequest`, so nothing legitimate changes.
+ */
+async function listsAsFriend(db: admin.firestore.Firestore, owner: string, other: string): Promise<boolean> {
+  const snap = await db.doc(`users/${owner}`).get();
   const friends = snap.data()?.friends;
-  return Array.isArray(friends) && friends.some((f) => f && f.uid === b);
+  return Array.isArray(friends) && friends.some((f) => f && f.uid === other);
 }
 
 export const openDirectChat = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
@@ -83,7 +94,8 @@ export const openDirectChat = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
   }
 
   const [friends, sharedGroup] = await Promise.all([
-    areFriends(db, uid, otherUid),
+    // THEIR list, not ours — see the note on `listsAsFriend`.
+    listsAsFriend(db, otherUid, uid),
     shareAGroup(db, uid, otherUid),
   ]);
   if (!friends && !sharedGroup) {

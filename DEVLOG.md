@@ -8004,3 +8004,92 @@ devenise falsa prin constructie.
 — ultimul a scris doua caractere BACKSPACE acolo unde trebuia `\b`, fiindca fiecare strat mananca
 un nivel si `\b` e un escape Python valid care da un caracter de control in loc sa strige. Orice
 continut cu backslash se scrie de acum intr-un FISIER, cu string brut.
+
+## 2026-09-22 · Apartenenta la un grup se putea inventa — si de acolo se deschidea tot
+
+**Prompt (Andrei):** „continua". **Model:** Claude Opus 5.
+
+Prima recenzie de securitate dedicata a intregii suprafete de reguli: 755 de randuri de
+`firestore.rules`, `storage.rules`, si callable-urile care ocolesc regulile cu totul. 35 de agenti,
+5 lentile. **14 constatari au supravietuit, 10 la amandoi refutatorii**, plus 13 in coada.
+
+Cele doua recenzii dinainte gasisera cele mai grave lucruri **din intamplare**, in timp ce se uitau
+la altceva. Fisierul asta n-avuse niciodata o pasa a lui.
+
+### RADACINA: `members` se putea semana la creare
+
+```
+allow create: if ... && request.auth.uid in request.resource.data.members;
+```
+
+**`in` inseamna apartenenta, nu egalitate.** Comentariul de deasupra promitea „fara a forta pe
+altii inauntru" — dar impunea doar jumatatea in care creatorul se lasa pe SINE pe dinafara. Un
+strain, cu un cont facut acum zece secunde, putea crea un grup **cu victima deja inauntru**. Uid-ul
+victimei nu e secret: `warlordPlayers/{uid}` e cheiat pe uid si citibil de oricine autentificat.
+
+Si fiindca fiecare ecran listeaza grupurile cu `members array-contains uid`, **fara niciun steag de
+acceptare**, grupul fantoma apare instantaneu — cu un nume ales de atacator — in comutatorul de
+calendar, in lista de chat si in tintele de partajare din portofel. Din interiorul lui se putea:
+
+- **scrie in chat**, ceea ce declanseaza `onMessageCreated` si trimite o **notificare push**;
+- **crea evenimente** care se randeaza in calendarul victimei;
+- **partaja imagini** in portofelul ei;
+- si, cel mai grav, `usersShareGroup(atacator, victima)` devenea **adevarat** — iar aia e poarta pe
+  care se sprijina `notifyUsers`, `openDirectChat` si `transferAssetCopy`.
+
+Patru lentile independente au ajuns la aceeasi linie pe drumuri diferite. Acum: `members` trebuie sa
+fie **exact [tu]**. Intrarea intr-un grup ramane exclusiv `acceptGroupInvite`, pe Admin SDK.
+
+**Si aceeasi gaura, un rand mai jos:** ramura de proprietar din `update` zicea „proprietarul poate
+schimba orice, inclusiv lista de membri". Deci: faci un grup de unul singur, apoi adaugi victime.
+Acum nimeni nu ADAUGA dintr-un client, proprietarul inclus. Scoaterea e neatinsa.
+
+### A cincea si a sasea oara: o regula care citeste doar `resource`
+
+„Expeditorul fixat pe apelant" era doar pe **create**. La `update`, nimic nu fixa `senderId` — deci
+trimiti un mesaj, apoi il editezi si scrii `senderId` al altcuiva. Regula de citire arata toata
+conversatia grupului, deci ce vede toata lumea e un mesaj pe care pare sa-l fi scris altcineva.
+La fel in chatul direct, unde sunt doar doi oameni, deci falsul e neechivoc.
+
+Memoria despre clasa asta a fost scrisa **ieri**, dupa a patra instanta. Astea sunt a cincea si a
+sasea, in acelasi fisier.
+
+### Un callable care se autoriza pe o nota scrisa de el insusi
+
+`openDirectChat` accepta daca esti prieten cu tinta — citind `users/{apelant}.friends`, **documentul
+apelantului, pe care apelantul are voie sa scrie**. Adica: „am voie? stai sa verific biletul pe care
+mi l-am scris singur". Bagi `{ uid: <oricine> }` in propriul tau tablou de prieteni si deschizi un
+chat privat cu orice cont din aplicatie. Acum se citeste lista **CELUILALT**, pe care n-ai cum s-o
+fabrici; o prietenie reala e scrisa in ambele documente de `respondToFriendRequest`.
+
+### Storage: media din chat se putea SUPRASCRIE
+
+`allow write` acopera si suprascrierea unui obiect existent, si nu exista proprietar in cale de
+comparat. Deci orice cont autentificat putea inlocui orice poza trimisa vreodata in orice
+conversatie, **pastrand acelasi URL**: mesajul ramanea, poza de sub el era alta. Acum sunt
+`create`-only, si la imagini si la audio.
+
+*Ce NU e reparat si o spun explicit:* oricine autentificat poate inca **incarca un fisier nou** in
+folderul oricarei conversatii, fiindca regulile de Storage nu pot citi apartenenta din Firestore.
+Comentariul din capul fisierului spune asta dintotdeauna. Inchiderea cere fie o cale de upload
+printr-o Cloud Function, fie uid-ul incarcatorului in numele fisierului — a doua e doua randuri
+aici plus o schimbare de client, si **trebuie livrata HOSTING PRIMUL**, altfel clientii pe bundle
+vechi raman cu upload-urile refuzate.
+
+### Plasa
+
+**4 din 5 mutatii prinse.** A cincea e **echivalenta** si o spun ca atare: a largi lista permisa cu
+un literal pe care nu-l detine nimeni (`hasOnly([eu, 'anyone'])`) tot refuza `[eu, ALICE]` — nu
+deschide niciun atac, deci niciun test n-are ce prinde.
+
+Una dintre cele doua ratari initiale era insa reala: **falsificarea autorului intr-un mesaj de grup
+n-avea niciun test**, desi geamanul ei din chatul direct avea. Acum are.
+
+`npx tsc -b` verde · poarta de lint verde · **1712 teste** · **242 de teste de reguli** (de la 236).
+
+### Ce ramane din recenzie, neremediat
+
+Le scriu ca sa nu se piarda: `group_invites` update rescrie tot documentul si `acceptGroupInvite`
+are incredere in `fromId`/`groupId`; `createWarlordChallenge` trimite text liber catre orice uid
+fara nicio relatie; `profiles` e enumerabil de orice strain si contine data nasterii; `profiles`
+write n-are lista alba de campuri; plus 13 constatari neverificate in coada.

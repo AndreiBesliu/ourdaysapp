@@ -75,10 +75,28 @@ service cloud.firestore {
     // ── Groups ──
     match /groups/{groupId} {
       allow read: if isSignedIn() && request.auth.uid in resource.data.members;
-      // Creator must list themselves as a member and own the group (no creating
-      // groups on behalf of / forcing others in without yourself).
+      // Creator must own the group and be its ONLY member.
+      //
+      // This said `request.auth.uid in request.resource.data.members`, and `in` is membership,
+      // not equality — so the comment's promise ("no forcing others in") held only for the half
+      // where the creator left THEMSELVES out. A stranger could mint a group with any victim
+      // already inside, and uids are not secret: `warlordPlayers/{uid}` is keyed by uid and
+      // readable by anyone signed in.
+      //
+      // What that bought, because every client lists groups by `members array-contains uid` with
+      // no acceptance flag: the group appears at once in the victim's calendar switcher, chat
+      // list and wallet-sharing targets, with an attacker-chosen NAME. From inside it the
+      // attacker may post messages (which fire `onMessageCreated` and push an FCM notification),
+      // create events that render in the victim's calendar, and share images into their wallet.
+      // It also makes `usersShareGroup` true, which is the gate `notifyUsers`, `openDirectChat`
+      // and `transferAssetCopy` all rely on.
+      //
+      // Joining stays exactly where the rest of this file says it is: `acceptGroupInvite`, via
+      // the Admin SDK, which these rules do not constrain. The only client-created group is a
+      // group of one — `CreateGroupModal` already writes `members: [auth.currentUser.uid]`.
       allow create: if isSignedIn() &&
         request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.members.hasOnly([request.auth.uid]) &&
         request.auth.uid in request.resource.data.members;
       // This used to be `update, delete: if uid in members` — which let ANY member eject any
       // other member, the owner included, and delete the whole group with its events. The UI
@@ -110,8 +128,17 @@ service cloud.firestore {
       // groups instead of protecting them. Two absent owners compare equal, so they keep working.
       allow update: if isSignedIn() && request.auth.uid in resource.data.members
         && request.resource.data.get('ownerId', null) == resource.data.get('ownerId', null)
+        // Nobody ADDS a member from a client, the owner included. Membership is granted only by
+        // `acceptGroupInvite`, which runs on the Admin SDK and is not constrained by this file —
+        // that is the whole design, and the owner branch below quietly contradicted it by saying
+        // "the owner may change anything, including the member list". Minting a group of one and
+        // then adding victims to it is the same attack as the create hole above, one step later.
+        //
+        // Removing is untouched: the owner may still eject, and anyone may still leave.
+        && request.resource.data.members.toSet()
+             .difference(resource.data.members.toSet()).size() == 0
         && (
-          // the owner may change anything, including the member list
+          // the owner may change anything else, and may remove members
           resource.data.ownerId == request.auth.uid ||
           // anyone else may edit the group as long as they do not touch who is in it…
           request.resource.data.members.toSet() == resource.data.members.toSet() ||
@@ -127,9 +154,15 @@ service cloud.firestore {
         // Sender must be the authenticated user (prevents impersonating a member).
         allow create: if isMemberOfGroup(groupId) &&
           request.resource.data.senderId == request.auth.uid;
-        allow update: if isMemberOfGroup(groupId) &&
-          (request.auth.uid == resource.data.senderId || 
-           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy', 'reactions', 'isPinned']));
+        // `senderId` is PINNED, and without that line "sender pinned to the caller" on create
+        // bought nothing: send a message, then edit it and rewrite `senderId` to another member.
+        // The read rule shows the whole conversation to the group, so what everybody then sees is
+        // a message somebody else appears to have written. Fifth instance in this file of a rule
+        // that decides on `resource` without constraining `request.resource`.
+        allow update: if isMemberOfGroup(groupId)
+          && request.resource.data.senderId == resource.data.senderId
+          && (request.auth.uid == resource.data.senderId ||
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy', 'reactions', 'isPinned']));
         allow delete: if false; // soft-delete only (isDeleted flag)
       }
 
@@ -231,9 +264,12 @@ service cloud.firestore {
         // Sender pinned to the caller, exactly as in a group: the read rule grants the whole
         // conversation, so an unpinned author field is impersonation.
         allow create: if inChat() && request.resource.data.senderId == request.auth.uid;
-        allow update: if inChat() &&
-          (request.auth.uid == resource.data.senderId ||
-           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy', 'reactions', 'isPinned']));
+        // Pinned for the same reason as the group's, and it matters more here: a direct chat has
+        // exactly two people in it, so a forged author is unambiguously the other one.
+        allow update: if inChat()
+          && request.resource.data.senderId == resource.data.senderId
+          && (request.auth.uid == resource.data.senderId ||
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy', 'reactions', 'isPinned']));
         allow delete: if false; // soft-delete only, like a group's
       }
 
