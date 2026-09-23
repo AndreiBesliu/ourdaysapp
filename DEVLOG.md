@@ -8316,3 +8316,66 @@ Am verificat și că restul celor cinci locuri prind aruncătura într-un `try` 
 niciun rotitor nu rămâne înfipt. La Setări, cele două `alert` spun acum motivul adevărat.
 
 `npx tsc -b` verde · poarta de lint verde · **1744 teste** (de la 1719) · build verde.
+
+## 2026-09-23 · Cheia era constrânsă, valoarea nu: confirmările de citire
+
+**Prompt (Andrei):** „Continua". **Model:** Claude Opus 5.
+
+Ultimul punct rămas din coada auditului, și singurul neblocat: regula de `update` pe mesaje
+spunea ce CHEI poate atinge cineva care nu e autorul — `seenBy`, `reactions`, `isPinned` — și
+**nimic** despre valori. Deci oricine din conversație putea rescrie tot tabloul.
+
+### Întâi am măsurat, abia apoi am proiectat
+
+Întrebarea care decidea totul: `.diff()` merge pe o hartă **imbricată**, sau doar pe
+`request.resource.data`? De răspuns depindea dacă `reactions` are nevoie de o schimbare de
+formă a datelor — adică de o migrare. N-am vrut să proiectez o migrare peste o credință, așa că
+am scris o sondă de unică folosință pe emulator, cu reguli inline și alt `projectId`, ca să nu
+ating `firestore.rules`. **11 teste, toate verzi.** Ce au arătat:
+
+- **`.diff()` MERGE pe o hartă imbricată.** `reactions.diff(...).affectedKeys().hasOnly([uid])`
+  îi dă voie lui Bob la cheia LUI și îl refuză pe a Alicei — și la modificare, și la ștergere.
+- **Forma actuală `{emoji: uid[]}` NU se poate asigura.** Se poate întreba doar CÂTE chei-emoji
+  s-au schimbat; un `Set` nu se poate indexa, deci nu ajungi înăuntru. Iar cu `size() == 1`
+  Bob **șterge reacția Alicei** — o cheie schimbată, regulă mulțumită. Măsurat, nu presupus.
+- `.get('reactions', {})` acoperă mesajele de dinainte să existe câmpul.
+
+### Ce am livrat: `seenBy`
+
+Nu cere nici schimbare de formă, nici schimbare de client. Regula spune exact ce face clientul
+(`arrayUnion(myUid)`, singurul scriitor din tot repo-ul): **uid-ul meu poate să APARĂ, și nimeni
+nu poate să plece.**
+
+`hasOnly` în loc de `==` fiindcă o scriere care nu schimbă nimic trebuie să treacă — un
+re-`arrayUnion` pe un uid deja prezent e ceva ce clientul chiar face. Și `.get('seenBy', [])` pe
+**ambele** părți, fiindcă citirea unui câmp lipsă pe o singură parte a stricat deja patru reguli
+în fișierul ăsta.
+
+Garda stă **în afara** lui `||`, deliberat: ramura autorului îi dădea voie să schimbe orice
+în afară de `senderId`, deci și să pretindă pe mesajul lui că l-au văzut toți. Al cui e mesajul
+nu face afirmația despre alții a lui.
+
+### Proba: trei mutații, toate prinse
+
+Un test verde care ar trece și pe reguli stricate nu probează nimic.
+
+| Mutație | Teste căzute |
+|---|---|
+| scot jumătatea „nimeni nu pleacă" | 2 |
+| las orice uid să intre, nu doar al apelantului | 3 |
+| citesc doar `resource`, nu și `request.resource` | 3 |
+
+Prima rulare a mutațiilor **n-a dat niciun verdict**: `grep` pe „Tests" nu prindea rândul fiindcă
+are coduri ANSI în față, iar `| tail -1` întoarce mereu 0, deci și lanțul `&&` mergea mai departe
+ca și cum ar fi mers. Iar a doua mutație avea **3 potriviri**, nu una — scriptul a refuzat să dea
+verdict, ceea ce e exact ce trebuia să facă.
+
+**267 de teste de reguli** (de la 257) · `npx tsc -b` verde · poartă de lint verde ·
+**1744 de teste** · build verde.
+
+### RĂMAS DESCHIS: `reactions`
+
+Forma actuală nu se poate apăra, iar cea care se poate cere re-cheiere pe uid — deci UI schimbat,
+documente vechi, și un APK care poartă o copie înghețată a bundle-ului. **Nu am luat decizia
+singur**; am pus-o la măsurat separat. Până atunci, oricine din conversație poate încă rescrie
+reacțiile altcuiva.

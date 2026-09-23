@@ -249,4 +249,64 @@ describe('chat messages inside a group', () => {
   it('nobody deletes a message — soft-delete only', async () => {
     await assertFails(deleteDoc(doc(as(ALICE), 'groups', G1, 'messages', 'm1')));
   });
+
+  // ── A read receipt is a claim about who SAW something ──────────────────────────────────
+  //
+  // The update rule constrained which KEYS a non-sender may touch and said nothing about the
+  // VALUES, so `seenBy` was rewritable wholesale by anybody in the group.
+
+  it('a member may not mark a message seen on somebody else behalf', async () => {
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm1'), {
+      seenBy: [ALICE, CAROL],
+    }));
+  });
+
+  it('a member may not remove anybody from seenBy', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'groups', G1, 'messages', 'm5'), {
+        senderId: ALICE, text: 'seen by both', seenBy: [ALICE, BOB], reactions: {}, isPinned: false,
+      });
+    });
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm5'), { seenBy: [BOB] }));
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm5'), { seenBy: [] }));
+  });
+
+  it('not even the sender may forge a receipt on their own message', async () => {
+    // The sender branch of the `||` lets them change anything but `senderId`. Whose message it
+    // is does not make somebody else having read it theirs to assert.
+    await assertFails(updateDoc(doc(as(ALICE), 'groups', G1, 'messages', 'm1'), {
+      seenBy: [ALICE, BOB],
+    }));
+  });
+
+  it('but a member marking THEMSELVES still works, which is the whole feature', async () => {
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm1'), {
+      seenBy: [ALICE, BOB],
+    }));
+  });
+
+  it('including on a message stored before seenBy existed', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'groups', G1, 'messages', 'm6'), { senderId: ALICE, text: 'old' });
+    });
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm6'), { seenBy: [BOB] }));
+  });
+
+  it('and a no-op re-add is not an error', async () => {
+    // `arrayUnion` of a uid already present is a real write the client makes. `hasOnly` rather
+    // than `==` is what lets an empty difference through.
+    await seed(async (db) => {
+      await setDoc(doc(db, 'groups', G1, 'messages', 'm7'), {
+        senderId: ALICE, text: 'x', seenBy: [ALICE, BOB], reactions: {}, isPinned: false,
+      });
+    });
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm7'), {
+      seenBy: [ALICE, BOB],
+    }));
+  });
+
+  it('pinning and reacting still pass, since they leave seenBy alone', async () => {
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm1'), { isPinned: true }));
+  });
+
 });

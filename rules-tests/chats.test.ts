@@ -161,6 +161,37 @@ describe('messages inside it', () => {
       senderId: ALICE, text: 'hello?',
     }));
   });
+
+  // ── Read receipts, as in a group ───────────────────────────────────────────────────────
+  //
+  // It reads worse here: a direct chat has two people in it, so a forged receipt is
+  // unambiguously a claim about the one other person.
+
+  it('neither person may mark the message seen for the other', async () => {
+    await assertFails(updateDoc(doc(as(BOB), 'chats', AB, 'messages', 'm1'), {
+      seenBy: [ALICE, BOB, CAROL],
+    }));
+    await assertFails(updateDoc(doc(as(ALICE), 'chats', AB, 'messages', 'm1'), {
+      seenBy: [ALICE, BOB],
+    }));
+  });
+
+  it('and nobody may take a receipt back', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'chats', AB, 'messages', 'm9'), {
+        senderId: ALICE, text: 'read', seenBy: [ALICE, BOB], reactions: {}, isPinned: false,
+      });
+    });
+    await assertFails(updateDoc(doc(as(BOB), 'chats', AB, 'messages', 'm9'), { seenBy: [ALICE] }));
+  });
+
+  it('marking yourself still works on a message with no seenBy at all', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'chats', AB, 'messages', 'm10'), { senderId: ALICE, text: 'old' });
+    });
+    await assertSucceeds(updateDoc(doc(as(BOB), 'chats', AB, 'messages', 'm10'), { seenBy: [BOB] }));
+  });
+
 });
 
 describe('typing indicators', () => {

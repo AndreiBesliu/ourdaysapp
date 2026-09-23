@@ -120,6 +120,31 @@ service cloud.firestore {
     // by breaking them.
     //
     // Every field is optional: the client writes them one at a time with `{ merge: true }`.
+    // Read receipts are a claim about WHO SAW a message, so only the person who saw it may make
+    // it. The rule below used to constrain the KEY (`seenBy` may change) and say nothing at all
+    // about the VALUE, so any member of the conversation could rewrite the whole array on
+    // somebody else's message — mark it seen on behalf of people who never opened it, or unmark
+    // it for everybody. The sender's own branch was no better, for the same reason.
+    //
+    // This says exactly what the client does (`arrayUnion(myUid)`, nothing else, anywhere):
+    // my uid may APPEAR, and nobody may leave. `hasOnly` rather than `==` so a write that
+    // changes nothing still passes — a no-op re-add is a real thing the client does.
+    //
+    // `.get('seenBy', [])` on BOTH sides: messages stored before the field existed have no
+    // `seenBy`, and reading a missing field on only one side is how this file has broken a rule
+    // four times already.
+    //
+    // Measured on the emulator before it was written, including the cases that must still be
+    // ALLOWED: a first-ever mark on an old message, and a no-op re-add.
+    function onlySelfJoinsSeenBy() {
+      return request.resource.data.get('seenBy', []).toSet()
+               .difference(resource.data.get('seenBy', []).toSet())
+               .hasOnly([request.auth.uid])
+        && resource.data.get('seenBy', []).toSet()
+             .difference(request.resource.data.get('seenBy', []).toSet())
+             .size() == 0;
+    }
+
     function profileShapeOk() {
       return request.resource.data.keys().hasOnly(['name', 'photoURL', 'birthday'])
         && (!('name' in request.resource.data)
@@ -235,8 +260,14 @@ service cloud.firestore {
         // The read rule shows the whole conversation to the group, so what everybody then sees is
         // a message somebody else appears to have written. Fifth instance in this file of a rule
         // that decides on `resource` without constraining `request.resource`.
+        //
+        // `onlySelfJoinsSeenBy()` sits OUTSIDE the `||`, deliberately: the sender's branch lets
+        // them change anything but `senderId`, which included rewriting the read receipts on
+        // their own message to claim everybody had seen it. Whose message it is does not make
+        // the claim theirs to make.
         allow update: if isMemberOfGroup(groupId)
           && request.resource.data.senderId == resource.data.senderId
+          && onlySelfJoinsSeenBy()
           && (request.auth.uid == resource.data.senderId ||
               request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy', 'reactions', 'isPinned']));
         allow delete: if false; // soft-delete only (isDeleted flag)
@@ -359,8 +390,12 @@ service cloud.firestore {
         allow create: if inChat() && request.resource.data.senderId == request.auth.uid;
         // Pinned for the same reason as the group's, and it matters more here: a direct chat has
         // exactly two people in it, so a forged author is unambiguously the other one.
+        // Same `seenBy` constraint as the group's, and it reads worse here: a direct chat has
+        // two people in it, so a forged read receipt is unambiguously a claim about the one
+        // other person.
         allow update: if inChat()
           && request.resource.data.senderId == resource.data.senderId
+          && onlySelfJoinsSeenBy()
           && (request.auth.uid == resource.data.senderId ||
               request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy', 'reactions', 'isPinned']));
         allow delete: if false; // soft-delete only, like a group's
