@@ -4,7 +4,8 @@ import { format, isSameDay, isToday, isYesterday } from 'date-fns';
 import { collection, query, orderBy, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { liveQuery } from '../utils/liveQuery';
 import { reportError } from '../reportError';
-import { uploadFile } from '../utils/uploadFile';
+import { uploadFile, UploadRefused } from '../utils/uploadFile';
+import { checkChatImage, refusalKey, refusalDetail } from '../utils/uploadLimits';
 import { db, auth } from '../firebase';
 import { chatUploadPath } from '../utils/uploadName';
 import { playTone } from '../utils/sounds';
@@ -114,6 +115,12 @@ export default function GroupChatWidget({
   // The same flag for the message path, which had none: a refused send left the text in the
   // box and said nothing, so it read as a slow network rather than a failure.
   const [sendFailed, setSendFailed] = useState(false);
+  // A file Storage would refuse is a different banner from a send that failed: there is
+  // nothing to retry, and “check your connection” is wrong advice. Holds the sentence.
+  const [refusedText, setRefusedText] = useState<string | null>(null);
+  // Set when the RECORDING itself cannot be sent — the retry button has to disappear, because
+  // every retry rebuilds the same request and earns the same refusal.
+  const [voiceRefused, setVoiceRefused] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -300,6 +307,15 @@ export default function GroupChatWidget({
   }, [editingMsg, replyingTo, open, embedded]);
 
   const attachImage = (file: File) => {
+    // Asked here, at the moment of choosing, rather than after the bytes have been spent. An
+    // ordinary photo from a recent phone can be over the limit, and what used to happen was a
+    // full upload followed by a refusal and a picture still sitting in the box.
+    const refusal = checkChatImage(file);
+    if (refusal) {
+      setRefusedText(t(refusalKey(refusal), language) + refusalDetail(refusal));
+      return;
+    }
+    setRefusedText(null);
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
   };
@@ -366,6 +382,7 @@ export default function GroupChatWidget({
 
     setUploading(true);
     setSendFailed(false);
+    setRefusedText(null);
     try {
       let imageUrl: string | null = null;
       if (imageFile) {
@@ -429,14 +446,21 @@ export default function GroupChatWidget({
       deleteDoc(doc(db, `${basePath}/typing`, auth.currentUser.uid)).catch(console.error);
       
     } catch (err) {
-      // The message did not send, and until now the screen said so in no way whatsoever: the
-      // text stayed in the box, the picture stayed attached, and nothing appeared in the
+      // The message did not send, and until this week the screen said so in no way whatsoever:
+      // the text stayed in the box, the picture stayed attached, and nothing appeared in the
       // conversation. Indistinguishable from a slow network, and the person has no reason to
       // suspect anything but their own patience. The voice path has had a failure flag for
       // days; this one never did.
       reportError(err instanceof Error ? err.message : String(err), { context: 'GroupChatWidget.handleSend' });
       console.error('Failed to send message:', err);
-      setSendFailed(true);
+      // A refusal is not a failure. “Check your connection and try again” is not merely unhelpful
+      // for a file that is too large — it is wrong, and following it costs the upload again.
+      if (err instanceof UploadRefused) {
+        setRefusedText(t(refusalKey(err.refusal), language) + refusalDetail(err.refusal));
+        clearImage();
+      } else {
+        setSendFailed(true);
+      }
     } finally {
       setUploading(false);
     }
@@ -563,6 +587,7 @@ export default function GroupChatWidget({
 
     setUploading(true);
     setVoiceSendFailed(false);
+    setVoiceRefused(false);
     try {
       const audioUrl = await uploadFile(
         chatUploadPath('chat-audio', convId, auth.currentUser?.uid || '', 'note.webm', Date.now()),
@@ -588,6 +613,10 @@ export default function GroupChatWidget({
     } catch (e) {
       reportError(e instanceof Error ? e.message : String(e), { context: 'GroupChatWidget.voiceUpload' });
       setVoiceSendFailed(true);
+      // Storage would refuse this recording no matter how many times it is offered, so the retry
+      // button must not be. The recording is still held — discarding is the person's choice to
+      // make, not something that happens to them.
+      if (e instanceof UploadRefused) setVoiceRefused(true);
     } finally {
       setUploading(false);
     }
@@ -596,6 +625,7 @@ export default function GroupChatWidget({
   const discardRecording = () => {
     audioChunksRef.current = [];
     setVoiceSendFailed(false);
+    setVoiceRefused(false);
   };
 
   // ── The microphone must not outlive this component ─────────────────────────────────────
@@ -1257,6 +1287,14 @@ export default function GroupChatWidget({
             </div>
           ) : (
             <>
+            {refusedText && (
+              <div role="alert" className="px-3 py-2 border-t border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 flex items-center gap-2 shrink-0">
+                <span className="text-xs text-amber-800 dark:text-amber-200 flex-1">{refusedText}</span>
+                <button type="button" onClick={() => setRefusedText(null)} aria-label={t('dismissAction', language)} className="text-xs font-medium text-amber-800 dark:text-amber-200 underline">
+                  {t('dismissAction', language)}
+                </button>
+              </div>
+            )}
             {sendFailed && (
               <div role="alert" className="px-3 py-2 border-t border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 flex items-center gap-2 shrink-0">
                 <span className="text-xs text-rose-700 dark:text-rose-300 flex-1">{t('messageSendFailed', language)}</span>
@@ -1267,10 +1305,14 @@ export default function GroupChatWidget({
             )}
             {voiceSendFailed && (
               <div role="alert" className="px-3 py-2 border-t border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 flex items-center gap-2 shrink-0">
-                <span className="text-xs text-rose-700 dark:text-rose-300 flex-1">{t('voiceSendFailed', language)}</span>
-                <button type="button" onClick={sendRecording} disabled={uploading} className="text-xs font-medium text-rose-700 dark:text-rose-300 underline disabled:opacity-50">
-                  {t('retry', language)}
-                </button>
+                <span className="text-xs text-rose-700 dark:text-rose-300 flex-1">
+                  {voiceRefused ? t('voiceTooLong', language) : t('voiceSendFailed', language)}
+                </span>
+                {!voiceRefused && (
+                  <button type="button" onClick={sendRecording} disabled={uploading} className="text-xs font-medium text-rose-700 dark:text-rose-300 underline disabled:opacity-50">
+                    {t('retry', language)}
+                  </button>
+                )}
                 <button type="button" onClick={discardRecording} className="text-xs text-rose-500">
                   {t('discard', language)}
                 </button>

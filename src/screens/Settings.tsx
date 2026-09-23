@@ -9,7 +9,8 @@ import { auth, db } from '../firebase';
 import { signOut, updateProfile } from 'firebase/auth';
 import { doc, updateDoc, setDoc } from 'firebase/firestore';
 import { liveDoc } from '../utils/liveQuery';
-import { uploadFile } from '../utils/uploadFile';
+import { uploadFile, UploadRefused } from '../utils/uploadFile';
+import { refusalKey, refusalDetail } from '../utils/uploadLimits';
 import { localZone, zoneChoices, zoneLabel } from '../utils/eventTime';
 
 const THEME_COLORS = [
@@ -125,7 +126,11 @@ export default function Settings() {
     } catch (error) {
       reportError(error instanceof Error ? error.message : String(error), { context: 'Settings.handleProfileImageUpload' });
       console.error("Failed to upload profile picture:", error);
-      alert(t('imageUploadFailed', language));
+      // "Upload failed" for a photo that was never uploaded sends the person back to try the same
+      // photo again. Say which of the two problems it is, and give them the number.
+      alert(error instanceof UploadRefused
+        ? t(refusalKey(error.refusal), language) + refusalDetail(error.refusal)
+        : t('imageUploadFailed', language));
     } finally {
       setUploadingImage(false);
     }
@@ -191,7 +196,9 @@ export default function Settings() {
     } catch (error) {
       reportError(error instanceof Error ? error.message : String(error), { context: 'Settings.handleBgImageUpload' });
       console.error("Failed to upload background:", error);
-      alert(t('imageUploadFailed', language));
+      alert(error instanceof UploadRefused
+        ? t(refusalKey(error.refusal), language) + refusalDetail(error.refusal)
+        : t('imageUploadFailed', language));
     } finally {
       setUploadingBg(false);
     }

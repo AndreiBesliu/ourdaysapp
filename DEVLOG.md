@@ -8256,3 +8256,63 @@ de eroare de zile intregi; asta n-a avut niciodata. Acum are, in sase limbi.
 
 `npx tsc -b` verde · poarta de lint verde · **1719 teste** · **257 de teste de reguli** (de la 255) ·
 build verde.
+
+## 2026-09-23 · Limita exista doar in reguli, deci clientul trimitea degeaba
+
+**Prompt (Andrei):** „Continua". **Model:** Claude Opus 5.
+
+Plecasem dupa o constatare din coada recenziei: butonul de „Încearcă din nou" de la mesajele
+vocale reconstruiește exact aceeași cerere, deci pentru un refuz permanent e o buclă infinită.
+Scenariul ei concret **nu mai e valabil** — regula de nume n-am strâns-o, acceptă și forma veche.
+Dar când am căutat ce refuz permanent **chiar** se poate întâmpla azi, am găsit ceva mai prost.
+
+### Ce am măsurat
+
+**Șapte locuri de încărcare în aplicație. Niciunul nu verifica dimensiunea.** Limitele existau
+**doar** în `storage.rules`, pe care un browser nu le vede niciodată. Deci:
+
+> O poză obișnuită de pe un telefon recent — 12 MB nu mai e ceva neobișnuit — se încărca
+> **INTEGRAL**, pe ce conexiune avea omul, și era refuzată abia la ultimul pas.
+
+Ce vedea el: „mesajul nu a putut fi trimis", cu poza încă atașată. Apăsa iar, se duceau iar 12 MB,
+și era refuzată iar. **Nu există număr de încercări care să reușească:** cererea e identică la
+bit și refuzul la fel. Iar sfatul de pe ecran — „verifică legătura și încearcă din nou" — nu era
+doar nefolositor, era **greșit**, și te costa încă o dată dacă îl urmai.
+
+### Reparat
+
+`uploadLimits.ts` ține limitele, iar întrebarea se pune **în `uploadFile`**, nu la cele șapte
+apeluri — un loc de apel e ceva ce se poate uita, și șase din șapte se uitaseră. Un fișier care
+n-are cum să ajungă nu mai pleacă deloc: `UploadRefused`, aruncat înainte să se trimită vreun bit.
+Probat cu un contor pe SDK: rămâne pe 0.
+
+La poza din chat, întrebarea se pune și mai devreme — **la alegere**, nu la trimitere — și mesajul
+spune ambele numere: cât are fișierul și cât e voie. Fără limită nu știi cât să tai; fără
+dimensiunea ta nu știi dacă e aproape sau departe. Acoperă și lipirea din clipboard, nu doar
+butonul de atașare.
+
+Și **butonul de reîncercare dispare** când refuzul e permanent, care era chiar constatarea de la
+care plecasem. Onest însă: pe calea de voce asta e aproape imposibil de atins — 15 MiB de webm
+înseamnă peste o oră de vorbit. Partea care se întâmplă cu adevărat e poza.
+
+### Numerele sunt o COPIE, deci au nevoie de lesă
+
+Două constante scrise în alt fișier decât cel care le aplică — exact genul de lucru care încetează
+să fie adevărat fără să observe nimeni. `uploadLimits.test.ts` **citește `storage.rules`** și
+compară, în **ambele** direcții: o limită schimbată acolo, sau un dosar nou adăugat acolo pe care
+clientul nu-l cunoaște. Control negativ: am mutat 10 MiB → 8 MiB în reguli → **7 teste roșii**.
+
+### Două greșeli ale mele, prinse de propriile porți
+
+- **Parserul lua `{uid}` din CALE drept acolada blocului.** „Corpul" regulii ieșea `uid`, deci
+  niciun dosar nu părea scriibil — și `it.each([])` **rulează zero cazuri și raportează succes**.
+  Comparația mergea pe listă goală, verde. A prins-o doar verificarea în ambele direcții, pe care
+  o scrisesem fiindcă o incluziune nu e o egalitate. Acum numărul de cazuri se afirmă separat.
+- **Poarta veche m-a refuzat pe mine.** Scrisesem `chat-images/${convId}/x` ca să Întreb de limită;
+  `uploadName.test.ts` interzice căile construite de mână și a căzut. Corect: cine citește nu
+  deosebește o sondă de o destinație reală. Am mutat întrebarea în `checkChatImage(file)`.
+
+Am verificat și că restul celor cinci locuri prind aruncătura într-un `try` — o prind, deci
+niciun rotitor nu rămâne înfipt. La Setări, cele două `alert` spun acum motivul adevărat.
+
+`npx tsc -b` verde · poarta de lint verde · **1744 teste** (de la 1719) · build verde.

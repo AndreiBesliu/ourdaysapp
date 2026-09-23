@@ -24,11 +24,32 @@
 import { ref, uploadBytesResumable, getDownloadURL, type StorageReference } from 'firebase/storage';
 import { storage } from '../firebase';
 import { startWatch, watchTick, hasStalled, percentOf, STALL_MS } from './uploadWatch';
+import { checkUpload, type UploadRefusal } from './uploadLimits';
 
 export class UploadStalled extends Error {
   constructor() {
     super('upload-stalled');
     this.name = 'UploadStalled';
+  }
+}
+
+/**
+ * The upload was not attempted, because Storage would have refused it.
+ *
+ * This is a DIFFERENT thing from a failure, and the difference is the whole point: a stall is
+ * worth retrying and this is not. Sending the bytes anyway and letting the rules say no meant
+ * spending the person's connection on a request whose answer was already known — and then
+ * offering them a retry that produced a byte-identical request and a byte-identical refusal.
+ */
+export class UploadRefused extends Error {
+  // Declared rather than a constructor parameter property: `erasableSyntaxOnly` is on, and that
+  // shorthand emits code instead of erasing.
+  readonly refusal: UploadRefusal;
+
+  constructor(refusal: UploadRefusal) {
+    super(`upload-refused/${refusal.kind}`);
+    this.name = 'UploadRefused';
+    this.refusal = refusal;
   }
 }
 
@@ -40,11 +61,21 @@ export interface UploadOptions {
   stallMs?: number;
 }
 
+/** Byte length of whatever `uploadFile` accepts. */
+function sizeOf(data: Blob | Uint8Array | ArrayBuffer): number {
+  if (typeof Blob !== 'undefined' && data instanceof Blob) return data.size;
+  if (data instanceof ArrayBuffer) return data.byteLength;
+  return (data as Uint8Array).byteLength;
+}
+
 /**
  * Put `data` at `path` and return its download URL.
  *
  * Throws `UploadStalled` when nothing has moved for `stallMs`, having first cancelled the upload —
  * the cancellation is the point, not the error.
+ *
+ * Throws `UploadRefused`, before sending anything, when the file cannot satisfy the Storage rule
+ * for this path. That one is not worth retrying and the caller should not offer to.
  */
 export async function uploadFile(
   path: string,
@@ -52,6 +83,13 @@ export async function uploadFile(
   options: UploadOptions = {},
 ): Promise<string> {
   const { onProgress, contentType, stallMs = STALL_MS } = options;
+
+  // Asked here rather than at the seven call sites, because a call site is a thing that can be
+  // forgotten — and six of the seven had been.
+  const blobType = typeof Blob !== 'undefined' && data instanceof Blob ? data.type : undefined;
+  const refusal = checkUpload(path, sizeOf(data), contentType ?? blobType);
+  if (refusal) throw new UploadRefused(refusal);
+
   const fileRef: StorageReference = ref(storage, path);
   const task = uploadBytesResumable(fileRef, data, contentType ? { contentType } : undefined);
 

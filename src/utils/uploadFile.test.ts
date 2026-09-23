@@ -16,6 +16,8 @@ type Handlers = {
 const task = {
   handlers: null as Handlers | null,
   cancelled: 0,
+  /** How many times the SDK was asked to start an upload. A refusal must leave this at 0. */
+  started: 0,
   on(_event: string, next: Handlers['next'], error: Handlers['error'], complete: Handlers['complete']) {
     task.handlers = { next, error, complete };
   },
@@ -27,15 +29,16 @@ const task = {
 vi.mock('../firebase', () => ({ storage: {} }));
 vi.mock('firebase/storage', () => ({
   ref: (_s: unknown, path: string) => ({ path }),
-  uploadBytesResumable: () => task,
+  uploadBytesResumable: () => { task.started++; return task; },
   getDownloadURL: async (r: { path: string }) => 'https://example.test/' + r.path,
 }));
 
-const { uploadFile, UploadStalled } = await import('./uploadFile');
+const { uploadFile, UploadStalled, UploadRefused } = await import('./uploadFile');
 
 beforeEach(() => {
   task.handlers = null;
   task.cancelled = 0;
+  task.started = 0;
 });
 
 /** Let the watchdog's own interval run. */
@@ -113,5 +116,41 @@ describe('an upload that stops moving', () => {
     await p;
     await settle(250); // past the stall window
     expect(task.cancelled).toBe(0);
+  });
+});
+
+describe('a file Storage would refuse', () => {
+  // The refusal used to happen at the far end, after every byte had been sent. On a phone, on
+  // mobile data, with a 12 MB photo. And then the banner offered to do it again.
+  it('is not uploaded at all', async () => {
+    const big = { size: 12 * 1024 * 1024, type: 'image/jpeg' } as unknown as Blob;
+    Object.setPrototypeOf(big, Blob.prototype);
+    await expect(uploadFile('chat-images/g1/u1_1_photo.jpg', big)).rejects.toBeInstanceOf(UploadRefused);
+    expect(task.started, 'the SDK must not be asked to start an upload that cannot land').toBe(0);
+  });
+
+  it('carries why, so the caller can say something true about it', async () => {
+    const big = { size: 12 * 1024 * 1024, type: 'image/jpeg' } as unknown as Blob;
+    Object.setPrototypeOf(big, Blob.prototype);
+    const err = await uploadFile('chat-images/g1/u1_1_photo.jpg', big).catch((e) => e);
+    expect(err.refusal).toEqual({ kind: 'too-large', maxBytes: 10 * 1024 * 1024, size: 12 * 1024 * 1024 });
+  });
+
+  it("uses the explicit contentType over the blob one, since that is what the SDK sends", async () => {
+    const data = { size: 10, type: 'image/png' } as unknown as Blob;
+    Object.setPrototypeOf(data, Blob.prototype);
+    const err = await uploadFile('chat-images/g1/u1_1.png', data, { contentType: 'application/pdf' })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(UploadRefused);
+    expect(err.refusal.kind).toBe('wrong-type');
+  });
+
+  it('leaves an upload it knows nothing about alone', async () => {
+    // No limit for this root, so nothing here may stand in the way of it being attempted.
+    const p = uploadFile('unknown-root/x.bin', new Blob(['x']), { stallMs: 50 });
+    await settle(5);
+    expect(task.started).toBe(1);
+    task.handlers!.complete();
+    await expect(p).resolves.toContain('unknown-root');
   });
 });

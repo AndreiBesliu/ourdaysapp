@@ -82,6 +82,29 @@ aplicatia instalata** ar fi refuzata, tacut, pana la un APK nou.
 conta cel mai mult), dar inca se poate incarca un fisier fara semnatura.
 
 ---
+## 📷 De încercat: o poză MARE în chat
+
+Am reparat ceva ce nu pot vedea cu ochii mei, fiindcă e în spatele autentificării.
+
+**Ce se întâmpla până azi:** o poză peste 10 MB se încărca de tot și abia apoi era refuzată.
+Scria „mesajul nu a putut fi trimis", poza rămânea atașată, și dacă apăsai iar se duceau iar
+10–12 MB din abonament. La infinit.
+
+- [ ] **Deschide o conversație și încearcă să atașezi o poză de peste 10 MB** (una de la o cameră
+      foto, sau o captură mare; pe telefon, o poză la rezoluție maximă).
+      - **Cum arată bine:** refuzul apare **imediat ce o alegi**, nu după așteptare, și scrie
+        ambele numere — cât are poza și cât e voie. Poza **nu** rămâne atașată.
+      - **De ce nu pot eu:** chat-ul cere cont; nu-l pot încărca în browser de aici.
+      - **Ce se strică dacă răspunsul e greșit:** dacă refuzul apare târziu, sau nu apare deloc și
+        poza pleacă și e refuzată la capăt, înseamnă că verificarea nu s-a livrat — și se întoarce
+        exact risipa de trafic de mai sus.
+- [ ] **Și una normală, de 2–3 MB, ca să fiu sigur că n-am strâns prea tare.**
+      - **Cum arată bine:** pleacă exact ca până acum, fără niciun mesaj nou.
+      - **Ce se strică dacă răspunsul e greșit:** dacă și asta e refuzată, am pus limita greșit și
+        nimeni nu mai poate trimite poze deloc. Spune-mi și opresc.
+
+---
+
 ## ⭐ DACA AI CINCI MINUTE, ASTEA SUNT
 
 Trei lucruri, toate din ultimele doua zile, toate cu o consecinta clara daca raspunsul e gresit.
