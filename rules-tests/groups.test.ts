@@ -309,4 +309,60 @@ describe('chat messages inside a group', () => {
     await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm1'), { isPinned: true }));
   });
 
+
+  // ── The two holes the first version of this guard had ─────────────────────────────────
+
+  it('a member cannot pad somebody else receipts with duplicates', async () => {
+    // The first version compared only SETS, so a set-identical but arbitrarily LONGER array
+    // passed. The chat renders `users.length`, so this put Alice name on screen 400 times.
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm1'), {
+      seenBy: [...Array(400).fill(ALICE), BOB],
+    }));
+    // …and he could do it without adding himself at all.
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm1'), {
+      seenBy: Array(400).fill(ALICE),
+    }));
+  });
+
+  it('a member cannot plant a message whose seenBy is not a list', async () => {
+    // `.toSet()` RAISES on a non-list, and the guard sits outside the `||`, so such a document
+    // could never be updated again by anybody — and mark-as-seen is ONE atomic batch over every
+    // unseen message, so one of these discarded every other receipt in it, on every open.
+    await assertFails(setDoc(doc(as(BOB), 'groups', G1, 'messages', 'poison'), {
+      senderId: BOB, text: 'x', seenBy: 'not-a-list',
+    }));
+    await assertFails(setDoc(doc(as(BOB), 'groups', G1, 'messages', 'poison2'), {
+      senderId: BOB, text: 'x', seenBy: [BOB, BOB],
+    }));
+    await assertFails(setDoc(doc(as(BOB), 'groups', G1, 'messages', 'poison3'), {
+      senderId: BOB, text: 'x', seenBy: [ALICE],
+    }));
+  });
+
+  it('and a message ALREADY holding a bad value is repairable, not frozen', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'groups', G1, 'messages', 'm11'), {
+        senderId: ALICE, text: 'was frozen', seenBy: 'not-a-list', reactions: {}, isPinned: false,
+      });
+    });
+    // Its author can still edit and still soft-delete it: the guard asks FIRST whether seenBy
+    // changed, so an untouched bad value is no longer re-judged on every unrelated write.
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', G1, 'messages', 'm11'), { text: 'edit' }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', G1, 'messages', 'm11'), { isDeleted: true }));
+    // And it can be repaired — but only into a claim about yourself.
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm11'), { seenBy: [ALICE, BOB] }));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm11'), { seenBy: [BOB] }));
+  });
+
+  it('a padded list can be cleaned up, since removing duplicates does not change the set', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'groups', G1, 'messages', 'm12'), {
+        senderId: ALICE, text: 'padded', seenBy: [ALICE, ALICE, ALICE], reactions: {}, isPinned: false,
+      });
+    });
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm12'), {
+      seenBy: [ALICE, BOB],
+    }));
+  });
+
 });

@@ -8379,3 +8379,58 @@ Forma actuală nu se poate apăra, iar cea care se poate cere re-cheiere pe uid 
 documente vechi, și un APK care poartă o copie înghețată a bundle-ului. **Nu am luat decizia
 singur**; am pus-o la măsurat separat. Până atunci, oricine din conversație poate încă rescrie
 reacțiile altcuiva.
+
+## 2026-09-23 · Garda livrată acum o oră avea două găuri, una făcută de mine
+
+**Prompt (Andrei):** „Continua". **Model:** Claude Opus 5.
+
+Am pus patru lentile independente pe gaura de valori, iar prima constatare a fost împotriva a ce
+tocmai livrasem. Le-am **măsurat pe emulator** înainte să le cred. Amândouă adevărate.
+
+### 1. Compara doar MULȚIMI, deci un tablou identic ca mulțime dar mai LUNG trecea
+
+Bob putea înlocui confirmările Alicei cu **patru sute de copii ale uid-ului ei** — și **fără
+să se adauge pe el**. Chatul afișează `users.length`, deci numele ei apărea de patru sute de ori.
+
+`arrayUnion` nu produce niciodată un duplicat, deci „tabloul primit n-are duplicate" e chiar
+purtarea clientului, și mărginește lungimea cu numărul de oameni distincți, fără nicio cifră
+inventată. O listă deja umflată se poate **repara**, fiindcă scoaterea duplicatelor nu schimbă
+mulțimea.
+
+### 2. Un `seenBy` care nu e listă îngheța mesajul PENTRU TOTȚI — și eu am adus asta
+
+`.toSet()` pe o non-listă **aruncă**, iar garda stă în afara lui `||`, deci refuza regula
+întreagă. Un mesaj cu `seenBy` string nu mai putea fi marcat, reacționat, fixat, editat de autorul
+lui, nici măcar șters. Și `allow create` constrângea doar `senderId`, deci oricine putea **planta
+unul intenționat**.
+
+Mai rău de-atât: marcarea ca văzut e **UN writeBatch atomic** peste toate mesajele nevăzute. Un
+singur document înghețat arunca confirmările tuturor celorlalte, la fiecare deschidere, la
+nesfârșit — și eșecul e înghițit de un `.catch(console.error)`.
+
+**Regula se evaluează pe documentul REZULTAT**, deci o valoare veche pe un câmp NEATINS era
+rejudecată la fiecare scriere fără legătură. A patra oară când fișierul ăsta e mușcat exact de
+asta, și **prima oară când eu sunt cel care a scris-o**. Acum garda Întreabă Întâi dacă `seenBy`
+s-a schimbat, și `allow create` îl pinuiește pe amândouă căile.
+
+### Proba
+
+Patru mutații, toate prinse: fără verificarea de duplicate **3**, fără `is list` **3**, fără
+scurtcircuitul „neatins" **1**, `create` nepinuit **1**.
+
+**273 de teste de reguli** (de la 267) · `npx tsc -b` verde · lint verde · **1744 teste** · build verde.
+
+### Ce m-a costat și cât
+
+Am spus „8–12 agenți, ~1,5M". Au fost **32 de agenți și 3,94M**. De 2,6 ori peste, și regula mea
+e să nimeresc cifra ÎNAINTE. A meritat — a găsit o regresie pe care o livrasem eu — dar cifra
+a fost greșită.
+
+### RĂMAS: `reactions`
+
+Lentila a **refuzat** premisa mea: forma `{emoji: uid[]}` SE POATE constrânge pe loc, cu o paletă
+de șase emoji și `map.get(emoji, [])` — deci fără migrare. Dar refuzatorul ei a găsit că varianta
+propusă are **aceeași gaură de duplicate** ca `seenBy`, lasă să se creeze coșuri goale pe mesajul
+altuia, **pică două teste existente** (cheia `up`, nu un emoji — verificat de mine: groups:216 și
+chats:79), și o cheie din afara paletei nu mai poate fi ștearsă de niciun client. Deci se poate,
+dar nu în forma propusă. Următoarea felie.

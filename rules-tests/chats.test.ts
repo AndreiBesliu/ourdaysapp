@@ -192,6 +192,22 @@ describe('messages inside it', () => {
     await assertSucceeds(updateDoc(doc(as(BOB), 'chats', AB, 'messages', 'm10'), { seenBy: [BOB] }));
   });
 
+
+  it('neither person may pad the other receipts, nor plant a non-list', async () => {
+    await assertFails(updateDoc(doc(as(BOB), 'chats', AB, 'messages', 'm1'), {
+      seenBy: [...Array(200).fill(ALICE), BOB],
+    }));
+    await assertFails(setDoc(doc(as(BOB), 'chats', AB, 'messages', 'm11'), {
+      senderId: BOB, text: 'x', seenBy: 'not-a-list',
+    }));
+  });
+
+  it('but an ordinary send, which carries seenBy of just the sender, still works', async () => {
+    await assertSucceeds(setDoc(doc(as(BOB), 'chats', AB, 'messages', 'm12'), {
+      senderId: BOB, text: 'hello', seenBy: [BOB], reactions: {}, isPinned: false,
+    }));
+  });
+
 });
 
 describe('typing indicators', () => {

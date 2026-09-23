@@ -136,13 +136,53 @@ service cloud.firestore {
     //
     // Measured on the emulator before it was written, including the cases that must still be
     // ALLOWED: a first-ever mark on an old message, and a no-op re-add.
+    //
+    // ── TWO HOLES IN THE FIRST VERSION OF THIS, BOTH MEASURED ────────────────────────
+    //
+    // 1. It compared only SETS, so a set-identical but arbitrarily LONGER array passed. Bob
+    //    could replace Alice's receipts with four hundred copies of her uid — without adding
+    //    himself at all — and the chat renders `users.length`, so the screen showed her name
+    //    four hundred times. `arrayUnion` never produces a duplicate, so requiring the incoming
+    //    list to have none is exactly the client's own behaviour, and it bounds the length by
+    //    the number of distinct people without inventing a magic number. A list padded before
+    //    this shipped can still be REPAIRED, because removing duplicates does not change the
+    //    set, so the 'nobody may leave' half still holds.
+    //
+    // 2. `.toSet()` on a non-list RAISES, and this guard sits outside the `||`, so a message
+    //    whose stored `seenBy` was not a list could never be updated again BY ANYBODY — not
+    //    marked seen, not reacted to, not edited by its author, not even soft-deleted. And
+    //    `allow create` constrains only `senderId`, so any member could plant one deliberately.
+    //    Worse than one dead message: mark-as-seen is a single atomic writeBatch over every
+    //    unseen message, so one frozen document discarded the receipts for all the others, on
+    //    every open, forever.
+    //
+    //    Two answers, both needed. The create rule now refuses a `seenBy` that is not a list of
+    //    only the sender. And this guard asks FIRST whether `seenBy` changed at all: a rule is
+    //    evaluated on the RESULTING document, so an untouched bad value was being re-judged on
+    //    every unrelated write. That is the fourth time this file has been bitten by exactly
+    //    that, and the first time I have been the one to write it.
+    function seenByShapeOk(v) {
+      return v is list && v.toSet().size() == v.size();
+    }
     function onlySelfJoinsSeenBy() {
-      return request.resource.data.get('seenBy', []).toSet()
-               .difference(resource.data.get('seenBy', []).toSet())
-               .hasOnly([request.auth.uid])
-        && resource.data.get('seenBy', []).toSet()
-             .difference(request.resource.data.get('seenBy', []).toSet())
-             .size() == 0;
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['seenBy'])
+        || (
+          seenByShapeOk(request.resource.data.get('seenBy', []))
+          && (
+            // The ordinary case: a well-formed stored value.
+            (resource.data.get('seenBy', []) is list
+             && request.resource.data.get('seenBy', []).toSet()
+                  .difference(resource.data.get('seenBy', []).toSet())
+                  .hasOnly([request.auth.uid])
+             && resource.data.get('seenBy', []).toSet()
+                  .difference(request.resource.data.get('seenBy', []).toSet())
+                  .size() == 0)
+            // Repairing broken data: allowed, but only into a claim about yourself.
+            || (!(resource.data.get('seenBy', []) is list)
+                && request.resource.data.get('seenBy', []).toSet()
+                     .hasOnly([request.auth.uid]))
+          )
+        );
     }
 
     function profileShapeOk() {
@@ -253,8 +293,13 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if isMemberOfGroup(groupId);
         // Sender must be the authenticated user (prevents impersonating a member).
+        // `seenBy` pinned at CREATE too. Without it a member could plant a message whose
+        // `seenBy` is a string, which the update guard then raises on — freezing the document
+        // for everybody and poisoning every mark-as-seen batch that touches it.
         allow create: if isMemberOfGroup(groupId) &&
-          request.resource.data.senderId == request.auth.uid;
+          request.resource.data.senderId == request.auth.uid &&
+          seenByShapeOk(request.resource.data.get('seenBy', [])) &&
+          request.resource.data.get('seenBy', []).toSet().hasOnly([request.auth.uid]);
         // `senderId` is PINNED, and without that line "sender pinned to the caller" on create
         // bought nothing: send a message, then edit it and rewrite `senderId` to another member.
         // The read rule shows the whole conversation to the group, so what everybody then sees is
@@ -387,7 +432,10 @@ service cloud.firestore {
         allow read: if inChat();
         // Sender pinned to the caller, exactly as in a group: the read rule grants the whole
         // conversation, so an unpinned author field is impersonation.
-        allow create: if inChat() && request.resource.data.senderId == request.auth.uid;
+        // `seenBy` pinned at create, for the same reason as the group's.
+        allow create: if inChat() && request.resource.data.senderId == request.auth.uid &&
+          seenByShapeOk(request.resource.data.get('seenBy', [])) &&
+          request.resource.data.get('seenBy', []).toSet().hasOnly([request.auth.uid]);
         // Pinned for the same reason as the group's, and it matters more here: a direct chat has
         // exactly two people in it, so a forged author is unambiguously the other one.
         // Same `seenBy` constraint as the group's, and it reads worse here: a direct chat has
