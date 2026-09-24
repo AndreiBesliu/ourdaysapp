@@ -134,8 +134,8 @@ exports.sendDueReminders = (0, scheduler_1.onSchedule)({ schedule: "every 5 minu
                     type: "reminder",
                     titleKey: "notifReminder",
                     titleParam: d.title,
-                    bodyKey: "notifReminderAt",
-                    param: d.clock,
+                    bodyKey: d.bodyKey,
+                    param: d.bodyParam,
                     data: { route: "/", eventId: d.eventId },
                 });
                 counts.sent += 1;

@@ -15,8 +15,24 @@
 //     already written something. So this splits in two: `readFriendship` during the read phase,
 //     and the `apply` it returns during the write phase.
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.authIdentityOf = authIdentityOf;
 exports.readFriendship = readFriendship;
+const admin = require("firebase-admin");
+const senderIdentity_1 = require("./senderIdentity");
 const cap = (s) => String(s || "").slice(0, 80);
+/** A person's email and whether it is verified, from their Auth record. Null when unknown. */
+async function authIdentityOf(uid) {
+    if (!uid)
+        return { email: null, verified: false };
+    try {
+        const user = await admin.auth().getUser(uid);
+        const email = (0, senderIdentity_1.trustedEmail)(user.email);
+        return { email, verified: email !== null && user.emailVerified === true };
+    }
+    catch (_a) {
+        return { email: null, verified: false };
+    }
+}
 /**
  * Read everything needed to make `uidA` and `uidB` mutual friends.
  *
@@ -24,7 +40,7 @@ const cap = (s) => String(s || "").slice(0, 80);
  * each have to guard it.
  */
 async function readFriendship(tx, db, uidA, uidB, hints = {}) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f;
     if (!uidA || !uidB || uidA === uidB) {
         return { apply: () => { }, aName: "", bName: "", isNew: false };
     }
@@ -34,14 +50,16 @@ async function readFriendship(tx, db, uidA, uidB, hints = {}) {
         tx.get(aRef), tx.get(bRef),
         tx.get(db.doc(`profiles/${uidA}`)), tx.get(db.doc(`profiles/${uidB}`)),
     ]);
-    const aEmail = (((_a = aUser.data()) === null || _a === void 0 ? void 0 : _a.email) || hints.aEmail || "").toLowerCase() || null;
-    const bEmail = (((_b = bUser.data()) === null || _b === void 0 ? void 0 : _b.email) || hints.bEmail || "").toLowerCase() || null;
-    const aName = cap(((_c = aProfile.data()) === null || _c === void 0 ? void 0 : _c.name) || ((_d = aUser.data()) === null || _d === void 0 ? void 0 : _d.name) || hints.aName ||
+    // Emails from Auth only; names are self-chosen wherever they come from, so the profile is as
+    // good a source as any — but never a field on the request that brought the two together.
+    const aEmail = (0, senderIdentity_1.trustedEmail)(hints.aEmail);
+    const bEmail = (0, senderIdentity_1.trustedEmail)(hints.bEmail);
+    const aName = cap(((_a = aProfile.data()) === null || _a === void 0 ? void 0 : _a.name) || ((_b = aUser.data()) === null || _b === void 0 ? void 0 : _b.name) ||
         (aEmail || "").split("@")[0] || "Friend");
-    const bName = cap(((_e = bProfile.data()) === null || _e === void 0 ? void 0 : _e.name) || ((_f = bUser.data()) === null || _f === void 0 ? void 0 : _f.name) || hints.bName ||
+    const bName = cap(((_c = bProfile.data()) === null || _c === void 0 ? void 0 : _c.name) || ((_d = bUser.data()) === null || _d === void 0 ? void 0 : _d.name) ||
         (bEmail || "").split("@")[0] || "Friend");
-    const aFriends = Array.isArray((_g = aUser.data()) === null || _g === void 0 ? void 0 : _g.friends) ? aUser.data().friends : [];
-    const bFriends = Array.isArray((_h = bUser.data()) === null || _h === void 0 ? void 0 : _h.friends) ? bUser.data().friends : [];
+    const aFriends = Array.isArray((_e = aUser.data()) === null || _e === void 0 ? void 0 : _e.friends) ? aUser.data().friends : [];
+    const bFriends = Array.isArray((_f = bUser.data()) === null || _f === void 0 ? void 0 : _f.friends) ? bUser.data().friends : [];
     const isNew = !aFriends.some((f) => f && f.uid === uidB);
     // Filter then push: exactly one entry per uid on each side, and an existing entry has its name
     // and email refreshed rather than duplicated.

@@ -207,7 +207,11 @@ exports.redeemGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
             }
             joinsGroup = !members.includes(uid);
         }
-        const friendship = await (0, friendship_1.readFriendship)(tx, db, inviter, uid, { bEmail: email });
+        // Both emails from Auth: the redeemer's from their token, the inviter's from their record.
+        const inviterAuth = await (0, friendship_1.authIdentityOf)(inviter);
+        const friendship = await (0, friendship_1.readFriendship)(tx, db, inviter, uid, {
+            aEmail: inviterAuth.email, bEmail: email,
+        });
         // ── WRITE PHASE ───────────────────────────────────────────────────────────
         if (joinsGroup && groupRef) {
             tx.update(groupRef, { members: admin.firestore.FieldValue.arrayUnion(uid) });

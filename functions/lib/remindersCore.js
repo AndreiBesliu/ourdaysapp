@@ -16,6 +16,7 @@
 // window boundary, and a boundary bug is a reminder that never fires or fires twice — neither of
 // which anybody reports, because there is nothing to see.
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.bodyFor = bodyFor;
 exports.dueIn = dueIn;
 const eventTime_1 = require("./eventTime");
 /**
@@ -27,6 +28,35 @@ const eventTime_1 = require("./eventTime");
  * a per-recipient instant would need a per-recipient dedupe key.
  */
 const ALL_DAY_HOUR = "09:00";
+const DAY_MS = 86400000;
+/** The calendar day of instant `ms` in `zone`, as `yyyy-MM-dd`. */
+function dayIn(ms, zone) {
+    return new Date(ms + (0, eventTime_1.zoneOffsetMs)(ms, zone)).toISOString().slice(0, 10);
+}
+/**
+ * What the reminder says about WHEN.
+ *
+ * It said "Starts at 09:00" in every case. The eve of an all-day event therefore read as "today at
+ * nine" — and nine is only where an all-day reminder is placed, not when anything starts. A timed
+ * event reminded a day ahead said "Starts at 14:00" with no day either. So: relative to the day the
+ * reminder arrives, in the event's zone, which every language can say without formatting a date —
+ * today, tomorrow, and past that the date itself (ISO, the one form nobody misreads).
+ */
+function bodyFor(day, at, zone, clockText) {
+    const ahead = Math.round((Date.parse(`${day}T00:00:00.000Z`) - Date.parse(`${dayIn(at, zone)}T00:00:00.000Z`)) / DAY_MS);
+    if (clockText === null) {
+        if (ahead <= 0)
+            return { bodyKey: "notifReminderAllDayToday", bodyParam: "" };
+        if (ahead === 1)
+            return { bodyKey: "notifReminderAllDayTomorrow", bodyParam: "" };
+        return { bodyKey: "notifReminderAllDayOn", bodyParam: day };
+    }
+    if (ahead <= 0)
+        return { bodyKey: "notifReminderAt", bodyParam: clockText };
+    if (ahead === 1)
+        return { bodyKey: "notifReminderTomorrowAt", bodyParam: clockText };
+    return { bodyKey: "notifReminderOn", bodyParam: `${day}, ${clockText}` };
+}
 /**
  * Which reminders fall inside (from, to].
  *
@@ -68,17 +98,11 @@ function dueIn(occurrences, ownerZones, from, to) {
         const recipients = [...new Set([ownerId, ...assignees, ...single])].filter(Boolean);
         if (recipients.length === 0)
             continue;
-        out.push({
+        out.push(Object.assign({ 
             // Per OCCURRENCE, not per event: a weekly series has to remind every week.
-            key: `${ev.id}__${occ.day}`,
-            eventId: ev.id,
-            day: occ.day,
-            title: (typeof ev.title === "string" ? ev.title : "").slice(0, 120),
-            at,
+            key: `${ev.id}__${occ.day}`, eventId: ev.id, day: occ.day, title: (typeof ev.title === "string" ? ev.title : "").slice(0, 120), at,
             zone,
-            recipients,
-            clock: ((_a = (0, eventTime_1.displayTime)({ date: `${occ.day}T00:00:00.000Z`, time: clock, timezone: zone }, zone)) === null || _a === void 0 ? void 0 : _a.text) || clock,
-        });
+            recipients }, bodyFor(occ.day, at, zone, hasClock ? (((_a = (0, eventTime_1.displayTime)({ date: `${occ.day}T00:00:00.000Z`, time: clock, timezone: zone }, zone)) === null || _a === void 0 ? void 0 : _a.text) || clock) : null)));
     }
     return out;
 }

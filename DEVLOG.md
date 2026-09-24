@@ -9060,3 +9060,51 @@ harness-ul urmează ce raportează CLI-ul, nu un port scris de mână.
 
 `npx tsc -b` · `tsc` pe functions · lint · **1848 de teste** · **312 pe emulator** · test:tz · build
 — verzi.
+
+## 2026-09-24 · C — Node 22 pe Cloud Functions, înainte ca Node 20 să nu mai poată fi livrat
+
+**Prompt (Andrei):** C: „`functions/package.json` are `"node": "20"`. Verifică pe documentația Google
+data de decomisionare pentru Node 20 în Cloud Functions și treci pe Node 22, cu firebase-functions
+6/7 și firebase-admin 13/14." **Model:** Claude Opus 5.5.
+
+### Documentația Google, citită azi (`docs.cloud.google.com/functions/docs/runtime-support`)
+
+| Runtime | Depreciat | **Decomisionat** |
+|---|---|---|
+| Node.js 20 (ce rula) | 30.04.2026 — deja trecut | **30.10.2026 — peste 36 de zile** |
+| Node.js 22 | 30.04.2027 | 31.10.2027 |
+
+După decomisionare, citat: *„you can no longer create new workloads or update existing workloads"*,
+iar cele care rulează *„may be disabled"*. Deci de pe 30 octombrie **nu se mai poate livra nicio
+funcție** — și toate reparațiile de server de azi (A.2, A.5, A.6, A.8, A.9) cer un deploy de funcții.
+**De aceea nu l-am lăsat în backlog.**
+
+### Ce s-a schimbat
+
+- `engines.node` **22**, `firebase-functions` **5.1.1 → 6.6.0**, `firebase-admin` **12.7.0 → 13.10.0**,
+  `@types/node` 22. Am ales cea mai mică treaptă care respectă cererea ta: cele mai puține schimbări
+  incompatibile, ambele suportate mult după 2027. Singura ruptură mare a v6 (exportul rădăcină devine
+  v2) nu ne atinge: codul importă doar `firebase-functions/v2/*`. Perechea e compatibilă ca peer.
+- **CI pe Node 22.**
+
+### Ce am găsit pe drum: `functions/lib` rămăsese în urmă
+
+`lib/` (codul compilat) **e în git**, și până pe 22.09 s-a comis odată cu sursa. **Cele cinci commit-uri
+de funcții de azi nu l-au reconstruit** — am rulat doar `tsc --noEmit`, care **nu e build** (memoria
+mea chiar are regula asta). Deploy-ul ar fi fost corect, fiindcă predeploy-ul construiește, dar
+repo-ul spunea una în `src/` și alta în `lib/`. **Reconstruit și comis acum.** Plus o plasă în CI:
+construiește funcțiile și pică dacă `lib/` diferă de sursă.
+
+### Proba
+
+- tsc pe functions verde;
+- **1848 de teste**;
+- **312 pe emulator**, inclusiv cele **9 teste de callable** care rulează handlerele reale pe noile
+  SDK-uri (tranzacții, `FieldValue`, interogări);
+- build-ul real de funcții verde.
+
+**Scris cinstit:** testele au rulat pe Node 26, cel de pe mașina asta, nu pe 22. Pe 22 rulează abia
+CI-ul și deploy-ul. Iar noua politică npm a sărit local două scripturi postinstall (protobufjs,
+@firebase/util) — neesențiale într-un server; Cloud Build le rulează normal.
+
+**Deploy de functions: doar cu confirmarea ta**, și înainte de 30.10.

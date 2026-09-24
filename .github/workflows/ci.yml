@@ -19,7 +19,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # 22, the Cloud Functions runtime since 24.09.2026. Node 20 is decommissioned there on
+          # 30.10.2026, after which functions on it can no longer even be deployed.
+          node-version: '22'
           cache: npm
 
       - name: Install
@@ -34,6 +36,16 @@ jobs:
       - name: Typecheck functions
         working-directory: functions
         run: npx tsc --noEmit -p .
+
+      # functions/lib (the compiled output) is COMMITTED, and on 24.09.2026 it lagged its source for
+      # five commits: each ran `tsc --noEmit`, which is not a build. Deploys were safe (the predeploy
+      # builds) but the repository said one thing in src/ and another in lib/. This fails CI when
+      # they disagree.
+      - name: Compiled functions match their source
+        run: |
+          npm --prefix functions run build
+          git diff --exit-code --stat -- functions/lib
+          test -z "$(git status --porcelain -- functions/lib)"
 
       - name: Typecheck
         run: npx tsc -b

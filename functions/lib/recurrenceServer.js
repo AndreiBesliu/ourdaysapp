@@ -37,46 +37,15 @@ exports.frequencyOf = frequencyOf;
 exports.lookbackMsFor = lookbackMsFor;
 exports.expandInWindow = expandInWindow;
 const eventTime_1 = require("./eventTime");
-exports.FREQUENCIES = ["daily", "weekly", "monthly", "yearly"];
+const recurrenceCore_1 = require("./recurrenceCore");
+Object.defineProperty(exports, "FREQUENCIES", { enumerable: true, get: function () { return recurrenceCore_1.FREQUENCIES; } });
 /** Frequencies whose whole horizon fits inside 400 days back. */
 exports.SHORT_FREQUENCIES = ["daily", "weekly", "monthly"];
 const DAY_MS = 86400000;
 const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
-/** Advance by one step, in UTC. Month and year steps clamp, matching `date-fns` behaviour. */
-function advance(ms, freq) {
-    const d = new Date(ms);
-    switch (freq) {
-        case "daily": return ms + DAY_MS;
-        case "weekly": return ms + 7 * DAY_MS;
-        case "monthly": {
-            const day = d.getUTCDate();
-            const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1, d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds()));
-            const last = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
-            next.setUTCDate(Math.min(day, last));
-            return next.getTime();
-        }
-        case "yearly": {
-            const day = d.getUTCDate();
-            const next = new Date(Date.UTC(d.getUTCFullYear() + 1, d.getUTCMonth(), 1, d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds()));
-            const last = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
-            next.setUTCDate(Math.min(day, last));
-            return next.getTime();
-        }
-    }
-}
-/** The client's horizon, from the series start. Mirrors `getRecurrenceEndDate`. */
-function horizonEnd(startMs, freq) {
-    const d = new Date(startMs);
-    switch (freq) {
-        case "daily": return startMs + 30 * DAY_MS;
-        case "weekly": return startMs + 52 * 7 * DAY_MS;
-        case "monthly": return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 12, d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds());
-        case "yearly": return Date.UTC(d.getUTCFullYear() + 5, d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds());
-    }
-}
 function frequencyOf(ev) {
     const f = ev.recurrenceRule && ev.recurrenceRule.frequency;
-    return typeof f === "string" && exports.FREQUENCIES.includes(f)
+    return typeof f === "string" && recurrenceCore_1.FREQUENCIES.includes(f)
         ? f
         : null;
 }
@@ -91,12 +60,27 @@ function lookbackMsFor(freq) {
  * an edited occurrence and its ghost can never both be emitted.
  */
 function expandInWindow(docs, fromDay, toDay) {
+    // Keyed by the day the override REPLACES. A new override stores it (`overrideDate`); the dedupe
+    // used to use the override's own `date` instead, so a daily occurrence moved from the 22nd to the
+    // 23rd suppressed the REAL occurrence on the 23rd — no reminder for it, missing from the digest.
+    //
+    // An override written BEFORE `overrideDate` existed still keys on its date, deliberately. For
+    // that data, "moved onto another occurrence" and "its exception went missing" look identical,
+    // and the second is what `digestEvents.test` pins: without this, the edited occurrence AND its
+    // ghost both reach the digest. I removed it once, and that test caught it. The price is that a
+    // legacy override which was also MOVED can still hide a real occurrence; every override made
+    // from now on carries `overrideDate` and cannot.
     const taken = new Set();
     for (const ev of docs) {
         const parent = ev.overrideOfParent;
-        if (typeof parent === "string" && parent && typeof ev.date === "string") {
-            taken.add(`${parent}|${ev.date.slice(0, 10)}`);
-        }
+        if (typeof parent !== "string" || !parent)
+            continue;
+        const stored = ev.overrideDate;
+        const replaced = typeof stored === "string" && /^\d{4}-\d{2}-\d{2}$/.test(stored)
+            ? stored
+            : typeof ev.date === "string" ? ev.date.slice(0, 10) : null;
+        if (replaced)
+            taken.add(`${parent}|${replaced}`);
     }
     const out = [];
     for (const ev of docs) {
@@ -117,29 +101,25 @@ function expandInWindow(docs, fromDay, toDay) {
                 out.push({ source: ev, day, virtual: false });
             continue;
         }
-        const startMs = Date.parse(ev.date);
-        if (!Number.isFinite(startMs))
+        // The SAME days the calendar shows, from the shared core: computed from the series start in
+        // UTC day labels. This loop used to step in UTC from the PREVIOUS occurrence while the calendar
+        // stepped the local clock, and the two disagreed on moved series, west of Greenwich, and every
+        // monthly or yearly series whose day a short month clamped.
+        const startDay = (0, recurrenceCore_1.seriesStartDay)(ev.date);
+        if (!startDay)
             continue;
         const exceptions = new Set((Array.isArray(ev.recurrenceExceptions) ? ev.recurrenceExceptions : [])
             .filter((x) => typeof x === "string"));
-        const end = horizonEnd(startMs, freq);
-        const toMs = Date.parse(`${toDay}T23:59:59.999Z`);
-        let cur = startMs;
-        // A hard step cap: a corrupt `date` plus a daily rule could otherwise spin. The horizon
-        // already bounds this; the cap is the guard against a value that defeats the horizon.
-        for (let steps = 0; steps < 4000 && cur <= end && cur <= toMs; steps++) {
-            const day = dayKey(cur);
-            if (lastDayOf(day) >= fromDay) {
-                const suppressed = freq === "daily"
-                    ? exceptions.has(day)
-                    : exceptions.has(day) ||
-                        exceptions.has(dayKey(cur - DAY_MS)) ||
-                        exceptions.has(dayKey(cur + DAY_MS));
-                if (!suppressed && !taken.has(`${ev.id}|${day}`)) {
-                    out.push({ source: ev, day, virtual: true });
-                }
+        for (const day of (0, recurrenceCore_1.occurrenceDaysInWindow)(startDay, freq, fromDay, toDay, spanDays)) {
+            const ms = Date.parse(`${day}T00:00:00.000Z`);
+            const suppressed = freq === "daily"
+                ? exceptions.has(day)
+                : exceptions.has(day) ||
+                    exceptions.has(dayKey(ms - DAY_MS)) ||
+                    exceptions.has(dayKey(ms + DAY_MS));
+            if (!suppressed && !taken.has(`${ev.id}|${day}`)) {
+                out.push({ source: ev, day, virtual: true });
             }
-            cur = advance(cur, freq);
         }
     }
     out.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));

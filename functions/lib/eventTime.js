@@ -113,7 +113,12 @@ function zoneOffsetMs(utcMs, zone) {
     const get = (type) => { var _a, _b; return Number((_b = (_a = parts.find((p) => p.type === type)) === null || _a === void 0 ? void 0 : _a.value) !== null && _b !== void 0 ? _b : 0); };
     // `hour` comes back as 24 for midnight in some engines under hour12:false.
     const asIfUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour') % 24, get('minute'), get('second'));
-    return asIfUtc - utcMs;
+    // Against the instant truncated to its SECOND, because that is all `formatToParts` reports. The
+    // raw instant's milliseconds used to leak into the answer: at 09:00:00.437 Bucharest came out as
+    // 3 h minus 437 ms, and `zoneLabel` floored that to "UTC+02:59". Every real offset is a whole
+    // number of minutes, and now so is this.
+    const wholeSecond = utcMs - (((utcMs % 1000) + 1000) % 1000);
+    return asIfUtc - wholeSecond;
 }
 /**
  * The day a LOCAL Date falls on, as `yyyy-MM-dd` — the label a calendar cell carries.

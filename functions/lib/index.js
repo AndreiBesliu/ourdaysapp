@@ -1,8 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminSetAiConfig = exports.adminGetAiConfig = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
+exports.adminGetAiLedger = exports.adminSetAiConfig = exports.adminGetAiConfig = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onGroupInviteCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
+exports.adminBackfillExpenses = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
+const v2_1 = require("firebase-functions/v2");
+const bootstrapAdmins_1 = require("./bootstrapAdmins");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 const genai_1 = require("@google/genai");
@@ -16,6 +19,8 @@ const aiLimits_1 = require("./aiLimits");
 const aiConfigProvenance_1 = require("./aiConfigProvenance");
 const aiSpendMerge_1 = require("./aiSpendMerge");
 const friendship_1 = require("./friendship");
+const senderIdentity_1 = require("./senderIdentity");
+const overrideRsvps_1 = require("./overrideRsvps");
 const notify_1 = require("./notify");
 const errorGrouping_1 = require("./errorGrouping");
 const errorFixes_1 = require("./errorFixes");
@@ -50,6 +55,10 @@ Object.defineProperty(exports, "logErrorDigest", { enumerable: true, get: functi
 var games_1 = require("./games");
 Object.defineProperty(exports, "expireIdleGames", { enumerable: true, get: function () { return games_1.expireIdleGames; } });
 admin.initializeApp();
+// A ceiling on instances per function. There was none anywhere, so a burst — a bug in a client
+// loop, or somebody calling a callable in a loop — could scale out and bill without limit. Ten is
+// far above what eight people need, and low enough to cap a runaway.
+(0, v2_1.setGlobalOptions)({ maxInstances: 10 });
 // App Check enforcement is toggled via env so it can be switched on AFTER the
 // reCAPTCHA key is registered and verified in monitor mode in the Firebase
 // Console — avoids locking out clients that aren't yet sending tokens. Set
@@ -85,7 +94,10 @@ const WARLORD_TURN_TIMEOUT_HOURS = Number(process.env.WARLORD_TURN_TIMEOUT_HOURS
 // to clients; only the Admin SDK writes it). A VERIFIED email in this bootstrap
 // list is auto-granted admin on first admin call (so the owner works out of the
 // box, no script) — verification required to block email-squatting.
-const BOOTSTRAP_ADMIN_EMAILS = ["besliandrei@gmail.com"];
+// From `functions/.env` (gitignored), not from the source: the repository is PUBLIC. Unset, there
+// is simply no bootstrap — `admins/{uid}` still grants access — but also no way back in if every
+// admin were removed, which is what this exists for. See bootstrapAdmins.ts.
+const BOOTSTRAP_ADMIN_EMAILS = (0, bootstrapAdmins_1.bootstrapAdminEmails)(process.env.BOOTSTRAP_ADMIN_EMAILS);
 // Per-user, per-day quota counter (admin-only `*_usage` collections — clients
 // have no matching rule → denied). Returns true if within today's limit (and
 // records the use), false if over. Shared by the AI callables, the AI trigger,
@@ -391,8 +403,25 @@ exports.onFriendRequestCreated = (0, firestore_1.onDocumentCreated)("friend_requ
     const fromId = typeof fr.fromId === "string" ? fr.fromId : "";
     if (!fromId)
         return;
+    // WHO sent it, from sources the sender cannot write — stamped before anything below can
+    // return early, since the recipient's screen shows this and nothing else. See senderIdentity.ts.
+    let stampName = "";
     try {
-        const db = admin.firestore();
+        const [identity, prof] = await Promise.all([
+            (0, friendship_1.authIdentityOf)(fromId), admin.firestore().doc(`profiles/${fromId}`).get(),
+        ]);
+        const sender = (0, senderIdentity_1.senderStamp)({
+            authEmail: identity.email, authVerified: identity.verified, profileName: (_b = prof.data()) === null || _b === void 0 ? void 0 : _b.name,
+        });
+        stampName = sender.name;
+        await event.data.ref.update({ sender });
+    }
+    catch (err) {
+        // Fires once; a failure is permanent. The screen then says it could not confirm the sender,
+        // which is the honest answer — and this makes the failure visible to the owner.
+        void logServerError(`friend-request sender stamp failed: ${String(err)}`, "friends:stamp", { uid: fromId });
+    }
+    try {
         // Two ways a request is addressed, and the common one is the second.
         //
         //   toId   — one tap from a group member's row. Direct.
@@ -437,15 +466,10 @@ exports.onFriendRequestCreated = (0, firestore_1.onDocumentCreated)("friend_requ
             void logServerError(`friend-request notification suppressed: daily limit ${NOTIF_DAILY_LIMIT} reached`, "friends:notifyQuota", { uid: fromId });
             return;
         }
-        const prof = await db.doc(`profiles/${fromId}`).get();
-        const rawSender = (_b = prof.data()) === null || _b === void 0 ? void 0 : _b.name;
-        // Clamped here as well as in the rules: this string becomes a push notification on somebody
-        // else's phone, and a value that arrives from another document is not this function's to
-        // trust however tightly another file promises to hold it.
-        const senderName = (typeof rawSender === "string" && rawSender.trim()
-            ? rawSender.trim().slice(0, 40)
-            : (typeof fr.fromEmail === "string" ? fr.fromEmail.split("@")[0].slice(0, 40) : ""))
-            || "Someone";
+        // The stamp's name: the profile name, else the Auth email's local part. It used to fall back on
+        // the request's own `fromEmail`, which the sender writes — so the push on somebody else's
+        // phone could say anything they liked. Clamped inside senderStamp.
+        const senderName = stampName || "Someone";
         await (0, notify_1.notify)({
             userIds: [toId],
             createdBy: fromId,
@@ -458,6 +482,36 @@ exports.onFriendRequestCreated = (0, firestore_1.onDocumentCreated)("friend_requ
     }
     catch (err) {
         console.error("onFriendRequestCreated: could not notify", err);
+    }
+});
+// The same stamp for a group invitation, plus the group's REAL name. The person invited is not a
+// member yet, so the rules do not let their client read the group — the server can. Before this,
+// their screen showed the `groupName` and `fromEmail` the sender typed. See senderIdentity.ts.
+exports.onGroupInviteCreated = (0, firestore_1.onDocumentCreated)("group_invites/{inviteId}", async (event) => {
+    var _a, _b, _c;
+    const inv = (_a = event.data) === null || _a === void 0 ? void 0 : _a.data();
+    if (!inv)
+        return;
+    const fromId = typeof inv.fromId === "string" ? inv.fromId : "";
+    if (!fromId)
+        return;
+    try {
+        const db = admin.firestore();
+        const groupId = typeof inv.groupId === "string" && inv.groupId ? inv.groupId : "";
+        const [identity, prof, group] = await Promise.all([
+            (0, friendship_1.authIdentityOf)(fromId),
+            db.doc(`profiles/${fromId}`).get(),
+            groupId ? db.doc(`groups/${groupId}`).get() : Promise.resolve(null),
+        ]);
+        const sender = (0, senderIdentity_1.senderStamp)({
+            authEmail: identity.email, authVerified: identity.verified, profileName: (_b = prof.data()) === null || _b === void 0 ? void 0 : _b.name,
+        });
+        const verifiedGroupName = group && group.exists ? (0, senderIdentity_1.stampedGroupName)((_c = group.data()) === null || _c === void 0 ? void 0 : _c.name) : null;
+        await event.data.ref.update(verifiedGroupName ? { sender, verifiedGroupName } : { sender });
+    }
+    catch (err) {
+        // Fires once. The screen then says it could not confirm the sender — the honest answer.
+        void logServerError(`group-invite sender stamp failed: ${String(err)}`, "invites:stamp", { uid: fromId });
     }
 });
 exports.onGameCreated = (0, firestore_1.onDocumentCreated)("games/{gameId}", async (event) => {
@@ -945,7 +999,7 @@ const OVERRIDE_FIELDS = [
     "rsvpEnabled", "rsvps", "visibleTo", "hiddenFrom",
 ];
 exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
-    var _a, _b, _c, _d;
+    var _a, _b;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid) {
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
@@ -1004,17 +1058,85 @@ exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
     const assigneeIds = requested.filter((id) => allowed.has(id) && id !== "ai_assistant");
     safe.assigneeIds = assigneeIds;
     safe.assigneeId = (_b = assigneeIds[0]) !== null && _b !== void 0 ? _b : null;
-    const overrideRef = db.collection("events").doc();
-    const batch = db.batch();
-    batch.set(overrideRef, Object.assign(Object.assign({}, safe), { ownerId: p.ownerId, groupId: (_c = p.groupId) !== null && _c !== void 0 ? _c : null, 
-        // Legacy and inert, but carried from the PARENT rather than from the caller: it is not the
-        // client's to state on a document it does not own.
-        sharedWithFamily: (_d = p.sharedWithFamily) !== null && _d !== void 0 ? _d : false, updatedAt: new Date().toISOString(), overrideOfParent: parentId, createdAt: new Date().toISOString() }));
-    batch.update(parentRef, {
-        recurrenceExceptions: admin.firestore.FieldValue.arrayUnion(overrideDate),
+    // RSVPs: everybody else's from the PARENT, only the caller's own from the request. The loop above
+    // copied the whole map from the client, on the Admin SDK — so the per-person rule was never
+    // consulted and one member could answer for the family. See overrideRsvps.ts.
+    const rsvps = (0, overrideRsvps_1.overrideRsvps)(p.rsvps, data.rsvps, uid);
+    if (rsvps)
+        safe.rsvps = rsvps;
+    else
+        delete safe.rsvps;
+    // ── ONE override per occurrence ───────────────────────────────────────────────────────────────
+    //
+    // This used to create a NEW override on every call. A second member with the occurrence still
+    // open from before the first one materialised it (CalendarHome keeps the old virtual row) got a
+    // second override for the same day, and the event then showed twice.
+    //
+    // Now it is a transaction: an override already made for this date is RETURNED, not duplicated.
+    // What happens to the caller's `data` then depends on what the caller meant:
+    //   * materialising (the details window, which then writes its one change to the returned id)
+    //     — nothing is applied; the existing override's edits must not be overwritten by a copy of
+    //     the parent that the caller happened to be holding;
+    //   * `apply: true` (the edit form, whose data IS the edit) — applied to the existing override,
+    //     under the same rules as a first edit: other people's RSVPs and assignees kept.
+    //
+    // `overrideDate` is now stored ON the override. The server's dedupe used to key on the
+    // override's own `date`, so moving an occurrence onto another occurrence's day hid that REAL
+    // occurrence from reminders and the digest.
+    const apply = request.data.apply === true;
+    const events = db.collection("events");
+    return db.runTransaction(async (tx) => {
+        var _a, _b, _c, _d;
+        const fresh = await tx.get(parentRef);
+        if (!fresh.exists)
+            throw new https_1.HttpsError("not-found", "Parent event not found.");
+        const exceptions = Array.isArray((_a = fresh.data()) === null || _a === void 0 ? void 0 : _a.recurrenceExceptions)
+            ? fresh.data().recurrenceExceptions
+            : [];
+        // `| undefined` said out loud: `docs[0]` of an empty result IS undefined, whatever the
+        // inferred type claims.
+        let existing = (await tx.get(events.where("overrideOfParent", "==", parentId).where("overrideDate", "==", overrideDate).limit(1))).docs[0];
+        if (!existing && exceptions.includes(overrideDate)) {
+            // The date is already excepted, so an override was made before `overrideDate` existed, or
+            // the occurrence was deleted. A legacy override that was not MOVED sits on its own day.
+            const legacy = await tx.get(events.where("overrideOfParent", "==", parentId));
+            existing = legacy.docs.find((d) => {
+                const x = d.data();
+                return typeof x.overrideDate !== "string" && typeof x.date === "string" && x.date.slice(0, 10) === overrideDate;
+            });
+            // Deleted (or a legacy override moved elsewhere): re-creating it would resurrect something
+            // somebody removed, from a stale screen.
+            if (!existing)
+                throw new https_1.HttpsError("failed-precondition", "That occurrence no longer exists.");
+        }
+        if (existing) {
+            if (apply) {
+                const cur = existing.data();
+                const upd = Object.assign(Object.assign({}, safe), { updatedAt: new Date().toISOString() });
+                // Recomputed against THIS override, not the parent: its RSVPs and assignees are the ones
+                // that apply on this date.
+                const curAssignees = Array.isArray(cur.assigneeIds)
+                    ? cur.assigneeIds.filter((x) => typeof x === "string") : [];
+                const mayAssign = new Set([...curAssignees, ...parentAssignees, uid]);
+                const keptAssignees = requested.filter((id) => mayAssign.has(id) && id !== "ai_assistant");
+                upd.assigneeIds = keptAssignees;
+                upd.assigneeId = (_b = keptAssignees[0]) !== null && _b !== void 0 ? _b : null;
+                const merged = (0, overrideRsvps_1.overrideRsvps)(cur.rsvps, data.rsvps, uid);
+                upd.rsvps = merged !== null && merged !== void 0 ? merged : admin.firestore.FieldValue.delete();
+                tx.update(existing.ref, upd);
+            }
+            return { id: existing.id, existed: true };
+        }
+        const overrideRef = events.doc();
+        tx.set(overrideRef, Object.assign(Object.assign({}, safe), { ownerId: p.ownerId, groupId: (_c = p.groupId) !== null && _c !== void 0 ? _c : null, 
+            // Legacy and inert, but carried from the PARENT rather than from the caller: it is not the
+            // client's to state on a document it does not own.
+            sharedWithFamily: (_d = p.sharedWithFamily) !== null && _d !== void 0 ? _d : false, updatedAt: new Date().toISOString(), overrideOfParent: parentId, overrideDate, createdAt: new Date().toISOString() }));
+        tx.update(parentRef, {
+            recurrenceExceptions: admin.firestore.FieldValue.arrayUnion(overrideDate),
+        });
+        return { id: overrideRef.id, existed: false };
     });
-    await batch.commit();
-    return { id: overrideRef.id };
 });
 // ── Group teardown ──
 //
@@ -1164,7 +1286,7 @@ exports.respondToFriendRequest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_
     // VERIFIED (prevents claiming a request sent to an address you don't own).
     // Requests addressed by uid (toId) are always safe (uid can't be spoofed).
     const outcome = await db.runTransaction(async (tx) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h;
+        var _a, _b, _c, _d, _e, _f;
         const snap = await tx.get(reqRef);
         if (!snap.exists) {
             throw new https_1.HttpsError("not-found", "Friend request not found.");
@@ -1186,23 +1308,27 @@ exports.respondToFriendRequest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_
             tx.update(reqRef, { status: "declined", toId: uid });
             throw new https_1.HttpsError("failed-precondition", "Invalid friend request.");
         }
+        const senderAuth = await (0, friendship_1.authIdentityOf)(senderUid);
         const senderRef = db.doc(`users/${senderUid}`);
         const accepterRef = db.doc(`users/${uid}`);
         const [senderUser, accepterUser, senderProfile, accepterProfile] = await Promise.all([
             tx.get(senderRef), tx.get(accepterRef),
             tx.get(db.doc(`profiles/${senderUid}`)), tx.get(db.doc(`profiles/${uid}`)),
         ]);
+        // Emails from Auth ONLY. `users/{uid}.email` is owner-writable and `fr.fromEmail` is the
+        // sender's own claim, and both used to land in the other person's friend list — a stranger's
+        // forged address in yours, and, since accepting is the point, yours in theirs.
+        const senderEmail = senderAuth.email;
         const senderName = cap(((_a = senderProfile.data()) === null || _a === void 0 ? void 0 : _a.name) || ((_b = senderUser.data()) === null || _b === void 0 ? void 0 : _b.name) ||
-            fr.fromName || (fr.fromEmail || "").split("@")[0] || "Friend");
-        const senderEmail = (((_c = senderUser.data()) === null || _c === void 0 ? void 0 : _c.email) || fr.fromEmail || "").toLowerCase() || null;
-        const accepterName = cap(((_d = accepterProfile.data()) === null || _d === void 0 ? void 0 : _d.name) || ((_e = accepterUser.data()) === null || _e === void 0 ? void 0 : _e.name) ||
-            (email || "").split("@")[0] || "Friend");
-        const accepterEmail = (((_f = accepterUser.data()) === null || _f === void 0 ? void 0 : _f.email) || email || "").toLowerCase() || null;
+            (senderEmail || "").split("@")[0] || "Friend");
+        const accepterEmail = (0, senderIdentity_1.trustedEmail)(email);
+        const accepterName = cap(((_c = accepterProfile.data()) === null || _c === void 0 ? void 0 : _c.name) || ((_d = accepterUser.data()) === null || _d === void 0 ? void 0 : _d.name) ||
+            (accepterEmail || "").split("@")[0] || "Friend");
         // Read-filter-write so each side has exactly ONE entry per friend uid (and a
         // re-accept refreshes name/email instead of accumulating stale duplicates).
-        const senderFriends = (((_g = senderUser.data()) === null || _g === void 0 ? void 0 : _g.friends) || []).filter((f) => f && f.uid !== uid);
+        const senderFriends = (((_e = senderUser.data()) === null || _e === void 0 ? void 0 : _e.friends) || []).filter((f) => f && f.uid !== uid);
         senderFriends.push({ uid, name: accepterName, email: accepterEmail });
-        const accepterFriends = (((_h = accepterUser.data()) === null || _h === void 0 ? void 0 : _h.friends) || []).filter((f) => f && f.uid !== senderUid);
+        const accepterFriends = (((_f = accepterUser.data()) === null || _f === void 0 ? void 0 : _f.friends) || []).filter((f) => f && f.uid !== senderUid);
         accepterFriends.push({ uid: senderUid, name: senderName, email: senderEmail });
         tx.set(senderRef, { friends: senderFriends }, { merge: true });
         tx.set(accepterRef, { friends: accepterFriends }, { merge: true });
@@ -1339,8 +1465,10 @@ exports.acceptGroupInvite = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
         // `inv.fromId` rather than the group: a personal invitation carries no group at all, and it
         // should still make a friendship.
         const inviterUid = typeof inv.fromId === "string" ? inv.fromId : "";
+        // Not `inv.fromName` / `inv.fromEmail`: the invitation's sender wrote those. From Auth.
+        const inviterAuth = await (0, friendship_1.authIdentityOf)(inviterUid);
         const friendship = await (0, friendship_1.readFriendship)(tx, db, inviterUid, uid, {
-            aName: inv.fromName, aEmail: inv.fromEmail, bEmail: email,
+            aEmail: inviterAuth.email, bEmail: email,
         });
         if (inv.groupId) {
             tx.update(db.doc(`groups/${inv.groupId}`), {
@@ -2617,7 +2745,11 @@ exports.claimWarlordTimeout = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
         // handing out a free win.
         if (!stampMs) {
             tx.update(ref, { lastMoveAt: admin.firestore.FieldValue.serverTimestamp() });
-            throw new https_1.HttpsError("failed-precondition", "The timeout clock has just started for this battle.");
+            // RETURNED, not thrown. A throw inside a transaction rolls the whole transaction back, the
+            // update above included — so the clock never started, every claim said it just had, and a
+            // battle from before this field existed could never time out at all. The error is thrown
+            // below, after the commit, so the player still gets the same message.
+            return { clockStarted: true };
         }
         const elapsedH = (Date.now() - stampMs) / 3600000;
         if (elapsedH < WARLORD_TURN_TIMEOUT_HOURS) {
@@ -2645,6 +2777,9 @@ exports.claimWarlordTimeout = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
     const done = ladder;
     if (done)
         await recordWarlordResult(done.winner, done.loser);
+    if ("clockStarted" in result) {
+        throw new https_1.HttpsError("failed-precondition", "The timeout clock has just started for this battle.");
+    }
     return result;
 });
 // Turn/lifecycle push notifications. Fires on EVERY games/{id} update (Firestore
