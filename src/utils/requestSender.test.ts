@@ -64,6 +64,12 @@ describe('what the recipient sees', () => {
       .toEqual({ name: 'Ion Popescu', email: null, verified: false, unconfirmed: true });
   });
 
+  it('a stamp without an email is NOT confirmation — the name alone is self-chosen', () => {
+    // The server stamps email: null when reading the Auth record failed, or there is none.
+    const s = shownSender({ sender: { name: 'Mama', email: null, emailVerified: false } });
+    expect(s).toEqual({ name: 'Mama', email: null, verified: false, unconfirmed: true });
+  });
+
   it('marks an unverified Auth email as such', () => {
     // Email/password sign-up does not prove ownership: a stranger can register an address whose
     // real owner never signed up. Shown, but not presented as proof.

@@ -11,6 +11,11 @@
 // A request with no stamp — sent before the server started stamping, or whose trigger has not
 // run yet — shows the sender's CURRENT profile name if the caller has it, no email at all, and
 // `unconfirmed: true`, which the screen turns into a warning.
+//
+// So does a stamp WITHOUT an email. The server stamps `email: null` when it could not read the
+// sender's Auth record (a transient failure) or the account has no address. What is left is the
+// name — self-chosen, and exactly what a stranger sets to "Mama". Until the pre-deploy review of
+// 24.09.2026 such a stamp was shown as confirmed.
 
 export interface ShownSender {
   /** Self-chosen, like every name. Null when nothing trustworthy is known. */
@@ -19,7 +24,7 @@ export interface ShownSender {
   email: string | null;
   /** Whether that email was verified — an unverified one is just an address someone typed. */
   verified: boolean;
-  /** No server stamp: the screen must say it could not confirm who sent this. */
+  /** No server stamp, or one with no email: the screen must say it could not confirm who sent this. */
   unconfirmed: boolean;
 }
 
@@ -37,7 +42,8 @@ export function shownSender(request: unknown, profileName?: unknown): ShownSende
       name: clean(stamp.name, 40),
       email,
       verified: stamp.emailVerified === true && email !== null,
-      unconfirmed: false,
+      // A name alone confirms nobody.
+      unconfirmed: email === null,
     };
   }
 

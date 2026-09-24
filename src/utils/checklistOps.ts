@@ -17,7 +17,18 @@
 //
 // Offline, a transaction cannot run. The screen then falls back to the old whole-array write,
 // which Firestore queues until the connection returns — last writer wins, as it always did, but
-// a tick made on a train is not refused.
+// a tick made on a train is not refused. The same fallback catches a transaction that fails with
+// `unavailable`: "online" by the browser's account, but unable to reach the server.
+//
+// ── One person's changes, in the order they were made ──────────────────────────────────────
+//
+// Added 24.09.2026, from the pre-deploy review of the version above. Two quick taps by the same
+// person started two transactions at once, and Firestore RETRIES the one that lost the race — so
+// tick-then-untick could commit untick first and tick second, and the item ended ticked. Each
+// event's writes from this screen now run one after another.
+//
+// Known and left: while a write is in flight, the snapshot of the one before it can arrive and
+// briefly show the checklist without the newer change, until its own write lands.
 
 import { doc, runTransaction, updateDoc, type Firestore } from 'firebase/firestore';
 
@@ -63,24 +74,70 @@ export function applyChecklistOp(items: unknown, op: ChecklistOp): Item[] {
   }
 }
 
+/** Per event, the end of the queue of this screen's writes. */
+const queues = new Map<string, Promise<void>>();
+
+/**
+ * Run `task` after every earlier task for `key` has finished — succeeded OR failed: an earlier
+ * refusal must not hold the later changes hostage.
+ */
+export function inOrder<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const before = queues.get(key) ?? Promise.resolve();
+  const mine = before.then(task);
+  const tail = mine.then(() => undefined, () => undefined);
+  queues.set(key, tail);
+  void tail.then(() => { if (queues.get(key) === tail) queues.delete(key); });
+  return mine;
+}
+
+/** The three ways a checklist change can reach the server; injectable so the order is testable. */
+export interface ChecklistWriter {
+  offline: () => boolean;
+  /** The operation, applied inside a transaction to the server's current array. */
+  transact: () => Promise<void>;
+  /** The whole array as this screen shows it, queued by Firestore until the server can take it. */
+  queue: () => Promise<void>;
+}
+
+function isUnavailable(e: unknown): boolean {
+  return !!e && typeof e === 'object' && (e as { code?: unknown }).code === 'unavailable';
+}
+
+export async function writeChecklistOpWith(w: ChecklistWriter, key: string): Promise<void> {
+  // A queued write's promise settles only when the server acknowledges it: offline, that is when
+  // the connection returns. The ORDER only needs it issued — Firestore applies queued writes in
+  // the order they were made — so the queue moves on once it is issued, and the caller alone waits
+  // for the acknowledgement (and hears a refusal).
+  const queued: { ack?: Promise<void> } = {};
+  await inOrder(key, async () => {
+    if (w.offline()) { queued.ack = w.queue(); return; }
+    try {
+      await w.transact();
+    } catch (e) {
+      if (!isUnavailable(e)) throw e;
+      queued.ack = w.queue();
+    }
+  });
+  if (queued.ack) await queued.ack;
+}
+
 /**
  * Apply `op` to event `eventId`'s checklist as it is on the server.
  *
- * `localNext` is what this screen shows after the change; it is written only in the offline
- * fallback, where the server's array cannot be read.
+ * `localNext` is what this screen shows after the change; it is written only in the fallback,
+ * where the server's array cannot be read.
  */
-export async function writeChecklistOp(
+export function writeChecklistOp(
   db: Firestore, eventId: string, op: ChecklistOp, localNext: unknown[],
 ): Promise<void> {
   const ref = doc(db, 'events', eventId);
-  const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
-  if (offline) {
-    await updateDoc(ref, { checklistItems: localNext });
-    return;
-  }
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(ref);
-    if (!snap.exists()) throw new Error('checklist-event-gone');
-    tx.update(ref, { checklistItems: applyChecklistOp(snap.data().checklistItems, op) });
-  });
+  return writeChecklistOpWith({
+    offline: () => typeof navigator !== 'undefined' && navigator.onLine === false,
+    transact: () => runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new Error('checklist-event-gone');
+      tx.update(ref, { checklistItems: applyChecklistOp(snap.data().checklistItems, op) });
+    }),
+    queue: () => updateDoc(ref, { checklistItems: localNext }),
+  }, eventId);
 }

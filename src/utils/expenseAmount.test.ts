@@ -23,6 +23,13 @@ describe('what the form accepts', () => {
     // The ceiling is exclusive, exactly as the rule says `<`.
     expect(parseExpenseAmount(EXPENSE_AMOUNT_MAX)).toBeNull();
   });
+
+  it('nothing that is under the ceiling only until it is rounded', () => {
+    // 9999999.999 < 10000000, but it is stored as 10000000.00, which the rule refuses.
+    expect(parseExpenseAmount('9999999.999')).toBeNull();
+    // The largest amount the rule takes is still taken.
+    expect(parseExpenseAmount('9999999.99')).toBe(9_999_999.99);
+  });
 });
 
 describe('what the wallet renders', () => {

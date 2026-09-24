@@ -26,8 +26,11 @@ export default function SeriesScopeDialog({ isOpen, language, onChoose }: Series
 
   if (!isOpen) return null;
 
+  // The backdrop STOPS the click. This dialog renders inside EventDetailsModal, whose backdrop
+  // closes it, and React bubbles through the component tree: a tap beside this question used to
+  // close the event window as well. See SeriesScopeDialog.test.ts.
   return (
-    <div onClick={dismiss} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[210] flex items-center justify-center p-4">
+    <div onClick={(e) => { e.stopPropagation(); dismiss(); }} className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[210] flex items-center justify-center p-4">
       <div onClick={(e) => e.stopPropagation()} ref={dialogRef} {...dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-sm shadow-xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
         <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-800/50">
           <h3 className="font-semibold text-lg text-zinc-900 dark:text-zinc-100 flex items-center gap-2">

@@ -36,10 +36,10 @@ describe('the dialog cannot be dismissed into a delete', () => {
 
   it('reports every dismissal as cancel', () => {
     expect(dialog).toMatch(/const dismiss = \(\) => onChoose\('cancel'\);/);
-    // Escape and the Back button come through useDialog's onClose; the backdrop and the X and
-    // the Cancel button through onClick. All four must be `dismiss`.
+    // Escape and the Back button come through useDialog's onClose, which only this can see. The
+    // backdrop, the X and the three answers are clicked for real in SeriesScopeDialog.test.ts —
+    // since 24.09.2026, when the backdrop had to stop its click and stopped matching a count here.
     expect(dialog).toMatch(/useDialog\(isOpen, dismiss,/);
-    expect(dialog.match(/onClick=\{dismiss\}/g)?.length).toBe(3);
   });
 
   it('and the modal no longer asks a three-answer question with a two-button confirm', () => {

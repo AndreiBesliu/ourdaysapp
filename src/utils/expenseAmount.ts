@@ -29,8 +29,11 @@ export function parseExpenseAmount(raw: unknown): number | null {
   const n = typeof text === 'number' ? text : typeof text === 'string' && text !== '' ? Number(text) : NaN;
   if (!Number.isFinite(n) || n <= 0 || n >= EXPENSE_AMOUNT_MAX) return null;
   const cents = Math.round(n * 100) / 100;
-  // A positive amount that rounds to nothing is not an expense.
-  return cents > 0 ? cents : null;
+  // A positive amount that rounds to nothing is not an expense. And the ceiling is checked AFTER
+  // rounding too: 9999999.999 is under it, rounds to exactly 10000000, and the rule refuses that —
+  // so the form sent a value it had approved and got a bare permission error back. Found by the
+  // pre-deploy review of 24.09.2026.
+  return cents > 0 && cents < EXPENSE_AMOUNT_MAX ? cents : null;
 }
 
 /** "12.50", or a dash for anything that is not a finite number. Never throws. */
