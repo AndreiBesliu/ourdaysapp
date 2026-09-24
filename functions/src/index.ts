@@ -462,7 +462,9 @@ export const onFriendRequestCreated = onDocumentCreated("friend_requests/{reques
       authEmail: identity.email, authVerified: identity.verified, profileName: prof.data()?.name,
     });
     stampName = sender.name;
-    await event.data!.ref.update({ sender });
+    // `verifiedGroupName` deleted as well: a friend request never has one, and any value there was
+    // written by the sender's client before the rule that forbids it was live.
+    await event.data!.ref.update({ sender, verifiedGroupName: admin.firestore.FieldValue.delete() });
   } catch (err) {
     // Fires once; a failure is permanent. The screen then says it could not confirm the sender,
     // which is the honest answer — and this makes the failure visible to the owner.
@@ -558,7 +560,13 @@ export const onGroupInviteCreated = onDocumentCreated("group_invites/{inviteId}"
       authEmail: identity.email, authVerified: identity.verified, profileName: prof.data()?.name,
     });
     const verifiedGroupName = group && group.exists ? stampedGroupName(group.data()?.name) : null;
-    await event.data!.ref.update(verifiedGroupName ? { sender, verifiedGroupName } : { sender });
+    // The group name is WRITTEN OR DELETED, never left alone: with no group (a personal invitation,
+    // or one whose group is gone) this used to write `{ sender }` only, so a `verifiedGroupName` the
+    // sender's client put there before the rule forbade it survived — and read as the server's.
+    await event.data!.ref.update({
+      sender,
+      verifiedGroupName: verifiedGroupName ?? admin.firestore.FieldValue.delete(),
+    });
   } catch (err) {
     // Fires once. The screen then says it could not confirm the sender — the honest answer.
     void logServerError(`group-invite sender stamp failed: ${String(err)}`, "invites:stamp", { uid: fromId });
@@ -1215,11 +1223,21 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
       ? fresh.data()!.recurrenceExceptions
       : [];
 
-    // `| undefined` said out loud: `docs[0]` of an empty result IS undefined, whatever the
-    // inferred type claims.
+    // Only a document that IS this parent's override. Every override this callable writes carries
+    // the parent's owner and group, and the two keys alone prove nothing: any account may create a
+    // personal event carrying `overrideOfParent` / `overrideDate` (no rule mentions them), and
+    // leaving a group copies them into a personal copy — on the web and in the APK alike. With
+    // `.limit(1)` and no check, an edit made with `apply` was written into somebody else's
+    // document. Found by the pre-deploy review of 24.09.2026, before any of this was deployed.
+    const fp = fresh.data() || {};
+    const belongs = (d: admin.firestore.QueryDocumentSnapshot): boolean => {
+      const x = d.data();
+      return x.ownerId === fp.ownerId && (x.groupId ?? null) === (fp.groupId ?? null);
+    };
+
     let existing: admin.firestore.QueryDocumentSnapshot | undefined = (await tx.get(
-      events.where("overrideOfParent", "==", parentId).where("overrideDate", "==", overrideDate).limit(1),
-    )).docs[0];
+      events.where("overrideOfParent", "==", parentId).where("overrideDate", "==", overrideDate),
+    )).docs.find(belongs);
 
     if (!existing && exceptions.includes(overrideDate)) {
       // The date is already excepted, so an override was made before `overrideDate` existed, or
@@ -1227,7 +1245,8 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
       const legacy = await tx.get(events.where("overrideOfParent", "==", parentId));
       existing = legacy.docs.find((d) => {
         const x = d.data();
-        return typeof x.overrideDate !== "string" && typeof x.date === "string" && x.date.slice(0, 10) === overrideDate;
+        return belongs(d) && typeof x.overrideDate !== "string"
+          && typeof x.date === "string" && x.date.slice(0, 10) === overrideDate;
       });
       // Deleted (or a legacy override moved elsewhere): re-creating it would resurrect something
       // somebody removed, from a stale screen.

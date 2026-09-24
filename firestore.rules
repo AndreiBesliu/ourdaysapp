@@ -610,6 +610,12 @@ service cloud.firestore {
         request.resource.data.inviteeId == null
       )
       && rsvpsOnlyMine()
+      // What makes a document an override. The server now accepts one only if it also carries the
+      // parent's owner and group, but these two keys still must not be WRITTEN onto an existing
+      // event by an update. Create stays open on purpose: leaving a group copies them into a
+      // personal copy, on the web and in the installed APK, and refusing that would break both.
+      && request.resource.data.get('overrideOfParent', null) == resource.data.get('overrideOfParent', null)
+      && request.resource.data.get('overrideDate', null) == resource.data.get('overrideDate', null)
       && (
         (request.resource.data.groupId != null &&
           isMemberOfGroup(request.resource.data.groupId) &&

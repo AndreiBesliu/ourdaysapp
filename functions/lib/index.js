@@ -414,7 +414,9 @@ exports.onFriendRequestCreated = (0, firestore_1.onDocumentCreated)("friend_requ
             authEmail: identity.email, authVerified: identity.verified, profileName: (_b = prof.data()) === null || _b === void 0 ? void 0 : _b.name,
         });
         stampName = sender.name;
-        await event.data.ref.update({ sender });
+        // `verifiedGroupName` deleted as well: a friend request never has one, and any value there was
+        // written by the sender's client before the rule that forbids it was live.
+        await event.data.ref.update({ sender, verifiedGroupName: admin.firestore.FieldValue.delete() });
     }
     catch (err) {
         // Fires once; a failure is permanent. The screen then says it could not confirm the sender,
@@ -507,7 +509,13 @@ exports.onGroupInviteCreated = (0, firestore_1.onDocumentCreated)("group_invites
             authEmail: identity.email, authVerified: identity.verified, profileName: (_b = prof.data()) === null || _b === void 0 ? void 0 : _b.name,
         });
         const verifiedGroupName = group && group.exists ? (0, senderIdentity_1.stampedGroupName)((_c = group.data()) === null || _c === void 0 ? void 0 : _c.name) : null;
-        await event.data.ref.update(verifiedGroupName ? { sender, verifiedGroupName } : { sender });
+        // The group name is WRITTEN OR DELETED, never left alone: with no group (a personal invitation,
+        // or one whose group is gone) this used to write `{ sender }` only, so a `verifiedGroupName` the
+        // sender's client put there before the rule forbade it survived — and read as the server's.
+        await event.data.ref.update({
+            sender,
+            verifiedGroupName: verifiedGroupName !== null && verifiedGroupName !== void 0 ? verifiedGroupName : admin.firestore.FieldValue.delete(),
+        });
     }
     catch (err) {
         // Fires once. The screen then says it could not confirm the sender — the honest answer.
@@ -1093,16 +1101,27 @@ exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
         const exceptions = Array.isArray((_a = fresh.data()) === null || _a === void 0 ? void 0 : _a.recurrenceExceptions)
             ? fresh.data().recurrenceExceptions
             : [];
-        // `| undefined` said out loud: `docs[0]` of an empty result IS undefined, whatever the
-        // inferred type claims.
-        let existing = (await tx.get(events.where("overrideOfParent", "==", parentId).where("overrideDate", "==", overrideDate).limit(1))).docs[0];
+        // Only a document that IS this parent's override. Every override this callable writes carries
+        // the parent's owner and group, and the two keys alone prove nothing: any account may create a
+        // personal event carrying `overrideOfParent` / `overrideDate` (no rule mentions them), and
+        // leaving a group copies them into a personal copy — on the web and in the APK alike. With
+        // `.limit(1)` and no check, an edit made with `apply` was written into somebody else's
+        // document. Found by the pre-deploy review of 24.09.2026, before any of this was deployed.
+        const fp = fresh.data() || {};
+        const belongs = (d) => {
+            var _a, _b;
+            const x = d.data();
+            return x.ownerId === fp.ownerId && ((_a = x.groupId) !== null && _a !== void 0 ? _a : null) === ((_b = fp.groupId) !== null && _b !== void 0 ? _b : null);
+        };
+        let existing = (await tx.get(events.where("overrideOfParent", "==", parentId).where("overrideDate", "==", overrideDate))).docs.find(belongs);
         if (!existing && exceptions.includes(overrideDate)) {
             // The date is already excepted, so an override was made before `overrideDate` existed, or
             // the occurrence was deleted. A legacy override that was not MOVED sits on its own day.
             const legacy = await tx.get(events.where("overrideOfParent", "==", parentId));
             existing = legacy.docs.find((d) => {
                 const x = d.data();
-                return typeof x.overrideDate !== "string" && typeof x.date === "string" && x.date.slice(0, 10) === overrideDate;
+                return belongs(d) && typeof x.overrideDate !== "string"
+                    && typeof x.date === "string" && x.date.slice(0, 10) === overrideDate;
             });
             // Deleted (or a legacy override moved elsewhere): re-creating it would resurrect something
             // somebody removed, from a stale screen.

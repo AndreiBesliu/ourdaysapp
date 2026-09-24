@@ -133,3 +133,59 @@ describe('A.6 — one override per occurrence', () => {
     expect(expandInWindow(docs, '2026-09-22', '2026-09-22').filter((o) => o.virtual)).toEqual([]);
   });
 });
+
+describe('pre-deploy review 24.09 — only a document that BELONGS to the parent is its override', () => {
+  it('a planted personal event carrying the keys is not adopted, and not written into', async () => {
+    // Any account may create an event with these two keys; no rule mentions them.
+    await db.doc('events/000-plant').set({
+      title: 'x', ownerId: 'uid-dave', groupId: null, date: '2026-09-22T00:00:00.000Z',
+      overrideOfParent: PARENT, overrideDate: '2026-09-22',
+    });
+    const r = await call(BOB, {
+      parentId: PARENT, overrideDate: '2026-09-22', apply: true,
+      data: { title: 'Walk', description: 'gate code 4711' },
+    });
+    expect(r.id).not.toBe('000-plant');
+    expect((await db.doc('events/000-plant').get()).data()?.description).toBeUndefined();
+    expect((await db.doc(`events/${r.id}`).get()).data()?.ownerId).toBe(ALICE);
+  });
+
+  it('a leave-group copy of an override does not stand in for the real one', async () => {
+    // LeaveGroupModal (and the APK) copy an event with a full spread, override keys included.
+    const real = await call(ALICE, { parentId: PARENT, overrideDate: '2026-09-22', data: { title: 'Walk (real)' } });
+    await db.doc('events/000-copy').set({
+      title: 'Walk (copy)', ownerId: BOB, groupId: null, date: '2026-09-22T00:00:00.000Z',
+      overrideOfParent: PARENT, overrideDate: '2026-09-22',
+    });
+    const again = await call(CAROL, { parentId: PARENT, overrideDate: '2026-09-22', apply: true, data: { title: 'Walk, later' } });
+    expect(again).toEqual({ id: real.id, existed: true });
+    expect((await db.doc('events/000-copy').get()).data()?.title).toBe('Walk (copy)');
+  });
+
+  it('and such a copy does not hide the real occurrence from reminders and the digest', async () => {
+    await db.doc('events/000-copy').set({
+      title: 'Walk (copy)', ownerId: BOB, groupId: null, date: '2026-09-22T00:00:00.000Z',
+      overrideOfParent: PARENT, overrideDate: '2026-09-22',
+    });
+    const docs = (await db.collection('events').get()).docs.map((d) => ({ id: d.id, ...d.data() }) as EventDoc);
+    const on22 = expandInWindow(docs, '2026-09-22', '2026-09-22').filter((o) => o.virtual);
+    expect(on22.map((o) => o.source.id)).toEqual([PARENT]);
+  });
+});
+
+describe('pre-deploy review 24.09 — no client-written stamp survives the trigger', () => {
+  it('a personal invitation loses a verifiedGroupName its sender wrote', async () => {
+    // Before the rule that forbids it is live, a client may write the stamp. With no group the
+    // trigger used to write `{ sender }` only, so the forged group name survived.
+    const { onGroupInviteCreated } = await import('../src/index');
+    await db.doc('group_invites/i1').set({
+      fromId: BOB, groupId: null, toEmail: 'x@example.test', status: 'pending', verifiedGroupName: 'Bank',
+    });
+    const snap = await db.doc('group_invites/i1').get();
+    await (onGroupInviteCreated as unknown as { run: (e: unknown) => Promise<unknown> })
+      .run({ data: snap, params: { inviteId: 'i1' } });
+    const after = (await db.doc('group_invites/i1').get()).data();
+    expect(after?.verifiedGroupName).toBeUndefined();
+    expect(after?.sender).toBeDefined();
+  });
+});

@@ -9108,3 +9108,56 @@ CI-ul și deploy-ul. Iar noua politică npm a sărit local două scripturi posti
 @firebase/util) — neesențiale într-un server; Cloud Build le rulează normal.
 
 **Deploy de functions: doar cu confirmarea ta**, și înainte de 30.10.
+
+## 2026-09-24 · Recenzia dinaintea deploy-ului — două găuri în ce livrasem azi
+
+**Prompt (Andrei):** „Try again" — după ce recenzia adversarială a atins limita săptămânală a
+contului. **Model:** Claude Opus 5.5.
+
+**Starea recenziei:** 5 lentile, câte maximum 3 verificatori. Prima rulare s-a oprit la **limita
+săptămânală** („resets Sep 26, 11am"): a terminat **doar lentila de reguli**. Verificatorii ei și
+celelalte patru lentile (APK, server, client, plase) au picat. Am reluat-o; ce iese din reluare e
+scris în raport. **Cele două constatări ale lentilei de reguli le-am verificat eu, la sursă, în loc
+de verificatorii picați.** Ambele adevărate.
+
+### 1. `createEventOverride` adopta ORICE document cu cele două chei
+
+Căutarea idempotentă de azi (`2d985db`) lua primul eveniment cu `overrideOfParent` + `overrideDate`,
+fără să verifice că e al părintelui. Cu `apply: true` (formularul de editare), editarea unui membru
+se scria cu Admin SDK **în documentul altcuiva**. Două căi, ambele verificate:
+
+- **Plantat:** nicio regulă nu pomenește cheile, deci oricine creează un eveniment personal care le poartă.
+- **Fără atacator:** „păstrează o copie" la părăsirea grupului face un spread complet al evenimentului,
+  cu chei cu tot — pe web **și în APK**.
+
+**Reparat:** se acceptă doar un document cu proprietarul și grupul părintelui, adică exact ce scrie
+callable-ul. Aceeași condiție și pe calea pentru override-urile vechi.
+
+**Rudă găsită la citire:** deduplicarea din reminder-e și digest avea încredere în aceleași chei, deci
+o copie de la părăsire ascundea **ocurența reală** a grupului. Aceeași condiție acolo.
+
+**Regula:** cheile nu mai pot fi **adăugate** pe un eveniment existent printr-un update. La creare
+rămân permise intenționat, fiindcă o regulă care le refuză ar strica părăsirea grupului pe telefoane.
+Plasa `apk-compat` a rămas verde.
+
+### 2. Ștampilele puse înainte de regulă ar fi apărut ca fiind ale serverului
+
+Până la deploy-ul de reguli, orice client poate scrie `sender` / `verifiedGroupName`. Reparația e
+publică: repo-ul e public. Iar triggerul de invitații, fără grup, scria doar `{ sender }`, deci un
+`verifiedGroupName` falsificat supraviețuia.
+
+**Reparat:** ambele triggere scriu sau **șterg** numele grupului, niciodată nu-l lasă în pace.
+
+**Măsurat pe live (doar citire):** **0 ștampile azi**, pe 1 cerere și 13 invitații. Deci riscul e
+doar fereastra până la deploy. `scripts/request-stamps.mjs` e verificarea care trebuie rulată
+**după** deploy-ul de reguli și **înainte** de hosting, cu `--before` = momentul deploy-ului de
+funcții. `createTime` e al serverului, deci nu se poate falsifica.
+
+### Proba
+
+- 6 teste noi: 4 pe emulator prin handler-ele **reale** (inclusiv triggerul de invitații), 2 de reguli.
+- Patru mutații, fiecare readucând un defect: adoptă orice → **2 roșii**; triggerul lasă numele
+  grupului → **1**; deduplicarea ignoră proprietarul → **1**; fără pinul de update → **1**.
+- `lib/` reconstruit — CI îl verifică acum.
+
+`npx tsc -b` · `tsc` pe functions · lint · **1848 de teste** · **318 pe emulator** · test:tz · build — verzi.

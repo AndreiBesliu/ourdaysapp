@@ -354,3 +354,21 @@ describe('who an event belongs to, and which calendar it is on', () => {
     await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'e-personal'), { groupId: G1 }));
   });
 });
+
+describe('the keys that make an event an override (pre-deploy review 24.09)', () => {
+  it('may be CREATED — leaving a group copies them, on the web and in the APK', async () => {
+    await assertSucceeds(setDoc(doc(as(BOB), 'events', 'leave-copy'), {
+      ownerId: BOB, groupId: null, title: 'x', date: '2026-09-22T00:00:00.000Z',
+      overrideOfParent: 'series-walk', overrideDate: '2026-09-22',
+    }));
+  });
+
+  it('but cannot be written onto an existing event by an update', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'events', 'plain'), { ownerId: BOB, groupId: null, title: 'x', date: '2026-09-22T00:00:00.000Z' });
+    });
+    await assertFails(updateDoc(doc(as(BOB), 'events', 'plain'), { overrideOfParent: 'series-walk' }));
+    await assertFails(updateDoc(doc(as(BOB), 'events', 'plain'), { overrideDate: '2026-09-22' }));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'plain'), { title: 'y' }));
+  });
+});

@@ -93,7 +93,14 @@ export function expandInWindow(docs: readonly EventDoc[], fromDay: string, toDay
   // ghost both reach the digest. I removed it once, and that test caught it. The price is that a
   // legacy override which was also MOVED can still hide a real occurrence; every override made
   // from now on carries `overrideDate` and cannot.
+  //
+  // And only a document that BELONGS to its parent — the parent's owner and group, which every real
+  // override carries. The keys alone prove nothing: leaving a group copies them into a personal copy,
+  // and any account may create an event that carries them. Such a copy used to hide the group's real
+  // occurrence from reminders and the digest.
   const taken = new Set<string>();
+  const who = (ev: EventDoc) =>
+    `${typeof ev.ownerId === "string" ? ev.ownerId : ""}|${typeof ev.groupId === "string" ? ev.groupId : ""}`;
   for (const ev of docs) {
     const parent = ev.overrideOfParent;
     if (typeof parent !== "string" || !parent) continue;
@@ -101,7 +108,7 @@ export function expandInWindow(docs: readonly EventDoc[], fromDay: string, toDay
     const replaced = typeof stored === "string" && /^\d{4}-\d{2}-\d{2}$/.test(stored)
       ? stored
       : typeof ev.date === "string" ? ev.date.slice(0, 10) : null;
-    if (replaced) taken.add(`${parent}|${replaced}`);
+    if (replaced) taken.add(`${parent}|${replaced}|${who(ev)}`);
   }
 
   const out: Occurrence[] = [];
@@ -142,7 +149,7 @@ export function expandInWindow(docs: readonly EventDoc[], fromDay: string, toDay
         : exceptions.has(day) ||
           exceptions.has(dayKey(ms - DAY_MS)) ||
           exceptions.has(dayKey(ms + DAY_MS));
-      if (!suppressed && !taken.has(`${ev.id}|${day}`)) {
+      if (!suppressed && !taken.has(`${ev.id}|${day}|${who(ev)}`)) {
         out.push({ source: ev, day, virtual: true });
       }
     }
