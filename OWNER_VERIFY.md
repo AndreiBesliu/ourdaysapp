@@ -66,6 +66,20 @@ cheltuieli** (regula cere `ownerId`, APK-ul nu-l trimite, iar eroarea e înghiț
 atribuirea unei sarcini. Iar APK-ul **nu scrie deloc oglinda `profiles`**, așa că cine folosește doar
 APK-ul n-are nume public pentru ceilalți: pe live sunt 3 profiluri pentru 8 conturi.
 
+**Mai mult decât atât — găsit de recenzia dinaintea deploy-ului (24.09), verificat pe bundle:** și
+**CITIRILE** APK-ului sunt refuzate, din mai. Calendarul lui ascultă `events` **fără niciun filtru**
+(am văzut-o eu în bundle), iar regula de citire a evenimentelor depinde de câmpurile documentului din
+22 mai (`ee9e401`) — o interogare pe care regula n-o poate dovedi e refuzată în bloc. Deci **pe
+telefoane calendarul e gol de patru luni**, dacă regulile s-au publicat atunci. După recenzie, la fel
+portofelul, cheltuielile, citirile din `users` și căutarea după email din invitații (de la 25 mai):
+**de pe telefon nu se poate trimite nicio invitație**, iar acceptarea uneia o lasă „acceptată” fără
+să te bage în grup. Ultimele trei le-a verificat recenzia pe bundle, nu eu.
+
+Ce schimbă asta, ca fapt, nu ca decizie: amânarea regulii care refuză `fromEmail`/`groupName` „ca să
+nu rupă telefoanele” nu mai are obiect pe partea APK-ului — telefoanele nu trimit invitații. O ține
+pe loc doar **web-ul**, care încă scrie câmpurile astea. Și reconstruirea e mai urgentă decât părea:
+pe telefoane aplicația e practic goală.
+
 - [ ] **Spune-mi când ai instalat APK-ul** — confirmă sau infirmă că e bundle-ul din 9 mai.
       - **Ce se strică dacă e altul:** plasa `rules-tests/apk-compat.test.ts` apară scrierile din
         mai; dacă telefoanele rulează alt cod, plasa apară altceva decât trebuie.

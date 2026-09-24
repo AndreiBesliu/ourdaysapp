@@ -9161,3 +9161,71 @@ funcții. `createTime` e al serverului, deci nu se poate falsifica.
 - `lib/` reconstruit — CI îl verifică acum.
 
 `npx tsc -b` · `tsc` pe functions · lint · **1848 de teste** · **318 pe emulator** · test:tz · build — verzi.
+
+## 2026-09-24 · Recenzia reluată: treisprezece regresii ale zilei, reparate înainte de deploy
+
+**Prompt (Andrei):** „Try again" — reluarea recenziei adversariale dinaintea deploy-ului, după
+limita săptămânală. **Model:** Claude Opus 5.5.
+
+**Recenzia:** cele cinci lentile, reluate. **Costul total: ~3,8M** — peste estimarea de 3–3,5M.
+Constatările care depindeau de datele de pe live le-am **măsurat întâi**, doar citire, doar numere
+(`scripts/predeploy-measure.mjs`): 27 de evenimente, 1 serie (anuală), **0 chei de excepție**,
+**0 override-uri**, 0 serii care nu încep la miezul nopții UTC, 47 de mesaje cu **0 `seenBy`**
+umflate sau care nu sunt liste, 1 înregistrare de admin (bootstrap). Deci trei constatări nu ating
+nimic pe live: cheile de excepție vechi, seriile mutate cu o oră de DST și intrarea de admin.
+
+Restul erau regresii pe care le introdusesem eu azi. Fiecare are acum un test care pică fără
+reparație, dovedit prin mutație:
+
+| Ce | Commit |
+|---|---|
+| Delogarea offline nu făcea nimic: `updateDoc` offline nu se rezolvă și nici nu pică. Pașii au acum o limită de timp. | `7ab6a58` |
+| Push nativ: `register()` rula ÎNAINTE de golirea ascultătorilor, deci token-ul ajungea la contul de dinainte | `7ab6a58` |
+| `maxInstances` lipsea pe 10 din 51 de funcții (cele din modulele reexportate) | `1d778d8` |
+| Un override vechi primește acum `overrideDate`, iar excepția părintelui se reafirmă | `1d778d8` |
+| CI golește `functions/lib` înainte de build | `1d778d8` |
+| „Se repetă până la” era cu o zi mai devreme în panoul de serii, vara, la București | `9c40d1a` |
+| Datele din titlu: „la ora 10 luni” → 10 luni; „5 zile” muta evenimentul; „mai 10 ouă” → mai | `9c40d1a` |
+| O ciornă restaurată moștenea lacătul datei de la evenimentul de dinainte | `9c40d1a` |
+| `test:tz` refuză un fișier lipsă; `titleDate.test` își verifică fusul | `9c40d1a` |
+| O atingere lângă „șterge doar asta?” închidea și fereastra evenimentului | `62fc5b9` |
+| Checklist: scrierile aceluiași om, în ordine; `unavailable` → scriere pusă la coadă | `62fc5b9` |
+| O ștampilă fără email apare ca neconfirmată | `62fc5b9` |
+| O sumă sub plafon doar până la rotunjire | `62fc5b9` |
+| `seenBy`: o listă deja umflată își poate primi cititorul, fără să crească umplutura | `497d504` |
+
+**Nefăcut, intenționat:** toleranța de ±1 zi la excepții, în calendar. Există pe server și contează
+doar pentru cheile scrise de codul vechi — pe live sunt **0**. E în BACKLOG, cu măsurătoarea.
+
+### Două capcane în propria plasă, prinse de mutație
+
+- **`maxInstances`.** Primul test importa sursa prin vitest și a rămas **verde** cu apelul mutat
+  înapoi: vitest ridică importurile deasupra reexporturilor, deci opțiunile rulau primele oricum.
+  Testul citește acum `lib/index.js` compilat, cu `require`-ul lui Node, ca CLI-ul. Și a doua
+  versiune a rămas tot verde: încărca `globalOptions.js` ÎNAINTE de `index.js` ca să citească
+  constanta, **adică seta singură opțiunile**. Acum încarcă `index.js` primul, iar mutația pică și
+  numește exact cele zece funcții.
+- **Suma rotunjită.** Am scris `9999999.995` ca trebuind refuzat. În virgulă mobilă e
+  `…994999`, deci se rotunjește în jos la o sumă validă. Greșit era testul, nu codul. Scos.
+
+### APK-ul, un fapt nou pentru Andrei
+
+Recenzia a găsit că pe telefoane și **citirile** sunt refuzate din mai. Am verificat-o eu pe bundle
+pentru calendar: acesta ascultă `events` fără filtru, iar regula din 22 mai (`ee9e401`) nu-l poate
+dovedi. Scris în `OWNER_VERIFY.md` ca fapt, nu ca decizie. Ordinea livrărilor rămâne a lui.
+
+### Reziduuri trecute în BACKLOG
+
+- eșecul trecător la `authIdentityOf`;
+- prieteni fără `emailVerified`;
+- emailul owner-ului în istoria git;
+- cheltuiala needitabilă după plecarea unui membru;
+- fereastra de deploy cu taburi vechi (**hosting imediat după reguli**);
+- orbirile plasei AST;
+- limita testului de checklist;
+- clipirea în timpul unei scrieri;
+- Node 22, învechit din 30.04.2027.
+
+`npx tsc -b` · `tsc` pe functions · lint · **1873 de teste** · **323 pe emulator** · test:tz
+(37 × 2 fusuri) · build · `lib/` reconstruit de la zero, 51 de funcții, toate cu plafon — verzi.
+**Nimic publicat.**

@@ -30,8 +30,16 @@ pică exact când se ajunge aici.
   paletă și fără duplicate, dar numai împreună cu schimbarea clientului — vezi DEVLOG 23.09.
   **APK-ul rescrie toată harta**, deci orice variantă îl refuză.
 - Regula care refuză `fromName` / `fromEmail` / `groupName` pe cereri. Ecranul nu le mai citește
-  (`725993e`), dar APK-ul încă le scrie.
+  (`725993e`). **Corectat 24.09 de recenzia dinaintea deploy-ului:** nu APK-ul o ține pe loc —
+  telefoanele nu ajung să trimită nicio invitație (căutarea după email e refuzată din 25 mai) — ci
+  **clientul web**, care încă scrie câmpurile. Așteaptă o schimbare de client web, nu reconstruirea.
 - Scoaterea token-ului de push la delogare pe APK: codul e gata (`a556640`), ajunge cu reconstruirea.
+  La fel ordinea ascultătorilor de push nativ (`src/utils/nativePush.ts`, 24.09): pe un telefon cu
+  mai multe logări token-ul ajungea la contul de dinainte.
+- **Pe telefoane și CITIRILE sunt refuzate, din mai** (recenzia din 24.09, verificat pe bundle):
+  calendarul ascultă `events` fără filtru, iar regula din 22 mai (`ee9e401`) nu-l poate dovedi —
+  calendarul e gol. La fel portofelul, cheltuielile, `users` și căutarea din invitații. Nu se
+  repară din reguli: o regulă care ar primi interogarea nefiltrată ar arăta oricui toate evenimentele.
 - Cine folosește doar APK-ul **n-are profil public** (APK-ul nu scrie oglinda `profiles`): 3 profiluri
   pentru 8 conturi.
 - Pe APK nu se poate adăuga nicio cheltuială (regula cere `ownerId`), iar erorile de pe telefoane nu
@@ -54,8 +62,17 @@ pică exact când se ajunge aici.
   `deleteGroupCascade`. Harness-ul există de pe 24.09 (`functions/test/`, sub `npm run test:rules`).
 - Cererile și invitațiile vechi nu vor primi niciodată ștampila expeditorului (triggerul pornește o
   dată); rămân cu avertismentul. O ștampilare retroactivă se poate scrie — rulată doar cu confirmare.
-- Un override vechi (fără `overrideDate`) care a fost și **mutat** poate încă ascunde o ocurență
-  reală de reminder și digest. Cele noi nu pot (`2d985db`).
+- **Un eșec trecător la citirea contului Auth** (`authIdentityOf`) ștampilează `email: null` —
+  pentru totdeauna, fiindcă triggerul pornește o dată. De la 24.09 ecranul arată atunci „nu am putut
+  confirma” (corect: un nume singur nu confirmă pe nimeni), deci o cerere legitimă poate purta
+  avertismentul. Reparația ar fi o reîncercare în trigger, sau ștampilarea retroactivă de mai sus.
+- **Prietenii nu păstrează dacă emailul era verificat.** La acceptare se scrie emailul, nu și
+  `emailVerified`, deci lista de prieteni nu poate deosebi o adresă dovedită de una tastată.
+- **Emailul owner-ului rămâne în istoria git și în DEVLOG.** Din 24.09 vine din `functions/.env`
+  (ignorat), dar repo-ul e public și istoria îl are. Rescrierea istoriei e decizia lui Andrei.
+- **O cheltuială nu mai poate fi corectată după ce un membru pleacă din grup.** `splitIsHonest` cere
+  ca toți din `splitAmong` să fie membri, pe documentul REZULTAT — deci orice editare a rândului e
+  refuzată cât timp cel plecat e încă pe listă (scoaterea lui schimbă împărțirea). Ștergerea merge.
 
 ## 3. Cod și operațiuni (C)
 
@@ -64,6 +81,22 @@ pică exact când se ajunge aici.
 - **Bundle-ul:** chunk-ul principal are 1,5 MB (425 kB gzip). De împărțit pe rute: Wallet, Chat,
   Settings.
 - **Warlord** (repo-ul Warlord, nu aici): 44 de PNG-uri, 28 MB, 800–900 kB fiecare → WebP.
+- **Node 22 în Cloud Functions:** învechit din **30.04.2027**, scos din uz pe **31.10.2027**. Trecerea
+  la Node 24 înainte de prima dată.
+- **Fereastra de deploy și taburile vechi.** Regulile noi întâlnesc, până la hosting, clientul web
+  vechi: o editare de ocurență fără `apply` se pierde, clopoțelul arată chei brute de i18n, oglinda
+  `profiles` cu data completă e refuzată. De aceea **hosting imediat după reguli**. Un tab rămas
+  deschis zile întregi le vede până la reîncărcare (`NewVersionNotice` o oferă).
+- **Plasa AST din `requestSender.test.ts`** („nimic nu citește câmpurile expeditorului”) e oarbă la
+  acces dinamic (`r[k]`), la destructurare cu redenumire printr-o variabilă și la fișiere în afara
+  `src/`. O ocolire deliberată nu o prinde; o scăpare obișnuită, da.
+- **Testul de emulator pentru checklist** nu poate deosebi o tranzacție de un „citește-apoi-scrie”
+  fără fereastra lărgită pe care o folosește; fără ea, cursa nu se produce în timpul testului.
+- **Checklist, în timpul unei scrieri:** instantaneul scrierii dinainte poate sosi și arăta pentru o
+  clipă lista fără schimbarea mai nouă, până aterizează și ea. Cunoscut, lăsat (`checklistOps.ts`).
+- **Toleranța ±1 zi la excepțiile de recurență** există pe server (`recurrenceServer.ts`), nu și în
+  calendar. Contează doar pentru chei scrise de codul vechi: **măsurat pe live 24.09 — 0 chei de
+  excepție**, iar cele noi se scriu exact. Nu merită portată decât dacă apar.
 
 ## 4. Produs (D) — doar înregistrat
 
