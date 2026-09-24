@@ -970,8 +970,13 @@ service cloud.firestore {
     // ── Admins ──
     // Admin backend access list. Locked to clients entirely — only the Admin SDK
     // (admin* Cloud Functions, which self-check assertAdmin) reads/writes it.
+    // Each person may read their OWN admin record — nothing else, and never write. It tells them only
+    // what the server already acts on (`assertAdmin` checks this very document), and it replaces an
+    // email address that the app hard-coded to decide who sees the Admin entry: every OTHER admin
+    // never saw it, and the address sat in a public repository.
     match /admins/{adminId} {
-      allow read, write: if false;
+      allow get: if isSignedIn() && request.auth.uid == adminId;
+      allow list, write: if false;
     }
 
     // ── Error logs ──

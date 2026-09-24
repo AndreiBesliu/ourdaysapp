@@ -9015,3 +9015,48 @@ Migrarea doar nu mai așteaptă asta.
 - oglinda păstrează anul → **2**.
 
 `npx tsc -b` · lint · **1842 de teste** · **309 pe emulator** · build — verzi.
+
+## 2026-09-24 · C — igiena: config rătăcit, plafon de instanțe, emailul tău din repo, keystore
+
+**Prompt (Andrei):** secțiunea C, punctele care nu cer decizia ta: „Nicio funcție n-are
+`maxInstances`." / „`google-services.json` din rădăcină […] nu-l folosește nimic […] Șterge-l. În
+`android/.gitignore`, liniile `*.jks` și `*.keystore` sunt comentate; decomentează-le" / „Emailul meu
+e hardcodat ca admin de bootstrap […] constanta poate ieși din cod." **Model:** Claude Opus 5.5.
+
+- **`google-services.json` din rădăcină, șters.** E pentru pachetul `Besliu.Org`; aplicația e
+  `com.ourdays.app`, iar Gradle citește `android/app/google-services.json`. **Care nu există.**
+  Deci build-ul Android scrie „google-services plugin not applied. Push Notifications won't work”:
+  **push-ul pe APK n-a mers, după toate probabilitățile, niciodată.** Intră în felia de reconstruire.
+- **`*.jks` / `*.keystore` ignorate.** Niciun keystore nu era urmărit (verificat). Repo-ul e public,
+  iar cine are cheia poate publica actualizări în numele aplicației.
+- **`setGlobalOptions({ maxInstances: 10 })`.** Nu era niciun plafon, deci o buclă într-un client
+  putea scala și factura fără limită. Zece e mult peste ce au nevoie opt oameni. Un comentariu din
+  `aiLedger.ts` care spunea „nu există `maxInstances`” a fost îndreptat, ca să rămână adevărat.
+- **Emailul tău, scos din sursă — dar nu scos pur și simplu.** Constanta era **calea de recuperare**:
+  un email verificat de pe listă se re-provizionează admin dacă toți adminii ar fi scoși. Ștearsă de
+  tot, n-ar mai fi existat drum înapoi. Acum vine din `functions/.env` (gitignored; l-am creat local
+  cu adresa ta, ca deploy-ul de aici să păstreze recuperarea). Nesetat, nu există bootstrap, dar
+  `admins/{uid}` funcționează în continuare.
+- **Clientul decidea intrarea „Admin” după același email** — deci **niciun alt admin nu vedea
+  intrarea.** Acum fiecare om își poate citi **propria** înregistrare din `admins`, fără listare și
+  fără scriere, iar ecranul decide după ea. Nu află nimic ce serverul nu folosește deja.
+- **O plasă:** nicio adresă de la un furnizor real de email nu mai poate apărea în `src/` sau
+  `functions/src/`.
+
+**Un test vechi afirma că nici propria înregistrare de admin nu se poate citi.** L-am schimbat
+deliberat, cu motivul în el. Temerea declarată de acel test — să te faci singur admin — e în
+continuare acolo și în continuare verde.
+
+**Proba:** 6 teste unitare și 3 de reguli. Mutația „oricine citește orice înregistrare de admin" →
+**2 roșii**.
+
+### Și testele pe emulator aveau nevoie de porturile lor (`1c986e1`)
+
+Suita folosea porturile implicite. **Suita CNCVectorStudio, pornită în același timp dintr-o sesiune
+paralelă, ținea 8080, 9299 și 9499**, așa că `npm run test:rules` nici nu pornea. Iar o rulare trecută
+prin `| head` nu tipărea nimic, ceea ce **arăta ca un succes**. Am identificat procesele înainte
+să fac ceva — erau ale celuilalt proiect, și le-am lăsat în pace. Suita are acum 8380/9399, iar
+harness-ul urmează ce raportează CLI-ul, nu un port scris de mână.
+
+`npx tsc -b` · `tsc` pe functions · lint · **1848 de teste** · **312 pe emulator** · test:tz · build
+— verzi.

@@ -1,5 +1,7 @@
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { setGlobalOptions } from "firebase-functions/v2";
+import { bootstrapAdminEmails } from "./bootstrapAdmins";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 
@@ -58,6 +60,11 @@ export { expireIdleGames } from "./games";
 
 admin.initializeApp();
 
+// A ceiling on instances per function. There was none anywhere, so a burst — a bug in a client
+// loop, or somebody calling a callable in a loop — could scale out and bill without limit. Ten is
+// far above what eight people need, and low enough to cap a runaway.
+setGlobalOptions({ maxInstances: 10 });
+
 // App Check enforcement is toggled via env so it can be switched on AFTER the
 // reCAPTCHA key is registered and verified in monitor mode in the Firebase
 // Console — avoids locking out clients that aren't yet sending tokens. Set
@@ -95,7 +102,10 @@ const WARLORD_TURN_TIMEOUT_HOURS = Number(process.env.WARLORD_TURN_TIMEOUT_HOURS
 // to clients; only the Admin SDK writes it). A VERIFIED email in this bootstrap
 // list is auto-granted admin on first admin call (so the owner works out of the
 // box, no script) — verification required to block email-squatting.
-const BOOTSTRAP_ADMIN_EMAILS = ["besliandrei@gmail.com"];
+// From `functions/.env` (gitignored), not from the source: the repository is PUBLIC. Unset, there
+// is simply no bootstrap — `admins/{uid}` still grants access — but also no way back in if every
+// admin were removed, which is what this exists for. See bootstrapAdmins.ts.
+const BOOTSTRAP_ADMIN_EMAILS = bootstrapAdminEmails(process.env.BOOTSTRAP_ADMIN_EMAILS);
 
 // Per-user, per-day quota counter (admin-only `*_usage` collections — clients
 // have no matching rule → denied). Returns true if within today's limit (and

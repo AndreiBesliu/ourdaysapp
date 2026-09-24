@@ -180,8 +180,12 @@ describe('notifications: the recipient owns them, and nobody creates them from a
 describe('the collections no client may touch at all', () => {
   it('the admin list is invisible and unwritable', async () => {
     // Being able to add yourself here is being able to make yourself an admin.
-    await assertFails(getDoc(doc(as(ALICE), 'admins', ALICE)));
     await assertFails(setDoc(doc(as(BOB), 'admins', BOB), { email: EMAIL[BOB] }));
+    // Invisible to everybody else. Since 24.09.2026 each person may read their OWN record — it
+    // replaced a hard-coded email deciding who saw the Admin entry, and tells them only what the
+    // server already acts on. That read is pinned in admins.test.ts; this line used to assert the
+    // opposite, and was changed deliberately, not loosened by accident.
+    await assertFails(getDoc(doc(as(BOB), 'admins', ALICE)));
   });
 
   it('the error log is invisible and unwritable', async () => {

@@ -53,9 +53,10 @@ captures/
 .idea/navEditor.xml
 
 # Keystore files
-# Uncomment the following lines if you do not want to check your keystore files in.
-#*.jks
-#*.keystore
+# The signing keystore must never be committed: this repository is PUBLIC, and whoever holds the
+# key can publish updates as this app. Were commented out; none is tracked (checked 24.09.2026).
+*.jks
+*.keystore
 
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild

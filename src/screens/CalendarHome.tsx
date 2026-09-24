@@ -31,7 +31,7 @@ import { reconciledActiveGroup, sourceFlags } from '../utils/calendarSources';
 import { birthdayDaysIn } from '../utils/birthdays';
 import { t, getDateLocale } from '../utils/i18n';
 import { expandRecurringEvents } from '../utils/recurrence';
-import { acceptGroupInvite, ADMIN_BOOTSTRAP_EMAILS } from '../serverActions';
+import { acceptGroupInvite } from '../serverActions';
 import { displayTime, localZone, occursOn, localDayKey } from '../utils/eventTime';
 import { eventColorClass } from '../utils/eventColors';
 import { useDialog } from '../hooks/useDialog';
@@ -91,7 +91,19 @@ export default function CalendarHome() {
   });
   const dateLocale = getDateLocale(language);
   // Cosmetic gate for the Admin entry (the /admin screen + callables re-check server-side).
-  const isAdminEmail = ADMIN_BOOTSTRAP_EMAILS.includes((auth.currentUser?.email || '').toLowerCase());
+  // Whether this person is an admin, from their OWN admin record — the same document the server's
+  // `assertAdmin` checks. It was a hard-coded email, so every other admin never saw the entry.
+  // Cosmetic either way: /admin and every admin callable re-check on the server.
+  const [isAdminEmail, setIsAdminEmail] = useState(false);
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) { setIsAdminEmail(false); return; }
+    let live = true;
+    getDoc(doc(db, 'admins', uid))
+      .then((snap) => { if (live) setIsAdminEmail(snap.exists()); })
+      .catch(() => { if (live) setIsAdminEmail(false); });
+    return () => { live = false; };
+  }, []);
 
   // Pull to refresh states
   const [isRefreshing, setIsRefreshing] = useState(false);

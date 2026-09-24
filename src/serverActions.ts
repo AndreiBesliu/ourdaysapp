@@ -183,10 +183,8 @@ export async function adminGetGrowth(): Promise<any> {
   return (await fn({})).data;
 }
 
-// Emails that see the Admin entry client-side (cosmetic only — the /admin screen
-// and every admin callable re-check server-side). Keep in sync with the
-// functions' BOOTSTRAP_ADMIN_EMAILS.
-export const ADMIN_BOOTSTRAP_EMAILS = ["besliandrei@gmail.com"];
+// (ADMIN_BOOTSTRAP_EMAILS lived here: a hard-coded address deciding who saw the Admin entry.
+// The screen now reads the caller's own `admins/{uid}` — see CalendarHome.)
 
 // ── The assistant's visibility preview ─────────────────────────────────────────────────
 //
