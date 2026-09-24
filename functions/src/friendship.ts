@@ -15,6 +15,7 @@
 //     and the `apply` it returns during the write phase.
 
 import * as admin from "firebase-admin";
+import { trustedEmail } from "./senderIdentity";
 
 type Tx = admin.firestore.Transaction;
 type Db = admin.firestore.Firestore;
@@ -22,11 +23,29 @@ type Db = admin.firestore.Firestore;
 const cap = (s: unknown): string => String(s || "").slice(0, 80);
 
 export interface FriendshipHints {
-  /** Fallbacks when neither the profile nor the user document carries a name. */
-  aName?: string;
-  bName?: string;
-  aEmail?: string;
-  bEmail?: string;
+  /**
+   * The two people's emails, and the ONLY source of them. Each must come from Firebase Auth — the
+   * caller's ID token, or `authIdentityOf` below — never from a Firestore document.
+   *
+   * This used to read `users/{uid}.email` first and fall back to whatever the caller passed, which
+   * for an invitation was the invitation's own `fromEmail`. Both are written by the person they
+   * describe (`users` is owner-writable; the invitation by its sender), so a stranger's forged
+   * address went straight into the recipient's friend list. See senderIdentity.ts.
+   */
+  aEmail?: string | null;
+  bEmail?: string | null;
+}
+
+/** A person's email and whether it is verified, from their Auth record. Null when unknown. */
+export async function authIdentityOf(uid: string): Promise<{ email: string | null; verified: boolean }> {
+  if (!uid) return { email: null, verified: false };
+  try {
+    const user = await admin.auth().getUser(uid);
+    const email = trustedEmail(user.email);
+    return { email, verified: email !== null && user.emailVerified === true };
+  } catch {
+    return { email: null, verified: false };
+  }
 }
 
 export interface PreparedFriendship {
@@ -59,11 +78,13 @@ export async function readFriendship(
     tx.get(db.doc(`profiles/${uidA}`)), tx.get(db.doc(`profiles/${uidB}`)),
   ]);
 
-  const aEmail = (aUser.data()?.email || hints.aEmail || "").toLowerCase() || null;
-  const bEmail = (bUser.data()?.email || hints.bEmail || "").toLowerCase() || null;
-  const aName = cap(aProfile.data()?.name || aUser.data()?.name || hints.aName ||
+  // Emails from Auth only; names are self-chosen wherever they come from, so the profile is as
+  // good a source as any — but never a field on the request that brought the two together.
+  const aEmail = trustedEmail(hints.aEmail);
+  const bEmail = trustedEmail(hints.bEmail);
+  const aName = cap(aProfile.data()?.name || aUser.data()?.name ||
     (aEmail || "").split("@")[0] || "Friend");
-  const bName = cap(bProfile.data()?.name || bUser.data()?.name || hints.bName ||
+  const bName = cap(bProfile.data()?.name || bUser.data()?.name ||
     (bEmail || "").split("@")[0] || "Friend");
 
   const aFriends: any[] = Array.isArray(aUser.data()?.friends) ? aUser.data()!.friends : [];

@@ -17,7 +17,8 @@ import {
 import { clampAiLimits, configChangeAllowed, type AiConfigFields } from "./aiLimits";
 import { changedOutsideAdmin } from "./aiConfigProvenance";
 import { mergeRollups } from "./aiSpendMerge";
-import { readFriendship } from "./friendship";
+import { readFriendship, authIdentityOf } from "./friendship";
+import { senderStamp, stampedGroupName, trustedEmail } from "./senderIdentity";
 import { notify } from "./notify";
 import { groupErrors, fingerprint } from "./errorGrouping";
 import { fixFor, fixVerdict } from "./errorFixes";
@@ -439,8 +440,25 @@ export const onFriendRequestCreated = onDocumentCreated("friend_requests/{reques
   const fromId = typeof fr.fromId === "string" ? fr.fromId : "";
   if (!fromId) return;
 
+  // WHO sent it, from sources the sender cannot write — stamped before anything below can
+  // return early, since the recipient's screen shows this and nothing else. See senderIdentity.ts.
+  let stampName = "";
   try {
-    const db = admin.firestore();
+    const [identity, prof] = await Promise.all([
+      authIdentityOf(fromId), admin.firestore().doc(`profiles/${fromId}`).get(),
+    ]);
+    const sender = senderStamp({
+      authEmail: identity.email, authVerified: identity.verified, profileName: prof.data()?.name,
+    });
+    stampName = sender.name;
+    await event.data!.ref.update({ sender });
+  } catch (err) {
+    // Fires once; a failure is permanent. The screen then says it could not confirm the sender,
+    // which is the honest answer — and this makes the failure visible to the owner.
+    void logServerError(`friend-request sender stamp failed: ${String(err)}`, "friends:stamp", { uid: fromId });
+  }
+
+  try {
 
     // Two ways a request is addressed, and the common one is the second.
     //
@@ -490,15 +508,10 @@ export const onFriendRequestCreated = onDocumentCreated("friend_requests/{reques
       return;
     }
 
-    const prof = await db.doc(`profiles/${fromId}`).get();
-    const rawSender = prof.data()?.name;
-    // Clamped here as well as in the rules: this string becomes a push notification on somebody
-    // else's phone, and a value that arrives from another document is not this function's to
-    // trust however tightly another file promises to hold it.
-    const senderName = (typeof rawSender === "string" && rawSender.trim()
-      ? rawSender.trim().slice(0, 40)
-      : (typeof fr.fromEmail === "string" ? fr.fromEmail.split("@")[0].slice(0, 40) : ""))
-      || "Someone";
+    // The stamp's name: the profile name, else the Auth email's local part. It used to fall back on
+    // the request's own `fromEmail`, which the sender writes — so the push on somebody else's
+    // phone could say anything they liked. Clamped inside senderStamp.
+    const senderName = stampName || "Someone";
 
     await notify({
       userIds: [toId],
@@ -511,6 +524,33 @@ export const onFriendRequestCreated = onDocumentCreated("friend_requests/{reques
     });
   } catch (err) {
     console.error("onFriendRequestCreated: could not notify", err);
+  }
+});
+
+// The same stamp for a group invitation, plus the group's REAL name. The person invited is not a
+// member yet, so the rules do not let their client read the group — the server can. Before this,
+// their screen showed the `groupName` and `fromEmail` the sender typed. See senderIdentity.ts.
+export const onGroupInviteCreated = onDocumentCreated("group_invites/{inviteId}", async (event) => {
+  const inv = event.data?.data();
+  if (!inv) return;
+  const fromId = typeof inv.fromId === "string" ? inv.fromId : "";
+  if (!fromId) return;
+  try {
+    const db = admin.firestore();
+    const groupId = typeof inv.groupId === "string" && inv.groupId ? inv.groupId : "";
+    const [identity, prof, group] = await Promise.all([
+      authIdentityOf(fromId),
+      db.doc(`profiles/${fromId}`).get(),
+      groupId ? db.doc(`groups/${groupId}`).get() : Promise.resolve(null),
+    ]);
+    const sender = senderStamp({
+      authEmail: identity.email, authVerified: identity.verified, profileName: prof.data()?.name,
+    });
+    const verifiedGroupName = group && group.exists ? stampedGroupName(group.data()?.name) : null;
+    await event.data!.ref.update(verifiedGroupName ? { sender, verifiedGroupName } : { sender });
+  } catch (err) {
+    // Fires once. The screen then says it could not confirm the sender — the honest answer.
+    void logServerError(`group-invite sender stamp failed: ${String(err)}`, "invites:stamp", { uid: fromId });
   }
 });
 
@@ -1329,6 +1369,7 @@ export const respondToFriendRequest = onCall({ enforceAppCheck: ENFORCE_APP_CHEC
       throw new HttpsError("failed-precondition", "Invalid friend request.");
     }
 
+    const senderAuth = await authIdentityOf(senderUid);
     const senderRef = db.doc(`users/${senderUid}`);
     const accepterRef = db.doc(`users/${uid}`);
     const [senderUser, accepterUser, senderProfile, accepterProfile] = await Promise.all([
@@ -1336,12 +1377,15 @@ export const respondToFriendRequest = onCall({ enforceAppCheck: ENFORCE_APP_CHEC
       tx.get(db.doc(`profiles/${senderUid}`)), tx.get(db.doc(`profiles/${uid}`)),
     ]);
 
+    // Emails from Auth ONLY. `users/{uid}.email` is owner-writable and `fr.fromEmail` is the
+    // sender's own claim, and both used to land in the other person's friend list — a stranger's
+    // forged address in yours, and, since accepting is the point, yours in theirs.
+    const senderEmail = senderAuth.email;
     const senderName = cap(senderProfile.data()?.name || senderUser.data()?.name ||
-      fr.fromName || (fr.fromEmail || "").split("@")[0] || "Friend");
-    const senderEmail = (senderUser.data()?.email || fr.fromEmail || "").toLowerCase() || null;
+      (senderEmail || "").split("@")[0] || "Friend");
+    const accepterEmail = trustedEmail(email);
     const accepterName = cap(accepterProfile.data()?.name || accepterUser.data()?.name ||
-      (email || "").split("@")[0] || "Friend");
-    const accepterEmail = (accepterUser.data()?.email || email || "").toLowerCase() || null;
+      (accepterEmail || "").split("@")[0] || "Friend");
 
     // Read-filter-write so each side has exactly ONE entry per friend uid (and a
     // re-accept refreshes name/email instead of accumulating stale duplicates).
@@ -1494,8 +1538,10 @@ export const acceptGroupInvite = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
     // `inv.fromId` rather than the group: a personal invitation carries no group at all, and it
     // should still make a friendship.
     const inviterUid = typeof inv.fromId === "string" ? inv.fromId : "";
+    // Not `inv.fromName` / `inv.fromEmail`: the invitation's sender wrote those. From Auth.
+    const inviterAuth = await authIdentityOf(inviterUid);
     const friendship = await readFriendship(tx, db, inviterUid, uid, {
-      aName: inv.fromName, aEmail: inv.fromEmail, bEmail: email,
+      aEmail: inviterAuth.email, bEmail: email,
     });
 
     if (inv.groupId) {

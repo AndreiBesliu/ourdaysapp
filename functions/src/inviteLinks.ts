@@ -35,7 +35,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
-import { readFriendship } from "./friendship";
+import { readFriendship, authIdentityOf } from "./friendship";
 import { linkVerdict } from "./inviteLinkState";
 import { notify } from "./notify";
 
@@ -211,7 +211,11 @@ export const redeemGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK
       joinsGroup = !members.includes(uid);
     }
 
-    const friendship = await readFriendship(tx, db, inviter, uid, { bEmail: email });
+    // Both emails from Auth: the redeemer's from their token, the inviter's from their record.
+    const inviterAuth = await authIdentityOf(inviter);
+    const friendship = await readFriendship(tx, db, inviter, uid, {
+      aEmail: inviterAuth.email, bEmail: email,
+    });
 
     // ── WRITE PHASE ───────────────────────────────────────────────────────────
     if (joinsGroup && groupRef) {

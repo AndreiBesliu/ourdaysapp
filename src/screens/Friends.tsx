@@ -9,6 +9,7 @@ import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
 import { respondToFriendRequest, removeFriend } from '../serverActions';
 import { useVerifiedEmail } from '../hooks/useVerifiedEmail';
+import { shownSender } from '../utils/requestSender';
 
 interface Friend { uid: string; name?: string; email?: string }
 interface FriendRequest { id: string; fromId: string; fromName?: string; fromEmail?: string; toId?: string | null; toEmail?: string | null; status: string }
@@ -32,6 +33,9 @@ export default function Friends() {
   const [incomingLoadError, setIncomingLoadError] = useState(false);
   const [outgoingLoadError, setOutgoingLoadError] = useState(false);
   const [photoMap, setPhotoMap] = useState<Record<string, string>>({});
+  // Profile names, fetched with the photos: the fallback for a request the server has not
+  // stamped. Never the request's own `fromName`, which its sender wrote.
+  const [nameMap, setNameMap] = useState<Record<string, string>>({});
 
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
@@ -108,13 +112,18 @@ export default function Friends() {
     let cancelled = false;
     (async () => {
       const updates: Record<string, string> = {};
+      const names: Record<string, string> = {};
       await Promise.all(missing.map(async (id) => {
         try {
           const p = await getDoc(doc(db, 'profiles', id));
           updates[id] = p.exists() ? (p.data()?.photoURL || '') : '';
-        } catch { updates[id] = ''; }
+          names[id] = p.exists() && typeof p.data()?.name === 'string' ? p.data()!.name : '';
+        } catch { updates[id] = ''; names[id] = ''; }
       }));
-      if (!cancelled) setPhotoMap(prev => ({ ...prev, ...updates }));
+      if (!cancelled) {
+        setPhotoMap(prev => ({ ...prev, ...updates }));
+        setNameMap(prev => ({ ...prev, ...names }));
+      }
     })();
     return () => { cancelled = true; };
   }, [friends, incoming.length]);
@@ -288,13 +297,22 @@ export default function Friends() {
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {incoming.map((r) => (
+                  {incoming.map((r) => {
+                    // The server's stamp, never the request's own fromName / fromEmail: those were
+                    // written by the sender, which is how a stranger read as "Mama <mama@…>".
+                    const s = shownSender(r, nameMap[r.fromId]);
+                    return (
                     <div key={r.id} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        <Avatar uid={r.fromId} name={r.fromName} />
+                        <Avatar uid={r.fromId} name={s.name ?? undefined} />
                         <div className="min-w-0">
-                          <p className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">{r.fromName || r.fromEmail}</p>
-                          {r.fromEmail && <p className="text-xs text-zinc-500 truncate">{r.fromEmail}</p>}
+                          <p className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">{s.name ?? t('unknownPerson', language)}</p>
+                          {s.email && (
+                            <p className="text-xs text-zinc-500 truncate">
+                              {s.email}{!s.verified && ` · ${t('emailNotVerified', language)}`}
+                            </p>
+                          )}
+                          {s.unconfirmed && <p className="text-xs text-amber-600 dark:text-amber-400">{t('senderUnconfirmed', language)}</p>}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -306,7 +324,8 @@ export default function Friends() {
                         </button>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -8515,3 +8515,68 @@ apese — Cancel — ștergea ceva. La fel Escape, fiindcă un `confirm` închis
 raportează o închidere e fixat de un test pe sursă, mai slab — scris ca atare.
 
 `npx tsc -b` · lint · **1749 de teste** (de la 1744) · build — verzi.
+
+## 2026-09-24 · A.2 — cererile arătau cum voia expeditorul; acum arată ce știe serverul
+
+**Prompt (Andrei):** A.2: „Oricine poate trimite o cerere de prietenie sau o invitație într-un grup
+care arată ca venind de la altcineva. […] UI-ul citește numele din `profiles/{fromId}`, iar
+`groupName` din `groups/{groupId}`; […] scoate fallback-ul pe `fromEmail`." Plus decizia din 24.09:
+„acum faci doar partea de UI […] Regula care le refuză vine după reconstruire." **Model:** Claude
+Opus 5.5.
+
+**Reverificat pe HEAD:** `Friends.tsx:294-297` și `CalendarHome.tsx:788` afișau `fromName`,
+`fromEmail`, `groupName` — toate scrise de clientul expeditorului. Regulile pinuiau doar `fromId`.
+
+### Reparația propusă n-ar fi închis nimic — am măsurat de ce, înainte s-o scriu
+
+- **`profiles/{uid}.name` e scris de proprietar.** Un străin își pune singur numele „Mama".
+- **`users/{uid}.email` e scris tot de proprietar** (`allow read, write: if isOwner`). „Din
+  documentul de user, nu din cerere" mută falsul cu un document mai încolo.
+- **`groups/{id}` se citește doar de MEMBRI**, iar cel invitat încă nu e. Clientul lui nu poate
+  citi deloc numele real al grupului.
+
+Un NUME e mereu ales de om. Ce nu poate alege un străin e emailul din contul lui Firebase Auth,
+și doar serverul îl poate citi. Deci **am mers dincolo de litera „doar UI"**, fiindcă litera nu
+putea face ce trebuia — dar respectând motivul ei: nimic din ce trimite APK-ul nu e refuzat.
+
+### Ce am construit
+
+- **Ștampila serverului.** `onFriendRequestCreated` (existent) și `onGroupInviteCreated` (nou)
+  scriu pe cerere `sender: { name, email, emailVerified }` — emailul **din Auth**, numele din
+  profil — iar la invitație și `verifiedGroupName`, citit de server din grup.
+- **Ecranul arată doar ștampila** (`utils/requestSender.ts`). Fără ștampilă — cereri de dinainte,
+  sau un trigger care n-a rulat încă — arată numele de profil ACTUAL, **fără email**, cu
+  avertismentul „Nu am putut confirma cine a trimis asta".
+- **„Neverificat" lângă un email neverificat.** Înscrierea cu email și parolă nu dovedește că adresa
+  e a ta: un străin poate înregistra adresa reală a Mamei dacă ea nu s-a înscris niciodată.
+- **Serverul nu mai are încredere în câmpurile expeditorului.** Acceptarea cererii de prietenie,
+  acceptarea invitației și răscumpărarea linkului iau emailurile **doar din Auth**
+  (`authIdentityOf` / token). Înainte, emailul fals ajungea în lista victimei, iar cel real al
+  victimei în lista străinului. Push-ul nu mai cade pe `fromEmail` pentru nume.
+- **O singură clauză de regulă:** un client nu poate trimite ștampila deja scrisă (`sender`,
+  `verifiedGroupName`). **Nu refuză nimic din ce trimite APK-ul** — plasa `apk-compat` a rămas verde.
+
+### Proba
+
+- **Teste:** 12 unitare (inclusiv „o cerere cu câmpuri falsificate și fără ștampilă nu arată nimic
+  din ele") și 6 de reguli.
+- **O plasă AST peste `src/` ȘI `functions/src/`:** nimeni nu mai CITEȘTE `fromName`/`fromEmail`.
+  Scrierile rămân legale, fiindcă APK-ul nu e reconstruit. Controlul negativ rulează ACELAȘI
+  predicat, nu o copie.
+- **Trei mutații, toate prinse:**
+  - `shownSender` cade pe `fromName` → **2 roșii**;
+  - o citire plantată în `Friends.tsx` → **1 roșu, cu fișierul și linia exacte**;
+  - regula acceptă ștampila → **3 roșii**.
+
+### Ce NU e încă adevărat, și de ce
+
+- **Nimic nu e pe live.** Ștampila cere deploy de **functions**, iar clauza, deploy de reguli.
+  Până atunci, ecranul arată pentru orice cerere numele de profil și avertismentul.
+- **Cererile vechi nu vor primi ștampila niciodată:** triggerul pornește o dată, la creare. Rămân
+  cu avertismentul. Un script care să le ștampileze retroactiv se poate scrie, dar rulează doar cu
+  confirmarea ta.
+- **Regula care refuză `fromName`/`fromEmail`/`groupName` așteaptă reconstruirea APK-ului**, cum
+  ai decis.
+
+`npx tsc -b` · `tsc` pe functions · lint · **1761 de teste** (de la 1749) · **288 de teste de
+reguli** · build — verzi.

@@ -25,6 +25,7 @@ import GamesHubModal from '../components/games/GamesHubModal';
 import RecurringEventsPanel from '../components/RecurringEventsPanel';
 import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../store';
+import { shownSender, shownGroupName } from '../utils/requestSender';
 import { t, getDateLocale } from '../utils/i18n';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { acceptGroupInvite, ADMIN_BOOTSTRAP_EMAILS } from '../serverActions';
@@ -784,9 +785,22 @@ export default function CalendarHome() {
             </div>
             {pendingFamilyInvites.map(invite => (
               <div key={invite.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                <div>
-                  <p className="font-medium text-zinc-900 dark:text-zinc-100">{invite.fromEmail} {t('invitedYouTo', language)} {invite.groupName || t('aGroup', language)}</p>
-                </div>
+                {(() => {
+                  // The server's stamp and the group's REAL name — never the invitation's own
+                  // fromEmail / groupName, which the sender typed. The invitee is not a member yet,
+                  // so their client cannot read the group itself; the server can, and did.
+                  const s = shownSender(invite, userMap[invite.fromId]?.name);
+                  const group = shownGroupName(invite);
+                  return (
+                    <div>
+                      <p className="font-medium text-zinc-900 dark:text-zinc-100">
+                        {s.name ?? t('unknownPerson', language)}{s.email ? ` <${s.email}>` : ''} {t('invitedYouTo', language)} {group ?? t('aGroup', language)}
+                      </p>
+                      {s.email && !s.verified && <p className="text-xs text-zinc-500">{t('emailNotVerified', language)}</p>}
+                      {s.unconfirmed && <p className="text-xs text-amber-600 dark:text-amber-400">{t('senderUnconfirmed', language)}</p>}
+                    </div>
+                  );
+                })()}
                 <div className="flex items-center gap-2">
                   <button 
                     onClick={() => handleAcceptFamilyInvite(invite)}

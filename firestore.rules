@@ -185,6 +185,19 @@ service cloud.firestore {
         );
     }
 
+    // The server stamps WHO sent a request (`sender`, from Firebase Auth) and, on an invitation,
+    // the group's real name (`verifiedGroupName`) — see functions/src/senderIdentity.ts. The
+    // recipient's screen shows those and nothing else. So a client must not be able to write
+    // them first: a stamp the sender supplies is the forgery this replaced, wearing a new name.
+    //
+    // This refuses nothing the installed APK sends — it has never heard of either key, and
+    // rules-tests/apk-compat.test.ts proves the invitation it does send still passes. The rule
+    // that refuses `fromName` / `fromEmail` / `groupName` themselves is the one that has to wait
+    // for the rebuild, and it is not this one.
+    function noServerStamp() {
+      return !request.resource.data.keys().hasAny(['sender', 'verifiedGroupName']);
+    }
+
     function profileShapeOk() {
       return request.resource.data.keys().hasOnly(['name', 'photoURL', 'birthday'])
         && (!('name' in request.resource.data)
@@ -372,6 +385,7 @@ service cloud.firestore {
       // create time. acceptGroupInvite re-checks the sender's membership at accept time.
       allow create: if isSignedIn() &&
         request.resource.data.fromId == request.auth.uid &&
+        noServerStamp() &&
         (request.resource.data.groupId == null ||
          isMemberOfGroup(request.resource.data.groupId));
       // Only `status` may change — SEVENTH instance of a rule that decides on `resource` while
@@ -964,7 +978,8 @@ service cloud.firestore {
       allow read: if canAccessFriendReq();
       allow create: if isSignedIn() &&
         request.resource.data.fromId == request.auth.uid &&
-        request.resource.data.status == 'pending';
+        request.resource.data.status == 'pending' &&
+        noServerStamp();
       allow update: if false;
       allow delete: if isSignedIn() && request.auth.uid == resource.data.fromId;
     }
