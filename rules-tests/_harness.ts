@@ -34,20 +34,30 @@ export const EMAIL: Record<string, string> = {
 
 let env: RulesTestEnvironment | null = null;
 
+/**
+ * Where the emulator `emulators:exec` actually started, from the variable it sets for its child —
+ * never a hard-coded port. Other projects on this machine run their own emulators, sometimes at the
+ * same moment from a parallel session (CNCVectorStudio's held 8080, 9299 and 9499 on 24.09.2026), so this
+ * suite has its own ports in firebase.json and follows whatever the CLI reports.
+ */
+function emulatorAt(envVar: string, fallbackPort: number): { host: string; port: number } {
+  const v = process.env[envVar];
+  const m = typeof v === 'string' ? /^(.+):(\d+)$/.exec(v) : null;
+  return m ? { host: m[1], port: Number(m[2]) } : { host: '127.0.0.1', port: fallbackPort };
+}
+
 export async function startEnv(projectId: string): Promise<RulesTestEnvironment> {
   env = await initializeTestEnvironment({
     projectId,
     firestore: {
       rules: readFileSync(join(__dirname, '..', 'firestore.rules'), 'utf8'),
-      host: '127.0.0.1',
-      port: 8080,
+      ...emulatorAt('FIRESTORE_EMULATOR_HOST', 8380),
     },
     // Both, always. The storage emulator costs a second at startup and buys the only rules
     // file in the project that nothing had ever probed.
     storage: {
       rules: readFileSync(join(__dirname, '..', 'storage.rules'), 'utf8'),
-      host: '127.0.0.1',
-      port: 9199,
+      ...emulatorAt('FIREBASE_STORAGE_EMULATOR_HOST', 9399),
     },
   });
   return env;
