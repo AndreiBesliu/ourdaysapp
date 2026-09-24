@@ -5,9 +5,13 @@ import { useNavigate } from 'react-router-dom';
 import { t } from '../utils/i18n';
 import { shouldUseLightText, isUnreadableBackground, effectiveTextContrast } from '../utils/themeContrast';
 import { useThemeStore } from '../store';
-import { auth, db } from '../firebase';
+import { auth, db, messaging } from '../firebase';
 import { signOut, updateProfile } from 'firebase/auth';
-import { doc, updateDoc, setDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, arrayRemove } from 'firebase/firestore';
+import { deleteToken } from 'firebase/messaging';
+import { Capacitor } from '@capacitor/core';
+import { PushNotifications } from '@capacitor/push-notifications';
+import { releasePushThenSignOut, rememberedPushToken } from '../utils/pushRelease';
 import { liveDoc } from '../utils/liveQuery';
 import { uploadFile, UploadRefused } from '../utils/uploadFile';
 import { refusalKey, refusalDetail } from '../utils/uploadLimits';
@@ -204,8 +208,26 @@ export default function Settings() {
     }
   };
 
+  // Takes this device's push token with it — see utils/pushRelease.ts. A bare signOut left the
+  // token on the account, so a shared phone kept delivering the leaver's chat and events.
   const handleSignOut = async () => {
-    await signOut(auth);
+    await releasePushThenSignOut({
+      uid: auth.currentUser?.uid ?? null,
+      remembered: rememberedPushToken(),
+      removeFromAccount: (uid, token) => updateDoc(doc(db, 'users', uid), { fcmTokens: arrayRemove(token) }),
+      invalidateOnDevice: async () => {
+        if (Capacitor.isNativePlatform()) {
+          await PushNotifications.unregister();
+          await PushNotifications.removeAllListeners();
+        } else if (messaging && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          // Only when there can be a token: otherwise deleteToken throws for everybody who never
+          // allowed notifications, and every sign-out would file an error nobody can act on.
+          await deleteToken(messaging);
+        }
+      },
+      signOut: () => signOut(auth),
+      report: (err, context) => reportError(err instanceof Error ? err.message : String(err), { context }),
+    });
     navigate('/login');
   };
 

@@ -8580,3 +8580,38 @@ putea face ce trebuia — dar respectând motivul ei: nimic din ce trimite APK-u
 
 `npx tsc -b` · `tsc` pe functions · lint · **1761 de teste** (de la 1749) · **288 de teste de
 reguli** · build — verzi.
+
+## 2026-09-24 · A.3 — la delogare, token-ul de push pleacă odată cu omul
+
+**Prompt (Andrei):** A.3: „Token-ul de push nu se scoate la delogare (confidențialitate pe
+dispozitive comune). […] Fix: la delogare, `arrayRemove` pe token-ul acestui dispozitiv și
+`deleteToken`, apoi abia `signOut`. Listener-ele se scot." Plus: „web-ul se repară acum, APK-ul
+după reconstruire." **Model:** Claude Opus 5.5.
+
+**Reverificat pe HEAD:**
+- `Settings.tsx:208` făcea doar `signOut`.
+- Înregistrarea, și pe web (`CalendarHome`), și nativă (`App.tsx`), doar ADĂUGA (`arrayUnion`).
+- Nicăieri nu exista `arrayRemove` sau `deleteToken`.
+- Listener-ul nativ `registration` se adăuga din nou la **fiecare** logare.
+
+**Ce am măsurat înainte să proiectez:** `notify` curăță deja token-urile pe care FCM le refuză
+(`notify.ts:198-216`). Deci `deleteToken` e pasul care OPREȘTE livrarea, iar `arrayRemove` e
+curățenia imediată. Asta hotărăște ce se întâmplă când un pas eșuează.
+
+**Ordinea e chiar reparația,** așa că stă în `utils/pushRelease.ts`, unde un test o poate rula:
+1. **Scoate token-ul din cont cât ești încă logat.** După `signOut` regula refuză scrierea:
+   `users/{uid}` e doar al proprietarului, și nu mai există proprietar.
+2. **Invalidează-l pe dispozitiv**, orice s-ar fi întâmplat la 1. Așa se oprește livrarea chiar și
+   offline, sau pentru un token vechi pe care nu l-a ținut minte nimeni.
+3. **`signOut` mereu.** Un pas de curățenie eșuat se raportează; nu ține pe nimeni logat.
+
+Dispozitivul ține minte ce token a înregistrat **și pentru cine**, ca să nu scoată niciodată
+token-ul altui cont. Nativ: `removeAllListeners` înainte de `addListener`, deci câte unul din
+fiecare, oricâte logări ar fi fost.
+
+**Proba:** 8 teste. Mutația „`signOut` primul" — exact ordinea defectului — dă **5 roșii**.
+
+**Pe APK nu se schimbă nimic** până la reconstruire, cum ai decis. Pe web, la următorul deploy de
+hosting.
+
+`npx tsc -b` · lint · **1769 de teste** (de la 1761) · build — verzi.

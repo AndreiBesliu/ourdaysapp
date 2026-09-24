@@ -26,6 +26,7 @@ import RecurringEventsPanel from '../components/RecurringEventsPanel';
 import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../store';
 import { shownSender, shownGroupName } from '../utils/requestSender';
+import { rememberPushToken } from '../utils/pushRelease';
 import { t, getDateLocale } from '../utils/i18n';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { acceptGroupInvite, ADMIN_BOOTSTRAP_EMAILS } from '../serverActions';
@@ -294,6 +295,8 @@ export default function CalendarHome() {
             await updateDoc(doc(db, 'users', auth.currentUser!.uid), {
               fcmTokens: arrayUnion(token)
             });
+            // So sign-out knows which token THIS device added, and for whom.
+            rememberPushToken(auth.currentUser!.uid, token);
           }
         }
       } catch (err) {

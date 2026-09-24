@@ -5,6 +5,7 @@ import { doc, setDoc, updateDoc, getDoc, arrayUnion } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { publicMirrorFor } from './utils/publicProfile';
 import { PushNotifications } from '@capacitor/push-notifications';
+import { rememberPushToken } from './utils/pushRelease';
 import { Capacitor } from '@capacitor/core';
 
 // Components
@@ -283,6 +284,11 @@ function App() {
             const permStatus = await PushNotifications.requestPermissions();
             if (permStatus.receive === 'granted') {
               await PushNotifications.register();
+
+              // This runs on EVERY sign-in, and it used to stack one more listener each time — so a
+              // phone that had seen three sign-ins wrote the token three times and handled every
+              // push three times. Cleared first, so there is exactly one of each.
+              await PushNotifications.removeAllListeners();
               
               PushNotifications.addListener('registration', async (token) => {
                 // Store native FCM tokens in the `fcmTokens` array (matching the
@@ -296,6 +302,7 @@ function App() {
                   await updateDoc(doc(db, 'users', currentUser.uid), {
                     fcmTokens: arrayUnion(token.value)
                   });
+                  rememberPushToken(currentUser.uid, token.value);
                 } catch (err) {
                   reportError(err instanceof Error ? err.message : String(err), { context: 'fcm.token' });
                 }
