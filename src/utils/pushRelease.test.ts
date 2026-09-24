@@ -55,6 +55,18 @@ describe('failures never keep somebody signed in', () => {
   });
 });
 
+describe('offline, where a write neither succeeds nor fails', () => {
+  it('still signs out when the account write never settles', async () => {
+    // What `updateDoc` actually does offline: queue, and leave its promise pending until the
+    // connection returns. The first version awaited it and never signed anybody out.
+    const never = () => new Promise<void>(() => {});
+    const { steps, calls, reported } = fakeSteps({ removeFromAccount: never, invalidateOnDevice: never, stepTimeoutMs: 20 });
+    await releasePushThenSignOut(steps);
+    expect(calls).toEqual(['signOut']);
+    expect(reported).toEqual(['push.release.account', 'push.release.device']);
+  });
+});
+
 describe('whose token it is', () => {
   it('invalidates on the device even when nothing was remembered', async () => {
     // A token registered before this existed was never remembered. Invalidating it is what stops

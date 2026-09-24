@@ -6,6 +6,7 @@ import { auth, db } from './firebase';
 import { publicMirrorFor } from './utils/publicProfile';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { rememberPushToken } from './utils/pushRelease';
+import { registerNativePush } from './utils/nativePush';
 import { Capacitor } from '@capacitor/core';
 
 // Components
@@ -281,37 +282,24 @@ function App() {
           // that. Push registration is not a precondition for showing a calendar.
           void (async () => {
           try {
-            const permStatus = await PushNotifications.requestPermissions();
-            if (permStatus.receive === 'granted') {
-              await PushNotifications.register();
-
-              // This runs on EVERY sign-in, and it used to stack one more listener each time — so a
-              // phone that had seen three sign-ins wrote the token three times and handled every
-              // push three times. Cleared first, so there is exactly one of each.
-              await PushNotifications.removeAllListeners();
-              
-              PushNotifications.addListener('registration', async (token) => {
-                // Store native FCM tokens in the `fcmTokens` array (matching the
-                // web path in CalendarHome.tsx and what the Cloud Functions read),
-                // so remote push reaches Android devices.
-                //
-                // The try/catch is not decoration: this callback runs later, on its own stack, so
-                // the enclosing try around addListener never sees it. Without this, a device that
-                // silently never receives a notification again leaves no trace anywhere.
-                try {
-                  await updateDoc(doc(db, 'users', currentUser.uid), {
-                    fcmTokens: arrayUnion(token.value)
-                  });
-                  rememberPushToken(currentUser.uid, token.value);
-                } catch (err) {
-                  reportError(err instanceof Error ? err.message : String(err), { context: 'fcm.token' });
-                }
-              });
-
-              PushNotifications.addListener('pushNotificationReceived', (notification) => {
-                console.log('Push received: ', notification);
-              });
-            }
+            // Listeners cleared and attached BEFORE register() fires the event — see nativePush.ts.
+            await registerNativePush(PushNotifications, async (token) => {
+              // Store native FCM tokens in the `fcmTokens` array (matching the
+              // web path in CalendarHome.tsx and what the Cloud Functions read),
+              // so remote push reaches Android devices.
+              //
+              // The try/catch is not decoration: this callback runs later, on its own stack, so
+              // the enclosing try never sees it. Without this, a device that silently never
+              // receives a notification again leaves no trace anywhere.
+              try {
+                await updateDoc(doc(db, 'users', currentUser.uid), {
+                  fcmTokens: arrayUnion(token)
+                });
+                rememberPushToken(currentUser.uid, token);
+              } catch (err) {
+                reportError(err instanceof Error ? err.message : String(err), { context: 'fcm.token' });
+              }
+            });
           } catch (e) {
             reportError(e instanceof Error ? e.message : String(e), { context: 'App.pushSetup' });
             console.error("Push notification setup failed:", e);

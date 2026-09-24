@@ -53,17 +53,36 @@ export interface ReleaseSteps {
   invalidateOnDevice: () => Promise<void>;
   signOut: () => Promise<void>;
   report: (err: unknown, context: string) => void;
+  /** How long each clean-up step may take before sign-out goes ahead without it. */
+  stepTimeoutMs?: number;
+}
+
+/**
+ * A step that has not finished in `ms` is abandoned (and reported), not awaited for ever.
+ *
+ * Found by the pre-deploy review of 24.09.2026, before this shipped: OFFLINE, `updateDoc` does not
+ * reject — it is queued, and its promise does not settle until the connection returns. The first
+ * version awaited it, so signing out on a phone with no signal did nothing at all: no sign-out, no
+ * error, the person still signed in. Its test modelled offline as a THROW, which is why it passed.
+ * The same trap is documented in App.tsx for the user document.
+ */
+function within<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`push-release: no answer in ${ms} ms`)), ms);
+    p.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
 }
 
 export async function releasePushThenSignOut(s: ReleaseSteps): Promise<void> {
   // 1. Only a token this device registered for THIS account. A token remembered for somebody
   //    else is not this account's to remove — and removing it from the wrong document would be
   //    refused anyway, or worse, succeed on a stale uid.
+  const ms = s.stepTimeoutMs ?? 4000;
   if (s.uid && s.remembered && s.remembered.uid === s.uid) {
-    try { await s.removeFromAccount(s.uid, s.remembered.token); } catch (e) { s.report(e, 'push.release.account'); }
+    try { await within(s.removeFromAccount(s.uid, s.remembered.token), ms); } catch (e) { s.report(e, 'push.release.account'); }
   }
   // 2. Regardless of step 1.
-  try { await s.invalidateOnDevice(); } catch (e) { s.report(e, 'push.release.device'); }
+  try { await within(s.invalidateOnDevice(), ms); } catch (e) { s.report(e, 'push.release.device'); }
   forgetPushToken();
   // 3. Always.
   await s.signOut();
