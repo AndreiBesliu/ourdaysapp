@@ -8434,3 +8434,56 @@ propusă are **aceeași gaură de duplicate** ca `seenBy`, lasă să se creeze c
 altuia, **pică două teste existente** (cheia `up`, nu un emoji — verificat de mine: groups:216 și
 chats:79), și o cheie din afara paletei nu mai poate fi ștearsă de niciun client. Deci se poate,
 dar nu în forma propusă. Următoarea felie.
+
+## 2026-09-24 · Ce cod rulează APK-ul, și ce e deja stricat pe telefoane
+
+**Task Started.** **Prompt (Andrei):** auditul read-only din sesiunea cloud (pe `3d74d7c`) plus
+deciziile lui din 24.09, în special: „APK-ul ESTE instalat pe telefoane […] **Întâi află ce cod
+rulează.** […] Regula de compatibilitate: fiecare schimbare de reguli sau de callable se verifică
+față de ce trimite codul din APK." **Model:** Claude Opus 5.5.
+
+### Ce cod rulează
+
+Ultimul `npx cap sync` din proiect e pe **9 mai 2026, 08:27**: `index-DTbgbzyX.js`, 1,67 MB, în
+`android/app/src/main/assets/public/assets/`. Drive sincronizează tot folderul, deci un sync
+ulterior de pe orice mașină ar fi apărut aici. **Nu există niciun APK construit pe disc**, așa că
+„telefoanele rulează exact bundle-ul ăsta" e o DEDUCȚIE din data sync-ului, nu o probă. Andrei
+confirmă când l-a instalat.
+
+Dar bundle-ul e chiar aici, deci am citit **ce trimite**, nu am ghicit din istoricul git:
+
+| În bundle-ul APK | Apariții | Ce înseamnă |
+|---|---|---|
+| `birthday` | **0** | decizia cu data nașterii nu poate strica APK-ul |
+| `friend_requests` | **0** | APK-ul n-are cereri de prietenie deloc |
+| `createEventOverride` | **0** | nici recurență pe server: o serie = 14/12/6 documente separate |
+| `chat-audio/` | **0** | nici note vocale |
+| `hiddenFrom` | **0** | dar scrie `visibleTo` pe evenimente |
+
+### Ce e DEJA stricat pe telefoane, măsurat pe emulator
+
+Am rejucat unsprezece scrieri de bază ale APK-ului, câmp cu câmp, contra regulilor de azi.
+**Nouă trec. Două sunt refuzate:**
+
+- **Adăugarea unei cheltuieli.** APK-ul scrie `{ amount, description, paidBy, createdAt }` în
+  `expenses`; regula cere acum `ownerId`, pe care nu-l trimite. Iar APK-ul înghite eroarea într-un
+  `console.error`, deci cine apasă „adaugă" de pe telefon nu primește nimic, de luni de zile.
+- **Notificarea când atribui o sarcină altcuiva.** Evenimentul se creează; doar anunțul se pierde.
+
+Deci regula nouă pe `amount` (A.4) nu poate înrăutăți nimic pe telefon: cheltuielile de acolo
+sunt deja moarte. Se repară prin reconstruire, nu prin slăbirea regulii.
+
+### Plasa: `rules-tests/apk-compat.test.ts`
+
+Scrierile care trec azi sunt acum **teste**: mesaj în grup, invitație, grup, eveniment (personal,
+în grup, sarcină), joc, asset, documentul `users` la înscriere, marcarea ca văzut **în batch cu
+`arrayUnion`**, și reacția care rescrie toată harta pe cheie-emoji. Orice regulă nouă care ar
+strica telefoanele înroșește suita.
+
+Cele două deja stricate **nu** sunt pinuite ca `assertFails` — plasa ar ajunge să apere
+stricăciunea. Stau în antet și aici.
+
+**Proba că plasa mușcă:** am aplicat chiar regula pe care ar fi adus-o A.2 (invitațiile refuză
+`groupName`) → **1 test roșu**, exact cel al invitației. Restaurat, fără diferență.
+
+**282 de teste de reguli** (de la 273).
