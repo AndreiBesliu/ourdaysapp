@@ -11,7 +11,7 @@
 
 import { beforeAll, afterAll, beforeEach, describe, it } from 'vitest';
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { arrayUnion, deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { ALICE, BOB, CAROL, DAVE, G1, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
 
 beforeAll(async () => { await startEnv('demo-ourdays-groups'); });
@@ -362,6 +362,36 @@ describe('chat messages inside a group', () => {
     });
     await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm12'), {
       seenBy: [ALICE, BOB],
+    }));
+  });
+
+  it('…and marked seen the way the client does it, with arrayUnion, in the same batch as the rest', async () => {
+    // Pre-deploy review 24.09: arrayUnion keeps the old duplicates, so the no-duplicates test
+    // refused this — and mark-as-seen is one batch, so every receipt in it was lost with it.
+    await seed(async (db) => {
+      await setDoc(doc(db, 'groups', G1, 'messages', 'm13'), {
+        senderId: ALICE, text: 'padded', seenBy: [ALICE, ALICE, ALICE], reactions: {}, isPinned: false,
+      });
+    });
+    const bob = as(BOB);
+    const batch = writeBatch(bob);
+    batch.update(doc(bob, 'groups', G1, 'messages', 'm13'), { seenBy: arrayUnion(BOB) });
+    batch.update(doc(bob, 'groups', G1, 'messages', 'm1'), { seenBy: arrayUnion(BOB) });
+    await assertSucceeds(batch.commit());
+  });
+
+  it('but the padding it already had is the most it will ever have', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'groups', G1, 'messages', 'm14'), {
+        senderId: ALICE, text: 'padded', seenBy: [ALICE, ALICE, ALICE], reactions: {}, isPinned: false,
+      });
+    });
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm14'), {
+      seenBy: [ALICE, ALICE, ALICE, ALICE, BOB],
+    }));
+    // Still only yourself, padded or not.
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm14'), {
+      seenBy: [ALICE, ALICE, ALICE, CAROL],
     }));
   });
 

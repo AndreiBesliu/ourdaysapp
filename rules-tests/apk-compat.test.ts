@@ -32,6 +32,16 @@
 //
 // Pinning those as `assertFails` would make this file defend the breakage. They are recorded in
 // the DEVLOG and in the report on the rebuild; they are fixed by rebuilding, not by loosening.
+//
+// ── And its READS, found by the pre-deploy review of 24.09 ───────────────────────────────────
+//
+// The list above was only what the APK WRITES. Its reads fare worse. The calendar listens on
+// `query(collection(db, 'events'))` with no filter at all (checked in the bundle), and since the
+// rules of 22 May (`ee9e401`) the events read rule depends on the document's fields — so that
+// query cannot be proven and is refused whole: the calendar on the phones is empty. The review
+// found the wallet, the expenses, `users` reads and the invite lookup refused the same way, which
+// means the phones cannot send an invite, and accepting one leaves it 'accepted' without joining.
+// So every case below passing says the rules still take these WRITES — not that the APK works.
 
 import { beforeAll, afterAll, beforeEach, describe, it } from 'vitest';
 import { assertSucceeds } from '@firebase/rules-unit-testing';
@@ -61,9 +71,12 @@ describe('what the installed APK creates', () => {
     }));
   });
 
-  it('a group invite, which carries fromEmail and groupName but no fromName', async () => {
-    // Why the impersonation fix (A.2) is UI-only until the rebuild: a rule refusing these fields
-    // refuses every invite sent from a phone.
+  it('a group invite, as the APK would write it — which, on the phones, it never gets to', async () => {
+    // The payload is the APK's, field for field. But the pre-deploy review of 24.09 found that
+    // sending an invite from the APK first looks the recipient up in `users` by email, and that
+    // read has been refused since 25 May — so no phone reaches this write at all. This case is kept
+    // as the shape of the payload, NOT as a reason the fromEmail/groupName rule must wait: what
+    // still writes these fields today is the WEB client. See OWNER_VERIFY.md.
     await assertSucceeds(addDoc(collection(as(BOB), 'group_invites'), {
       fromId: BOB, fromEmail: EMAIL[BOB], toId: null, toEmail: 'someone@example.test',
       groupId: G1, groupName: 'Family', status: 'pending', createdAt: NOW,

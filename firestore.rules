@@ -161,13 +161,25 @@ service cloud.firestore {
     //    evaluated on the RESULTING document, so an untouched bad value was being re-judged on
     //    every unrelated write. That is the fourth time this file has been bitten by exactly
     //    that, and the first time I have been the one to write it.
+    //
+    // 3. (pre-deploy review, 24.09.2026) A list padded BEFORE this ships keeps its duplicates
+    //    under `arrayUnion` — that is what the client sends, not a cleaned-up list — so the next
+    //    mark-as-seen failed the no-duplicates test, and with it the whole batch of receipts.
+    //    Measured on live the same day: no message holds one. The window is the time until the
+    //    deploy. So a padded list may still gain its reader, as long as the number of duplicates
+    //    does not GROW: whatever padding it had is the most it will ever have.
     function seenByShapeOk(v) {
       return v is list && v.toSet().size() == v.size();
+    }
+    function seenByNoMorePadded(v, old) {
+      return v is list && old is list
+        && v.size() - v.toSet().size() <= old.size() - old.toSet().size();
     }
     function onlySelfJoinsSeenBy() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['seenBy'])
         || (
-          seenByShapeOk(request.resource.data.get('seenBy', []))
+          (seenByShapeOk(request.resource.data.get('seenBy', []))
+           || seenByNoMorePadded(request.resource.data.get('seenBy', []), resource.data.get('seenBy', [])))
           && (
             // The ordinary case: a well-formed stored value.
             (resource.data.get('seenBy', []) is list
