@@ -205,6 +205,11 @@ describe('the picker', () => {
   it('labels a zone with the offset people recognise', () => {
     expect(zoneLabel(BUC, Date.UTC(2026, 6, 15))).toBe('Europe/Bucharest (UTC+03:00)');
     expect(zoneLabel(BUC, Date.UTC(2026, 0, 15))).toBe('Europe/Bucharest (UTC+02:00)');
+    // With milliseconds, as `Date.now()` always has them. Every instant above sits on a whole
+    // second, which is why this read "UTC+02:59" in the app for months while the tests were green.
+    expect(zoneLabel(BUC, Date.UTC(2026, 8, 24, 9, 0, 0, 437))).toBe('Europe/Bucharest (UTC+03:00)');
+    expect(zoneLabel('America/New_York', Date.UTC(2026, 8, 24, 9, 0, 0, 999))).toBe('America/New York (UTC-04:00)');
+    expect(zoneOffsetMs(Date.UTC(2026, 8, 24, 9, 0, 0, 437), BUC) % 60_000).toBe(0);
     expect(zoneLabel('Asia/Kolkata', Date.UTC(2026, 0, 15))).toBe('Asia/Kolkata (UTC+05:30)');
   });
 

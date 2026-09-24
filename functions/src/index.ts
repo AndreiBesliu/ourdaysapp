@@ -2849,7 +2849,11 @@ export const claimWarlordTimeout = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
     // handing out a free win.
     if (!stampMs) {
       tx.update(ref, { lastMoveAt: admin.firestore.FieldValue.serverTimestamp() });
-      throw new HttpsError("failed-precondition", "The timeout clock has just started for this battle.");
+      // RETURNED, not thrown. A throw inside a transaction rolls the whole transaction back, the
+      // update above included — so the clock never started, every claim said it just had, and a
+      // battle from before this field existed could never time out at all. The error is thrown
+      // below, after the commit, so the player still gets the same message.
+      return { clockStarted: true as const };
     }
     const elapsedH = (Date.now() - stampMs) / 3600000;
     if (elapsedH < WARLORD_TURN_TIMEOUT_HOURS) {
@@ -2879,6 +2883,9 @@ export const claimWarlordTimeout = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
 
   const done = ladder as WarlordLadderUpdate | null;
   if (done) await recordWarlordResult(done.winner, done.loser);
+  if ("clockStarted" in result) {
+    throw new HttpsError("failed-precondition", "The timeout clock has just started for this battle.");
+  }
   return result;
 });
 

@@ -8928,3 +8928,34 @@ comportamentul găsit de audit, apărat de un test. **L-am inversat, nu l-am șt
 Intră în vigoare la deploy-ul de **functions**. Clopoțelul, la cel de hosting.
 
 `npx tsc -b` · `tsc` pe functions · lint · **1828 de teste** · build — verzi.
+
+## 2026-09-24 · A.9 — cele mărunte, dar vizibile
+
+**Prompt (Andrei):** A.9, „Mărunte, dar vizibile" — `zoneLabel`, grupul șters care rămâne selectat,
+flag-ul de eroare șters de alt listener, aniversările, redenumirea eșuată, `claimWarlordTimeout`.
+**Model:** Claude Opus 5.5.
+
+Toate reverificate pe HEAD. Aniversările (doar anul curent + 29 februarie) **nu sunt aici**: ating
+exact codul felii „data nașterii" pe care ai definit-o la secțiunea 0, și vin acolo.
+
+- **`zoneLabel` arăta „UTC+02:59".** `formatToParts` nu raportează milisecunde, iar `zoneOffsetMs`
+  scădea instantul **cu** milisecunde: la 09:00:00.437, Bucureștiul ieșea 3 h minus 437 ms. Reparat
+  la sursă, în `zoneOffsetMs`, fiindcă îl folosesc și `startInstant` și noul `dayIn` al
+  reminder-elor. Ambele copii, byte-identice. **Testele vechi erau verzi fiindcă toate instantele
+  lor cădeau pe secundă fixă.** Adăugat cazul cu milisecunde. Mutația (scăderea veche) → **1 roșu**.
+- **Un grup șters, sau din care ai fost scos, rămânea selectat** — calendar gol sub un tab care nu
+  mai exista. Acum cade pe calendarul personal (`reconciledActiveGroup`).
+- **Un listener care se încărca ștergea eroarea altuia.** Evenimentele tale se încărcau, iar
+  avertismentul că cele asignate ție NU se încărcaseră dispărea. Fiecare sursă vorbește acum doar
+  pentru ea (`sourceFlags`) — aceeași reparație ca în `ExpensesTab`. Mutația „un succes șterge tot"
+  → **2 roșii**.
+- **O redenumire eșuată spunea „grupul nu a putut fi șters"** și se trecea în jurnalul de erori
+  sub ștergere sau părăsire, copiată cu mesaj cu tot de la handler-ul de deasupra. Acum are propriul
+  mesaj, în șase limbi, și propriul context în jurnal.
+- **`claimWarlordTimeout`:** `tx.update` urmat de `throw` în aceeași tranzacție. Un `throw` anulează
+  tranzacția, cu update cu tot. Pentru o bătălie de dinainte de ceas, ceasul **nu pornea niciodată**:
+  fiecare cerere spunea că tocmai a pornit, iar bătălia nu putea expira. Acum tranzacția întoarce
+  rezultatul, iar eroarea se aruncă după commit. **Test pe emulator, prin handlerul real:** ceasul
+  rămâne pornit, iar a doua cerere e măsurată după el. Mutația (`throw` înapoi înăuntru) → **2 roșii**.
+
+`npx tsc -b` · `tsc` pe functions · lint · **1833 de teste** · **303 pe emulator** · build — verzi.

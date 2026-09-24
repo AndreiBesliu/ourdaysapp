@@ -27,6 +27,7 @@ import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../store';
 import { shownSender, shownGroupName } from '../utils/requestSender';
 import { rememberPushToken } from '../utils/pushRelease';
+import { reconciledActiveGroup, sourceFlags } from '../utils/calendarSources';
 import { t, getDateLocale } from '../utils/i18n';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { acceptGroupInvite, ADMIN_BOOTSTRAP_EMAILS } from '../serverActions';
@@ -145,6 +146,9 @@ export default function CalendarHome() {
     const unsubscribeGroups = liveQuery<any>(qGroups, 'CalendarHome.groups', async (fetchedGroups) => {
       setGroupsLoadError(false);
       setGroups(fetchedGroups);
+      // A group deleted, or one this person was removed from, used to stay selected — an empty
+      // calendar under a tab that no longer exists for them.
+      setActiveGroupId((current) => reconciledActiveGroup(current, fetchedGroups));
       
       const map: Record<string, any> = {};
       // Seed current user from auth first, then enrich with Firestore doc (which has photoURL)
@@ -348,6 +352,9 @@ export default function CalendarHome() {
 
     // Accumulator: merge results from multiple queries, deduplicating by id
     const eventBuckets: Record<string, Record<string, any>> = { main: {}, assigned: {}, invited: {} };
+    // Each listener speaks for itself: one loading fine must not clear another's failure. See
+    // utils/calendarSources.ts.
+    const loadFlags = sourceFlags(['main', 'assigned', 'invited'] as const);
 
     const mergeAndSet = () => {
       const merged = new Map<string, any>();
@@ -379,29 +386,31 @@ export default function CalendarHome() {
     // — the same shape as a calendar that genuinely has none — and nothing reached errorLogs,
     // because the SDK neither throws nor rejects when no error handler is given.
     unsubs.push(liveQuery<any>(mainQuery, 'CalendarHome.events.main', (docs) => {
-      setEventsLoadError(false);
+      setEventsLoadError(loadFlags.ok('main'));
       eventBuckets.main = {};
       // No tab filtering here either — this listener used to be the only one that did any, which
       // is precisely why the other two leaked.
       docs.forEach(ev => { eventBuckets.main[ev.id] = ev; });
       mergeAndSet();
-    }, () => setEventsLoadError(true)));
+    }, () => setEventsLoadError(loadFlags.fail('main'))));
 
     // ── Query 2: Events assigned to me ──
     const assignedQuery = query(collection(db, 'events'), where('assigneeIds', 'array-contains', uid));
     unsubs.push(liveQuery<any>(assignedQuery, 'CalendarHome.events.assigned', (docs) => {
+      setEventsLoadError(loadFlags.ok('assigned'));
       eventBuckets.assigned = {};
       docs.forEach(ev => { eventBuckets.assigned[ev.id] = ev; });
       mergeAndSet();
-    }, () => setEventsLoadError(true)));
+    }, () => setEventsLoadError(loadFlags.fail('assigned'))));
 
     // ── Query 3: Events where I'm invited ──
     const invitedQuery = query(collection(db, 'events'), where('inviteeId', '==', uid));
     unsubs.push(liveQuery<any>(invitedQuery, 'CalendarHome.events.invited', (docs) => {
+      setEventsLoadError(loadFlags.ok('invited'));
       eventBuckets.invited = {};
       docs.forEach(ev => { eventBuckets.invited[ev.id] = ev; });
       mergeAndSet();
-    }, () => setEventsLoadError(true)));
+    }, () => setEventsLoadError(loadFlags.fail('invited'))));
 
     return () => unsubs.forEach(u => u());
   }, [activeGroupId]);

@@ -88,10 +88,12 @@ export default function GroupSettingsModal({
       await updateDoc(doc(db, 'groups', groupId), { name: editedName.trim() });
       setIsEditingName(false);
     } catch (err) {
-      reportError(err instanceof Error ? err.message : String(err), {
-        context: isOwner ? 'GroupSettingsModal.deleteGroup' : 'GroupSettingsModal.leaveGroup',
-      });
-      setError(isOwner ? t('deleteGroupFailed', language) : t('leaveGroupFailed', language));
+      // A failed RENAME used to say the group could not be deleted (or left), and was filed in the
+      // error log under delete/leave too — copied from the handler above, message and all. It
+      // told the person something frightening and untrue, and the log sent whoever read it to the
+      // wrong function.
+      reportError(err instanceof Error ? err.message : String(err), { context: 'GroupSettingsModal.rename' });
+      setError(t('renameGroupFailed', language));
     } finally {
       setLoading(false);
     }
