@@ -19,6 +19,7 @@ import { changedOutsideAdmin } from "./aiConfigProvenance";
 import { mergeRollups } from "./aiSpendMerge";
 import { readFriendship, authIdentityOf } from "./friendship";
 import { senderStamp, stampedGroupName, trustedEmail } from "./senderIdentity";
+import { overrideRsvps } from "./overrideRsvps";
 import { notify } from "./notify";
 import { groupErrors, fingerprint } from "./errorGrouping";
 import { fixFor, fixVerdict } from "./errorFixes";
@@ -1169,6 +1170,13 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   const assigneeIds = requested.filter((id) => allowed.has(id) && id !== "ai_assistant");
   safe.assigneeIds = assigneeIds;
   safe.assigneeId = assigneeIds[0] ?? null;
+
+  // RSVPs: everybody else's from the PARENT, only the caller's own from the request. The loop above
+  // copied the whole map from the client, on the Admin SDK — so the per-person rule was never
+  // consulted and one member could answer for the family. See overrideRsvps.ts.
+  const rsvps = overrideRsvps(p.rsvps, (data as Record<string, unknown>).rsvps, uid);
+  if (rsvps) safe.rsvps = rsvps;
+  else delete safe.rsvps;
 
   const overrideRef = db.collection("events").doc();
   const batch = db.batch();

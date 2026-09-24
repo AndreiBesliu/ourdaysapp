@@ -8654,3 +8654,35 @@ A treia **nu s-a aplicat la prima încercare**: `sed` n-a potrivit, lanțul s-a 
 „applied" — deci verdict nul, nu un „a trecut". Refăcută cu potrivire exactă.
 
 `npx tsc -b` · lint · **1775 de teste** · **291 de teste de reguli** · build — verzi.
+
+## 2026-09-24 · A.5 — `createEventOverride` răspundea RSVP în numele altora
+
+**Prompt (Andrei):** A.5: „`createEventOverride` lasă un membru să răspundă RSVP în numele altora.
+[…] copiază `rsvps` din client prin Admin SDK, deci ocolește garda per persoană din reguli. Fix:
+păstrează `rsvps` din părinte și acceptă doar intrarea apelantului." **Model:** Claude Opus 5.5.
+
+**Reverificat pe HEAD:** `rsvps` e în `OVERRIDE_FIELDS` și se copia întreg din `data` venit de la
+client. Admin SDK nu evaluează regulile, deci `rsvpsOnlyMine()` nu era consultată deloc. Oricine
+putea edita o serie comună putea trimite `{ rsvps: { <oricine>: 'yes' } }` și răspundea pentru
+toată familia, pe o dată, prin singura ușă pe care regula n-o vedea.
+
+**Reparat — `functions/src/overrideRsvps.ts`, pur:** răspunsurile celorlalți vin din PĂRINTE,
+exact cum sunt. Cererea vorbește doar pentru apelant: răspunsul lui, dacă e unul real
+(`yes`/`maybe`/`no`). Dacă o hartă trimisă nu-i are cheia, răspunsul lui se șterge — așa își
+retrage clientul răspunsul. O cerere fără `rsvps` nu schimbă nimic. Răspunsurile celorlalți **nu**
+sunt rejudecate: le-au scris, sub reguli, oamenii cărora le aparțin.
+
+`rsvps` rămâne în `OVERRIDE_FIELDS` — garda din `overrideFields.test.ts` îl cere acolo, și pe bună
+dreptate: fără el, materializarea unei ocurențe pierdea toate răspunsurile. Doar că acum e
+suprascris după copiere cu rezultatul combinării.
+
+**Proba:** 9 teste. Mutația „cererea vorbește pentru toți" — chiar defectul — dă **1 roșu**.
+
+**Ce NU am făcut încă:** testul pe emulator al callable-ului, cerut la B. N-am pus un test
+`functions/` care importă `firebase-admin` într-un CI care instalează doar rădăcina — ar fi verde
+local și ar cădea în CI. Vine cu A.6, unde `createEventOverride` devine idempotent (tranzacția e
+exact ce merită rulată pe emulator), împreună cu pasul de CI pentru `functions/` din C.
+
+Intră în vigoare la deploy-ul de **functions**.
+
+`npx tsc -b` · `tsc` pe functions · lint · **1784 de teste** · build — verzi.
