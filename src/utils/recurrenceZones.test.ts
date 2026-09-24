@@ -11,11 +11,14 @@
 // print the same day. Bucharest crosses its DST change in March and October; New York sits WEST
 // of Greenwich, where reading a stored midnight-UTC instant locally lands on the previous evening.
 //
-// Every case here was written to FAIL on the code before the repair, and that failing run is
-// recorded in the DEVLOG — a zone test that was only ever green would prove nothing about zones.
+// The cases were written against the defects measured on 24.09.2026, and the failing run is
+// recorded in the DEVLOG. Not every case failed on the old code — some pin a side that was already
+// right, so the two cannot drift apart again. A zone test that was only ever green would prove
+// nothing about zones; this file's claim is that each DEFECT has a case that fails without its fix.
 
 import { describe, it, expect } from 'vitest';
-import { expandRecurringEvents, shiftedSeriesStart } from './recurrence';
+import { expandRecurringEvents, shiftedSeriesStart, getRecurrenceEndDate } from './recurrence';
+import { seriesStartDay } from './recurrenceCore';
 import { dayAsLocalDate } from './dayLabel';
 import { expandInWindow } from '../../functions/src/recurrenceServer';
 
@@ -115,5 +118,37 @@ describe(`recurrence under ${ACTUAL}`, () => {
     const { client, server } = both(series('legacy', '2026-03-31T23:00:00.000Z', 'weekly'), '2026-03-25', '2026-04-10');
     expect(client).toEqual(want);
     expect(server).toEqual(want);
+  });
+});
+
+/** The day a LOCAL formatter would print for this Date. */
+function localLabel(d: Date | null): string | null {
+  if (!d) return null;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+describe(`"repeats until" under ${ACTUAL}`, () => {
+  it('prints the day the calendar actually stops on', () => {
+    // The last occurrence the expansion produces is the day the text promises.
+    const start = '2026-07-01';
+    const end = localLabel(getRecurrenceEndDate(start, 'daily'));
+    expect(end).toBe('2026-07-31');
+    expect(clientDays(series('d', `${start}T00:00:00.000Z`, 'daily'), '2026-07-25', '2026-08-05').at(-1)).toBe(end);
+  });
+
+  it('the series panel, in Bucharest summer, does not print the day before', () => {
+    // The panel used to pass a LOCAL midnight Date, read back as its UTC day: 21:00Z on 30 June in
+    // Bucharest summer, so every series there "ended" a day early. It now passes the start label.
+    const stored = '2026-07-01T00:00:00.000Z';
+    expect(localLabel(getRecurrenceEndDate(seriesStartDay(stored), 'weekly'))).toBe('2027-06-30');
+    expect(localLabel(getRecurrenceEndDate(seriesStartDay(stored), 'monthly'))).toBe('2027-07-01');
+    expect(localLabel(getRecurrenceEndDate(seriesStartDay(stored), 'yearly'))).toBe('2031-07-01');
+  });
+
+  it('says nothing rather than a wrong date when there is no start', () => {
+    expect(getRecurrenceEndDate(null, 'daily')).toBeNull();
+    expect(getRecurrenceEndDate('', 'daily')).toBeNull();
+    expect(getRecurrenceEndDate('01.07.2026', 'daily')).toBeNull();
   });
 });

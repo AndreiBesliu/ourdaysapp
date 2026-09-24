@@ -9,16 +9,21 @@ export interface RecurrenceRule {
 }
 
 /**
- * The last day a series repeats until, as a LOCAL Date for a local formatter.
+ * The last day a series repeats until, as a LOCAL Date for a local formatter; null when the start
+ * is not a day label.
  *
  * Display only ("repeats until …"). It reads the same horizon the expansion stops at, from
- * `recurrenceCore`, so the date the form promises is the date the calendar actually ends on —
- * including west of Greenwich, where the old date-fns version printed the day before.
+ * `recurrenceCore`, so the date the form promises is the date the calendar actually ends on.
+ *
+ * It takes a day LABEL (`yyyy-MM-dd`), never a Date. Until 24.09.2026 it took a Date and read its
+ * UTC day — right for the form, which passed `new Date('yyyy-MM-dd')` (midnight UTC), and a day
+ * EARLY for the series panel, which passed a LOCAL midnight: in Bucharest summer that is 21:00 UTC
+ * the evening before. Found by the pre-deploy review, the same day the version with a Date shipped
+ * to no one. A label has no zone to get wrong. The panel passes `seriesStartDay(ev.date)`.
  */
-export function getRecurrenceEndDate(startDate: Date, frequency: RecurrenceRule['frequency']): Date {
-  const start = Number.isFinite(startDate.getTime()) ? seriesStartDay(startDate.toISOString()) : null;
-  const end = start && isFrequency(frequency) ? horizonEndDay(start, frequency) : null;
-  return (end && dayAsLocalDate(end)) || startDate;
+export function getRecurrenceEndDate(startDay: string | null, frequency: RecurrenceRule['frequency']): Date | null {
+  const end = startDay && isFrequency(frequency) ? horizonEndDay(startDay, frequency) : null;
+  return end ? dayAsLocalDate(end) : null;
 }
 
 /**

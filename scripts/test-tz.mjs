@@ -13,10 +13,19 @@
 // Usage: npm run test:tz
 
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import process from 'node:process';
 
 const ZONES = ['Europe/Bucharest', 'America/New_York'];
 const FILES = ['src/utils/recurrenceZones.test.ts', 'src/utils/titleDate.test.ts'];
+
+// vitest given a path that matches nothing runs the OTHER file and reports green. A renamed test
+// would drop out of the zone run without a word, so a missing one stops it here.
+const missing = FILES.filter((f) => !existsSync(f));
+if (missing.length) {
+  console.error(`test:tz: missing ${missing.join(', ')} — refusing to report on fewer files than listed.`);
+  process.exit(1);
+}
 
 let failed = false;
 for (const zone of ZONES) {

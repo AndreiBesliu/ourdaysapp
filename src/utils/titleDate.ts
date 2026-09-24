@@ -11,16 +11,26 @@
 //   * The Romanian words were matched with `\bmaine\b` and friends — ASCII only. So "mâine",
 //     "marți", "sâmbătă", "poimâine", written the way Romanian is written, matched nothing.
 //   * "luni" was always Monday. It is also the plural of "month": "concediu peste 2 luni" became
-//     "peste 2 monday" and moved the event to Monday 21.09 — in the past. A number before it now
-//     makes it months. ("mai" has the same double meaning, "more", but chrono never parsed a bare
-//     "may", so that one never misfired. It is guarded the same way anyway, and pinned by a test,
-//     so no later rule can start to.)
+//     "peste 2 monday" and moved the event to Monday 21.09 — in the past. "peste/în N luni" is now
+//     months; see below for why ONLY that phrase.
 //   * "meeting at 3" typed at nine in the morning, with forwardDate on, moves the event to TOMORROW
 //     (three o'clock has passed). A bare time says nothing about the day, so a result counts only
 //     when the day, the weekday or the month was actually stated.
 //
 // And the form overwrote a date the person had already picked, on every keystroke. That part is
 // the form's (`AddEventModal`), which now stops listening once the date field is edited by hand.
+//
+// ── What the first repair got wrong, found by the pre-deploy review the same day ────────────
+//
+// It read any number before "luni", "zile" or "mai" as a date, and a number is far more often a
+// quantity or a clock. Measured on that version:
+//   * "ședință la ora 10 luni" → 10 MONTHS away. It is ten o'clock on Monday.
+//   * "concediu 5 zile" → the event moved five days. It is a five-day holiday, not a date.
+//   * "mai 10 ouă", "mai 3 sticle" → May. "mai" before a number is "N more".
+//   * "2 mai multe" → 2 May. "N mai" followed by "mult", "puțin", "devreme"… is a comparison.
+// So a count of months, weeks or days is a date only after "peste" or "în" — "in N …" is exactly
+// what those say — and "mai" is May only AFTER a number, never before, and not when a comparison
+// follows it.
 
 import * as chrono from 'chrono-node';
 
@@ -32,12 +42,14 @@ export function stripDiacritics(s: string): string {
 // Applied to text that has already been stripped, so every Romanian spelling meets one pattern.
 // Order matters where one word contains another: "poimaine" before "maine", "astazi" before "azi".
 const WORDS: Array<[RegExp, string]> = [
-  // "luni" is Monday AND the plural of "month" — "peste 2 luni" is "in 2 months". A number
-  // before it decides, the same way it does for "mai". Before the weekday rule, so it wins.
-  [/\bpeste\b/g, 'in'],
-  [/(\d+)\s+luni\b/g, '$1 months'],
-  [/(\d+)\s+saptamani\b/g, '$1 weeks'],
-  [/(\d+)\s+zile\b/g, '$1 days'],
+  // "luni" is Monday AND the plural of "month". Months only in "peste/în N luni" — a bare number
+  // before it is as likely a clock ("la ora 10 luni"). Before the weekday rule, so it wins.
+  [/\b(?:peste|in)\s+(\d+)\s+luni\b/g, 'in $1 months'],
+  [/\b(?:peste|in)\s+(\d+)\s+saptamani\b/g, 'in $1 weeks'],
+  [/\b(?:peste|in)\s+(\d+)\s+zile\b/g, 'in $1 days'],
+  [/\b(?:peste|in)\s+(?:o|1)\s+luna\b/g, 'in 1 month'],
+  [/\b(?:peste|in)\s+(?:o|1)\s+saptamana\b/g, 'in 1 week'],
+  [/\b(?:peste|in)\s+(?:o|1)\s+zi\b/g, 'in 1 day'],
   [/\bpoimaine\b/g, 'in 2 days'],
   [/\bmaine\b/g, 'tomorrow'],
   [/\bastazi\b/g, 'today'],
@@ -53,9 +65,9 @@ const WORDS: Array<[RegExp, string]> = [
   [/\bfebruarie\b/g, 'february'],
   [/\bmartie\b/g, 'march'],
   [/\baprilie\b/g, 'april'],
-  // "mai" only beside a number: "1 mai", "mai 5". Otherwise it is "more".
-  [/(\d{1,2})\s+mai\b/g, '$1 may'],
-  [/\bmai\s+(\d{1,2})\b/g, 'may $1'],
+  // "mai" is May only AFTER a number ("1 mai"), and not when a comparison follows ("2 mai multe").
+  // Before a number it is "N more": "mai 10 ouă". Otherwise it is "more" and is left alone.
+  [/(\d{1,2})\s+mai\b(?!\s+(?:mult|multe|multi|multa|putin|putine|putini|putina|devreme|tarziu)\b)/g, '$1 may'],
   [/\biunie\b/g, 'june'],
   [/\biulie\b/g, 'july'],
   [/\bseptembrie\b/g, 'september'],
@@ -63,6 +75,18 @@ const WORDS: Array<[RegExp, string]> = [
   [/\bnoiembrie\b/g, 'november'],
   [/\bdecembrie\b/g, 'december'],
 ];
+
+/**
+ * Whether a restored draft's date was picked by hand — and so must not be moved by the title.
+ *
+ * The form's lock is a ref that lives as long as the form, which is never unmounted. Until the
+ * pre-deploy review of 24.09.2026 it was cleared only when NO draft was restored, so a restored
+ * draft inherited the lock from whatever event was opened before it. The draft now carries its
+ * own; one saved before it did says nothing, and nothing is not a hand.
+ */
+export function restoredDateLock(draft: unknown): boolean {
+  return !!draft && typeof draft === 'object' && (draft as { dateChosenByHand?: unknown }).dateChosenByHand === true;
+}
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');

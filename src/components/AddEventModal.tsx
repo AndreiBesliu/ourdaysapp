@@ -24,7 +24,7 @@ import { useThemeStore } from '../store';
 import { t, getDateLocale } from '../utils/i18n';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { titleDate } from '../utils/titleDate';
+import { titleDate, restoredDateLock } from '../utils/titleDate';
 import { EVENT_COLORS, eventSwatchClass } from '../utils/eventColors';
 import { shiftedSeriesStart } from '../utils/recurrence';
 import { createAskScheduler, type AskScheduler } from '../utils/aiSuggestionGate';
@@ -291,6 +291,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       // later. Proven: the local day of 2026-09-20T00:00:00Z is the 19th in New York and Los
       // Angeles, the 20th in Bucharest, London and Auckland.
       setEventDate(dayOf(editEvent.date) || format(new Date(), 'yyyy-MM-dd'));
+      // Not read while editing (the title moves the date only for a new event); cleared so that
+      // nothing of this opening leaks into the next.
+      dateChosenByHand.current = false;
       setDescription(editEvent.description || '');
       setChecklistItems(editEvent.checklistItems || []);
       setCategory(CATEGORIES.find(c => c.id === editEvent.categoryId) || CATEGORIES[0]);
@@ -343,6 +346,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           if (window.confirm(t('draftRestorePrompt', language))) {
             setTitle(parsed.title || '');
             if (parsed.eventDate) setEventDate(parsed.eventDate);
+            // The draft's own lock, never the one left by the event opened before it.
+            dateChosenByHand.current = restoredDateLock(parsed);
             setDescription(parsed.description || '');
             if (parsed.checklistItems) setChecklistItems(parsed.checklistItems);
             if (parsed.categoryId) {
@@ -408,7 +413,10 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   useEffect(() => {
     if (isOpen && !editEvent) {
       const draft = {
-        title, eventDate, eventTime, endDate, endTime, description, checklistItems, categoryId: category.id, color, emoji, isTask, assigneeIds, hiddenFrom, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes
+        title, eventDate, eventTime, endDate, endTime, description, checklistItems, categoryId: category.id, color, emoji, isTask, assigneeIds, hiddenFrom, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes,
+        // A ref, so not a dependency: it is set in the same gesture that changes `eventDate`,
+        // which is, so the draft saved after a hand-picked date carries it.
+        dateChosenByHand: dateChosenByHand.current,
       };
       if (title || description || checklistItems.length > 0) {
         localStorage.setItem('ourDays_draftEvent', JSON.stringify(draft));
@@ -547,6 +555,12 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   }, [title, eventDate, eventTime, endDate, endTime, showEnd, spanIssue, description, checklistItems, category, color, isTask, assigneeIds, hiddenFrom, selectedGroupId, removeMainImage, selectedAssetId, selectedAssetUrl, rsvpEnabled, location, reminderMinutes, isOpen, editEvent]);
 
   if (!isOpen) return null;
+
+  // "Repeats until …" for the dropdown and the notice under it. `eventDate` is already a day label.
+  const repeatEndText = (freq: 'daily' | 'weekly' | 'monthly' | 'yearly', fallback: string) => {
+    const end = eventDate ? getRecurrenceEndDate(eventDate, freq) : null;
+    return end ? format(end, 'd MMM yyyy', { locale: getDateLocale(language) }) : fallback;
+  };
 
   const handleCategoryChange = (cat: typeof CATEGORIES[0]) => {
     setCategory(cat);
@@ -1612,16 +1626,14 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   className="w-full px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
                 >
                   <option value="none">{t('doesNotRepeat', language)}</option>
-                  <option value="daily">{t('repeatUntil', language).replace('{freq}', t('freqDaily', language)).replace('{date}', (eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'daily'), 'd MMM yyyy', { locale: getDateLocale(language) }) : '...'))}</option>
-                  <option value="weekly">{t('repeatUntil', language).replace('{freq}', t('freqWeekly', language)).replace('{date}', (eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'weekly'), 'd MMM yyyy', { locale: getDateLocale(language) }) : '...'))}</option>
-                  <option value="monthly">{t('repeatUntil', language).replace('{freq}', t('freqMonthly', language)).replace('{date}', (eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'monthly'), 'd MMM yyyy', { locale: getDateLocale(language) }) : '...'))}</option>
-                  <option value="yearly">{t('repeatUntil', language).replace('{freq}', t('freqYearly', language)).replace('{date}', (eventDate ? format(getRecurrenceEndDate(new Date(eventDate), 'yearly'), 'd MMM yyyy', { locale: getDateLocale(language) }) : '...'))}</option>
+                  <option value="daily">{t('repeatUntil', language).replace('{freq}', t('freqDaily', language)).replace('{date}', repeatEndText('daily', '...'))}</option>
+                  <option value="weekly">{t('repeatUntil', language).replace('{freq}', t('freqWeekly', language)).replace('{date}', repeatEndText('weekly', '...'))}</option>
+                  <option value="monthly">{t('repeatUntil', language).replace('{freq}', t('freqMonthly', language)).replace('{date}', repeatEndText('monthly', '...'))}</option>
+                  <option value="yearly">{t('repeatUntil', language).replace('{freq}', t('freqYearly', language)).replace('{date}', repeatEndText('yearly', '...'))}</option>
                 </select>
                 {repeat !== 'none' && (
                   <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-                    🔁 {t('repeatNotice', language).replace('{date}', eventDate
-                      ? format(getRecurrenceEndDate(new Date(eventDate), repeat), 'd MMM yyyy', { locale: getDateLocale(language) })
-                      : '…')}
+                    🔁 {t('repeatNotice', language).replace('{date}', repeatEndText(repeat, '…'))}
                   </p>
                 )}
               </div>

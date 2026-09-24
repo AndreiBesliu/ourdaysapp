@@ -6,6 +6,7 @@ import { db, auth } from '../firebase';
 import { useState } from 'react';
 import { useDialog } from '../hooks/useDialog';
 import { getRecurrenceEndDate, getFrequencyKey } from '../utils/recurrence';
+import { seriesStartDay } from '../utils/recurrenceCore';
 import { t, getDateLocale } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { reportError } from '../reportError';
@@ -134,7 +135,7 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
                       // fix; the guard written alongside it could not see this one, because the Date
                       // is bound to a variable before it reaches `format`.
                       const startDate = eventDayAsLocalDate(ev.date) ?? new Date(NaN);
-                      const endDate = getRecurrenceEndDate(startDate, freq as any);
+                      const endDate = getRecurrenceEndDate(seriesStartDay(ev.date), freq as any);
                       const isOwner = ev.ownerId === auth.currentUser?.uid;
                       
                       return (
@@ -151,7 +152,7 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
                               </span>
                               <span className="text-xs text-zinc-400">→</span>
                               <span className="text-xs text-zinc-500">
-                                {format(endDate, 'd MMM yyyy', { locale: getDateLocale(language) })}
+                                {endDate ? format(endDate, 'd MMM yyyy', { locale: getDateLocale(language) }) : '…'}
                               </span>
                             </div>
                             {ev.recurrenceExceptions && ev.recurrenceExceptions.length > 0 && (
