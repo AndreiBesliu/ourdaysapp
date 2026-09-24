@@ -287,3 +287,33 @@ describe('invite links are denied to clients outright', () => {
     await assertFails(deleteDoc(doc(as(ALICE), 'invite_links', 'mine')));
   });
 });
+
+// ── amount: the one field nothing checked ──────────────────────────────────────────────────────
+// The wallet renders `amount.toFixed(2)`, so a single row with a string or null amount put every
+// member's Wallet on the ErrorBoundary; a negative one ran every balance backwards.
+describe('expenses — the amount has to be a real amount', () => {
+  const base = { ownerId: BOB, paidBy: BOB, groupId: G1, splitAmong: [ALICE, BOB], description: 'x' };
+
+  it('accepts an ordinary one, and a large one', async () => {
+    await assertSucceeds(setDoc(doc(as(BOB), 'expenses', 'ok-1'), { ...base, amount: 12.5 }));
+    await assertSucceeds(setDoc(doc(as(BOB), 'expenses', 'ok-2'), { ...base, amount: 9_999_999 }));
+  });
+
+  it('refuses everything that took the wallet down or ran it backwards', async () => {
+    const bad: unknown[] = ['12.50', null, NaN, Infinity, -Infinity, -5, 0, 10_000_000, true, [12], { v: 12 }];
+    for (const [i, amount] of bad.entries()) {
+      await assertFails(setDoc(doc(as(BOB), 'expenses', `bad-${i}`), { ...base, amount }));
+    }
+    // And a row with no amount at all.
+    await assertFails(setDoc(doc(as(BOB), 'expenses', 'bad-missing'), base));
+  });
+
+  it('and an edit cannot introduce one either', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'expenses', 'x-amount'), { ...base, amount: 20 });
+    });
+    await assertFails(updateDoc(doc(as(BOB), 'expenses', 'x-amount'), { amount: 'twenty' }));
+    await assertFails(updateDoc(doc(as(BOB), 'expenses', 'x-amount'), { amount: -20 }));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'expenses', 'x-amount'), { amount: 21 }));
+  });
+});

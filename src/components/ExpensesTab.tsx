@@ -3,6 +3,7 @@ import { db, auth } from '../firebase';
 import { collection, query, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, where } from 'firebase/firestore';
 import { Plus, Trash2, Receipt, TrendingUp, AlertTriangle } from 'lucide-react';
 import { useThemeStore } from '../store';
+import { parseExpenseAmount, formatAmount } from '../utils/expenseAmount';
 import { t } from '../utils/i18n';
 import { reportError } from '../reportError';
 import { ledgerFor, displayedBalances, isSettled, usableSplit, splitForGroup } from '../utils/ledger';
@@ -30,6 +31,8 @@ export default function ExpensesTab(
   const [groupsFailed, setGroupsFailed] = useState(false);
   const loadError = ownFailed || groupsFailed;
   const [addError, setAddError] = useState(false);
+  // The amount itself was wrong, which is not the same advice as "could not add".
+  const [amountError, setAmountError] = useState(false);
   const [deleteError, setDeleteError] = useState(false);
   const { language } = useThemeStore();
 
@@ -100,11 +103,16 @@ export default function ExpensesTab(
     // The rules refuse an empty split and dividing a cost by nobody means nothing; the button
     // is disabled too, but a form can still be submitted with Enter.
     if (groupId && !splitOk) return;
+    // Checked here, before sending: `parseFloat` accepted -5 and turned "1e400" into Infinity, and
+    // the rule now refuses both — better to say which, than to fail with "could not add".
+    const value = parseExpenseAmount(amount);
+    setAmountError(value === null);
+    if (value === null) return;
     setLoading(true);
     setAddError(false);
     try {
       await addDoc(collection(db, 'expenses'), {
-        amount: parseFloat(amount),
+        amount: value,
         description,
         paidBy: auth.currentUser.uid,
         // `ownerId` is what the rule reads, and it is pinned to the caller on create so nobody can
@@ -294,6 +302,11 @@ export default function ExpensesTab(
         </p>
       )}
 
+      {amountError && (
+        <div role="alert" className="flex items-center gap-2 text-sm text-rose-600 dark:text-rose-400 px-1">
+          <span>{t('expenseAmountInvalid', language)}</span>
+        </div>
+      )}
       {addError && (
         <p role="alert" className="flex items-start gap-2 text-sm text-rose-700 dark:text-rose-300">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -330,7 +343,7 @@ export default function ExpensesTab(
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="font-bold text-zinc-900 dark:text-white">{exp.amount.toFixed(2)}</span>
+                <span className="font-bold text-zinc-900 dark:text-white">{formatAmount(exp.amount)}</span>
                 {exp.paidBy === auth.currentUser?.uid && (
                   <button aria-label={t('deleteExpense', language)} onClick={() => handleDelete(exp.id)} className="text-red-400 hover:text-red-500 p-1.5 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-md transition-colors">
                     <Trash2 className="w-4 h-4"/>

@@ -8615,3 +8615,42 @@ fiecare, oricâte logări ar fi fost.
 hosting.
 
 `npx tsc -b` · lint · **1769 de teste** (de la 1761) · build — verzi.
+
+## 2026-09-24 · A.4 — o singură cheltuială greșită dărâma Wallet-ul tuturor
+
+**Prompt (Andrei):** A.4: „O cheltuială cu `amount` invalid blochează Wallet-ul tuturor membrilor.
+[…] Fix: în reguli, `amount is number && amount > 0 && amount < plafon`; plus randare defensivă."
+Plus: „`ExpensesTab` scrie `parseFloat(amount)` încă din mai […] `parseFloat` pe un câmp gol dă
+NaN; verifică și cazul ăsta." **Model:** Claude Opus 5.5.
+
+**Reverificat pe HEAD:** create și update verificau cine a plătit, grupul și împărțirea — niciodată
+suma. Două locuri de randare cădeau: `ExpensesTab.tsx:333` (`exp.amount.toFixed(2)`) și
+`PeriodLog.tsx:186`, care se păzea doar de `undefined`. Formularul scria `parseFloat` neverificat:
+`-5` trecea și inversa soldurile, iar „1e400" devenea Infinity.
+
+**Compatibilitatea cu APK-ul, măsurată, nu presupusă:** cheltuielile din APK sunt **deja**
+refuzate azi (nu trimite `ownerId`). Deci regula nouă nu poate strica pe telefon ceva ce merge.
+Câmpul gol din întrebarea ta nu ajunge nici măcar la `parseFloat`: formularul iese devreme pe `!amount`.
+
+**Reparat:**
+- **Regula** `amountOk()`: un număr finit în (0, 10 000 000), la create ȘI la update. NaN pică la
+  `> 0`, Infinity la plafon. Plafonul e larg intenționat — oprește valorile absurde, nu pe cele
+  mari; o familie poate trece o mașină. La update se aplică pe documentul REZULTAT, deliberat:
+  clientul nu editează niciodată o cheltuială, deci singurul update e o reparație.
+- **Formularul** verifică înainte să trimită (`parseExpenseAmount`) și spune *de ce*: „Introdu o
+  sumă mai mare decât 0", nu „nu am putut adăuga". Acceptă și virgula zecimală.
+- **Randarea** trece prin `formatAmount`: un rând vechi, de dinainte de regulă, arată o liniuță în
+  loc să dărâme ecranul — și **nu** un 0 fals (`Number(null)`, `Number('')`, `Number([])` sunt toate 0).
+- **Plafonul e o copie**, deci un test citește literalul din `firestore.rules` și-l compară cu
+  `EXPENSE_AMOUNT_MAX`, plus că `amountOk()` e chemat și la create, și la update.
+
+**Proba:** 6 teste unitare, 3 de reguli (11 valori rele: `'12.50'`, null, NaN, ±Infinity, -5, 0,
+plafonul, true, `[12]`, `{v:12}`, plus lipsa sumei). Trei mutații:
+- fără `> 0` → **2 roșii**;
+- plafonul mutat cu 1 → **1 roșu**;
+- `toFixed` orb → **2 roșii**.
+
+A treia **nu s-a aplicat la prima încercare**: `sed` n-a potrivit, lanțul s-a oprit, n-a tipărit
+„applied" — deci verdict nul, nu un „a trecut". Refăcută cu potrivire exactă.
+
+`npx tsc -b` · lint · **1775 de teste** · **291 de teste de reguli** · build — verzi.

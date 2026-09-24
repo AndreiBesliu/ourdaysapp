@@ -18,6 +18,7 @@
 // three months.
 
 import { useMemo, useState } from 'react';
+import { formatAmount } from '../utils/expenseAmount';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, CalendarDays, Loader2, AlertTriangle, Receipt, CheckSquare } from 'lucide-react';
 import { aiPreviewScope, type ScopePreview } from '../serverActions';
@@ -183,7 +184,7 @@ export default function PeriodLog() {
                     ? <Receipt className="w-4 h-4 mt-0.5 text-emerald-500 shrink-0" />
                     : <CheckSquare className={`w-4 h-4 mt-0.5 shrink-0 ${r.isTask ? 'text-indigo-500' : 'text-primary'}`} />}
                   <span className="text-sm flex-1">{r.title || t('logUntitled', language)}</span>
-                  {r.amount !== undefined && <span className="text-sm font-mono">{r.amount.toFixed(2)}</span>}
+                  {r.amount !== undefined && <span className="text-sm font-mono">{formatAmount(r.amount)}</span>}
                   {r.scopeLabel && <span className="text-[11px] text-zinc-500 self-center">{r.scopeLabel}</span>}
                 </li>
               ))}

@@ -766,6 +766,21 @@ service cloud.firestore {
       // It must be a real list, it must be people who are actually in the group, and the
       // payer must be allowed to be in it. Absent is fine: rows written before 16.09.2026
       // have none and fall back to the group-wide split.
+      // The amount, which nothing checked. The wallet renders `amount.toFixed(2)`, so one row
+      // whose amount was a string or null — written from the console by any member — put
+      // EVERY member's Wallet on the ErrorBoundary. Negative amounts ran the balances backwards.
+      //
+      // A finite number in (0, 10000000). NaN fails `> 0`; Infinity fails the ceiling. The
+      // ceiling is generous on purpose — it stops absurd values, not large ones — and
+      // `src/utils/expenseAmount.test.ts` pins this literal to the client's EXPENSE_AMOUNT_MAX.
+      //
+      // Measured against the installed APK first: its expense writes are ALREADY refused (it
+      // never sends `ownerId`), so this cannot break anything on the phones that works today.
+      function amountOk() {
+        return request.resource.data.amount is number
+          && request.resource.data.amount > 0
+          && request.resource.data.amount < 10000000;
+      }
       function splitIsHonest(groupId) {
         return !('splitAmong' in request.resource.data) || (
           request.resource.data.splitAmong is list &&
@@ -781,7 +796,8 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.paidBy == request.auth.uid
         && (request.resource.data.groupId == null || isMemberOfGroup(request.resource.data.groupId))
-        && splitIsHonest(request.resource.data.groupId);
+        && splitIsHonest(request.resource.data.groupId)
+        && amountOk();
       // Only the owner edits or removes it — being in the group lets you SEE the ledger, not
       // rewrite what someone else recorded.
       //
@@ -802,7 +818,10 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid
         && request.resource.data.paidBy == request.auth.uid
         && (request.resource.data.groupId == null || isMemberOfGroup(request.resource.data.groupId))
-        && splitIsHonest(request.resource.data.groupId);
+        && splitIsHonest(request.resource.data.groupId)
+        // On the RESULTING document, deliberately: nothing in the client updates an expense, so the
+        // only update is a repair, and a repair must leave a valid amount behind.
+        && amountOk();
       allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
 
