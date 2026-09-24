@@ -24,7 +24,7 @@ import { useThemeStore } from '../store';
 import { t, getDateLocale } from '../utils/i18n';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import * as chrono from 'chrono-node';
+import { titleDate } from '../utils/titleDate';
 import { EVENT_COLORS, eventSwatchClass } from '../utils/eventColors';
 import { shiftedSeriesStart } from '../utils/recurrence';
 import { createAskScheduler, type AskScheduler } from '../utils/aiSuggestionGate';
@@ -89,6 +89,11 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
   const [title, setTitle] = useState('');
   const [eventDate, setEventDate] = useState<string>('');
+  // Set once the person edits the date FIELD. From then on a date in the title no longer moves
+  // it: typing "Meeting at 3" used to reset a date picked a moment earlier to today. A tapped
+  // calendar day is a starting point, not a pick — the title may still refine it. Cleared on
+  // every open, since this modal is never unmounted.
+  const dateChosenByHand = useRef(false);
   const [description, setDescription] = useState('');
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [newItemText, setNewItemText] = useState('');
@@ -368,6 +373,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       if (!loadedDraft) {
         setTitle(initialTemplate?.title || '');
         setEventDate(selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'));
+        dateChosenByHand.current = false;
         // This modal is never unmounted — CalendarHome only toggles `isOpen` — so anything not
         // reset here survives into the next event. Without these three, opening a three-day trip
         // and then tapping + carried the trip's end date into the new event: saved silently as
@@ -607,43 +613,12 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     const newTitle = e.target.value;
     setTitle(newTitle);
     
-    // Chrono natural language date parsing with Romanian support
-    if (!editEvent) {
-      let parseableTitle = newTitle.toLowerCase();
-      
-      // Keywords
-      parseableTitle = parseableTitle.replace(/\bmaine\b/g, 'tomorrow');
-      parseableTitle = parseableTitle.replace(/\bazi\b/g, 'today');
-      parseableTitle = parseableTitle.replace(/\bpoimaine\b/g, 'in 2 days');
-      
-      // Days of week
-      parseableTitle = parseableTitle.replace(/\bluni\b/g, 'monday');
-      parseableTitle = parseableTitle.replace(/\bmarti\b/g, 'tuesday');
-      parseableTitle = parseableTitle.replace(/\bmiercuri\b/g, 'wednesday');
-      parseableTitle = parseableTitle.replace(/\bjoi\b/g, 'thursday');
-      parseableTitle = parseableTitle.replace(/\bvineri\b/g, 'friday');
-      parseableTitle = parseableTitle.replace(/\bsambata\b/g, 'saturday');
-      parseableTitle = parseableTitle.replace(/\bduminica\b/g, 'sunday');
-      
-      // Months
-      parseableTitle = parseableTitle.replace(/\bianuarie\b/g, 'january');
-      parseableTitle = parseableTitle.replace(/\bfebruarie\b/g, 'february');
-      parseableTitle = parseableTitle.replace(/\bmartie\b/g, 'march');
-      parseableTitle = parseableTitle.replace(/\baprilie\b/g, 'april');
-      parseableTitle = parseableTitle.replace(/\bmai\b/g, 'may');
-      parseableTitle = parseableTitle.replace(/\biunie\b/g, 'june');
-      parseableTitle = parseableTitle.replace(/\biulie\b/g, 'july');
-      parseableTitle = parseableTitle.replace(/\baugust\b/g, 'august');
-      parseableTitle = parseableTitle.replace(/\bseptembrie\b/g, 'september');
-      parseableTitle = parseableTitle.replace(/\boctombrie\b/g, 'october');
-      parseableTitle = parseableTitle.replace(/\bnoiembrie\b/g, 'november');
-      parseableTitle = parseableTitle.replace(/\bdecembrie\b/g, 'december');
-      
-      const parsed = chrono.parse(parseableTitle);
-      if (parsed && parsed.length > 0) {
-        const parsedDate = parsed[0].start.date();
-        setEventDate(format(parsedDate, 'yyyy-MM-dd'));
-      }
+    // A date written in the title — "dentist luni", "concediu 1 mai". Read forward from today,
+    // Romanian with its diacritics, and never over a date the person picked by hand: see
+    // utils/titleDate.ts for what the old version got wrong, measured.
+    if (!editEvent && !dateChosenByHand.current) {
+      const day = titleDate(newTitle, new Date());
+      if (day) setEventDate(day);
     }
   };
 
@@ -1010,6 +985,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 value={eventDate}
                 onChange={(e) => {
                   const next = e.target.value;
+                  dateChosenByHand.current = true;
                   // Moving the start moves the whole event: the end travels with it and the length
                   // is kept. Only bumping it when it would fall behind would silently shorten a
                   // three-day trip to two whenever its start was nudged forward by a day.

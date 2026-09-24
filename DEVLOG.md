@@ -8846,3 +8846,44 @@ Plus 7 teste unitare ale operațiilor.
 per item (3/3).
 
 `npx tsc -b` · lint · **1802 teste** · **301 pe emulator** · test:tz · build — verzi.
+
+## 2026-09-24 · A.7 — datele din titlu cad în viitor, iar româna se citește cu diacritice
+
+**Prompt (Andrei):** A.7: „Datele scrise în titlu ajung în trecut, iar româna cu diacritice e
+ignorată. […] Fix: `forwardDate: true`, eliminarea diacriticelor înainte de potrivire, și nu
+suprascrie o dată aleasă manual." **Model:** Claude Opus 5.5.
+
+**Reverificat pe HEAD:** `chrono.parse` fără dată de referință și fără `forwardDate`; potriviri
+`\bmaine\b` doar ASCII; data suprascrisă la fiecare tastă. Cu **joi 24.09** ca azi, exact ca în audit.
+
+**Reparat — `utils/titleDate.ts`, pur, cu „azi" ca parametru:**
+- **`forwardDate`:** „dentist luni" → 28.09 (era 21.09); „concediu 1 mai" → **2027**; „5 septembrie"
+  → **2027**.
+- **Diacriticele se scot înaintea potrivirii:** „mâine", „marți", „sâmbătă", „poimâine",
+  „duminică" funcționează, și cu ș/ş, ț/ţ în ambele forme.
+- **„luni" după un număr înseamnă luni calendaristice, nu ziua de luni.** Asta găsită de mine, și
+  **măsurată** pe codul vechi: „concediu peste 2 luni" devenea „peste 2 monday" → luni 21.09, în trecut.
+- **O oră goală nu spune nimic despre zi**, măsurat înainte să scriu: cu `forwardDate`, „meeting at
+  3" tastat la nouă dimineața muta evenimentul pe **mâine** (ora trei trecuse). Contează doar un
+  rezultat în care ziua, ziua săptămânii sau luna chiar au fost scrise.
+- **În formular:** după ce data e editată de mână, titlul n-o mai mută. O zi atinsă în calendar e
+  un punct de plecare, nu o alegere. Blocarea se resetează la fiecare deschidere.
+
+### O afirmație de-a mea care era falsă
+
+Am scris în antet și într-un test că „cumpăr mai multe" muta evenimentul în mai. **Mutația care o
+verifica a rămas verde**, așa că am măsurat: chrono **nu a parsat niciodată** un „may" singur. Deci
+nu s-a întâmplat. Antetul și testul spun acum adevărul: regula „mai doar lângă un număr" e o
+precauție, iar testul o fixează, nu repară ceva ce s-a întâmplat.
+
+**Proba:**
+- 19 teste, rulate și sub București, și sub New York (adăugate în `test:tz`).
+- Mutații:
+  - fără `forwardDate` → **6 roșii**;
+  - fără scoaterea diacriticelor → **7**;
+  - fără filtrul de certitudine → **1**;
+  - „mai" mereu mai → **0**, adică exact ce spun mai sus.
+- Două rulări de mutații au fost **nule**: una n-a potrivit nimic, alta a fost stricată de delimitatorul
+  meu de shell care se lovea de `||` din cod. Refăcute din Python.
+
+`npx tsc -b` · lint · **1823 de teste** · test:tz (27 în fiecare fus) · build — verzi.

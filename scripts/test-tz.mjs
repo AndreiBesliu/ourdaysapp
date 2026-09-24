@@ -16,7 +16,7 @@ import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 
 const ZONES = ['Europe/Bucharest', 'America/New_York'];
-const FILES = ['src/utils/recurrenceZones.test.ts'];
+const FILES = ['src/utils/recurrenceZones.test.ts', 'src/utils/titleDate.test.ts'];
 
 let failed = false;
 for (const zone of ZONES) {
