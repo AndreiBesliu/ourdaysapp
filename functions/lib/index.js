@@ -2,9 +2,11 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.adminGetAiLedger = exports.adminSetAiConfig = exports.adminGetAiConfig = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onGroupInviteCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
 exports.adminBackfillExpenses = void 0;
+// FIRST, before anything that defines a function: the global options apply only to functions
+// defined after them. See globalOptions.ts.
+require("./globalOptions");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
-const v2_1 = require("firebase-functions/v2");
 const bootstrapAdmins_1 = require("./bootstrapAdmins");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
@@ -55,10 +57,6 @@ Object.defineProperty(exports, "logErrorDigest", { enumerable: true, get: functi
 var games_1 = require("./games");
 Object.defineProperty(exports, "expireIdleGames", { enumerable: true, get: function () { return games_1.expireIdleGames; } });
 admin.initializeApp();
-// A ceiling on instances per function. There was none anywhere, so a burst — a bug in a client
-// loop, or somebody calling a callable in a loop — could scale out and bill without limit. Ten is
-// far above what eight people need, and low enough to cap a runaway.
-(0, v2_1.setGlobalOptions)({ maxInstances: 10 });
 // App Check enforcement is toggled via env so it can be switched on AFTER the
 // reCAPTCHA key is registered and verified in monitor mode in the Firebase
 // Console — avoids locking out clients that aren't yet sending tokens. Set
@@ -1129,9 +1127,20 @@ exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
                 throw new https_1.HttpsError("failed-precondition", "That occurrence no longer exists.");
         }
         if (existing) {
+            // Two repairs on the way through, both idempotent (pre-deploy review of 24.09.2026):
+            //   * a LEGACY override (found by its day, above) is given `overrideDate`, so the next call —
+            //     and the server's dedupe — finds it by key instead of through the fallback;
+            //   * the parent's exception is re-asserted. An override the parent does not except is shown
+            //     twice: once as itself, once as the occurrence it replaces.
+            if (typeof existing.data().overrideDate !== "string") {
+                tx.update(existing.ref, { overrideDate });
+            }
+            if (!exceptions.includes(overrideDate)) {
+                tx.update(parentRef, { recurrenceExceptions: admin.firestore.FieldValue.arrayUnion(overrideDate) });
+            }
             if (apply) {
                 const cur = existing.data();
-                const upd = Object.assign(Object.assign({}, safe), { updatedAt: new Date().toISOString() });
+                const upd = Object.assign(Object.assign({}, safe), { overrideDate, updatedAt: new Date().toISOString() });
                 // Recomputed against THIS override, not the parent: its RSVPs and assignees are the ones
                 // that apply on this date.
                 const curAssignees = Array.isArray(cur.assigneeIds)

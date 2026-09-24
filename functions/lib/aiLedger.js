@@ -339,7 +339,7 @@ async function withLedger(entry, estimateUsd, run, usageFrom, chars) {
     // Not a remote failure mode: that batch writes `aiSpendDaily/{date}` — ONE document per day for
     // the whole app — on every AI call. Firestore sustains roughly one write per second per
     // document, so the failure rate rises with the request rate, which a caller controls. Since
-    // 24.09.2026 every function is capped at ten instances (`setGlobalOptions` in index.ts), which
+    // 24.09.2026 every function is capped at ten instances (globalOptions.ts), which
     // bounds that rate but does not remove it: ten instances still contend for the one document.
     let result;
     try {

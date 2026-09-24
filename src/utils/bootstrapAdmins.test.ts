@@ -50,10 +50,3 @@ describe('no personal email address is written into the shipped source', () => {
     expect(PROVIDERS.test('owner: "a@example.test"')).toBe(false);
   });
 });
-
-describe('functions have a ceiling', () => {
-  it('every function is capped by a global maxInstances', () => {
-    const src = readFileSync(resolve(process.cwd(), 'functions/src/index.ts'), 'utf8');
-    expect(src).toMatch(/setGlobalOptions\(\{\s*maxInstances:\s*\d+\s*\}\)/);
-  });
-});

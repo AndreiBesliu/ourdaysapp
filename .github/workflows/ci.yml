@@ -40,9 +40,11 @@ jobs:
       # functions/lib (the compiled output) is COMMITTED, and on 24.09.2026 it lagged its source for
       # five commits: each ran `tsc --noEmit`, which is not a build. Deploys were safe (the predeploy
       # builds) but the repository said one thing in src/ and another in lib/. This fails CI when
-      # they disagree.
+      # they disagree. lib/ is emptied first: tsc never deletes the output of a source file that was
+      # removed, so a stale compiled file would otherwise pass — and still deploy.
       - name: Compiled functions match their source
         run: |
+          rm -rf functions/lib
           npm --prefix functions run build
           git diff --exit-code --stat -- functions/lib
           test -z "$(git status --porcelain -- functions/lib)"

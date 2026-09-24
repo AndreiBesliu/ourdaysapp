@@ -122,6 +122,30 @@ describe('A.6 — one override per occurrence', () => {
     expect(await overridesOf(PARENT)).toHaveLength(1);
   });
 
+  it('and is upgraded on the way: it now carries the day it replaces', async () => {
+    // Pre-deploy review 24.09: the legacy override was found and left as it was, so every later
+    // call went through the fallback again and the server's dedupe never knew its day.
+    await db.doc('events/legacy').set({
+      title: 'Walk (old)', ownerId: ALICE, groupId: 'g1', date: '2026-09-22T00:00:00.000Z',
+      overrideOfParent: PARENT,
+    });
+    await db.doc(`events/${PARENT}`).update({ recurrenceExceptions: ['2026-09-22'] });
+    await call(BOB, { parentId: PARENT, overrideDate: '2026-09-22', data: { title: 'Walk' } });
+    const legacy = (await db.doc('events/legacy').get()).data();
+    expect(legacy?.overrideDate).toBe('2026-09-22');
+    // Materialising, not editing: nothing else about it changed.
+    expect(legacy?.title).toBe('Walk (old)');
+  });
+
+  it('an override the parent no longer excepts is excepted again, not shown twice', async () => {
+    const { id } = await call(BOB, { parentId: PARENT, overrideDate: '2026-09-22', data: { title: 'Walk' } });
+    // The exception lost — the override and the occurrence it replaces would both show.
+    await db.doc(`events/${PARENT}`).update({ recurrenceExceptions: [] });
+    const r = await call(CAROL, { parentId: PARENT, overrideDate: '2026-09-22', data: { title: 'Walk' } });
+    expect(r).toEqual({ id, existed: true });
+    expect((await db.doc(`events/${PARENT}`).get()).data()?.recurrenceExceptions).toEqual(['2026-09-22']);
+  });
+
   it('moving an occurrence onto another occurrence’s day no longer hides the real one', async () => {
     // Daily series; the 22nd moved to the 23rd. The server's dedupe keyed on the override's own
     // date, so the REAL occurrence on the 23rd got no reminder and fell out of the digest.

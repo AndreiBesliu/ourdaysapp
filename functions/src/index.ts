@@ -1,6 +1,8 @@
+// FIRST, before anything that defines a function: the global options apply only to functions
+// defined after them. See globalOptions.ts.
+import "./globalOptions";
 import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { setGlobalOptions } from "firebase-functions/v2";
 import { bootstrapAdminEmails } from "./bootstrapAdmins";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
@@ -59,11 +61,6 @@ export { logErrorDigest } from "./errorDigest";
 export { expireIdleGames } from "./games";
 
 admin.initializeApp();
-
-// A ceiling on instances per function. There was none anywhere, so a burst — a bug in a client
-// loop, or somebody calling a callable in a loop — could scale out and bill without limit. Ten is
-// far above what eight people need, and low enough to cap a runaway.
-setGlobalOptions({ maxInstances: 10 });
 
 // App Check enforcement is toggled via env so it can be switched on AFTER the
 // reCAPTCHA key is registered and verified in monitor mode in the Firebase
@@ -1254,9 +1251,20 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
     }
 
     if (existing) {
+      // Two repairs on the way through, both idempotent (pre-deploy review of 24.09.2026):
+      //   * a LEGACY override (found by its day, above) is given `overrideDate`, so the next call —
+      //     and the server's dedupe — finds it by key instead of through the fallback;
+      //   * the parent's exception is re-asserted. An override the parent does not except is shown
+      //     twice: once as itself, once as the occurrence it replaces.
+      if (typeof existing.data().overrideDate !== "string") {
+        tx.update(existing.ref, { overrideDate });
+      }
+      if (!exceptions.includes(overrideDate)) {
+        tx.update(parentRef, { recurrenceExceptions: admin.firestore.FieldValue.arrayUnion(overrideDate) });
+      }
       if (apply) {
         const cur = existing.data();
-        const upd: Record<string, unknown> = { ...safe, updatedAt: new Date().toISOString() };
+        const upd: Record<string, unknown> = { ...safe, overrideDate, updatedAt: new Date().toISOString() };
         // Recomputed against THIS override, not the parent: its RSVPs and assignees are the ones
         // that apply on this date.
         const curAssignees = Array.isArray(cur.assigneeIds)
