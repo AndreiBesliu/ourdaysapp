@@ -8487,3 +8487,31 @@ stricăciunea. Stau în antet și aici.
 `groupName`) → **1 test roșu**, exact cel al invitației. Restaurat, fără diferență.
 
 **282 de teste de reguli** (de la 273).
+
+## 2026-09-24 · A.1 — „Renunță" la ștergerea unei serii ȘTERGEA ocurența
+
+**Prompt (Andrei):** auditul din 24.09, punctul A.1: „«Renunță» la ștergerea unui eveniment
+recurent ȘTERGE ocurența (pierdere de date, fix mic). […] Fix: un dialog cu trei opțiuni — doar
+aceasta / toată seria / renunță." **Model:** Claude Opus 5.5.
+
+**Reverificat pe HEAD (`e1857c5`), înainte de reparație:** `EventDetailsModal.tsx:550`,
+`window.confirm(t('deleteSeriesScope'))`. OK ștergea seria, Cancel ștergea ocurența. Întrebarea
+avea TREI răspunsuri și era pusă cu un buton de două. Butonul la care ajunge oricine n-a vrut să
+apese — Cancel — ștergea ceva. La fel Escape, fiindcă un `confirm` închis ESTE Cancel.
+
+**Reparat:**
+- `SeriesScopeDialog`, pe primitiva `useDialog`: *Doar pe acesta* / *Toată seria* / *Renunță*.
+  Orice fel de a-l închide — Renunță, X, Escape, Back, clic pe fundal — raportează `cancel`.
+- `deletePlanFor(scope)` în `utils/deleteScope.ts`: doar cele două alegeri explicite șterg.
+  Orice altceva — inclusiv `false`, adică exact ce întorcea vechiul `confirm` la Cancel — dă
+  `nothing`.
+- Cheia veche `deleteSeriesScope` a ieșit din toate șase limbile: textul ei descria chiar
+  comportamentul care ștergea. Patru chei noi, în șase limbi.
+
+**Proba:** 5 teste. Două mutații, fiecare verificată că s-a aplicat: `false` → ștergere, și
+închiderea dialogului raportată ca „doar pe acesta" → câte **1 roșu** fiecare. Restaurate.
+
+**N-am putut vedea dialogul:** e în spatele autentificării. Testele rulează decizia; care răspuns
+raportează o închidere e fixat de un test pe sursă, mai slab — scris ca atare.
+
+`npx tsc -b` · lint · **1749 de teste** (de la 1744) · build — verzi.

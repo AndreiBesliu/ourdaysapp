@@ -14,6 +14,8 @@ import { format } from 'date-fns';
 import { useDialog } from '../hooks/useDialog';
 import { useMenu } from '../hooks/useMenu';
 import { getFrequencyKey } from '../utils/recurrence';
+import { deletePlanFor, type DeleteScope } from '../utils/deleteScope';
+import SeriesScopeDialog from './SeriesScopeDialog';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { t, getDateLocale } from '../utils/i18n';
 import { useThemeStore } from '../store';
@@ -39,6 +41,9 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   const [loading, setLoading] = useState(false);
 
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // The "this one or the whole series?" question, asked in a dialog that can be dismissed
+  // without deleting anything. See utils/deleteScope.ts for what it replaced.
+  const [scopeOpen, setScopeOpen] = useState(false);
   // Keep local state for optimistic UI updates of checklist
   const [checklist, setChecklist] = useState<any[]>(event?.checklistItems || []);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
@@ -546,45 +551,8 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     const hasRecurrenceRule = !!event.recurrenceRule;
 
     if (isRecurringInstance && parentId) {
-      // Ask scope: delete this one or all
-      const choice = window.confirm(t('deleteSeriesScope', language));
-      setLoading(true);
-      try {
-        if (choice) {
-          // Overrides FIRST, while the parent still exists to identify them — otherwise a failure
-          // here leaves the series deleted and its individually-edited occurrences stranded in the
-          // calendar forever, out of the Recurring panel and impossible to delete as a set.
-          //
-          // `ownerId == uid` is not a workaround, it is what makes the query legal: no branch of
-          // the events read rule mentions `overrideOfParent`, and Firestore validates a LIST query
-          // against the rules WITHOUT reading documents, so filtering on it alone is denied
-          // outright. `createEventOverride` keeps the PARENT's ownerId and this button only shows
-          // for a series you own, so the filter is both permitted and complete.
-          // Same fix, same reasoning as RecurringEventsPanel.handleDeleteSeries.
-          const overridesQuery = fsQuery(
-            collection(db, 'events'),
-            where('overrideOfParent', '==', parentId),
-            where('ownerId', '==', auth.currentUser!.uid),
-          );
-          const overrideSnap = await getDocs(overridesQuery);
-          await Promise.all(overrideSnap.docs.map((d) => deleteDoc(doc(db, 'events', d.id))));
-          await deleteDoc(doc(db, 'events', parentId));
-        } else {
-          // Delete just this occurrence — add exception to parent
-          const overrideDate = event.recurrenceDate;
-          if (overrideDate) {
-            await updateDoc(doc(db, 'events', parentId), { recurrenceExceptions: arrayUnion(overrideDate) });
-          }
-        }
-        onClose();
-      } catch (e) {
-        // Was console.error alone: a half-finished delete that looks finished is the worst of the
-        // three outcomes, so it says so and leaves the modal open.
-        setDeleteError(t('recurringDeleteFailed', language));
-        reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.deleteSeries' });
-      } finally {
-        setLoading(false);
-      }
+      // Nothing is written here. The dialog answers, and `deleteOccurrence` acts on the answer.
+      setScopeOpen(true);
     } else if (hasRecurrenceRule) {
       // This is the master event itself
       if (!confirm(t('deleteSeriesConfirm', language))) return;
@@ -619,6 +587,53 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       } finally {
         setLoading(false);
       }
+    }
+  };
+
+  // Acts on the scope dialog's answer. Every way of dismissing that dialog arrives here as
+  // `cancel`, and `cancel` plans `nothing` — so backing out can no longer delete anything.
+  const deleteOccurrence = async (scope: DeleteScope) => {
+    setScopeOpen(false);
+    const plan = deletePlanFor(scope);
+    const parentId = event.parentEventId;
+    if (plan === 'nothing' || !parentId) return;
+
+    setLoading(true);
+    try {
+      if (plan === 'delete-series') {
+        // Overrides FIRST, while the parent still exists to identify them — otherwise a failure
+        // here leaves the series deleted and its individually-edited occurrences stranded in the
+        // calendar forever, out of the Recurring panel and impossible to delete as a set.
+        //
+        // `ownerId == uid` is not a workaround, it is what makes the query legal: no branch of
+        // the events read rule mentions `overrideOfParent`, and Firestore validates a LIST query
+        // against the rules WITHOUT reading documents, so filtering on it alone is denied
+        // outright. `createEventOverride` keeps the PARENT's ownerId and this button only shows
+        // for a series you own, so the filter is both permitted and complete.
+        // Same fix, same reasoning as RecurringEventsPanel.handleDeleteSeries.
+        const overridesQuery = fsQuery(
+          collection(db, 'events'),
+          where('overrideOfParent', '==', parentId),
+          where('ownerId', '==', auth.currentUser!.uid),
+        );
+        const overrideSnap = await getDocs(overridesQuery);
+        await Promise.all(overrideSnap.docs.map((d) => deleteDoc(doc(db, 'events', d.id))));
+        await deleteDoc(doc(db, 'events', parentId));
+      } else {
+        // Just this occurrence — an exception on the parent.
+        const overrideDate = event.recurrenceDate;
+        if (overrideDate) {
+          await updateDoc(doc(db, 'events', parentId), { recurrenceExceptions: arrayUnion(overrideDate) });
+        }
+      }
+      onClose();
+    } catch (e) {
+      // A half-finished delete that looks finished is the worst of the outcomes, so it says so
+      // and leaves the modal open.
+      setDeleteError(t('recurringDeleteFailed', language));
+      reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.deleteSeries' });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1260,6 +1275,8 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           </button>
         </div>
       )}
+
+      <SeriesScopeDialog isOpen={scopeOpen} language={language} onChoose={deleteOccurrence} />
     </div>
   );
 }
