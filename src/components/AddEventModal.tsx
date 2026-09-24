@@ -893,6 +893,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               parentId,
               overrideDate,
               data: { ...baseEventData, date: new Date(eventDate).toISOString() },
+              // This form's data IS the edit. If somebody materialised this occurrence while the
+              // form was open, the edit goes onto that override instead of being dropped.
+              apply: true,
             });
           } else {
             // Edit the parent — that is, the SERIES.

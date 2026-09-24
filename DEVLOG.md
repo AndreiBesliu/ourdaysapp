@@ -8745,3 +8745,60 @@ erau invizibile.
 idempotent, cu primul test pe emulator al unui callable; (3/3) bifele din checklist, pe item.
 
 `npx tsc -b` · `tsc` pe functions · lint · **1795 de teste** · test:tz · build — verzi.
+
+## 2026-09-24 · A.6 (2/3) — un singur override pe ocurență, și primul test al unui callable
+
+**Prompt (Andrei):** A.6, ultimele două puncte ale recurenței: mutarea unei ocurențe ascundea pe
+server o ocurență reală („stochează `overrideDate` pe override și folosește-l în verificare"), și
+`createEventOverride` nu era idempotent („tranzacție care întoarce override-ul existent"). Plus B:
+„Callable-urile nu au NICIUN test pe emulator […] Primul test de acest fel ar trebui să fie pentru
+`createEventOverride`." Plus C: „CI-ul nu face typecheck pe `functions/`." **Model:** Claude Opus 5.5.
+
+### `createEventOverride` e acum o tranzacție
+
+Un override deja făcut pentru ziua aceea se **întoarce**, nu se dublează. Ce se întâmplă cu `data`
+depinde de ce voia apelantul:
+- **materializare** (fereastra de detalii, care apoi scrie schimbarea ei pe id-ul întors) — nu se
+  aplică nimic, ca să nu suprascrie editările existente cu o copie a părintelui;
+- **`apply: true`** (formularul de editare, unde datele SUNT editarea) — se aplică peste override-ul
+  existent, cu aceleași reguli ca prima dată: RSVP-urile și asignații celorlalți rămân.
+
+Bonus, cazuri tratate:
+- o ocurență **ștearsă** nu mai poate fi înviată dintr-un ecran vechi (`failed-precondition`);
+- un override făcut înainte să existe `overrideDate` e găsit, nu dublat.
+
+### `overrideDate` pe override, și deduplicarea serverului
+
+Override-urile noi țin minte ce zi ÎNLOCUIESC, iar deduplicarea folosește ziua aia, nu data nouă.
+
+**Aici m-a prins un test vechi.** Scosesem de tot varianta veche (după `date`), crezând că excepțiile
+părintelui ajung. `digestEvents.test` — „keeps the edited occurrence and not its ghost" — a picat:
+la datele vechi, „mutat peste altă ocurență" și „excepția lipsește" arată identic, iar a doua ducea
+fantoma în digest. **Am pus varianta veche înapoi pentru override-urile vechi.** Prețul, scris ca
+atare: un override vechi care a fost și MUTAT încă poate ascunde o ocurență reală. Orice override
+făcut de acum încolo poartă `overrideDate` și nu mai poate.
+
+### Primul test pe emulator al unui callable
+
+`functions/test/createEventOverride.test.ts` rulează **handlerul real** (`.run()`) contra
+emulatorului, sub `npm run test:rules`. Refuză să ruleze în altă parte decât pe un proiect `demo-*`.
+**7 teste:**
+- A.5 cap-coadă: Bob nu poate răspunde pentru Carol prin callable;
+- idempotența, și `apply`;
+- ocurența ștearsă, override-ul vechi;
+- ocurența mutată care nu mai ascunde ziua reală.
+
+**Trei mutații, fiecare reintroducând un defect în codul real:** fără idempotență → **4 roșii**;
+RSVP copiat întreg → **2**; deduplicare pe data nouă → **1**. Refăcută după revenirea de mai sus, tot
+**1**.
+
+### CI
+
+`functions/` n-avea niciun `npm ci` în CI, deci nici typecheck: o funcție stricată ieșea verde și
+cădea abia la deploy. Acum CI instalează `functions/` și îl verifică cu `tsc`, iar testul de callable
+rulează în `test:rules`. În suita principală e exclus: acolo nu există emulator.
+
+Intră în vigoare la deploy-ul de **functions**.
+
+`npx tsc -b` · `tsc` pe functions · lint · **1795 de teste** · **298 pe emulator** (291 reguli + 7
+callable) · test:tz · build — verzi.

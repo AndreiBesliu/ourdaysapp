@@ -83,12 +83,25 @@ export interface Occurrence {
  * an edited occurrence and its ghost can never both be emitted.
  */
 export function expandInWindow(docs: readonly EventDoc[], fromDay: string, toDay: string): Occurrence[] {
+  // Keyed by the day the override REPLACES. A new override stores it (`overrideDate`); the dedupe
+  // used to use the override's own `date` instead, so a daily occurrence moved from the 22nd to the
+  // 23rd suppressed the REAL occurrence on the 23rd — no reminder for it, missing from the digest.
+  //
+  // An override written BEFORE `overrideDate` existed still keys on its date, deliberately. For
+  // that data, "moved onto another occurrence" and "its exception went missing" look identical,
+  // and the second is what `digestEvents.test` pins: without this, the edited occurrence AND its
+  // ghost both reach the digest. I removed it once, and that test caught it. The price is that a
+  // legacy override which was also MOVED can still hide a real occurrence; every override made
+  // from now on carries `overrideDate` and cannot.
   const taken = new Set<string>();
   for (const ev of docs) {
     const parent = ev.overrideOfParent;
-    if (typeof parent === "string" && parent && typeof ev.date === "string") {
-      taken.add(`${parent}|${(ev.date as string).slice(0, 10)}`);
-    }
+    if (typeof parent !== "string" || !parent) continue;
+    const stored = ev.overrideDate;
+    const replaced = typeof stored === "string" && /^\d{4}-\d{2}-\d{2}$/.test(stored)
+      ? stored
+      : typeof ev.date === "string" ? ev.date.slice(0, 10) : null;
+    if (replaced) taken.add(`${parent}|${replaced}`);
   }
 
   const out: Occurrence[] = [];

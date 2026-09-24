@@ -25,6 +25,16 @@ jobs:
       - name: Install
         run: npm ci
 
+      # functions/ has its own package.json and nothing installed it here, so nothing typechecked it
+      # either — a broken Cloud Function reached CI green and failed only at deploy. And the
+      # callable tests under functions/test import firebase-admin from THIS install.
+      - name: Install functions
+        run: npm ci --prefix functions
+
+      - name: Typecheck functions
+        working-directory: functions
+        run: npx tsc --noEmit -p .
+
       - name: Typecheck
         run: npx tsc -b
 

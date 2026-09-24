@@ -10,10 +10,16 @@ import { app } from "./firebase";
 // Returns the new document's id. Callers that only wanted the side effect can ignore it, but
 // EventDetailsModal needs it: after materialising an occurrence it has to send the rest of that
 // interaction to the override rather than to the synthetic key it was rendered from.
+//
+// If an override already exists for that date, its id comes back instead of a second override
+// being made. `apply: true` is for a caller whose `data` IS the edit (the edit form): it is then
+// applied to the existing override. Without it (the details window, which materialises and then
+// writes its one change to the returned id), nothing is applied — see the callable.
 export async function createEventOverride(params: {
   parentId: string;
   overrideDate: string;
   data: Record<string, unknown>;
+  apply?: boolean;
 }): Promise<string> {
   const fn = httpsCallable(getFunctions(app), "createEventOverride");
   const res = await fn(params);

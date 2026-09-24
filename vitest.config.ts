@@ -12,6 +12,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     include: ['**/*.{test,spec}.?(c|m)[jt]s?(x)'],
-    exclude: ['**/node_modules/**', '**/dist/**', 'rules-tests/**'],
+    // functions/test runs callables against the emulator, under `npm run test:rules` only.
+    exclude: ['**/node_modules/**', '**/dist/**', 'rules-tests/**', 'functions/test/**'],
   },
 });

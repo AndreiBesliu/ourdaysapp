@@ -1178,24 +1178,89 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   if (rsvps) safe.rsvps = rsvps;
   else delete safe.rsvps;
 
-  const overrideRef = db.collection("events").doc();
-  const batch = db.batch();
-  batch.set(overrideRef, {
-    ...safe,
-    ownerId: p.ownerId, // server-authoritative (keep original owner)
-    groupId: p.groupId ?? null, // keep within the parent's group
-    // Legacy and inert, but carried from the PARENT rather than from the caller: it is not the
-    // client's to state on a document it does not own.
-    sharedWithFamily: p.sharedWithFamily ?? false,
-    updatedAt: new Date().toISOString(),
-    overrideOfParent: parentId,
-    createdAt: new Date().toISOString(),
+  // ── ONE override per occurrence ───────────────────────────────────────────────────────────────
+  //
+  // This used to create a NEW override on every call. A second member with the occurrence still
+  // open from before the first one materialised it (CalendarHome keeps the old virtual row) got a
+  // second override for the same day, and the event then showed twice.
+  //
+  // Now it is a transaction: an override already made for this date is RETURNED, not duplicated.
+  // What happens to the caller's `data` then depends on what the caller meant:
+  //   * materialising (the details window, which then writes its one change to the returned id)
+  //     — nothing is applied; the existing override's edits must not be overwritten by a copy of
+  //     the parent that the caller happened to be holding;
+  //   * `apply: true` (the edit form, whose data IS the edit) — applied to the existing override,
+  //     under the same rules as a first edit: other people's RSVPs and assignees kept.
+  //
+  // `overrideDate` is now stored ON the override. The server's dedupe used to key on the
+  // override's own `date`, so moving an occurrence onto another occurrence's day hid that REAL
+  // occurrence from reminders and the digest.
+  const apply = (request.data as { apply?: unknown }).apply === true;
+  const events = db.collection("events");
+
+  return db.runTransaction(async (tx) => {
+    const fresh = await tx.get(parentRef);
+    if (!fresh.exists) throw new HttpsError("not-found", "Parent event not found.");
+    const exceptions: unknown[] = Array.isArray(fresh.data()?.recurrenceExceptions)
+      ? fresh.data()!.recurrenceExceptions
+      : [];
+
+    // `| undefined` said out loud: `docs[0]` of an empty result IS undefined, whatever the
+    // inferred type claims.
+    let existing: admin.firestore.QueryDocumentSnapshot | undefined = (await tx.get(
+      events.where("overrideOfParent", "==", parentId).where("overrideDate", "==", overrideDate).limit(1),
+    )).docs[0];
+
+    if (!existing && exceptions.includes(overrideDate)) {
+      // The date is already excepted, so an override was made before `overrideDate` existed, or
+      // the occurrence was deleted. A legacy override that was not MOVED sits on its own day.
+      const legacy = await tx.get(events.where("overrideOfParent", "==", parentId));
+      existing = legacy.docs.find((d) => {
+        const x = d.data();
+        return typeof x.overrideDate !== "string" && typeof x.date === "string" && x.date.slice(0, 10) === overrideDate;
+      });
+      // Deleted (or a legacy override moved elsewhere): re-creating it would resurrect something
+      // somebody removed, from a stale screen.
+      if (!existing) throw new HttpsError("failed-precondition", "That occurrence no longer exists.");
+    }
+
+    if (existing) {
+      if (apply) {
+        const cur = existing.data();
+        const upd: Record<string, unknown> = { ...safe, updatedAt: new Date().toISOString() };
+        // Recomputed against THIS override, not the parent: its RSVPs and assignees are the ones
+        // that apply on this date.
+        const curAssignees = Array.isArray(cur.assigneeIds)
+          ? cur.assigneeIds.filter((x: unknown): x is string => typeof x === "string") : [];
+        const mayAssign = new Set([...curAssignees, ...parentAssignees, uid]);
+        const keptAssignees = requested.filter((id) => mayAssign.has(id) && id !== "ai_assistant");
+        upd.assigneeIds = keptAssignees;
+        upd.assigneeId = keptAssignees[0] ?? null;
+        const merged = overrideRsvps(cur.rsvps, (data as Record<string, unknown>).rsvps, uid);
+        upd.rsvps = merged ?? admin.firestore.FieldValue.delete();
+        tx.update(existing.ref, upd);
+      }
+      return { id: existing.id, existed: true };
+    }
+
+    const overrideRef = events.doc();
+    tx.set(overrideRef, {
+      ...safe,
+      ownerId: p.ownerId, // server-authoritative (keep original owner)
+      groupId: p.groupId ?? null, // keep within the parent's group
+      // Legacy and inert, but carried from the PARENT rather than from the caller: it is not the
+      // client's to state on a document it does not own.
+      sharedWithFamily: p.sharedWithFamily ?? false,
+      updatedAt: new Date().toISOString(),
+      overrideOfParent: parentId,
+      overrideDate,
+      createdAt: new Date().toISOString(),
+    });
+    tx.update(parentRef, {
+      recurrenceExceptions: admin.firestore.FieldValue.arrayUnion(overrideDate),
+    });
+    return { id: overrideRef.id, existed: false };
   });
-  batch.update(parentRef, {
-    recurrenceExceptions: admin.firestore.FieldValue.arrayUnion(overrideDate),
-  });
-  await batch.commit();
-  return { id: overrideRef.id };
 });
 
 // ── Group teardown ──
