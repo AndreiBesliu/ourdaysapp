@@ -1,20 +1,24 @@
-import { addDays, addWeeks, addMonths, addYears, format, isBefore, isAfter } from 'date-fns';
-import { isValidDayOffset } from './eventTime';
+import { isValidDayOffset, localDayKey } from './eventTime';
+import { dayAsLocalDate } from './dayLabel';
+import {
+  seriesStartDay, horizonEndDay, occurrenceDaysInWindow, isFrequency,
+} from './recurrenceCore';
 
 export interface RecurrenceRule {
   frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
 }
 
 /**
- * Returns the maximum horizon end date for a given frequency, starting from `startDate`.
+ * The last day a series repeats until, as a LOCAL Date for a local formatter.
+ *
+ * Display only ("repeats until …"). It reads the same horizon the expansion stops at, from
+ * `recurrenceCore`, so the date the form promises is the date the calendar actually ends on —
+ * including west of Greenwich, where the old date-fns version printed the day before.
  */
 export function getRecurrenceEndDate(startDate: Date, frequency: RecurrenceRule['frequency']): Date {
-  switch (frequency) {
-    case 'daily':   return addDays(startDate, 30);
-    case 'weekly':  return addWeeks(startDate, 52);
-    case 'monthly': return addMonths(startDate, 12);
-    case 'yearly':  return addYears(startDate, 5);
-  }
+  const start = Number.isFinite(startDate.getTime()) ? seriesStartDay(startDate.toISOString()) : null;
+  const end = start && isFrequency(frequency) ? horizonEndDay(start, frequency) : null;
+  return (end && dayAsLocalDate(end)) || startDate;
 }
 
 /**
@@ -34,18 +38,6 @@ export function getFrequencyKey(frequency: RecurrenceRule['frequency']): string 
     case 'weekly':  return 'freqWeekly';
     case 'monthly': return 'freqMonthly';
     case 'yearly':  return 'freqYearly';
-  }
-}
-
-/**
- * Advance a date by one step of the given frequency.
- */
-function advanceDate(date: Date, frequency: RecurrenceRule['frequency']): Date {
-  switch (frequency) {
-    case 'daily':   return addDays(date, 1);
-    case 'weekly':  return addWeeks(date, 1);
-    case 'monthly': return addMonths(date, 1);
-    case 'yearly':  return addYears(date, 1);
   }
 }
 
@@ -73,47 +65,36 @@ export function expandRecurringEvents(
     }
 
     const { frequency } = event.recurrenceRule as RecurrenceRule;
+    const startDay = seriesStartDay(event.date);
+    // A rule the app does not know, or a start it cannot read, is shown as the plain event it
+    // is — the server's `frequencyOf` does the same, so the two still agree.
+    if (!isFrequency(frequency) || !startDay) {
+      result.push(event);
+      continue;
+    }
+
     const exceptions: string[] = event.recurrenceExceptions || [];
-    const seriesStart = new Date(event.date);
-    const seriesEnd = getRecurrenceEndDate(seriesStart, frequency);
-    // The span is RELATIVE (whole days after each occurrence's start), so every occurrence below
-    // inherits it verbatim through `...event` and is right by construction. An absolute end date
-    // on the parent would have been copied unchanged too — and been wrong for every occurrence but
-    // the first. In UTC milliseconds because `current` is a UTC-midnight instant; no DST here.
-    const spanMs = (isValidDayOffset(event.endDayOffset) ? event.endDayOffset : 0) * 86_400_000;
+    // Relative span: every occurrence inherits it verbatim through `...event`.
+    const spanDays = isValidDayOffset(event.endDayOffset) ? event.endDayOffset : 0;
 
-    // Walk from the series start, stepping by frequency
-    let current = new Date(seriesStart);
+    // Day LABELS throughout — see recurrenceCore.ts. The window arrives as local Dates (a
+    // calendar's cells), and a local Date's label is its local calendar day.
+    const days = occurrenceDaysInWindow(
+      startDay, frequency, localDayKey(windowStart), localDayKey(windowEnd), spanDays,
+    );
 
-    while (!isAfter(current, seriesEnd) && !isAfter(current, windowEnd)) {
-      // Emit if any day of the occurrence is inside the window — not only its first day. A
-      // two-day occurrence starting the day before the window used to vanish from the window's
-      // first day entirely.
-      if (!isBefore(new Date(current.getTime() + spanMs), windowStart)) {
-        const dateStr = format(current, 'yyyy-MM-dd');
-
-        // Skip exceptions (deleted or overridden occurrences)
-        if (!exceptions.includes(dateStr)) {
-          result.push({
-            ...event,
-            id: `${event.id}_${dateStr}`,
-            // Midnight UTC of the occurrence's OWN day label, not `current.toISOString()`.
-            //
-            // `advanceDate` is date-fns, which steps the LOCAL calendar, so from the spring DST
-            // change onward `current` drifts to 23:00Z — and the document then contradicted
-            // itself: `recurrenceDate` said 30 March while the UTC day of `date` said the 29th.
-            // Rendering that compared the raw instant locally happened to agree with the label;
-            // anything reading the day out of `date` did not. Measured under Europe/Bucharest:
-            // the first five occurrences agree, every one after the change disagrees.
-            date: `${dateStr}T00:00:00.000Z`,
-            isRecurringInstance: true,
-            parentEventId: event.id,
-            recurrenceDate: dateStr,
-          });
-        }
-      }
-
-      current = advanceDate(current, frequency);
+    for (const dateStr of days) {
+      // Skip exceptions (deleted or overridden occurrences)
+      if (exceptions.includes(dateStr)) continue;
+      result.push({
+        ...event,
+        id: `${event.id}_${dateStr}`,
+        // Midnight UTC of the occurrence's own label: the stored-day convention every reader uses.
+        date: `${dateStr}T00:00:00.000Z`,
+        isRecurringInstance: true,
+        parentEventId: event.id,
+        recurrenceDate: dateStr,
+      });
     }
   }
 
@@ -152,12 +133,16 @@ export function shiftedSeriesStart(
   // Unchanged: the overwhelmingly common case, and the one that used to destroy the series.
   if (occurrenceDay === newDay) return null;
 
-  const from = new Date(`${occurrenceDay}T00:00:00.000Z`);
-  const to = new Date(`${newDay}T00:00:00.000Z`);
-  const start = typeof parentDate === 'string' ? new Date(parentDate) : new Date(NaN);
-  if ([from, to, start].some((d) => Number.isNaN(d.getTime()))) return null;
+  const from = Date.parse(`${occurrenceDay}T00:00:00.000Z`);
+  const to = Date.parse(`${newDay}T00:00:00.000Z`);
+  const startDay = seriesStartDay(parentDate);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || !startDay) return null;
 
-  const deltaDays = Math.round((to.getTime() - from.getTime()) / 86_400_000);
+  const deltaDays = Math.round((to - from) / 86_400_000);
   if (deltaDays === 0) return null;
-  return addDays(start, deltaDays).toISOString();
+  // In day labels, then back to the stored form. This was `addDays(start, deltaDays)` on the
+  // LOCAL clock, which across the March DST change stored 23:00Z — a Wednesday the server read
+  // as a Tuesday, so every reminder for the moved series came a day early.
+  const moved = new Date(Date.parse(`${startDay}T00:00:00.000Z`) + deltaDays * 86_400_000);
+  return `${moved.toISOString().slice(0, 10)}T00:00:00.000Z`;
 }

@@ -32,10 +32,13 @@
 // the dedupe for free, and it is the only branch here that cannot be defeated by a timezone.
 
 import { isValidDayOffset, dayPlus } from "./eventTime";
+import {
+  FREQUENCIES, type Frequency, seriesStartDay, occurrenceDaysInWindow,
+} from "./recurrenceCore";
 
-export type Frequency = "daily" | "weekly" | "monthly" | "yearly";
-
-export const FREQUENCIES: readonly Frequency[] = ["daily", "weekly", "monthly", "yearly"];
+// Re-exported so the readers of this module keep one import. The DEFINITIONS live in the shared
+// core now, which the calendar runs byte-for-byte — see recurrenceCore.ts.
+export { FREQUENCIES, type Frequency };
 /** Frequencies whose whole horizon fits inside 400 days back. */
 export const SHORT_FREQUENCIES: readonly Frequency[] = ["daily", "weekly", "monthly"];
 
@@ -51,44 +54,6 @@ export interface EventDoc {
 const DAY_MS = 86_400_000;
 
 const dayKey = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
-
-/** Advance by one step, in UTC. Month and year steps clamp, matching `date-fns` behaviour. */
-function advance(ms: number, freq: Frequency): number {
-  const d = new Date(ms);
-  switch (freq) {
-    case "daily": return ms + DAY_MS;
-    case "weekly": return ms + 7 * DAY_MS;
-    case "monthly": {
-      const day = d.getUTCDate();
-      const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1,
-        d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds()));
-      const last = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
-      next.setUTCDate(Math.min(day, last));
-      return next.getTime();
-    }
-    case "yearly": {
-      const day = d.getUTCDate();
-      const next = new Date(Date.UTC(d.getUTCFullYear() + 1, d.getUTCMonth(), 1,
-        d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds()));
-      const last = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
-      next.setUTCDate(Math.min(day, last));
-      return next.getTime();
-    }
-  }
-}
-
-/** The client's horizon, from the series start. Mirrors `getRecurrenceEndDate`. */
-function horizonEnd(startMs: number, freq: Frequency): number {
-  const d = new Date(startMs);
-  switch (freq) {
-    case "daily": return startMs + 30 * DAY_MS;
-    case "weekly": return startMs + 52 * 7 * DAY_MS;
-    case "monthly": return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 12, d.getUTCDate(),
-      d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds());
-    case "yearly": return Date.UTC(d.getUTCFullYear() + 5, d.getUTCMonth(), d.getUTCDate(),
-      d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds());
-  }
-}
 
 export function frequencyOf(ev: EventDoc): Frequency | null {
   const f = ev.recurrenceRule && (ev.recurrenceRule as { frequency?: unknown }).frequency;
@@ -146,31 +111,27 @@ export function expandInWindow(docs: readonly EventDoc[], fromDay: string, toDay
       continue;
     }
 
-    const startMs = Date.parse(ev.date);
-    if (!Number.isFinite(startMs)) continue;
+    // The SAME days the calendar shows, from the shared core: computed from the series start in
+    // UTC day labels. This loop used to step in UTC from the PREVIOUS occurrence while the calendar
+    // stepped the local clock, and the two disagreed on moved series, west of Greenwich, and every
+    // monthly or yearly series whose day a short month clamped.
+    const startDay = seriesStartDay(ev.date);
+    if (!startDay) continue;
     const exceptions = new Set(
       (Array.isArray(ev.recurrenceExceptions) ? ev.recurrenceExceptions : [])
         .filter((x): x is string => typeof x === "string")
     );
-    const end = horizonEnd(startMs, freq);
-    const toMs = Date.parse(`${toDay}T23:59:59.999Z`);
 
-    let cur = startMs;
-    // A hard step cap: a corrupt `date` plus a daily rule could otherwise spin. The horizon
-    // already bounds this; the cap is the guard against a value that defeats the horizon.
-    for (let steps = 0; steps < 4000 && cur <= end && cur <= toMs; steps++) {
-      const day = dayKey(cur);
-      if (lastDayOf(day) >= fromDay) {
-        const suppressed = freq === "daily"
-          ? exceptions.has(day)
-          : exceptions.has(day) ||
-            exceptions.has(dayKey(cur - DAY_MS)) ||
-            exceptions.has(dayKey(cur + DAY_MS));
-        if (!suppressed && !taken.has(`${ev.id}|${day}`)) {
-          out.push({ source: ev, day, virtual: true });
-        }
+    for (const day of occurrenceDaysInWindow(startDay, freq, fromDay, toDay, spanDays)) {
+      const ms = Date.parse(`${day}T00:00:00.000Z`);
+      const suppressed = freq === "daily"
+        ? exceptions.has(day)
+        : exceptions.has(day) ||
+          exceptions.has(dayKey(ms - DAY_MS)) ||
+          exceptions.has(dayKey(ms + DAY_MS));
+      if (!suppressed && !taken.has(`${ev.id}|${day}`)) {
+        out.push({ source: ev, day, virtual: true });
       }
-      cur = advance(cur, freq);
     }
   }
 

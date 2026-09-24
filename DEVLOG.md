@@ -8686,3 +8686,62 @@ exact ce merită rulată pe emulator), împreună cu pasul de CI pentru `functio
 Intră în vigoare la deploy-ul de **functions**.
 
 `npx tsc -b` · `tsc` pe functions · lint · **1784 de teste** · build — verzi.
+
+## 2026-09-24 · A.6 (1/3) — o singură recurență, în UTC, pe ambele părți
+
+**Prompt (Andrei):** A.6: „Recurența: clientul și serverul nu cad de acord, iar pe unele cazuri
+greșesc amândouă. […] Direcția: o singură implementare de recurență, UTC pură, cu o copie pe server
+păzită de un test de copie, ca la `eventTime`." Plus: „Pentru recurență: teste rulate sub cel puțin
+DOUĂ fusuri (București și New York), care traversează ambele schimbări de oră […] începe cu testul
+în două fusuri, care trebuie să pice înainte de reparație." **Model:** Claude Opus 5.5.
+
+### Întâi testul, și a picat
+
+`src/utils/recurrenceZones.test.ts` verifică, pentru fiecare caz, **și** calendarul
+(`expandRecurringEvents`), **și** serverul (`expandInWindow`). `npm run test:tz` îl rulează sub
+București și sub New York; fiecare rulare verifică întâi că fusul chiar s-a aplicat.
+
+**Pe codul de dinainte de reparație:**
+
+| Fus | Picate | Ce |
+|---|---|---|
+| București | **4 din 8** | lunar pe 31, anual pe 29 feb., seria mutată peste DST, începutul deja stocat la 23:00Z |
+| New York | **6 din 8** | tot ce e mai sus, plus săptămânalul (arăta 19, 26, 3, 10 în loc de 20, 27, 4, 11) și săptămânalul peste DST |
+
+Exact constatările auditului, măsurate aici.
+
+### Reparat
+
+`recurrenceCore.ts`: **o singură implementare**, byte-identică în `src/utils/` și
+`functions/src/`, păzită de `recurrenceCoreServerCopy.test.ts`, ca `eventTime`. Nu importă nimic.
+
+- **Totul în etichete de zi UTC.** Nu intervine niciun fus și niciun DST. Calendarul transformă
+  eticheta în dată locală doar la afișare.
+- **Ocurența n se calculează din STARTUL seriei**, niciodată din ocurența n−1. Deci 31 ian. →
+  28 feb. → **31 mar.** → 30 apr., și 29.02.2028 → 28.02 în anii nebisecți → **29.02.2032**.
+- **Mutarea unei serii** calculează în etichete. Înainte, `addDays` pe ceasul LOCAL stoca 23:00Z
+  peste schimbarea din martie: o miercuri pe care serverul o citea marți.
+- **Seriile deja stocate așa se citesc corect:** un început în ultimele DOUĂ ore ale unei zile UTC
+  e un miezul-nopții mutat de o oră DST și înseamnă ziua următoare. Fereastra e îngustă intenționat:
+  formularul scrie mereu miezul nopții UTC, deci nimic altceva nu ajunge acolo.
+- **„Se repetă până la…"** din formular citește același orizont ca expansiunea, deci data promisă
+  e data la care calendarul chiar se oprește.
+
+### Proba
+
+- **Același test: 8/8 în ambele fusuri** (de la 4 și 6 picate).
+- **Suita întreagă**, 1795, verde sub fusul mașinii, sub **UTC** și sub **New York**.
+- **Trei mutații, fiecare reintroducând un defect al auditului** în AMBELE copii, toate prinse:
+  - pas din ocurența precedentă → câte 1 roșu în fiecare fus;
+  - fără reparația DST → câte 1 roșu în fiecare fus;
+  - calendarul etichetează cu ziua locală → **8/8 verde la București și 7 roșii la New York**.
+
+A treia e motivul pentru care cereai două fusuri: în fusul de acasă defectul e **invizibil**.
+
+**`npm run test:tz` rulează acum și în CI**, după teste. CI e în UTC, unde toate defectele astea
+erau invizibile.
+
+**Urmează:** (2/3) `overrideDate` pe override-uri + deduplicarea de pe server + `createEventOverride`
+idempotent, cu primul test pe emulator al unui callable; (3/3) bifele din checklist, pe item.
+
+`npx tsc -b` · `tsc` pe functions · lint · **1795 de teste** · test:tz · build — verzi.

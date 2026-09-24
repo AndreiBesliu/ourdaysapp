@@ -15,6 +15,7 @@
     "dev:warlord": "vite --open /warlord.html",
     "dev:warlord-admin": "vite --open /warlord-admin.html",
     "test:rules": "node scripts/test-rules.mjs",
+    "test:tz": "node scripts/test-tz.mjs",
     "check:bundle": "node scripts/check-bundle.mjs"
   },
   "dependencies": {

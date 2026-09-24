@@ -38,6 +38,12 @@ jobs:
       - name: Tests
         run: npm test
 
+      # CI runs in UTC, where a local date formatter and a UTC one print the same day — so every
+      # recurrence defect found on 24.09.2026 was invisible here. These run the zone-sensitive
+      # tests again under Bucharest (DST in March and October) and New York (west of UTC).
+      - name: Zone tests
+        run: npm run test:tz
+
       - name: Build
         run: npm run build
 
