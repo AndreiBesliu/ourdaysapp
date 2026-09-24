@@ -8802,3 +8802,47 @@ Intră în vigoare la deploy-ul de **functions**.
 
 `npx tsc -b` · `tsc` pe functions · lint · **1795 de teste** · **298 pe emulator** (291 reguli + 7
 callable) · test:tz · build — verzi.
+
+## 2026-09-24 · A.6 (3/3) — două bife simultane nu se mai șterg una pe alta
+
+**Prompt (Andrei):** A.6: „Bifele din checklist rescriu tot array-ul (`EventDetailsModal.tsx:~389-409`),
+deci doi oameni care bifează simultan își șterg bifele unul altuia. Scrie per item."
+**Model:** Claude Opus 5.5.
+
+**Reverificat pe HEAD:** bifarea, editarea textului și reordonarea scriau fiecare **tot**
+`checklistItems`, construit din copia de pe ecranul ăsta. La fel și îmbinarea checklist-ului generat
+de AI. Doi oameni care bifează două lucruri deodată: a doua scriere o ștergea pe prima.
+
+**De ce nu literal „pe item":** Firestore nu poate adresa un element dintr-un array, iar
+transformarea checklist-ului într-o hartă ar rupe orice cititor al array-ului — APK-ul instalat
+printre ei. Deci fiecare schimbare e acum o **operație** („bifează X", „textul lui X", „mută X
+înaintea lui Y", „adaugă itemii ăștia") aplicată **într-o tranzacție pe array-ul de ACUM**. O
+tranzacție care s-a ciocnit cu alta e reluată de Firestore peste array-ul nou, deci ambele bife rămân.
+
+- **Bifarea SETEAZĂ, nu comută:** doi oameni care bifează același lucru ajung la același rezultat,
+  nu se anulează.
+- **Mutarea e „înaintea vecinului nou"**, nu „la indexul N": un index înseamnă altceva după ce
+  cineva a adăugat sau a șters ceva între timp.
+- **Adăugarea e după id**, deci o tranzacție reluată nu adaugă lotul de două ori.
+- **Un item șters între timp de altcineva nu se întoarce.**
+- **Offline** tranzacția nu poate rula, așa că se scrie ca înainte (Firestore pune în coadă).
+  Câștigă ultimul, ca întotdeauna, dar o bifă dată în tren nu e refuzată.
+
+**Proba — pe emulator, cu reguli reale și tranzacții reale** (`rules-tests/checklist-concurrency`):
+- **Control:** vechea scriere a întregului array pierde bifa Alicei. Dacă n-ar pierde-o, fișierul
+  n-ar demonstra nimic.
+- Noua cale păstrează ambele bife, în paralel, iar o bifă care aterizează în timpul unei adăugări
+  AI supraviețuiește.
+- **Mutația „citește, apoi scrie, fără tranzacție" → 2 roșii.** Asta probează că cei doi chiar
+  se suprapun în test. Notă cinstită: mutația lărgește cu 50 ms fereastra dintre citire și scriere,
+  ca suprapunerea să fie sigură. Codul livrat n-are nevoie de ea: tranzacția e corectă oricum ar
+  cădea timpul.
+
+Plus 7 teste unitare ale operațiilor.
+
+**N-am putut vedea bifele pe ecran** — sunt în spatele autentificării.
+
+**A.6 e închis:** recurența pe o singură implementare (1/3), un override pe ocurență (2/3), bife
+per item (3/3).
+
+`npx tsc -b` · lint · **1802 teste** · **301 pe emulator** · test:tz · build — verzi.

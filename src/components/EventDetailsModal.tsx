@@ -15,6 +15,7 @@ import { useDialog } from '../hooks/useDialog';
 import { useMenu } from '../hooks/useMenu';
 import { getFrequencyKey } from '../utils/recurrence';
 import { deletePlanFor, type DeleteScope } from '../utils/deleteScope';
+import { writeChecklistOp } from '../utils/checklistOps';
 import SeriesScopeDialog from './SeriesScopeDialog';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { t, getDateLocale } from '../utils/i18n';
@@ -367,7 +368,8 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     );
     setChecklist(newChecklist);
     try {
-      await updateDoc(doc(db, 'events', await resolveWriteTarget()), { checklistItems: newChecklist });
+      // One item, applied to the checklist as it is NOW — see utils/checklistOps.ts.
+      await writeChecklistOp(db, await resolveWriteTarget(), { kind: 'set-text', id: itemId, text: newText }, newChecklist);
     } catch (e) {
       reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.handleEditChecklistText' });
       console.error(e);
@@ -383,7 +385,10 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     setChecklist(newItems);
     Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
     try {
-      await updateDoc(doc(db, 'events', await resolveWriteTarget()), { checklistItems: newItems });
+      // "Before its new neighbour", not "at index N": an index means something else once
+      // somebody has added or removed an item meanwhile; a neighbour does not.
+      const beforeId = newItems[result.destination.index + 1]?.id ?? null;
+      await writeChecklistOp(db, await resolveWriteTarget(), { kind: 'move', id: reorderedItem.id, beforeId }, newItems);
     } catch (e) {
       reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.handleDragEnd' });
       console.error(e);
@@ -404,7 +409,10 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     Haptics.impact({ style: isNowCompleted ? ImpactStyle.Medium : ImpactStyle.Light }).catch(() => {});
 
     try {
-      await updateDoc(doc(db, 'events', await resolveWriteTarget()), { checklistItems: newChecklist });
+      // SET to what this person saw it become, not "toggle": two people ticking the same item must
+      // agree, not cancel out. And applied to the array as it is now, so somebody else's tick on
+      // another item a second earlier is not erased by this screen's older copy.
+      await writeChecklistOp(db, await resolveWriteTarget(), { kind: 'set-completed', id: itemId, value: !!isNowCompleted }, newChecklist);
     } catch (e) {
       reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.handleToggleChecklistItem' });
       console.error("Failed to update checklist item:", e);
@@ -497,7 +505,10 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       //                left every other occurrence still showing the card and still offering a
       //                Retry that costs another call. Clearing the parent answers it once.
       const plan = planEventWrite(event as any);
-      await updateDoc(doc(db, 'events', await resolveWriteTarget()), { checklistItems: merged });
+      // Appended to the checklist as it is NOW, not to this screen's copy: a tick somebody made
+      // while the model was thinking is otherwise erased by this write. `merged` is only the
+      // offline fallback — see utils/checklistOps.ts.
+      await writeChecklistOp(db, await resolveWriteTarget(), { kind: 'append', items: newItems }, merged);
       const noteHome = plan.kind === 'override' ? plan.parentId : plan.id;
       await updateDoc(doc(db, 'events', noteHome), { aiChecklist: deleteField() })
         .catch((e) => {
