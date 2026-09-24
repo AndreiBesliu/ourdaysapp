@@ -34,6 +34,27 @@ export interface MirrorFields {
 const text = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
 
 /**
+ * A birthday as the PUBLIC profile may carry it: day and month, never the year.
+ *
+ * Andrei, 24.09.2026: `profiles/{uid}` is readable by every signed-in account, and a full date of
+ * birth there is an age anybody can read. The full date stays in `users/{uid}`, which only its
+ * owner reads. The format is `0000-MM-DD`, NOT `MM-DD`: the calendar splits on '-' and takes
+ * positions 1 and 2 as month and day, so `MM-DD` would have put the day where the month goes —
+ * in the web app and in any installed copy with that code.
+ *
+ * Accepts a full `yyyy-MM-dd` or an already-public `0000-MM-DD`; anything else is null.
+ */
+export function publicBirthday(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v.trim());
+  if (!m) return null;
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return `0000-${m[2]}-${m[3]}`;
+}
+
+/**
  * The fields to merge into `profiles/{uid}`.
  *
  * `name` is present only when one is actually known — from the user document, or failing that from
@@ -47,7 +68,8 @@ export function publicMirrorFor(
   const src = userDoc || {};
   const out: MirrorFields = {
     photoURL: text(src.photoURL) ? src.photoURL : null,
-    birthday: text(src.birthday) ? src.birthday : null,
+    // Day and month only — see `publicBirthday`.
+    birthday: publicBirthday(src.birthday),
   };
   const name = text(src.name) ? src.name : (text(authDisplayName) ? authDisplayName : null);
   if (name) out.name = name;

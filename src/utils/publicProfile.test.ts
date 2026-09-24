@@ -42,7 +42,9 @@ describe('the public mirror reflects, and does not invent', () => {
     // These two are safe to overwrite: an absent avatar IS "no avatar", and writing null keeps a
     // stale one from surviving a change.
     expect(publicMirrorFor({}, null)).toEqual({ photoURL: null, birthday: null });
+    // The birthday is mirrored WITHOUT its year (Andrei, 24.09.2026): this used to assert the full
+    // date went into the public profile, which is exactly what that decision stopped.
     expect(publicMirrorFor({ photoURL: 'https://x/y.png', birthday: '1990-04-01' }, null))
-      .toEqual({ photoURL: 'https://x/y.png', birthday: '1990-04-01' });
+      .toEqual({ photoURL: 'https://x/y.png', birthday: '0000-04-01' });
   });
 });

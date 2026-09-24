@@ -206,10 +206,18 @@ service cloud.firestore {
             || request.resource.data.photoURL == null
             || (request.resource.data.photoURL is string
                 && request.resource.data.photoURL.size() <= 500))
+        // Day and month only (Andrei, 24.09): the profile is readable by every signed-in account,
+        // and a year there is an age. `0000-MM-DD`, never `MM-DD` — the calendar splits on '-'.
+        //
+        // A stored value is judged only when it CHANGES. The rule sees the resulting document, so
+        // judging it always would have refused every merge onto a profile still holding a full date
+        // — a new photo, say — until the migration ran. Untouched, it passes; set, it must be public.
         && (!('birthday' in request.resource.data)
             || request.resource.data.birthday == null
             || (request.resource.data.birthday is string
-                && request.resource.data.birthday.size() <= 10));
+                && request.resource.data.birthday.matches('^0000-[0-9]{2}-[0-9]{2}$'))
+            || (resource != null
+                && request.resource.data.birthday == resource.data.get('birthday', null)));
     }
     match /profiles/{userId} {
       allow read: if isSignedIn();

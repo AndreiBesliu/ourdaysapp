@@ -12,6 +12,7 @@ import { deleteToken } from 'firebase/messaging';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { releasePushThenSignOut, rememberedPushToken } from '../utils/pushRelease';
+import { publicBirthday } from '../utils/publicProfile';
 import { liveDoc } from '../utils/liveQuery';
 import { uploadFile, UploadRefused } from '../utils/uploadFile';
 import { refusalKey, refusalDetail } from '../utils/uploadLimits';
@@ -148,7 +149,8 @@ export default function Settings() {
         await updateDoc(doc(db, 'users', auth.currentUser.uid), {
           birthday: val || null
         });
-        await setDoc(doc(db, 'profiles', auth.currentUser.uid), { birthday: val || null }, { merge: true });
+        // The full date stays in `users` (above); the public profile gets day and month only.
+        await setDoc(doc(db, 'profiles', auth.currentUser.uid), { birthday: publicBirthday(val) }, { merge: true });
       } catch (err) {
         reportError(err instanceof Error ? err.message : String(err), { context: 'Settings.handleBirthdayChange' });
         console.error("Failed to update birthday", err);

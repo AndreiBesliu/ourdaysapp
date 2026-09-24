@@ -8959,3 +8959,59 @@ exact codul felii „data nașterii" pe care ai definit-o la secțiunea 0, și v
   rămâne pornit, iar a doua cerere e măsurată după el. Mutația (`throw` înapoi înăuntru) → **2 roșii**.
 
 `npx tsc -b` · `tsc` pe functions · lint · **1833 de teste** · **303 pe emulator** · build — verzi.
+
+## 2026-09-24 · Data nașterii: în profilul public, doar ziua și luna (decizia 0.1)
+
+**Prompt (Andrei):** „Data nașterii: în `profiles` rămân doar ziua și luna. […] Formatul e
+`0000-MM-DD`, NU `MM-DD` […] Regula pe `profiles` acceptă doar `null` sau
+`birthday.matches('^0000-[0-9]{2}-[0-9]{2}$')`, cu test în `rules-tests/`. Migrarea: un script
+Admin SDK […] rulat doar cu confirmarea mea. […] 29 februarie: […] afișează-l pe 28 februarie."
+Plus A.9: „Zilele de naștere apar doar în anul curent". **Model:** Claude Opus 5.5.
+
+### Consecința pe care ai acceptat-o nu se întâmplă — măsurat
+
+Ai acceptat că, dacă APK-ul scrie data completă în oglindă, regula nouă îi refuză TOATĂ scrierea.
+Am citit bundle-ul APK-ului: singura lui referință la `profiles` e calea din **Storage** pentru poza
+de profil, iar URL-ul îl pune în `users/{uid}`. **APK-ul nu scrie deloc oglinda `profiles` din
+Firestore**, deci regula nu-i poate refuza nimic.
+
+Același fapt explică altceva, măsurat la rularea de probă de mai jos: **3 profiluri pe live, pentru
+8 conturi.** Cine folosește doar APK-ul nu are oglindă publică — pentru ceilalți, n-are nume și
+n-are zi de naștere. Încă un motiv pentru reconstruire.
+
+### Reparat
+
+- **`publicBirthday`** (`utils/publicProfile.ts`): `yyyy-MM-dd` → `0000-MM-DD`. O folosesc oglinda
+  de la logare **și** Setările, care scriau direct în `profiles`. Data completă rămâne în `users`.
+- **Regula:** `null`, sau `^0000-[0-9]{2}-[0-9]{2}$`. **Cu o excepție deliberată:** o valoare
+  stocată și NEATINSĂ trece. Regula vede documentul REZULTAT, deci dacă ar fi judecat mereu data
+  stocată, ar fi refuzat orice scriere peste un profil care încă ține o dată completă — o poză nouă,
+  de exemplu — până la migrare. Setată din nou, trebuie să fie publică.
+- **Calendarul** (A.9): aniversările, în toți anii din jurul lunii afișate, nu doar în cel curent.
+  **29 februarie cade pe 28** într-un an fără 29, inclusiv 2100. Înainte, JavaScript îl muta tăcut
+  pe 1 martie.
+
+### Migrarea — scrisă, NU aplicată
+
+`scripts/migrate-public-birthdays.mjs`:
+- implicit **rulare de probă**: citește, numără, nu scrie nimic;
+- **`--apply`** scrie, și **doar cu confirmarea ta**;
+- tipărește numai cifre, niciodată un uid, un nume sau o dată;
+- conversia o importă din `publicProfile.ts` însuși, deci scriptul și aplicația nu pot înțelege
+  diferit ce e „public".
+
+Cheia read-only de măsurători poate face rularea de probă, dar **nu** și `--apply` — intenționat.
+
+**Rularea de probă pe live:** 3 profiluri; **2 cu data completă**, 1 fără. Nimic scris. Cele două
+s-ar repara oricum singure la următoarea logare web a proprietarilor lor, după deploy-ul de hosting.
+Migrarea doar nu mai așteaptă asta.
+
+**Un test vechi afirma chiar contrariul deciziei:** că oglinda publică păstrează data completă (`'1990-04-01'`). Actualizat la decizie, cu motivul în el.
+
+**Proba:** 9 teste unitare și 6 de reguli. Patru mutații:
+- fără clauza „neatinsă" → **1 roșu** (capcana documentului rezultat);
+- regula veche → **3**;
+- fără limitarea la 28 februarie → **1**;
+- oglinda păstrează anul → **2**.
+
+`npx tsc -b` · lint · **1842 de teste** · **309 pe emulator** · build — verzi.

@@ -28,6 +28,7 @@ import { useThemeStore } from '../store';
 import { shownSender, shownGroupName } from '../utils/requestSender';
 import { rememberPushToken } from '../utils/pushRelease';
 import { reconciledActiveGroup, sourceFlags } from '../utils/calendarSources';
+import { birthdayDaysIn } from '../utils/birthdays';
 import { t, getDateLocale } from '../utils/i18n';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { acceptGroupInvite, ADMIN_BOOTSTRAP_EMAILS } from '../serverActions';
@@ -485,7 +486,10 @@ export default function CalendarHome() {
   };
 
   const birthdayEvents = useMemo(() => {
-    const currentYear = new Date().getFullYear();
+    // The years around the month on screen, not just this one: browsing into next January
+    // used to show no birthdays at all. Three years cover any window the calendar expands.
+    const shownYear = currentDate.getFullYear();
+    const years = [shownYear - 1, shownYear, shownYear + 1];
     const bEvents: any[] = [];
     
     let usersToShow: any[] = [];
@@ -501,12 +505,13 @@ export default function CalendarHome() {
     }
 
     usersToShow.forEach(u => {
-      if (u.birthday) {
-        const [, month, day] = u.birthday.split('-');
+      // One per year shown; 29 February falls on the 28th in a year without it (it used to roll
+      // into 1 March). `0000-MM-DD` from a profile and a full date from one's own record both work.
+      for (const date of birthdayDaysIn(u.birthday, years)) {
         bEvents.push({
-          id: `virtual-birthday-${u.id}`,
+          id: `virtual-birthday-${u.id}-${date.slice(0, 4)}`,
           title: `${u.name || u.email?.split('@')[0] || t('personFallback', language)} — ${t('birthday', language)} 🎂`,
-          date: `${currentYear}-${month}-${day}`,
+          date,
           categoryId: 'important',
           color: 'rose',
           isTask: false,
@@ -518,7 +523,7 @@ export default function CalendarHome() {
       }
     });
     return bEvents;
-  }, [userMap, activeGroupId, groups, language]);
+  }, [userMap, activeGroupId, groups, language, currentDate]);
 
   const allCalendarEvents = useMemo(() => {
     // Build a 3-month window around currentDate for recurrence expansion
