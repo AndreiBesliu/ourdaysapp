@@ -1,8 +1,8 @@
 # Ce am de verificat
 
-> ## ⚠️ STAREA LISTEI, masurata azi (22.09)
+> ## ⚠️ STAREA LISTEI, re-măsurată pe 24.09: **355 nebifate, 8 bifate** (după ce am închis o întrebare și am adăugat șase: cele trei decizii și consola, cum ai cerut)
 >
-> **343 de casute nebifate, 8 bifate.** Pe 19.09 erau 262 si 8 — si atunci s-a scris
+> *(Pe 22.09: 343 și 8.)* Pe 19.09 erau 262 si 8 — si atunci s-a scris
 > regula „o lista la care doar adaugi inceteaza sa fie o lista". De atunci **eu am mai adaugat 81 si
 > tu n-ai avut cand sa bifezi niciuna.** Regula a fost scrisa si apoi incalcata, de mine, de patru
 > ori doar ieri.
@@ -37,49 +37,44 @@ putea **inlocui** o poza trimisa in orice conversatie, pastrand acelasi link.
       *Daca e, il poti parasi singur — dar vreau sa stiu, fiindca ar insemna ca s-a si folosit.*
 
 ---
-## ❓ O DECIZIE care e a ta: data nasterii e publica in aplicatie
+## ✅ DECIS (24.09): data nașterii — în profilul public doar ziua și luna
 
-Nu e o verificare si nu e un bug — e un compromis pe care l-a facut modelul de date, si vreau sa
-stii de el fiindca **alegerea e a ta, nu a mea.**
+Ai ales varianta 2, cu formatul `0000-MM-DD` (nu `MM-DD`, care ar fi mutat ziua în locul lunii).
+**Livrat în cod** (`ff88154`): oglinda și Setările scriu doar ziua și luna, regula refuză anul,
+iar 29 februarie apare pe 28 în anii nebisecți. Data completă rămâne în documentul tău privat.
 
-`profiles` e „oglinda publica": nume, poza si **data nasterii**, citibila de orice cont autentificat
-din aplicatie — inclusiv de cineva care nu e in niciun grup cu tine. Asa merg aniversarile: ca sa
-le vada membrii grupului fara sa citeasca documentul tau sensibil de alaturi.
+**Rămâne un singur pas, care e al tău:** migrarea profilurilor care au deja data completă.
+Rularea de probă pe live (doar citire): **3 profiluri, 2 cu data completă.**
 
-**Suita de teste chiar noteaza ca lista se poate parcurge toata**, ca pret constient al oglinzii,
-si spune ca oglinda „trebuie sa ramana ne-sensibila". Data nasterii completa e la limita.
-
-Trei variante, si oricare e in regula — dar alege tu:
-
-1. **Lasam asa.** Opt oameni care se cunosc; riscul e teoretic.
-2. **Pastram doar ziua si luna** (`04-01` in loc de `1990-04-01`). Aniversarile merg identic, anul
-   — partea din care se deduce varsta — nu mai pleaca nicaieri. Cere o migrare mica.
-3. **Scoatem data nasterii din oglinda** si o citim doar pentru membrii grupului, printr-un
-   callable. Cel mai curat, si cel mai mult de lucru.
-
-*Spune-mi care si o fac.* Pana atunci am inchis restul: profilul nu mai poate avea campuri in plus
-si nici text de orice lungime (era randat in aplicatia tuturor si ajungea si in notificari push).
+- [ ] **Confirmă-mi că rulez migrarea** (`node scripts/migrate-public-birthdays.mjs --apply`). Cere o
+      cheie cu drept de scriere, pe care mi-o dai tu, în afara repo-ului — cea de măsurători e doar
+      de citire, intenționat.
+      - **Ce se strică dacă nu:** nimic nu se strică; cele două date complete rămân vizibile până
+        la următoarea logare web a proprietarilor, când oglinda se rescrie singură (după deploy).
 
 ---
-## ❓ O INTREBARE care blocheaza o reparatie: mai foloseste cineva aplicatia INSTALATA?
+## ✅ RĂSPUNS (24.09): DA, APK-ul e instalat — și ce rulează el, măsurat
 
-Am pregatit o intarire pentru pozele din chat — fiecare fisier incarcat sa poarte numele celui
-care l-a pus, ca sa nu se mai poata incarca ceva atribuit altcuiva. **N-am livrat-o**, fiindca ar
-strica ceva daca raspunsul la intrebarea asta e „da".
+Ultimul `cap sync` din proiect e din **9 mai 2026** (`index-DTbgbzyX.js`). Pe disc nu există niciun
+APK construit, deci „telefoanele rulează exact asta” e o deducție, nu o probă. Calea prin
+`errorLogs` pe care o propuneai **nu poate** răspunde: bundle-ul din mai nu raportează erori deloc
+(`reportError` a apărut pe 12 iulie). Asta înseamnă și că **erorile de pe telefoane nu ajung
+nicăieri.**
 
-**Aplicatia e si un APK Android, iar APK-ul isi poarta propria copie a codului.** Un deploy normal
-(hosting) **nu ajunge** la un telefon cu aplicatia instalata — doar reconstruirea si reinstalarea
-APK-ului o face. Daca strang regula acum, orice poza trimisa in chat **de pe un telefon cu
-aplicatia instalata** ar fi refuzata, tacut, pana la un APK nou.
+**Ce e DEJA stricat pe telefoane**, măsurat pe emulator cu scrierile APK-ului: **adăugarea unei
+cheltuieli** (regula cere `ownerId`, APK-ul nu-l trimite, iar eroarea e înghițită) și notificarea la
+atribuirea unei sarcini. Iar APK-ul **nu scrie deloc oglinda `profiles`**, așa că cine folosește doar
+APK-ul n-are nume public pentru ceilalți: pe live sunt 3 profiluri pentru 8 conturi.
 
-- [ ] **Spune-mi daca mai e cineva care foloseste aplicatia INSTALATA pe telefon** (nu prin browser
-      sau prin scurtatura adaugata pe ecranul principal).
-      - **Daca NU** — strang regula la urmatoarea sesiune, e o linie.
-      - **Daca DA** — strangerea vine dupa un `npx cap sync android` + build + instalare pe acele
-        telefoane, si iti spun cand e momentul.
-
-*Pana atunci:* pozele din chat nu se mai pot **suprascrie** (asta e deja livrat si e partea care
-conta cel mai mult), dar inca se poate incarca un fisier fara semnatura.
+- [ ] **Spune-mi când ai instalat APK-ul** — confirmă sau infirmă că e bundle-ul din 9 mai.
+      - **Ce se strică dacă e altul:** plasa `rules-tests/apk-compat.test.ts` apară scrierile din
+        mai; dacă telefoanele rulează alt cod, plasa apară altceva decât trebuie.
+- [ ] **Alege cum se reconstruiește APK-ul:** (a) bundle local, reconstruit la fiecare livrare, sau
+      (b) `server.url` spre live — primește singur fiecare deploy, dar nu mai pornește fără internet,
+      iar Capacitor nu-l recomandă în producție. Propunerea mea, cu motivele, e în raportul din 24.09.
+      - **Ce se strică dacă nu alegi:** rămân blocate regula temporară din Storage, reparația la
+        reacții, regula care refuză `fromName`/`fromEmail`/`groupName` și orice reparație de client pe
+        telefoane.
 
 ---
 ## 📷 De încercat: o poză MARE în chat
@@ -102,6 +97,26 @@ Scria „mesajul nu a putut fi trimis", poza rămânea atașată, și dacă apă
       - **Cum arată bine:** pleacă exact ca până acum, fără niciun mesaj nou.
       - **Ce se strică dacă răspunsul e greșit:** dacă și asta e refuzată, am pus limita greșit și
         nimeni nu mai poate trimite poze deloc. Spune-mi și opresc.
+
+---
+
+## ❓ O DECIZIE deschisă: „ascunde de…” (`hiddenFrom`) nu ascunde, de fapt
+
+Formularul întreabă „Cine din grup poate vedea evenimentul?”, dar **`hiddenFrom` nu apare deloc în
+reguli**: membrul ascuns îl descarcă oricum (din devtools). Faptele, ca să poți alege:
+
+- Firestore **nu poate** interoga „array-ul NU conține uid”. O regulă pe `hiddenFrom` n-ar fi
+  dovedită de interogările de listă existente, deci le-ar refuza în bloc și **tot calendarul
+  grupului ar dispărea** (capcana LIST din CLAUDE.md).
+- Impunerea reală cere alt model de date (`restricted: true` + listă albă `visibleTo` + două
+  interogări). Cu APK-ul vechi instalat, orice schimbare la regula de citire a evenimentelor ar
+  rupe calendarul din APK până la reconstruire.
+
+- [ ] **Alege:** (1) **reformulăm eticheta** — „nu apare în calendarul lui (nu e privat)” — fără
+      risc, acum; sau (2) **impunem cu adevărat**, o felie mare, care are sens doar după reconstruirea
+      APK-ului.
+      - **Ce se strică dacă nu alegi:** eticheta promite o confidențialitate pe care aplicația n-o
+        oferă. Cineva poate ascunde ceva crezând că e privat.
 
 ---
 
@@ -592,6 +607,12 @@ Le las aici ca să nu se piardă; nu s-au mișcat.
 - [ ] App Check pe *enforce*.
 - [ ] Cotă pe cheia Gemini.
 - [ ] Alertă de buget în GCP.
+- [ ] **Cele două chei `AIza` restricționate** (Google Cloud → Credentials), și confirmarea că
+      Generative Language **nu** se poate apela cu ele. Adăugat 24.09. *Ce se strică dacă nu:* cheile
+      sunt publice în bundle; nerestricționate, oricine le poate folosi pe factura ta.
+- [ ] **PITR și backup zilnic pe Firestore** (consola Firestore → Disaster recovery). Adăugat 24.09:
+      nu există nicio dovadă că ar fi pornite. *Ce se strică dacă nu:* o ștergere greșită e
+      definitivă.
 
 ## 8. Limbile (26.08) — ai ce verifica repede
 
