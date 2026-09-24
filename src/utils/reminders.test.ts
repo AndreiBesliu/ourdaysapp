@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { dueIn } from '../../functions/src/remindersCore';
+import { renderNotify } from '../../functions/src/notifyStrings';
 
 const BUC = 'Europe/Bucharest';
 const OWNER = 'uid-owner';
@@ -151,12 +152,69 @@ describe('what the notification says', () => {
   it('carries the title and the local wall clock', () => {
     const due = dueIn(occ(), zones, START - 30 * 60_000 - 1, START - 30 * 60_000)[0];
     expect(due.title).toBe('Dentist');
-    expect(due.clock).toBe('19:00');
+    expect(due.bodyKey).toBe('notifReminderAt');
+    expect(due.bodyParam).toBe('19:00');
   });
 
-  it('shows an all-day event as the nine o’clock it is treated as', () => {
+  it('never shows an all-day event as starting at nine', () => {
+    // This test used to assert the opposite — `clock` '09:00' — and so pinned the very defect the
+    // 24.09 audit found: 09:00 is where an all-day reminder is PLACED, not when anything starts,
+    // and on the eve of the event it read as "today at nine". Reversed, not deleted.
     const nineBuc = Date.UTC(2026, 6, 15, 6, 0);
     const due = dueIn(occ({ time: undefined, timezone: undefined }), zones, nineBuc - 30 * 60_000 - 1, nineBuc - 30 * 60_000)[0];
-    expect(due.clock).toBe('09:00');
+    expect(due.bodyKey).toBe('notifReminderAllDayToday');
+    expect(due.bodyParam).not.toMatch(/09:00/);
+  });
+});
+
+// ── What the reminder SAYS ────────────────────────────────────────────────────────────────────────
+//
+// Measured by the audit: an all-day event on 26.09 with a reminder a day before arrived on 25.09 at
+// 09:00 as "Reminder: Ziua Mariei — Starts at 09:00", with no date — read as TODAY. The 09:00 is
+// the convention used to place an all-day reminder; it is not when anything starts. And a timed
+// event reminded a day ahead said "Starts at 14:00" the same way.
+describe('what the reminder says', () => {
+  /** The one reminder that falls at `at`, as the person reads it in `lang`. */
+  const said = (source: Record<string, unknown>, day: string, at: number, lang: 'en-US' | 'ro-RO' = 'en-US') => {
+    const due = dueIn(occ(source, day), zones, at - 1, at);
+    expect(due).toHaveLength(1);
+    const d = due[0] as unknown as { bodyKey: string; bodyParam: string };
+    return renderNotify(d.bodyKey, lang, d.bodyParam);
+  };
+  const nine = (y: number, m: number, d: number) => Date.UTC(y, m - 1, d, 6, 0); // 09:00 EEST
+
+  it('an all-day event, a day ahead: tomorrow — not "starts at 09:00"', () => {
+    const text = said({ time: undefined, timezone: undefined, reminderMinutes: 1440 }, '2026-09-26', nine(2026, 9, 25));
+    expect(text).toBe('Tomorrow, all day');
+    expect(text).not.toMatch(/09:00/);
+  });
+
+  it('in Romanian too', () => {
+    expect(said({ time: undefined, timezone: undefined, reminderMinutes: 1440 }, '2026-09-26', nine(2026, 9, 25), 'ro-RO'))
+      .toBe('Mâine, toată ziua');
+  });
+
+  it('an all-day event on the day itself', () => {
+    expect(said({ time: undefined, timezone: undefined, reminderMinutes: 30 }, '2026-09-26', nine(2026, 9, 26) - 30 * 60_000))
+      .toBe('Today, all day');
+  });
+
+  it('an all-day event further out names its date', () => {
+    expect(said({ time: undefined, timezone: undefined, reminderMinutes: 4 * 1440 }, '2026-09-30', nine(2026, 9, 26)))
+      .toBe('All day, on 2026-09-30');
+  });
+
+  it('a timed event the same day keeps "starts at"', () => {
+    expect(said({}, '2026-07-15', START - 30 * 60_000)).toBe('Starts at 19:00');
+  });
+
+  it('a timed event a day ahead says tomorrow', () => {
+    const two = Date.UTC(2026, 8, 26, 11, 0); // 14:00 EEST
+    expect(said({ time: '14:00', reminderMinutes: 1440 }, '2026-09-26', two - 1440 * 60_000)).toBe('Tomorrow at 14:00');
+  });
+
+  it('a timed event further out names its date and time', () => {
+    const two = Date.UTC(2026, 8, 30, 11, 0);
+    expect(said({ time: '14:00', reminderMinutes: 3 * 1440 }, '2026-09-30', two - 3 * 1440 * 60_000)).toBe('On 2026-09-30, 14:00');
   });
 });

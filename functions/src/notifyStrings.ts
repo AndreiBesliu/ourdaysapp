@@ -260,6 +260,48 @@ export const NOTIFY_STRINGS: Table = {
     'it-IT': 'Inizia alle ',
     'de-DE': 'Beginnt um ',
   },
+  // Which DAY, too. "Starts at 09:00" on the eve of an all-day event read as today — and the
+  // 09:00 is only where an all-day reminder is placed, not when anything starts.
+  notifReminderAllDayToday: {
+    'en-US': 'Today, all day',
+    'ro-RO': 'Azi, toată ziua',
+    'fr-FR': 'Aujourd’hui, toute la journée',
+    'es-ES': 'Hoy, todo el día',
+    'it-IT': 'Oggi, tutto il giorno',
+    'de-DE': 'Heute, ganztägig',
+  },
+  notifReminderAllDayTomorrow: {
+    'en-US': 'Tomorrow, all day',
+    'ro-RO': 'Mâine, toată ziua',
+    'fr-FR': 'Demain, toute la journée',
+    'es-ES': 'Mañana, todo el día',
+    'it-IT': 'Domani, tutto il giorno',
+    'de-DE': 'Morgen, ganztägig',
+  },
+  notifReminderAllDayOn: {
+    'en-US': 'All day, on ',
+    'ro-RO': 'Toată ziua, pe ',
+    'fr-FR': 'Toute la journée, le ',
+    'es-ES': 'Todo el día, el ',
+    'it-IT': 'Tutto il giorno, il ',
+    'de-DE': 'Ganztägig, am ',
+  },
+  notifReminderTomorrowAt: {
+    'en-US': 'Tomorrow at ',
+    'ro-RO': 'Mâine la ',
+    'fr-FR': 'Demain à ',
+    'es-ES': 'Mañana a las ',
+    'it-IT': 'Domani alle ',
+    'de-DE': 'Morgen um ',
+  },
+  notifReminderOn: {
+    'en-US': 'On ',
+    'ro-RO': 'Pe ',
+    'fr-FR': 'Le ',
+    'es-ES': 'El ',
+    'it-IT': 'Il ',
+    'de-DE': 'Am ',
+  },
 };
 
 /** A language we can actually render. Anything unknown or absent falls back to English. */

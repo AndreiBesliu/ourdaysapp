@@ -8887,3 +8887,44 @@ precauție, iar testul o fixează, nu repară ceva ce s-a întâmplat.
   meu de shell care se lovea de `||` din cod. Refăcute din Python.
 
 `npx tsc -b` · lint · **1823 de teste** · test:tz (27 în fiecare fus) · build — verzi.
+
+## 2026-09-24 · A.8 — reminder-ul spune ce zi, iar o zi întreagă nu mai „începe la 09:00"
+
+**Prompt (Andrei):** A.8: „Textul reminder-ului e înșelător la evenimentele de o zi întreagă. […]
+Pe 25.09 la 09:00 vine «Reminder: Ziua Mariei — Starts at 09:00», fără dată, deci se citește ca
+«azi». Fix: formulare proprie pentru evenimentele de o zi întreagă și data în corpul mesajului, în
+toate cele 6 limbi (`notifyStrings.ts`)." **Model:** Claude Opus 5.5.
+
+**Reverificat pe HEAD:** corpul era mereu `notifReminderAt` + ora. Pentru o zi întreagă, ora e
+09:00 — locul unde se *pune* reminder-ul, nu momentul în care începe ceva.
+
+**Același defect și la evenimentele cu oră.** Un eveniment mâine la 14:00, cu reminder cu o zi
+înainte, sosea azi la 14:00 cu „Începe la 14:00”, deci tot „azi”. Reparat odată.
+
+**Întâi testele, și au picat — 7 din 7.** Apoi:
+
+`bodyFor` în `remindersCore.ts`, pur: ziua evenimentului față de ziua în care **sosește**
+reminder-ul, în fusul evenimentului. Formularea e relativă, pe care orice limbă o spune fără să
+formateze vreo dată. Doar mai departe de mâine apare data însăși, în formă ISO, singura pe care
+n-o citește nimeni greșit.
+
+| Situație | O zi întreagă | Cu oră |
+|---|---|---|
+| aceeași zi | „Azi, toată ziua" | „Începe la 14:00" |
+| mâine | „Mâine, toată ziua" | „Mâine la 14:00" |
+| mai departe | „Toată ziua, pe 2026-09-30" | „Pe 2026-09-30, 14:00" |
+
+Cinci chei noi, **identice** în `notifyStrings.ts` (push-ul) și `i18n.ts` (clopoțelul), în șase
+limbi. `notifyStrings.test` refuză orice diferență între cele două.
+
+### Un test vechi fixa chiar defectul
+
+„shows an all-day event as the nine o'clock it is treated as” — `clock` = `'09:00'`. Era exact
+comportamentul găsit de audit, apărat de un test. **L-am inversat, nu l-am șters**, cu explicația
+în el.
+
+**Proba:** 7 teste noi. Mutația „vechea formulare, mereu" → **7 roșii**.
+
+Intră în vigoare la deploy-ul de **functions**. Clopoțelul, la cel de hosting.
+
+`npx tsc -b` · `tsc` pe functions · lint · **1828 de teste** · build — verzi.

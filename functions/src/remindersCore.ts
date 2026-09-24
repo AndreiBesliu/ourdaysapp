@@ -16,7 +16,7 @@
 // which anybody reports, because there is nothing to see.
 
 import type { EventDoc } from "./recurrenceServer";
-import { displayTime, isValidZone, startInstant } from "./eventTime";
+import { displayTime, isValidZone, startInstant, zoneOffsetMs } from "./eventTime";
 
 /**
  * When an ALL-DAY event is treated as starting.
@@ -36,7 +36,37 @@ export interface Due {
   at: number;
   zone: string;
   recipients: string[];
-  clock: string;
+  /** The body: which day, and when — see `bodyFor`. Rendered as `t(bodyKey) + bodyParam`. */
+  bodyKey: string;
+  bodyParam: string;
+}
+
+const DAY_MS = 86_400_000;
+
+/** The calendar day of instant `ms` in `zone`, as `yyyy-MM-dd`. */
+function dayIn(ms: number, zone: string): string {
+  return new Date(ms + zoneOffsetMs(ms, zone)).toISOString().slice(0, 10);
+}
+
+/**
+ * What the reminder says about WHEN.
+ *
+ * It said "Starts at 09:00" in every case. The eve of an all-day event therefore read as "today at
+ * nine" — and nine is only where an all-day reminder is placed, not when anything starts. A timed
+ * event reminded a day ahead said "Starts at 14:00" with no day either. So: relative to the day the
+ * reminder arrives, in the event's zone, which every language can say without formatting a date —
+ * today, tomorrow, and past that the date itself (ISO, the one form nobody misreads).
+ */
+export function bodyFor(day: string, at: number, zone: string, clockText: string | null): { bodyKey: string; bodyParam: string } {
+  const ahead = Math.round((Date.parse(`${day}T00:00:00.000Z`) - Date.parse(`${dayIn(at, zone)}T00:00:00.000Z`)) / DAY_MS);
+  if (clockText === null) {
+    if (ahead <= 0) return { bodyKey: "notifReminderAllDayToday", bodyParam: "" };
+    if (ahead === 1) return { bodyKey: "notifReminderAllDayTomorrow", bodyParam: "" };
+    return { bodyKey: "notifReminderAllDayOn", bodyParam: day };
+  }
+  if (ahead <= 0) return { bodyKey: "notifReminderAt", bodyParam: clockText };
+  if (ahead === 1) return { bodyKey: "notifReminderTomorrowAt", bodyParam: clockText };
+  return { bodyKey: "notifReminderOn", bodyParam: `${day}, ${clockText}` };
 }
 
 /**
@@ -96,7 +126,10 @@ export function dueIn(
       at,
       zone,
       recipients,
-      clock: displayTime({ date: `${occ.day}T00:00:00.000Z`, time: clock, timezone: zone }, zone)?.text || clock,
+      ...bodyFor(
+        occ.day, at, zone,
+        hasClock ? (displayTime({ date: `${occ.day}T00:00:00.000Z`, time: clock, timezone: zone }, zone)?.text || clock) : null,
+      ),
     });
   }
 

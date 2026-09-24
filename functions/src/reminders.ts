@@ -144,8 +144,8 @@ export const sendDueReminders = onSchedule(
             type: "reminder",
             titleKey: "notifReminder",
             titleParam: d.title,
-            bodyKey: "notifReminderAt",
-            param: d.clock,
+            bodyKey: d.bodyKey,
+            param: d.bodyParam,
             data: { route: "/", eventId: d.eventId },
           });
           counts.sent += 1;
