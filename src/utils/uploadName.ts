@@ -4,10 +4,10 @@
 //
 // ── The problem it answers ───────────────────────────────────────────────────────────────
 //
-// Storage rules cannot read Firestore, so they cannot ask whether the uploader belongs to the
-// conversation they are writing into. The header of `storage.rules` has said so since the file was
-// written, and the consequence was that `chat-images/{anything}/…` accepted a write from any
-// signed-in account.
+// storage.rules does not ask whether the uploader belongs to the conversation they are writing into.
+// Its header said for months that Storage rules CANNOT read Firestore — wrong: cross-service rules
+// can, for an IAM grant and a billed read per request, and the file declines that (25.09.2026). The
+// consequence was that `chat-images/{anything}/…` accepted a write from any signed-in account.
 //
 // Membership stays unknowable there. OWNERSHIP does not: if the uploader's uid leads the filename,
 // a rule can require `fileName.matches(request.auth.uid + '_.*')`. That does not stop somebody

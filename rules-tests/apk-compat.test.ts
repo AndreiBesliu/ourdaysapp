@@ -48,7 +48,8 @@ import { assertSucceeds } from '@firebase/rules-unit-testing';
 import {
   addDoc, arrayUnion, collection, doc, serverTimestamp, setDoc, updateDoc, writeBatch,
 } from 'firebase/firestore';
-import { ALICE, BOB, G1, EMAIL, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { ALICE, BOB, G1, EMAIL, as, filesAs, resetBucket, resetWorld, seed, startEnv, stopEnv } from './_harness';
 
 beforeAll(() => startEnv('demo-apk-compat'));
 afterAll(stopEnv);
@@ -119,6 +120,29 @@ describe('what the installed APK creates', () => {
       name: 'New', email: 'new@example.test', createdAt: new Date(),
       theme: { primaryColor: '#3b82f6', isDarkMode: false },
     }));
+  });
+});
+
+describe('Storage: what the installed APK uploads, then reads straight back', () => {
+  // Bundle: every flow is `JT(ref, file)` (uploadBytes) followed at once by `XT(ref)`
+  // (getDownloadURL) on the SAME ref. Since 25.09 `get` is the uploader's — by folder, by name, or,
+  // for the unattributed chat name, within ten minutes of the upload. These are the APK's six
+  // shapes; a File from the phone carries its own type, which a typed Blob stands in for.
+  const TS = 1758000000000;
+  const photo = () => new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' });
+  beforeEach(resetBucket);
+
+  it.each([
+    [`assets/${BOB}/${TS}_card.png`, { contentType: 'image/png' }],
+    [`events/${BOB}/${TS}_photo.png`, undefined],
+    [`checklists/${BOB}/${TS}_item.png`, undefined],
+    [`profiles/${BOB}_${TS}`, { contentType: 'image/png' }],
+    [`backgrounds/${BOB}_${TS}`, { contentType: 'image/png' }],
+    [`chat-images/${G1}/${TS}_pic.png`, undefined],
+  ] as const)('%s', async (path, meta) => {
+    const r = ref(filesAs(BOB), path);
+    await assertSucceeds(uploadBytes(r, photo(), meta));
+    await assertSucceeds(getDownloadURL(r));
   });
 });
 

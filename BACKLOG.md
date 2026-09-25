@@ -24,8 +24,10 @@ pică exact când se ajunge aici.
   - `npx cap sync`.
 
   **Decizia (a) bundle local vs (b) `server.url` e a lui Andrei** (`OWNER_VERIFY.md`).
-- Regula temporară din Storage pentru numele vechi de fișier (`chat-images`, `chat-audio`) — se scoate
-  a doua ramură.
+- Regula temporară din Storage pentru numele vechi de fișier (`chat-images`, `chat-audio`): se scot
+  ramurile vechi, **atât la `create`, cât și la `get`**. Fereastra de 10 minute de citire (25.09)
+  există doar pentru APK. Până atunci, oricine e logat și ține calea exactă a unei poze cu nume vechi o
+  poate citi în primele 10 minute de la încărcare.
 - Reacțiile din chat: se pot rescrie de oricine din conversație. Se pot asigura pe forma de azi, cu o
   paletă și fără duplicate, dar numai împreună cu schimbarea clientului — vezi DEVLOG 23.09.
   **APK-ul rescrie toată harta**, deci orice variantă îl refuză.
@@ -49,11 +51,11 @@ pică exact când se ajunge aici.
 
 - **`hiddenFrom`** — decizia e a lui Andrei (`OWNER_VERIFY.md`). Impunerea reală cere alt model de
   date și vine după reconstruire.
-- **Storage:** `get` e permis oricărui cont autentificat pe orice cale, inclusiv `assets/{uid}/…`.
-  De măsurat întâi ce citește, efectiv, fiecare ecran.
-- **Storage:** `isImage()` pe `write` face ștergerea imposibilă (la delete nu există
-  `request.resource`), iar `deleteGroupCascade` nu curăță `chat-images/`. Deci pozele șterse rămân
-  pentru totdeauna.
+- **Storage:** `deleteGroupCascade` nu curăță `chat-images/` și `chat-audio/`, deci pozele unui grup
+  șters rămân pentru totdeauna. (Citirea și ștergerea de către proprietar sunt reparate din 25.09.)
+- **Storage, apartenența la conversație:** oricine e logat poate încărca un fișier NOU, pe numele
+  lui, în folderul oricărei conversații. Închiderea cere regulile cross-service (un grant IAM și o
+  citire facturată pe cerere), pe care `storage.rules` le refuză deliberat. Decizia lui Andrei.
 - **Arcade:** un membru poate adăuga străini în `players` (reguli ~640-658). De verificat contra
   `apk-compat` — APK-ul creează și actualizează jocuri.
 - **`logClientError`:** 200 de rânduri pe zi per cont, fără expirare. Codul poate scrie un

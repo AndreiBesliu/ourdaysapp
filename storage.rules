@@ -1,12 +1,35 @@
 rules_version = '2';
 
 // ── Firebase Storage security rules ──
-// Writes are locked to the uploader's own path. Cross-user ENUMERATION (list)
-// is blocked, while individual GETs stay open to any signed-in user (download
-// URLs carry unguessable tokens and some media is rendered across a group).
-// Group chat media can't verify Firestore group membership from Storage rules,
-// so it's gated on auth + size/type only (true per-group scoping would need a
-// Cloud Function upload path or custom token claims — tracked as future work).
+//
+// ── Who reads through these rules at all (rewritten 25.09.2026) ──────────────────────────────
+//
+// Nobody RENDERS through them. Every document stores the tokenized download URL that the uploader
+// got back (`uploadFile` → getDownloadURL), and a request carrying that token is served by Storage
+// without consulting this file. `<img src>`, `new Audio()`, CSS `url()` — all of them.
+//
+// What `get` guards is the SDK read — getDownloadURL, getBytes, getMetadata — and measured across
+// the web source and the installed APK's bundle, only one person ever makes one: the uploader, a
+// moment after uploading, to learn the URL. (Plus the wallet listing its OWNER's folders.) So `get`
+// is now the uploader's, where the path or the name says who that is.
+//
+// It used to be `isSignedIn()` everywhere. That handed any account holding a path a PERMANENT
+// bearer URL: getDownloadURL mints a token if the object has none, so revoking a leaked URL in the
+// console bought nothing — anyone with the path could mint another.
+//
+// Storage rules CAN read Firestore (cross-service rules, since 2022) — earlier comments here said
+// otherwise, and were wrong. This file chooses not to: it would need an IAM grant for the Storage
+// service agent and bill a Firestore read per request, including refused ones, and the uploader
+// check below needs neither.
+//
+// ── The one exception: names that say nobody ─────────────────────────────────────────────
+//
+// The installed APK (and the web before 22.09) names chat uploads `<millis>_<name>` and
+// `<millis>.webm` — no uid. Their uploader cannot be recognised from the path, yet must be able to
+// read the URL back seconds after uploading, or the phone loses the message. So a legacy chat
+// name is readable for a short time after it was written, by any signed-in account. Measured on
+// live on 25.09: every chat object there has a legacy name, and a message landed at most ONE
+// SECOND after its upload; the window is ten minutes. Both branches go when the APK is rebuilt.
 service firebase.storage {
   match /b/{bucket}/o {
     function isSignedIn() { return request.auth != null; }
@@ -15,99 +38,82 @@ service firebase.storage {
       return request.resource.contentType.matches('image/.*') &&
              request.resource.size < 10 * 1024 * 1024;
     }
+    // A flat name that leads with the caller's uid: `{uid}_…`. Anchored, like every `matches`.
+    function namedFor(fileName) {
+      return isSignedIn() && fileName.matches(request.auth.uid + '_.*');
+    }
+    // A legacy, unattributed chat upload, read within ten minutes of being written — the
+    // uploader's own getDownloadURL, issued the moment the upload returns. See the header.
+    function justWritten() {
+      return request.time < resource.timeCreated + duration.value(10, 'm');
+    }
 
     // ── Per-user upload folders: <root>/{uid}/<file> ──
+    //
+    // `delete` is its own line since 25.09. It was part of `write`, next to `isImage()` — which
+    // reads `request.resource`, and there is no incoming object on a delete. So every owner delete
+    // raised a null-value error and was refused (measured on the emulator). No client deletes
+    // today; the rule stops being the reason one cannot.
     match /assets/{uid}/{path=**} {
-      allow get: if isSignedIn();
-      allow list: if isOwner(uid);
-      allow write: if isOwner(uid) && isImage();
+      allow get, list: if isOwner(uid);
+      allow create, update: if isOwner(uid) && isImage();
+      allow delete: if isOwner(uid);
     }
     match /events/{uid}/{path=**} {
-      allow get: if isSignedIn();
-      allow list: if isOwner(uid);
-      allow write: if isOwner(uid) && isImage();
+      allow get, list: if isOwner(uid);
+      allow create, update: if isOwner(uid) && isImage();
+      allow delete: if isOwner(uid);
     }
     match /checklists/{uid}/{path=**} {
-      allow get: if isSignedIn();
-      allow list: if isOwner(uid);
-      allow write: if isOwner(uid) && isImage();
+      allow get, list: if isOwner(uid);
+      allow create, update: if isOwner(uid) && isImage();
+      allow delete: if isOwner(uid);
     }
 
     // ── Flat per-user files named "{uid}_{timestamp}" (no enumeration) ──
     match /profiles/{fileName} {
-      allow get: if isSignedIn();
-      allow write: if isSignedIn() && fileName.matches(request.auth.uid + '_.*') && isImage();
+      allow get: if namedFor(fileName);
+      allow create, update: if namedFor(fileName) && isImage();
+      allow delete: if namedFor(fileName);
     }
     match /backgrounds/{fileName} {
-      allow get: if isSignedIn();
-      allow write: if isSignedIn() && fileName.matches(request.auth.uid + '_.*') && isImage();
+      allow get: if namedFor(fileName);
+      allow create, update: if namedFor(fileName) && isImage();
+      allow delete: if namedFor(fileName);
     }
 
-    // ── Group chat media (auth + size/type gated) ──
-    // `resource == null` makes these CREATE-only.
+    // ── Group and direct-chat media ──
     //
-    // Without it, `allow write` covers overwriting an object that already exists — and there is no
-    // owner in the path to compare against, so any signed-in account could replace any photo
-    // anybody had ever sent in any conversation, keeping the same download URL. The message would
-    // still be there, with a different picture under it.
+    // CREATE-ONLY, for real since 25.09. The comment here claimed `resource == null` made these
+    // create-only; neither rule contained it. In Storage an upload is a `create` even when it
+    // replaces an existing object (`update` covers metadata only) — so any signed-in account could
+    // overwrite any legacy-named photo or voice note in any conversation, keeping its download URL,
+    // and every uploader could overwrite their own. `resource == null` is what "new" means.
     //
-    // What remains, and is NOT fixed here: anyone signed in may still upload a NEW file into any
-    // conversation's folder, because Storage rules cannot read Firestore group membership. The
-    // comment at the top of this file has always said so. Closing that needs either an upload
-    // path through a Cloud Function or the uploader's uid in the filename — the latter is two
-    // lines here plus a client change, and must ship HOSTING FIRST or every client still running
-    // the old bundle has its uploads refused.
-    // OWNED, at last. The header above has always said these rules cannot read Firestore, so
-    // group membership is unknowable here — and it still is. But ownership of a NAME is knowable,
-    // and the client now leads every chat upload with the uploader's uid (`chatUploadPath` in
-    // src/utils/uploadName.ts). So a signed-in account may still write into a conversation it is
-    // not part of, which only a Cloud Function upload path could stop — but it can no longer put
-    // a file there attributed to anybody else, and every object in the bucket is traceable to the
-    // account that wrote it.
+    // Membership is not asked: any signed-in account may still upload a NEW file into any
+    // conversation's folder, under its own name. Closing that needs a membership check, which in
+    // this file means the cross-service read the header declines; it is written down, not forgotten.
     //
-    // Single segment `{fileName}`, not `{path=**}`: the pattern has to see the whole name to
-    // anchor on it. The client sanitises the original filename for exactly that reason.
-    //
-    // ── NOT TIGHTENED YET, AND THE REASON IS THE POINT ────────────────────────────────
-    //
-    // I wrote "deploy hosting first, then these rules" and believed it made the change safe. It
-    // does not. This app is ALSO a native Android build: `capacitor.config.ts` sets
-    // `webDir: 'dist'` with no `server` block, so the APK carries a FROZEN COPY of the bundle
-    // inside itself. A hosting deploy cannot reach it. Requiring the prefix today would refuse
-    // every chat photo sent from an installed phone, silently and permanently, until somebody
-    // builds and installs a new APK on that phone.
-    //
-    // So the rule accepts BOTH shapes for now. That is still strictly better than before this
-    // week: uploads are CREATE-only, so nobody can overwrite anybody's photo in place, and every
-    // new client attributes what it writes. What is not yet bought is the guarantee that a file
-    // could not have been written by someone else.
-    //
-    // TIGHTENING IS A SEPARATE, DELIBERATE STEP: drop the second branch below, once the APK has
-    // been rebuilt (`npx cap sync android` + a build) and installed on every phone that has one.
-    // That is a question for the owner, and it is written into OWNER_VERIFY.md.
+    // The uid-led name (`chatUploadPath` in src/utils/uploadName.ts) makes every new object
+    // attributable. The legacy shapes are accepted TRANSITIONALLY, because the installed APK writes
+    // them and a hosting deploy cannot reach it. Drop both legacy branches (create and get) once
+    // the APK is rebuilt and installed — BACKLOG.md, section 1.
     match /chat-images/{groupId}/{fileName} {
-      allow get: if isSignedIn();
-      allow create: if isSignedIn() && isImage()
+      allow get: if namedFor(fileName)
+        || (isSignedIn() && fileName.matches('[0-9]+_.*') && justWritten());
+      allow create: if isSignedIn() && resource == null && isImage()
         && (fileName.matches(request.auth.uid + '_.*')
             // Transitional: the shape the previous bundle writes, `<millis>_<name>`.
             || fileName.matches('[0-9]+_.*'));
       allow update, delete: if false;
     }
     match /chat-audio/{groupId}/{fileName} {
-      allow get: if isSignedIn();
-      // Gated on the TYPE as well as the size, since 19.09. The comment that used to sit here
-      // said MediaRecorder's MIME varies and left the type unchecked entirely — so this folder
-      // accepted an HTML page or a Windows executable up to 15 MiB, from any signed-in account,
-      // into any conversation. Proved on the storage emulator before the repair.
-      //
-      // The premise was wrong rather than the conclusion: the app does not send the recorder's
-      // guess. `sendRecording` wraps the chunks in `new Blob(chunks, { type: 'audio/webm' })`,
-      // so what arrives is that, always, on every browser.
-      //
-      // CREATE-only, for the same reason as the images above: without it any signed-in account
-      // could replace a recording anybody had sent, keeping the same download URL.
-      // Both shapes, for the same reason as the images above — see the note there.
-      allow create: if isSignedIn() &&
+      allow get: if namedFor(fileName)
+        || (isSignedIn() && fileName.matches('[0-9]+\\.webm') && justWritten());
+      // Gated on the TYPE as well as the size, since 19.09: the app wraps the recorder's chunks in
+      // `new Blob(chunks, { type: 'audio/webm' })`, so what arrives is that, always. Before, this
+      // folder accepted an HTML page or an executable up to 15 MiB.
+      allow create: if isSignedIn() && resource == null &&
         request.resource.contentType.matches('audio/.*') &&
         request.resource.size < 15 * 1024 * 1024 &&
         (fileName.matches(request.auth.uid + '_.*')

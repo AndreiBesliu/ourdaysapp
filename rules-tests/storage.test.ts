@@ -16,18 +16,22 @@
 //   profiles/{uid}_{ts}             backgrounds/{uid}_{ts}
 //   chat-images/{convId}/…          chat-audio/{convId}/{ts}.webm
 //
-// Two things below are recorded rather than repaired, because the rules cannot express them:
-// Storage cannot ask Firestore whether you are in a group, so chat media is gated on being signed
-// in and nothing more. That is a decision already written into storage.rules; the tests pin it so
-// it stays a decision.
+// One thing below is recorded rather than repaired: chat media is gated on being signed in, not
+// on being in the conversation. Storage rules CAN ask Firestore (cross-service rules) — an older
+// version of this header said they could not — but it costs an IAM grant and a billed read per
+// request, and storage.rules declines it. The tests pin that so it stays a decision.
+//
+// Since 25.09 reading is the uploader's (see the header of storage.rules), chat media is truly
+// create-only, and owners can delete what they uploaded.
 
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { getBytes, listAll, ref, uploadBytes } from 'firebase/storage';
-import { beforeAll, afterAll, describe, it } from 'vitest';
-import { ALICE, BOB, filesAnon, filesAs, startEnv, stopEnv } from './_harness';
+import { deleteObject, getBytes, getDownloadURL, listAll, ref, uploadBytes } from 'firebase/storage';
+import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import { ALICE, BOB, filesAnon, filesAs, resetBucket, startEnv, stopEnv } from './_harness';
 
 beforeAll(async () => { await startEnv('demo-ourdays-storage'); });
 afterAll(stopEnv);
+beforeEach(resetBucket);
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const image = { contentType: 'image/png' };
@@ -112,8 +116,8 @@ describe('somebody else’s folder', () => {
   });
 
   it('is not LISTABLE, which is what keeps a path from being guessed', async () => {
-    // `get` on a known path stays open to any signed-in reader — the paths carry a timestamp and
-    // a download token. Enumeration is the part that would turn that into a browsable album.
+    // Enumeration would turn a guessed prefix into a browsable album. (Reading a KNOWN path is the
+    // uploader's too since 25.09 — see 'reading' below.)
     await assertSucceeds(listAll(ref(filesAs(ALICE), `assets/${ALICE}`)));
     await assertFails(listAll(ref(filesAs(BOB), `assets/${ALICE}`)));
   });
@@ -162,10 +166,10 @@ describe('what may be uploaded, not just where', () => {
 
 describe('what the rules cannot ask, written down so it stays a decision', () => {
   it('chat media is gated on being signed in, not on being in the conversation', async () => {
-    // Storage rules cannot read Firestore, so "is Bob in this group" is a question this file
-    // cannot pose. Bob writing into a conversation he is not part of is therefore ALLOWED, and
-    // that is a known trade recorded in storage.rules — pinned here so that changing it has to be
-    // a deliberate act rather than a silent drift.
+    // "Is Bob in this group" is a question storage.rules chooses not to pose (it could, with a
+    // cross-service read — an IAM grant and a billed read per request). Bob writing into a
+    // conversation he is not part of is therefore ALLOWED, and that is a known trade recorded in
+    // storage.rules — pinned here so that changing it has to be a deliberate act.
     //
     // What DID change on 22.09 is the other half: he must write under his own name. So the file
     // lands where he should not be able to put it, but it is unmistakably his. Membership is
@@ -181,5 +185,131 @@ describe('what the rules cannot ask, written down so it stays a decision', () =>
     // outside these seven folders fails with a permission error and no hint of which half is wrong.
     await assertFails(uploadBytes(ref(filesAs(ALICE), 'scratch/whatever.png'), PNG, image));
     await assertFails(uploadBytes(ref(filesAs(ALICE), `assets/${ALICE}.png`), PNG, image));
+  });
+});
+
+// ── 25.09.2026: reading is the uploader's ──────────────────────────────────────────────────
+//
+// Every document stores the TOKENIZED url, and a request carrying the token never reaches these
+// rules. So `get` guards only SDK reads — getDownloadURL, getBytes — and only the uploader makes
+// one, right after uploading. It was `isSignedIn()`: any account holding a path could mint a
+// permanent public url for it, and revoking a leaked one bought nothing.
+
+/** The seven kinds of object, each as Alice's, with a uid-led name where the name is what counts. */
+const ALICES = [
+  [`assets/${ALICE}/1758000000100_a.png`, image],
+  [`events/${ALICE}/1758000000100_e.png`, image],
+  [`checklists/${ALICE}/1758000000100_c.png`, image],
+  [`profiles/${ALICE}_1758000000100`, image],
+  [`backgrounds/${ALICE}_1758000000100`, image],
+  [`chat-images/group-one/${ALICE}_1758000000100_p.png`, image],
+  [`chat-audio/group-one/${ALICE}_1758000000100.webm`, audio],
+] as const;
+
+describe('reading: only whoever wrote it', () => {
+  it.each(ALICES)('%s — Alice reads back her own upload', async (path, meta) => {
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path), PNG, meta));
+    await assertSucceeds(getDownloadURL(ref(filesAs(ALICE), path)));
+  });
+
+  it.each(ALICES)('%s — Bob cannot, not even to mint a url', async (path, meta) => {
+    // Bob IS in group-one in the harness world: members render the token url and never need this.
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path), PNG, meta));
+    await assertFails(getDownloadURL(ref(filesAs(BOB), path)));
+    await assertFails(getBytes(ref(filesAs(BOB), path)));
+  });
+
+  it('and nobody renders through the rules: the url works with its token, and not without', async () => {
+    // The pair that must differ. If the tokenless request ever succeeded, the rules would not be
+    // consulted for this object at all, and the refusals above would prove nothing.
+    const path = `assets/${ALICE}/1758000000101_r.png`;
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path), PNG, image));
+    const url = await getDownloadURL(ref(filesAs(ALICE), path));
+    const withToken = await fetch(url);
+    expect(withToken.status).toBe(200);
+    expect(new Uint8Array(await withToken.arrayBuffer())).toEqual(PNG);
+    const bare = new URL(url);
+    bare.searchParams.delete('token');
+    expect((await fetch(bare)).status).toBe(403);
+  });
+
+  it('listing a whole ROOT stays refused — which is why the old APK’s picker is empty, not new', async () => {
+    // The APK's "past images" lists `assets`, `chat-images`… at the bucket root. No rule covers a
+    // bare root, so it was refused before this change and still is.
+    await assertFails(listAll(ref(filesAs(ALICE), 'assets')));
+    await assertFails(listAll(ref(filesAs(ALICE), 'chat-images')));
+  });
+});
+
+describe('legacy chat names: readable briefly after being written, by design', () => {
+  it('the uploader reads back an unattributed upload at once — what the APK does', async () => {
+    const path = 'chat-images/group-one/1758000000300_p.png';
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path), PNG, image));
+    await assertSucceeds(getDownloadURL(ref(filesAs(ALICE), path)));
+    const note = 'chat-audio/group-one/1758000000300.webm';
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), note), PNG, audio));
+    await assertSucceeds(getDownloadURL(ref(filesAs(ALICE), note)));
+  });
+
+  it('and so, inside the window, can anyone signed in who holds the exact path — the price', async () => {
+    // A legacy name says nobody, so the rule cannot tell the uploader from Bob. The window is ten
+    // minutes; outside it, refused (rules-tests/storage-window.test.ts). Gone with the APK rebuild.
+    const path = 'chat-images/group-one/1758000000301_p.png';
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path), PNG, image));
+    await assertSucceeds(getDownloadURL(ref(filesAs(BOB), path)));
+    // A NAMED file carries no such exception.
+    const named = `chat-images/group-one/${ALICE}_1758000000301_p.png`;
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), named), PNG, image));
+    await assertFails(getDownloadURL(ref(filesAs(BOB), named)));
+  });
+});
+
+describe('an upload never replaces what is already there', () => {
+  // storage.rules said `resource == null` made chat media create-only; no rule contained it. An
+  // upload is a `create` even over an existing object, so any signed-in account could swap any
+  // legacy-named photo in any conversation for another, keeping its url.
+  it.each([
+    ['chat-images/group-one/1758000000400_p.png', image],
+    ['chat-audio/group-one/1758000000400.webm', audio],
+  ] as const)('%s — Bob cannot overwrite it, and neither can its uploader', async (path, meta) => {
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path), PNG, meta));
+    await assertFails(uploadBytes(ref(filesAs(BOB), path), new Uint8Array([1, 2, 3]), meta));
+    await assertFails(uploadBytes(ref(filesAs(ALICE), path), new Uint8Array([4, 5, 6]), meta));
+    // …while a NEW legacy name still goes through: the APK always writes a fresh one.
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path.replace('1758000000400', '1758000000401')), PNG, meta));
+  });
+});
+
+describe('deleting what I uploaded', () => {
+  // `delete` sat inside `write`, next to `isImage()`, which reads the incoming object — and a
+  // delete has none. So every owner delete was refused with a null-value error. No client deletes
+  // today; this is so the rule is not the reason one never can.
+  it.each(ALICES.slice(0, 5))('%s — Alice deletes her own', async (path, meta) => {
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path), PNG, meta));
+    await assertSucceeds(deleteObject(ref(filesAs(ALICE), path)));
+  });
+
+  it.each(ALICES.slice(0, 5))('%s — Bob cannot delete it', async (path, meta) => {
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path), PNG, meta));
+    await assertFails(deleteObject(ref(filesAs(BOB), path)));
+  });
+
+  it('a uid that merely PREFIXES Alice’s cannot delete her profile picture', async () => {
+    const path = `profiles/${ALICE}_1758000000500`;
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path), PNG, image));
+    await assertFails(deleteObject(ref(filesAs(ALICE.slice(0, 6)), path)));
+  });
+
+  it('deleting a missing object of my own says "not found", not "unauthorized"', async () => {
+    // The discriminating case: the old rule raised on the missing incoming object and answered
+    // unauthorized, whatever the truth was.
+    await expect(deleteObject(ref(filesAs(ALICE), `assets/${ALICE}/missing.png`)))
+      .rejects.toMatchObject({ code: 'storage/object-not-found' });
+  });
+
+  it('chat media stays undeletable from a client, even by its uploader', async () => {
+    const pic = `chat-images/group-one/${ALICE}_1758000000600_p.png`;
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), pic), PNG, image));
+    await assertFails(deleteObject(ref(filesAs(ALICE), pic)));
   });
 });

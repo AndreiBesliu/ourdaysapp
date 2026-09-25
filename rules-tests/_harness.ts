@@ -40,7 +40,7 @@ let env: RulesTestEnvironment | null = null;
  * same moment from a parallel session (CNCVectorStudio's held 8080, 9299 and 9499 on 24.09.2026), so this
  * suite has its own ports in firebase.json and follows whatever the CLI reports.
  */
-function emulatorAt(envVar: string, fallbackPort: number): { host: string; port: number } {
+export function emulatorAt(envVar: string, fallbackPort: number): { host: string; port: number } {
   const v = process.env[envVar];
   const m = typeof v === 'string' ? /^(.+):(\d+)$/.exec(v) : null;
   return m ? { host: m[1], port: Number(m[2]) } : { host: '127.0.0.1', port: fallbackPort };
@@ -122,5 +122,25 @@ export const filesAs = (uid: string) =>
   need().authenticatedContext(uid, { email: EMAIL[uid], email_verified: true }).storage();
 
 export const filesAnon = () => need().unauthenticatedContext().storage();
+
+/**
+ * Empty the bucket. Nothing else resets it between tests, and chat uploads are create-only.
+ *
+ * Not `clearStorage()`: it lists the bucket ROOT and deletes only the files sitting there — every
+ * object this app writes is inside a folder, so it deleted nothing (measured 25.09: a path uploaded
+ * in one test was still there in the next). This walks the folders.
+ */
+export async function resetBucket(): Promise<void> {
+  await need().withSecurityRulesDisabled(async (ctx) => {
+    // The compat API the environment hands out: `ref().listAll()` → { items, prefixes }.
+    type Node = { listAll(): Promise<{ items: Array<{ delete(): Promise<void> }>; prefixes: Node[] }> };
+    const walk = async (node: Node): Promise<void> => {
+      const { items, prefixes } = await node.listAll();
+      await Promise.all(items.map((i) => i.delete()));
+      for (const p of prefixes) await walk(p);
+    };
+    await walk(ctx.storage().ref() as unknown as Node);
+  });
+}
 
 export const anon = (): Firestore => need().unauthenticatedContext().firestore();

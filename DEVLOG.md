@@ -9356,3 +9356,63 @@ Am editat comentariul din `geminiKey.ts` după ultimul build și am comis fără
 Plasa pusă ieri și-a făcut treaba pe prima greșeală. Commit-ul ăsta aduce `lib/` refăcut.
 
 `npx tsc -b` · lint · **1873 teste** · **365 pe emulator** · build — verzi.
+
+## 2026-09-25 · B — Storage: citirea e a celui care a încărcat, chat-ul chiar e create-only, ștergerea merge
+
+**Prompt (Andrei):** „continua". **Model:** Claude Opus 5.5.
+
+### Ce era, și ce am măsurat înainte
+
+- **`get` era `isSignedIn()` peste tot.** Oricine avea o cale putea obține un URL public permanent:
+  `getDownloadURL` generează un token dacă obiectul n-are. Deci și retragerea unui URL scurs nu folosea
+  la nimic.
+- **Cine citește prin reguli, de fapt:**
+  - Nimeni nu **afișează** prin reguli: fiecare document ține URL-ul cu token.
+  - Singura citire SDK, pe web și în APK, e a celui care tocmai a încărcat, ca să afle URL-ul.
+  - Plus portofelul, care își listează propriile foldere.
+- **Chat-ul nu era create-only, deși comentariul spunea că e.**
+  - În Storage, o încărcare peste un obiect existent tot `create` este; `update` înseamnă doar
+    metadate.
+  - Deci oricine putea înlocui orice poză sau notă vocală cu nume vechi, din orice conversație,
+    păstrându-i URL-ul.
+- **Ștergerea de către proprietar era imposibilă.** `delete` stătea în `write`, lângă `isImage()`,
+  care citește obiectul primit, iar la ștergere nu există unul. Eroarea de „null” refuza tot.
+  Niciun client nu șterge azi; acum regula nu mai e motivul.
+- **Pe live, doar citire, doar numere:**
+  - toate cele 9 obiecte din chat au **nume vechi** (fără uid);
+  - un mesaj a ajuns la **cel mult 1 secundă** după încărcarea pozei lui;
+  - APK-ul scrie mesajul abia după `getDownloadURL`, deci o fereastră de 10 minute e larg suficientă.
+
+### Reparat — `storage.rules`
+
+- **`get`:**
+  - pe `assets/`, `events/`, `checklists/`: al proprietarului folderului;
+  - pe `profiles/`, `backgrounds/` și numele din chat care încep cu uid-ul: al celui numit în fișier;
+  - pentru numele vechi din chat: **10 minute** după scriere, oricui e logat. Asta e prețul unui nume
+    care nu spune al cui e. Dispare odată cu reconstruirea APK-ului.
+- **Chat:** `resource == null` la creare, adică create-only cu adevărat.
+- **Proprietarul își poate șterge fișierele.** Media din chat rămâne neștearsă de clienți.
+- **Antetul corectat:** regulile Storage POT citi Firestore (cross-service). Fișierul refuză
+  deliberat: ar cere un grant IAM și o citire facturată pe cerere. Aceeași corectură în
+  `rules-tests/storage.test.ts` și `src/utils/uploadName.ts`.
+
+### Proba
+
+- **Teste noi:**
+  - `rules-tests/storage.test.ts`: 33 noi. Printre ele perechea care trebuie să difere — URL-ul merge
+    cu token și dă 403 fără.
+  - `rules-tests/storage-window.test.ts`: fereastra se închide. E fișierul real, cu fereastra pusă pe
+    0 secunde; textul ferestrei trebuie să apară exact o dată.
+  - 6 cazuri APK în `apk-compat`, fiecare „încarcă, apoi citește înapoi” exact ca bundle-ul.
+- **Pe regulile de ieri:** exact **16 teste noi roșii**, restul verzi.
+- **Capcană prinsă pe drum:** `clearStorage()` din rules-unit-testing golea doar rădăcina bucket-ului,
+  iar toate obiectele aplicației stau în foldere. Deci nu ștergea nimic între teste; harness-ul
+  parcurge acum folderele.
+- **Șapte mutații, toate prinse:** fără ramura veche la `get` → 3 roșii; fereastra nu se închide → 1;
+  `get` pe `assets/` pentru oricine → 1; chat suprascriibil → 1; `delete` înapoi în `write` → 2;
+  chat ștergibil de cel care a încărcat → 1; `namedFor` neancorat → 1.
+
+### Deploy
+
+Doar `--only storage`, oricând, independent de funcții și de hosting. Primește și numele vechi, și pe
+cele noi, deci nu strică nici APK-ul, nici un tab vechi.
