@@ -9,11 +9,12 @@
 > plus ce a rămas deschis din felii. Un punct închis se **șterge de aici**, cu commit-ul care l-a
 > închis menționat în DEVLOG.
 
-## 1. Așteaptă reconstruirea APK-ului
+## 1. Așteaptă ca APK-ul să nu mai fie folosit
 
-APK-ul instalat rulează bundle-ul din 9 mai (măsurat 24.09) și vorbește cu aceleași reguli. Orice
-regulă care refuză ce trimite el îl strică până la un APK nou. `rules-tests/apk-compat.test.ts`
-pică exact când se ajunge aici.
+**Decis de Andrei pe 25.09: deocamdată aplicația rămâne web app, fără reconstruire.** APK-ul instalat
+rulează bundle-ul din 9 mai și vorbește cu aceleași reguli. Orice regulă care refuză ce trimite el îl
+strică, iar `rules-tests/apk-compat.test.ts` pică exact când se ajunge aici. Ce e mai jos se deblochează
+fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reconstruirea.
 
 - **Felia de reconstruire însăși:**
   - `android/app/google-services.json` **lipsește** — build-ul scrie „Push Notifications won't work”,
@@ -49,8 +50,9 @@ pică exact când se ajunge aici.
 
 ## 2. Securitate și confidențialitate (B)
 
-- **`hiddenFrom`** — decizia e a lui Andrei (`OWNER_VERIFY.md`). Impunerea reală cere alt model de
-  date și vine după reconstruire.
+- **`hiddenFrom`:** eticheta e reformulată din 25.09, la decizia lui Andrei. Impunerea reală ar cere
+  alt model de date (`restricted` + listă albă + două interogări) și o regulă de citire nouă pe
+  `events`, pe care APK-ul n-ar suporta-o. Rămâne aici doar ca posibilitate.
 - **Ștergerea unui grup din APK ocolește cascada.** APK-ul șterge grupul direct din client:
   evenimentele, apoi invitațiile, apoi `groups/{id}`. Lasă în urmă mesajele, `typing` și media.
   Singurul remediu care acoperă telefoanele e un trigger `onDocumentDeleted('groups/{id}')` cu

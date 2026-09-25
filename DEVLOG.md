@@ -9700,3 +9700,30 @@ numere și amprente.
   pozele din chat cu uid-ul (`rN('chat-images', grup, uid, …)`, forma din 22.09). Deci cele 3 poze cu
   nume vechi din ultimele 30 de zile au venit de pe telefoane. Ramura de nume vechi din `storage.rules`
   e încă necesară.
+
+## 2026-09-25 · Deciziile lui Andrei: web app, `hiddenFrom` reformulat, deploy după secret
+
+**Prompt (Andrei), răspunsurile la patru întrebări:**
+- deploy: „Yes, once the secret exists”;
+- APK: „deocamdata ramanem cu aplicatia in forma web app”;
+- `hiddenFrom`: „Reword the label”;
+- ce reparații urmează: „i don't know, what do you recommend?”.
+
+**Model:** Claude Opus 5.5.
+
+- **Deploy:** `GEMINI_KEY` tot nu există (404, verificat acum), deci nu am publicat nimic. Îl rulez
+  când apare secretul, cu tot ce se comite până atunci.
+- **APK:** nu se reconstruiește. Ce aștepta „reconstruirea” (regula temporară din Storage, reacțiile)
+  așteaptă acum ca nimeni să nu mai folosească APK-ul. Scris în OWNER_VERIFY și BACKLOG.
+- **`hiddenFrom`:** eticheta spune acum, în șase limbi, „Apare în calendare” și „Cei nebifați nu-l
+  văd în calendarul lor. Doar îl ascunde, nu îl face privat.”, în loc de „Cine … poate vedea
+  evenimentul?”.
+  - **Testul:** nicio limbă nu mai pune întrebarea, iar fiecare are propria traducere.
+  - **Capcană prinsă pe drum:** prima versiune folosea codurile `en` / `ro`. Aplicația folosește
+    `en-US` / `ro-RO`, iar un cod necunoscut cade pe engleză, deci testul trecea în gol pe cinci limbi.
+    Acum verifică explicit că textul nu e căderea pe engleză. Pe textele vechi: **7/7 roșii**.
+- **Recomandarea mea pentru reparații**, în ordine, toate de făcut acum:
+  1. rândurile de eroare care se pierd exact pe căile de eșec;
+  2. un chunk lipsă ținut în cache un an;
+  3. rândurile de eroare ale unui cont șters;
+  4. „AI nu e configurat” ajuns la client ca `internal`.

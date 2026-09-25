@@ -140,12 +140,14 @@ pe telefoane aplicația e practic goală.
 - [ ] **Spune-mi când ai instalat APK-ul** — confirmă sau infirmă că e bundle-ul din 9 mai.
       - **Ce se strică dacă e altul:** plasa `rules-tests/apk-compat.test.ts` apară scrierile din
         mai; dacă telefoanele rulează alt cod, plasa apară altceva decât trebuie.
-- [ ] **Alege cum se reconstruiește APK-ul:** (a) bundle local, reconstruit la fiecare livrare, sau
-      (b) `server.url` spre live — primește singur fiecare deploy, dar nu mai pornește fără internet,
-      iar Capacitor nu-l recomandă în producție. Propunerea mea, cu motivele, e în raportul din 24.09.
-      - **Ce se strică dacă nu alegi:** rămân blocate regula temporară din Storage, reparația la
-        reacții, regula care refuză `fromName`/`fromEmail`/`groupName` și orice reparație de client pe
-        telefoane.
+**✅ DECIS (25.09): deocamdată aplicația rămâne web app, fără reconstruirea APK-ului.**
+Consecința, ca fapt: APK-ul instalat vorbește în continuare cu aceleași reguli. Tot ce așteaptă
+„reconstruirea” așteaptă acum ca **nimeni să nu mai folosească APK-ul**: regula temporară din Storage
+pentru numele vechi și reparația la reacții.
+
+- [ ] **Spune-mi când pe niciun telefon nu se mai folosește APK-ul**, ci doar aplicația web.
+      - **Ce se strică dacă nu:** nimic nou. Doar cele două rămân blocate, iar pozele cu nume vechi
+        rămân citibile 10 minute de oricine ține calea exactă.
 
 ---
 ## 📷 De încercat: o poză MARE în chat
@@ -171,23 +173,14 @@ Scria „mesajul nu a putut fi trimis", poza rămânea atașată, și dacă apă
 
 ---
 
-## ❓ O DECIZIE deschisă: „ascunde de…” (`hiddenFrom`) nu ascunde, de fapt
+## ✅ DECIS (25.09): „ascunde de…” (`hiddenFrom`) se REFORMULEAZĂ, nu se impune
 
-Formularul întreabă „Cine din grup poate vedea evenimentul?”, dar **`hiddenFrom` nu apare deloc în
-reguli**: membrul ascuns îl descarcă oricum (din devtools). Faptele, ca să poți alege:
+Formularul întreba „Cine din grup poate vedea evenimentul?”, dar regulile nu citesc `hiddenFrom`:
+membrul ascuns poate descărca evenimentul oricum. Ai ales reformularea.
 
-- Firestore **nu poate** interoga „array-ul NU conține uid”. O regulă pe `hiddenFrom` n-ar fi
-  dovedită de interogările de listă existente, deci le-ar refuza în bloc și **tot calendarul
-  grupului ar dispărea** (capcana LIST din CLAUDE.md).
-- Impunerea reală cere alt model de date (`restricted: true` + listă albă `visibleTo` + două
-  interogări). Cu APK-ul vechi instalat, orice schimbare la regula de citire a evenimentelor ar
-  rupe calendarul din APK până la reconstruire.
-
-- [ ] **Alege:** (1) **reformulăm eticheta** — „nu apare în calendarul lui (nu e privat)” — fără
-      risc, acum; sau (2) **impunem cu adevărat**, o felie mare, care are sens doar după reconstruirea
-      APK-ului.
-      - **Ce se strică dacă nu alegi:** eticheta promite o confidențialitate pe care aplicația n-o
-        oferă. Cineva poate ascunde ceva crezând că e privat.
+Acum eticheta spune, în toate cele șase limbi, **„Apare în calendare”** și **„Cei nebifați nu-l văd în
+calendarul lor. Doar îl ascunde, nu îl face privat.”**. Ajunge pe live odată cu hosting-ul. Impunerea
+reală, cu alt model de date, rămâne posibilă mai târziu. E în BACKLOG, nu aici.
 
 ---
 
