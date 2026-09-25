@@ -9284,3 +9284,75 @@ Patru mutații, toate prinse:
 
 **Găsit pe drum, trecut în BACKLOG:** „AI nu e configurat” ajunge la client ca `internal` și se scrie
 în `errorLogs` la fiecare apel, fiindcă propriul `catch` al callable-ului îl re-împachetează.
+
+## 2026-09-25 · B — invitațiile: un membru scos nu se mai poate întoarce singur
+
+**Prompt (Andrei):** „continua". **Model:** Claude Opus 5.5.
+
+Auditul cerea teste pe emulator pentru callable-urile care nu aveau niciunul. Citindu-le, cititorul a
+găsit trei defecte. Le-am confirmat eu, cu **teste care au picat pe codul de azi**, înainte de reparație.
+
+### D1 — un link folosit o dată te băga înapoi în grup, oricând
+
+- **Cum:** Dave intră cu linkul lui Alice. Alice îl scoate din grup și din prieteni, apoi retrage
+  linkul. Dave apelează `redeemGroupInviteLink` cu același cod și **e iar în grup și iar prieten**.
+- **De ce:** verdictul „l-ai folosit deja” vine înaintea lui „retras / expirat” și apoi re-aplica
+  totul. Fiecare link făcut vreodată de owner era o ușă din spate pentru toți cei care îl folosiseră.
+- **Reparat:** „l-ai folosit deja” e acum un răspuns, niciodată o scriere. Cine a plecat sau a fost
+  scos are nevoie de o invitație nouă.
+- `peek` spune aceeași poveste: cui a folosit linkul și nu mai e în grup îi răspunde „folosit”, nu
+  „bun venit”.
+
+### D3 — un membru care atingea linkul îl consuma
+
+- **Cum:** Alice pune linkul în grupul familiei pentru bunica. Bob, deja membru, îl atinge primul.
+  Linkul se consumă și nu intră nimeni; bunica primește „folosit”.
+- **Reparat:** un membru primește răspunsul `member`. Nimic nu se consumă, nimic nu se scrie, nimeni
+  nu e anunțat.
+- Pe ecranul de intrare, rândul „acum sunteți prieteni” apare doar după o acceptare reală.
+
+### D2 — o invitație se putea accepta de două ori
+
+- **Cum:** accepți, ești scos, îți pui singur invitația înapoi pe `pending` (sau `null`, sau `''`),
+  accepți iar și **ești înapoi**.
+- **De ce:** regula lăsa `status` să meargă în orice direcție, iar serverul trata orice valoare goală
+  drept `pending`.
+- **Reparat pe două părți:**
+  - **Server:** scrie `acceptedBy` / `acceptedAt`, pe care niciun client nu le poate scrie, și
+    onorează doar un `pending` explicit.
+  - **Regulă:** o invitație trece doar din `pending` în `accepted` sau `declined`. Exact asta scrie
+    APK-ul, iar plasa `apk-compat` are acum ambele răspunsuri ale lui, copiate din bundle.
+  - Regula e cea care acoperă și invitațiile acceptate **înainte** să existe `acceptedBy`.
+
+### Măsurat pe live înainte (doar citire, doar numere)
+
+| Ce | Rezultat |
+|---|---|
+| Invitații | 13: 11 acceptate, 2 în așteptare, **0** cu stare lipsă sau ciudată (deci regula strictă nu lasă nimic fără răspuns) |
+| Expuși azi la D2 | **0** |
+| Expuși azi la D1 | **0** |
+| Acceptări fără `toId` | 5, venite din APK; trecute în BACKLOG |
+
+`scripts/predeploy-measure.mjs` are acum și blocurile pentru următoarele felii: grupuri, jocuri,
+jurnalul de erori, media din chat.
+
+### Proba
+
+- **Teste noi:**
+  - `functions/test/inviteLinks.test.ts` (16)
+  - `functions/test/acceptGroupInvite.test.ts` (10)
+  - 3 teste de reguli
+  - 2 cazuri APK
+- **Emulatorul de Auth** rulează acum în `test:rules` (portul 9398). Fără el, emailul prietenului
+  venea din „necunoscut”, și un test nu putea deosebi o adresă din Auth de una falsă.
+- **Șapte mutații, toate prinse:** re-aplicarea la „deja” → 6 roșii; membrul consumă → 1; `peek` are
+  încredere în „deja” → 1; serverul ignoră `acceptedBy` → 3; gol = `pending` → 1; regula permite
+  redeschiderea → 1; regula acceptă orice stare → 1.
+
+### CI roșu pe `23544ce`, și de ce
+
+Am editat comentariul din `geminiKey.ts` după ultimul build și am comis fără rebuild. Pasul nou din CI
+„Compiled functions match their source” a prins `lib/geminiKey.js` rămas în urmă, în 49 de secunde.
+Plasa pusă ieri și-a făcut treaba pe prima greșeală. Commit-ul ăsta aduce `lib/` refăcut.
+
+`npx tsc -b` · lint · **1873 teste** · **365 pe emulator** · build — verzi.

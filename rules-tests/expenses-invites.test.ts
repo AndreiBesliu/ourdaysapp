@@ -245,6 +245,34 @@ describe('group invites', () => {
     await assertFails(updateDoc(doc(as(CAROL), 'group_invites', 'i-to-dave'), { status: 'accepted' }));
   });
 
+  // ── Answered once (25.09.2026) ─────────────────────────────────────────────────────────────
+  // `status` moved in any direction, so an accepted invitation turned back to 'pending' let a
+  // removed member walk back in through acceptGroupInvite (functions/test/acceptGroupInvite.test.ts).
+
+  it('an answered invitation cannot be re-opened', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'group_invites', 'i-accepted'), {
+        fromId: ALICE, toEmail: EMAIL[DAVE], toId: DAVE, groupId: G1, status: 'accepted',
+      });
+      await setDoc(doc(db, 'group_invites', 'i-declined'), {
+        fromId: ALICE, toEmail: EMAIL[DAVE], groupId: G1, status: 'declined',
+      });
+    });
+    await assertFails(updateDoc(doc(as(DAVE), 'group_invites', 'i-accepted'), { status: 'pending' }));
+    await assertFails(updateDoc(doc(as(DAVE), 'group_invites', 'i-declined'), { status: 'pending' }));
+    await assertFails(updateDoc(doc(as(DAVE), 'group_invites', 'i-declined'), { status: 'accepted' }));
+  });
+
+  it('and a pending one moves only to an answer — not to a blank or a made-up status', async () => {
+    await assertFails(updateDoc(doc(as(DAVE), 'group_invites', 'i-to-dave'), { status: null }));
+    await assertFails(updateDoc(doc(as(DAVE), 'group_invites', 'i-to-dave'), { status: '' }));
+    await assertFails(updateDoc(doc(as(DAVE), 'group_invites', 'i-to-dave'), { status: 'maybe' }));
+  });
+
+  it('the sender, or a member, may still withdraw a pending invitation', async () => {
+    await assertSucceeds(updateDoc(doc(as(BOB), 'group_invites', 'i-to-dave'), { status: 'declined' }));
+  });
+
   it('the group query used for cleanup returns the group’s invites', async () => {
     const snap = await getDocs(query(collection(as(ALICE), 'group_invites'), where('groupId', '==', G1)));
     expect(snap.docs.map((d) => d.id)).toEqual(['i-to-dave']);

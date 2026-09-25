@@ -130,7 +130,7 @@ exports.createGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
  * list, never the creator's uid or email.
  */
 exports.peekGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
-    var _a, _b;
+    var _a, _b, _c, _d;
     const { code } = request.data || {};
     if (typeof code !== "string" || !code || code.length > 64) {
         throw new https_1.HttpsError("invalid-argument", "A code is required.");
@@ -143,7 +143,16 @@ exports.peekGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
     // different stories about one link. `request.auth` is optional here: this callable serves
     // visitors with no account, which is the whole reason the join screen can name who invited them
     // before asking anyone to sign up.
-    const verdict = (0, inviteLinkState_1.linkVerdict)(d, (_b = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid) !== null && _b !== void 0 ? _b : null, Date.now());
+    let verdict = (0, inviteLinkState_1.linkVerdict)(d, (_b = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid) !== null && _b !== void 0 ? _b : null, Date.now());
+    // "You used this one" means "you are in" only while you still ARE in. Somebody who used a group
+    // link and was removed since is told the link is spent — which it is, by them — instead of the
+    // join screen welcoming them into a group redeem no longer puts them back in (25.09.2026).
+    if (verdict === "already" && typeof d.groupId === "string" && d.groupId && ((_c = request.auth) === null || _c === void 0 ? void 0 : _c.uid)) {
+        const g = await admin.firestore().doc(`groups/${d.groupId}`).get();
+        const members = (_d = g.data()) === null || _d === void 0 ? void 0 : _d.members;
+        if (!Array.isArray(members) || !members.includes(request.auth.uid))
+            verdict = "spent";
+    }
     const alreadyJoined = verdict === 'already';
     const admits = verdict === 'ok' || alreadyJoined;
     return {
@@ -188,8 +197,21 @@ exports.redeemGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
             throw new https_1.HttpsError("failed-precondition", "This invitation has expired.");
         if (verdict === "spent")
             throw new https_1.HttpsError("resource-exhausted", "This invitation has already been used up.");
-        const already = verdict === "already";
         const inviter = d.createdBy;
+        const answer = (status) => ({
+            status, groupId: d.groupId || null, groupName: d.groupName || null,
+            invitedBy: cap(d.createdByName || ""), joinedGroup: false, inviter, joinerName: "",
+        });
+        // ── An answer, never a write (25.09.2026) ───────────────────────────────────────────────
+        //
+        // "You already used this link" is the ONE use it had. It used to re-apply everything: re-add
+        // to the group, re-make the friendship. So after being REMOVED from the group — and unfriended
+        // — a person who had once used a link got both back with a single call, whether the link had
+        // since been revoked, had expired, or was left alone (the verdict answers "already" before it
+        // looks at any of those). Every link an owner ever minted was a permanent back door for
+        // everyone who had used it. Somebody who left or was removed needs a fresh invitation.
+        if (verdict === "already")
+            return answer("already");
         let groupRef = null;
         let joinsGroup = false;
         if (typeof d.groupId === "string" && d.groupId) {
@@ -205,7 +227,12 @@ exports.redeemGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
             if (!members.includes(inviter)) {
                 throw new https_1.HttpsError("permission-denied", "Whoever sent this invitation is no longer in the group.");
             }
-            joinsGroup = !members.includes(uid);
+            // Already in, without having used THIS link: a member tapping it in the family chat. It used
+            // to spend the single use and admit nobody, and the person it was meant for got "used up".
+            // Spends nothing, writes nothing, tells nobody.
+            if (members.includes(uid))
+                return answer("member");
+            joinsGroup = true;
         }
         // Both emails from Auth: the redeemer's from their token, the inviter's from their record.
         const inviterAuth = await (0, friendship_1.authIdentityOf)(inviter);
@@ -217,16 +244,14 @@ exports.redeemGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
             tx.update(groupRef, { members: admin.firestore.FieldValue.arrayUnion(uid) });
         }
         friendship.apply();
-        // A second redemption by the SAME person spends no use — they are already in, and charging
-        // for it would let one person exhaust a family link by opening it twice.
-        if (!already) {
-            tx.update(linkRef, {
-                uses: admin.firestore.FieldValue.increment(1),
-                redeemedBy: admin.firestore.FieldValue.arrayUnion(uid),
-            });
-        }
+        // Reached only by somebody who has not used this link before (a second redemption by the same
+        // person returned above, and spends nothing).
+        tx.update(linkRef, {
+            uses: admin.firestore.FieldValue.increment(1),
+            redeemedBy: admin.firestore.FieldValue.arrayUnion(uid),
+        });
         return {
-            status: already ? "already" : "accepted",
+            status: "accepted",
             groupId: d.groupId || null,
             groupName: d.groupName || null,
             invitedBy: friendship.aName,

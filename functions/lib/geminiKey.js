@@ -28,6 +28,14 @@
 // The CLI loads this code with FUNCTIONS_CONTROL_API=true to read the deploy description, and
 // `.value()` throws there. At run time it returns the secret, or "" when unset — so every caller
 // keeps its `if (!key)` guard.
+//
+// ── If anyone ever runs the FUNCTIONS emulator ──────────────────────────────────────────────
+//
+// It reads functions/.secret.local, and for a secret missing there it fetches the PRODUCTION one
+// with application-default credentials — and `.firebaserc`'s default is the live project. An EMPTY
+// value in .secret.local counts as missing (firebase-tools functionsEmulator.js skips only truthy
+// entries). So put a non-empty dummy there first: `GEMINI_KEY=local-disabled`. The callable tests
+// in functions/test do not use that emulator; they call the handlers in-process.
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GEMINI_KEY = void 0;
 const params_1 = require("firebase-functions/params");

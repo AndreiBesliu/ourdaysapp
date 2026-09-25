@@ -149,7 +149,15 @@ export const peekGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   // different stories about one link. `request.auth` is optional here: this callable serves
   // visitors with no account, which is the whole reason the join screen can name who invited them
   // before asking anyone to sign up.
-  const verdict = linkVerdict(d, request.auth?.uid ?? null, Date.now());
+  let verdict = linkVerdict(d, request.auth?.uid ?? null, Date.now());
+  // "You used this one" means "you are in" only while you still ARE in. Somebody who used a group
+  // link and was removed since is told the link is spent — which it is, by them — instead of the
+  // join screen welcoming them into a group redeem no longer puts them back in (25.09.2026).
+  if (verdict === "already" && typeof d.groupId === "string" && d.groupId && request.auth?.uid) {
+    const g = await admin.firestore().doc(`groups/${d.groupId}`).get();
+    const members = g.data()?.members;
+    if (!Array.isArray(members) || !members.includes(request.auth.uid)) verdict = "spent";
+  }
   const alreadyJoined = verdict === 'already';
   const admits = verdict === 'ok' || alreadyJoined;
 
@@ -192,8 +200,21 @@ export const redeemGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK
     if (verdict === "expired") throw new HttpsError("failed-precondition", "This invitation has expired.");
     if (verdict === "spent") throw new HttpsError("resource-exhausted", "This invitation has already been used up.");
 
-    const already = verdict === "already";
     const inviter = d.createdBy as string;
+    const answer = (status: "already" | "member") => ({
+      status, groupId: d.groupId || null, groupName: d.groupName || null,
+      invitedBy: cap(d.createdByName || ""), joinedGroup: false, inviter, joinerName: "",
+    });
+
+    // ── An answer, never a write (25.09.2026) ───────────────────────────────────────────────
+    //
+    // "You already used this link" is the ONE use it had. It used to re-apply everything: re-add
+    // to the group, re-make the friendship. So after being REMOVED from the group — and unfriended
+    // — a person who had once used a link got both back with a single call, whether the link had
+    // since been revoked, had expired, or was left alone (the verdict answers "already" before it
+    // looks at any of those). Every link an owner ever minted was a permanent back door for
+    // everyone who had used it. Somebody who left or was removed needs a fresh invitation.
+    if (verdict === "already") return answer("already");
 
     let groupRef: admin.firestore.DocumentReference | null = null;
     let joinsGroup = false;
@@ -208,7 +229,11 @@ export const redeemGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK
       if (!members.includes(inviter)) {
         throw new HttpsError("permission-denied", "Whoever sent this invitation is no longer in the group.");
       }
-      joinsGroup = !members.includes(uid);
+      // Already in, without having used THIS link: a member tapping it in the family chat. It used
+      // to spend the single use and admit nobody, and the person it was meant for got "used up".
+      // Spends nothing, writes nothing, tells nobody.
+      if (members.includes(uid)) return answer("member");
+      joinsGroup = true;
     }
 
     // Both emails from Auth: the redeemer's from their token, the inviter's from their record.
@@ -223,17 +248,15 @@ export const redeemGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK
     }
     friendship.apply();
 
-    // A second redemption by the SAME person spends no use — they are already in, and charging
-    // for it would let one person exhaust a family link by opening it twice.
-    if (!already) {
-      tx.update(linkRef, {
-        uses: admin.firestore.FieldValue.increment(1),
-        redeemedBy: admin.firestore.FieldValue.arrayUnion(uid),
-      });
-    }
+    // Reached only by somebody who has not used this link before (a second redemption by the same
+    // person returned above, and spends nothing).
+    tx.update(linkRef, {
+      uses: admin.firestore.FieldValue.increment(1),
+      redeemedBy: admin.firestore.FieldValue.arrayUnion(uid),
+    });
 
     return {
-      status: already ? "already" : "accepted",
+      status: "accepted" as const,
       groupId: d.groupId || null,
       groupName: d.groupName || null,
       invitedBy: friendship.aName,

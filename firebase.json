@@ -80,6 +80,9 @@
     "storage": {
       "port": 9399
     },
+    "auth": {
+      "port": 9398
+    },
     "ui": {
       "enabled": false
     },

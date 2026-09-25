@@ -56,6 +56,9 @@ export default function JoinInvite() {
   const [invitedBy, setInvitedBy] = useState<string | null>(null);
   const [groupName, setGroupName] = useState<string | null>(null);
   const [joinedGroup, setJoinedGroup] = useState(false);
+  // Whether THIS visit made the friendship. Only an `accepted` redemption does; a member tapping
+  // the link, or a reopened link, befriends nobody, and the screen must not say it did.
+  const [befriended, setBefriended] = useState(false);
   const [problem, setProblem] = useState<string>('');
 
   useEffect(() => onAuthStateChanged(auth, (u) => setSignedIn(!!u)), []);
@@ -110,6 +113,7 @@ export default function JoinInvite() {
       setInvitedBy(res.invitedBy || invitedBy);
       setGroupName(res.groupName || groupName);
       setJoinedGroup(res.joinedGroup);
+      setBefriended(res.status === 'accepted');
       setPhase('done');
     } catch (err: any) {
       reportError(err instanceof Error ? err.message : String(err), { context: 'JoinInvite.redeem' });
@@ -210,7 +214,7 @@ export default function JoinInvite() {
                   {t('joinJoinedGroup', language).replace('{group}', groupName)}
                 </p>
               )}
-              {invitedBy && (
+              {befriended && invitedBy && (
                 <p className="text-sm text-zinc-600 dark:text-zinc-400">
                   {t('joinNowFriends', language).replace('{name}', invitedBy)}
                 </p>

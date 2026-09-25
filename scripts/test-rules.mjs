@@ -83,9 +83,13 @@ const inner = ['npx', 'vitest', 'run', '--config', 'vitest.rules.config.ts', ...
 // Storage runs alongside Firestore because `storage.rules` had no test of any kind until
 // 19.09, and a storage rule that refuses is indistinguishable from a bug in the uploader.
 //
+// Auth runs too since 25.09: the invitation callables read the inviter's email from the Auth
+// record (`authIdentityOf`), and without the emulator that call leaves the machine — and fails into
+// "no email", so a test could not tell a real address from a forged one.
+//
 // A `demo-` prefixed project id makes the emulator skip credentials entirely, so this cannot be
 // pointed at the real project even by accident.
-const cmd = `npx firebase emulators:exec --only firestore,storage --project demo-ourdays-rules "${inner}"`;
+const cmd = `npx firebase emulators:exec --only firestore,storage,auth --project demo-ourdays-rules "${inner}"`;
 const r = spawnSync(cmd, {
   stdio: 'inherit', env, shell: true, cwd: join(import.meta.dirname, '..'),
 });

@@ -417,10 +417,19 @@ service cloud.firestore {
       // group. With `groupId: null` you force a FRIENDSHIP, which writes `users/{victim}.friends`
       // — an owner-only document — and hands their private email back to you in your own list.
       //
-      // Declining is the only update any client makes (`CalendarHome` writes `status: 'declined'`),
+      // Declining is the only update the web makes (`CalendarHome` writes `status: 'declined'`),
       // and accepting happens server-side on the Admin SDK, which this file does not constrain.
+      //
+      // Answered ONCE (25.09.2026). `status` could move in any direction, so an accepted invitation
+      // turned back to 'pending' walked a removed member back in through acceptGroupInvite. Only a
+      // pending invitation changes now, and only to an answer. The installed APK writes exactly
+      // pending → accepted and pending → declined (rules-tests/apk-compat.test.ts); both stay.
+      // The server also keeps its own record (`acceptedBy`), which covers invitations accepted
+      // from now on; this rule is what covers the ones accepted before it existed.
       allow update: if canAccessInvite()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && resource.data.get('status', 'pending') == 'pending'
+        && request.resource.data.status in ['accepted', 'declined'];
       allow delete: if canAccessInvite();
     }
 

@@ -122,6 +122,30 @@ describe('what the installed APK creates', () => {
   });
 });
 
+describe('what the installed APK answers on an invitation', () => {
+  // Bundle: `MC(q(Y,'group_invites',e.id),{status:'accepted'})` and `…{status:'declined'}` — the
+  // only two invitation writes it makes. Since 25.09 the rule lets a status move only from pending
+  // to an answer; these two are exactly that, and must stay allowed.
+  beforeEach(async () => {
+    await seed(async (db) => {
+      for (const id of ['apk-inv-1', 'apk-inv-2']) {
+        await setDoc(doc(db, 'group_invites', id), {
+          fromId: ALICE, fromEmail: EMAIL[ALICE], toId: null, toEmail: EMAIL[BOB],
+          groupId: null, groupName: null, status: 'pending', createdAt: NOW,
+        });
+      }
+    });
+  });
+
+  it('accepts', async () => {
+    await assertSucceeds(updateDoc(doc(as(BOB), 'group_invites', 'apk-inv-1'), { status: 'accepted' }));
+  });
+
+  it('declines', async () => {
+    await assertSucceeds(updateDoc(doc(as(BOB), 'group_invites', 'apk-inv-2'), { status: 'declined' }));
+  });
+});
+
 describe('what the installed APK updates on somebody else’s message', () => {
   beforeEach(async () => {
     await seed(async (db) => {

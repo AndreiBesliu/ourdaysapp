@@ -408,9 +408,14 @@ export async function peekGroupInviteLink(code: string): Promise<{
   return (await fn({ code })).data as any;
 }
 
-/** Join, and become friends with whoever sent it. Requires a signed-in caller. */
+/**
+ * Join, and become friends with whoever sent it. Requires a signed-in caller.
+ *
+ * Only `accepted` changed anything. `already` (you used this link before) and `member` (you were
+ * already in the group) are answers: nothing was joined, nothing befriended, nothing spent.
+ */
 export async function redeemGroupInviteLink(code: string): Promise<{
-  status: 'accepted' | 'already'; groupId: string | null; groupName: string | null;
+  status: 'accepted' | 'already' | 'member'; groupId: string | null; groupName: string | null;
   invitedBy: string; joinedGroup: boolean;
 }> {
   const fn = httpsCallable(getFunctions(app), "redeemGroupInviteLink");

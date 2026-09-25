@@ -1614,8 +1614,17 @@ export const acceptGroupInvite = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
     if (!isRecipient) {
       throw new HttpsError("permission-denied", "This invite isn't addressed to you.");
     }
-    if (inv.status && inv.status !== "pending") {
-      return { status: inv.status, groupId: inv.groupId || null };
+    // Answered ONCE (25.09.2026). `status` is the client's to write, and until today the rule let
+    // it move in any direction while this treated anything falsy as pending — so: accept, get
+    // removed from the group, set your own invitation back to 'pending' (or null), accept again,
+    // and you were back in and re-befriended. The server now keeps its own record, `acceptedBy`,
+    // which no client can write (the update rule admits only `status`), and honours nothing but
+    // an explicit 'pending'.
+    if (inv.acceptedBy != null) {
+      return { status: "accepted", groupId: inv.groupId || null };
+    }
+    if (inv.status !== "pending") {
+      return { status: typeof inv.status === "string" && inv.status ? inv.status : "invalid", groupId: inv.groupId || null };
     }
 
     if (inv.groupId) {
@@ -1664,7 +1673,10 @@ export const acceptGroupInvite = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
       });
     }
     friendship.apply();
-    tx.update(inviteRef, { status: "accepted", toId: uid });
+    tx.update(inviteRef, {
+      status: "accepted", toId: uid,
+      acceptedBy: uid, acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
     return { status: "accepted", groupId: inv.groupId || null };
   });
 });

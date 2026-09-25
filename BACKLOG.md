@@ -58,8 +58,14 @@ pică exact când se ajunge aici.
   `apk-compat` — APK-ul creează și actualizează jocuri.
 - **`logClientError`:** 200 de rânduri pe zi per cont, fără expirare. Codul poate scrie un
   `expireAt`; politica TTL se pornește din consolă.
-- **Callable-uri fără test pe emulator:** `acceptGroupInvite`, `redeemGroupInviteLink`,
-  `deleteGroupCascade`. Harness-ul există de pe 24.09 (`functions/test/`, sub `npm run test:rules`).
+- **Callable-uri fără test pe emulator:** `deleteGroupCascade`. `acceptGroupInvite` și
+  `redeemGroupInviteLink` au teste din 25.09. Harness-ul e în `functions/test/`, cu emulatorul de Auth.
+- **Un membru scos poate accepta o a DOUA invitație încă în așteptare** în același grup. Scoaterea
+  nu anulează invitațiile și linkurile lui. Asta cere un trigger pe `groups` sau o listă a celor scoși,
+  ținută de server. Decizia lui Andrei.
+- **5 invitații „acceptate” fără `toId`** (măsurat 25.09): acceptări din APK care n-au băgat pe
+  nimeni în grup, fiindcă scrierea în `members` e refuzată. Rămân moarte. Recuperarea e decizia lui
+  Andrei.
 - Cererile și invitațiile vechi nu vor primi niciodată ștampila expeditorului (triggerul pornește o
   dată); rămân cu avertismentul. O ștampilare retroactivă se poate scrie — rulată doar cu confirmare.
 - **Un eșec trecător la citirea contului Auth** (`authIdentityOf`) ștampilează `email: null` —
