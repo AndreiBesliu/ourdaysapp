@@ -11,6 +11,7 @@ const bootstrapAdmins_1 = require("./bootstrapAdmins");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 const genai_1 = require("@google/genai");
+const geminiKey_1 = require("./geminiKey");
 const engine_1 = require("./warlordCombat/combat/engine");
 const pvp_1 = require("./warlordCombat/combat/pvp");
 const aiScope_1 = require("./aiScope");
@@ -62,6 +63,8 @@ admin.initializeApp();
 // Console — avoids locking out clients that aren't yet sending tokens. Set
 // APPCHECK_ENFORCE=true (functions env) to require valid App Check tokens.
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
+/** The four AI callables: the only callables that receive the Gemini key. See geminiKey.ts. */
+const AI_CALLABLE_OPTS = { enforceAppCheck: ENFORCE_APP_CHECK, secrets: [geminiKey_1.GEMINI_KEY] };
 // Require a signed-in caller and apply a basic per-user daily quota on the AI
 // callables to curb abuse / runaway Gemini cost. The `ai_usage` collection is
 // written only by the Admin SDK here (clients have no matching rule → denied).
@@ -249,7 +252,7 @@ async function recordChecklistOutcome(snapshot, data, reason) {
 async function runAutoChecklist(snapshot, data, ownerId) {
     const title = data.title;
     const description = data.description || "";
-    const key = process.env.GEMINI_API_KEY_LOCAL;
+    const key = geminiKey_1.GEMINI_KEY.value();
     if (!key)
         throw (0, aiChecklistOutcome_1.checklistFailure)(aiChecklistOutcome_1.CHECKLIST_UNCONFIGURED);
     const ai = new genai_1.GoogleGenAI({ apiKey: key });
@@ -301,7 +304,8 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
     console.log(`Successfully generated checklist for: ${title}`);
 }
 exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)({
-    document: "events/{eventId}"
+    document: "events/{eventId}",
+    secrets: [geminiKey_1.GEMINI_KEY],
 }, async (event) => {
     const snapshot = event.data;
     if (!snapshot)
@@ -563,14 +567,14 @@ exports.onGameCreated = (0, firestore_1.onDocumentCreated)("games/{gameId}", asy
         console.error("Error sending Game Invite FCM:", error);
     }
 });
-exports.generateAIChecklist = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.generateAIChecklist = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (request) => {
     const { title, description, language = 'en-US' } = request.data;
     if (!title) {
         throw new https_1.HttpsError('invalid-argument', 'Title is required.');
     }
     const callerUid = await assertAiCallerAllowed(request);
     try {
-        const key = process.env.GEMINI_API_KEY_LOCAL;
+        const key = geminiKey_1.GEMINI_KEY.value();
         if (!key) {
             // Nothing reached the model — there is no model to reach. The unit was taken at the door
             // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
@@ -627,14 +631,14 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
-exports.suggestEventCategory = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.suggestEventCategory = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (request) => {
     const { title, description } = request.data;
     if (!title) {
         throw new https_1.HttpsError('invalid-argument', 'Title is required.');
     }
     const callerUid = await assertAiCallerAllowed(request);
     try {
-        const key = process.env.GEMINI_API_KEY_LOCAL;
+        const key = geminiKey_1.GEMINI_KEY.value();
         if (!key) {
             // Nothing reached the model — there is no model to reach. The unit was taken at the door
             // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
@@ -683,7 +687,7 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
-exports.generateGroupDigest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.generateGroupDigest = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (request) => {
     var _a;
     const { groupId, language = 'en-US' } = request.data;
     if (!groupId || typeof groupId !== 'string') {
@@ -699,7 +703,7 @@ exports.generateGroupDigest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
         throw new https_1.HttpsError('permission-denied', 'You are not a member of that group.');
     }
     try {
-        const key = process.env.GEMINI_API_KEY_LOCAL;
+        const key = geminiKey_1.GEMINI_KEY.value();
         if (!key) {
             // Nothing reached the model — there is no model to reach. The unit was taken at the door
             // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
@@ -846,14 +850,14 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
-exports.suggestAssetForText = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.suggestAssetForText = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (request) => {
     const { text, availableAssets } = request.data;
     if (!text || !availableAssets || !Array.isArray(availableAssets)) {
         throw new https_1.HttpsError('invalid-argument', 'text and availableAssets are required.');
     }
     const callerUid = await assertAiCallerAllowed(request);
     try {
-        const key = process.env.GEMINI_API_KEY_LOCAL;
+        const key = geminiKey_1.GEMINI_KEY.value();
         if (!key) {
             // Nothing reached the model — there is no model to reach. The unit was taken at the door
             // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one

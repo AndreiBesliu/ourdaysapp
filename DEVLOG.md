@@ -9229,3 +9229,58 @@ dovedi. Scris în `OWNER_VERIFY.md` ca fapt, nu ca decizie. Ordinea livrărilor 
 `npx tsc -b` · `tsc` pe functions · lint · **1873 de teste** · **323 pe emulator** · test:tz
 (37 × 2 fusuri) · build · `lib/` reconstruit de la zero, 51 de funcții, toate cu plafon — verzi.
 **Nimic publicat.**
+
+## 2026-09-25 · C — cheia Gemini în Secret Manager, înainte ca deploy-ul să oprească AI-ul
+
+**Prompt (Andrei):** „continua" — restul auditului din 24.09: B (securitate), apoi C.
+**Model:** Claude Opus 5.5.
+
+**Cum am început:** am recitit brief-ul în loc să mă bazez pe rezumat. Au rămas deschise B (Storage,
+jocurile, TTL la erori, testele pentru trei callable-uri) și C (cheia Gemini, bundle-ul). Șase
+cititori read-only, **~1,5M tokeni**, au întors câte un plan cu citări, verificat față de ce trimite
+APK-ul. Arborele a rămas curat.
+
+### Ce a schimbat ordinea: deploy-ul pregătit ar fi oprit tot AI-ul
+
+Pe 24.09 am creat `functions/.env` pentru `BOOTSTRAP_ADMIN_EMAILS`. **Măsurat în firebase-tools
+15.18.0** (`lib/deploy/functions/prepare.js`, `inferDetailsFromExisting`): variabilele existente de pe
+live se păstrează doar `if (!usedDotenv)`. Cu un fișier `.env` prezent, fiecare funcție primește
+**exact** conținutul lui.
+
+Cheia Gemini stătea ca variabilă simplă (`GEMINI_API_KEY_LOCAL`) pe 7 funcții de pe live, inclusiv
+două care nu cheamă modelul. Deci deploy-ul de funcții descris ieri în raport ar fi oprit toate cele
+cinci funcții AI, pe web și în APK. Nimic nu era publicat, deci nimic nu s-a stricat.
+
+### Reparat
+
+- Cheia se citește din Secret Manager, `defineSecret("GEMINI_KEY")` (`functions/src/geminiKey.ts`).
+  O primesc **doar** cele cinci funcții care cheamă Gemini: trigger-ul `autoSuggestChecklist` și
+  patru callable-uri, prin `AI_CALLABLE_OPTS`.
+- **Nume nou, intenționat.** `GEMINI_API_KEY` există deja pe live, versiunea 1 din 6 mai, conținut
+  necunoscut. Cu numele vechi, un `secrets:set` uitat ar fi fixat tăcut versiunea 1. Cu numele nou,
+  deploy-ul neinteractiv pică în `prepare`, înainte să schimbe ceva.
+- `.gitignore` acoperă acum și `functions/.env.*`, pe care CLI-ul le încarcă. Repo-ul e public.
+- În `OWNER_VERIFY.md`, sus: comanda pe care o rulează Andrei înainte de deploy (`functions:secrets:set
+  GEMINI_KEY`), ce se strică fără ea, și ce se face cu secretul vechi după.
+
+### Proba
+
+`functions/test/geminiSecret.test.ts`, 11 teste:
+- **Descrierea de deploy.** Citește `lib/index.js` compilat, într-un proces copil cu
+  `FUNCTIONS_CONTROL_API=true`, cum îl citește CLI-ul. Exact cele cinci funcții au `GEMINI_KEY`;
+  niciuna nu are alt secret.
+- **Handler-ele reale.** Cu doar numele vechi setate răspund „AI is not configured”, fără cost din
+  cotă. Cu `GEMINI_KEY` setat trec de cheie și se opresc la kill switch, înainte de orice apel la
+  Google. Perechea trebuie să difere, și diferă.
+
+Patru mutații, toate prinse:
+
+| Mutația | Roșii |
+|---|---|
+| un callable citește iar numele vechi | 2 |
+| trigger-ul fără secret | 1 |
+| callable-urile fără secret | 1 |
+| `.value()` ridicat la nivel de modul (pică încărcarea în modul de deploy) | 1 |
+
+**Găsit pe drum, trecut în BACKLOG:** „AI nu e configurat” ajunge la client ca `internal` și se scrie
+în `errorLogs` la fiecare apel, fiindcă propriul `catch` al callable-ului îl re-împachetează.

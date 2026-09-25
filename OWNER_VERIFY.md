@@ -15,6 +15,33 @@
 
 ---
 
+## ⛔ ÎNAINTE de orice deploy de funcții: cheia Gemini în Secret Manager (25.09)
+
+**Faptul, măsurat în sursa CLI-ului:** de pe 24.09 există `functions/.env` (adresa de bootstrap).
+Când un astfel de fișier există, deploy-ul de funcții pune pe fiecare funcție **exact** ce e în el.
+Variabilele de azi nu se păstrează. Cheia Gemini stătea tocmai ca variabilă simplă pe 7 funcții de
+pe live, deci deploy-ul din 24.09, așa cum ți l-am descris, ar fi **oprit tot AI-ul**, pe web și pe
+telefoane. Nimic nu s-a publicat, deci nimic nu s-a stricat.
+
+**Reparat în cod:** cheia se citește acum din Secret Manager, sub numele nou **`GEMINI_KEY`**, și o
+primesc doar cele cinci funcții care vorbesc cu Gemini. Numele e nou intenționat: dacă uiți pasul de
+mai jos, deploy-ul pică **înainte** să schimbe ceva. Uitarea e zgomotoasă, nu tăcută.
+
+- [ ] **Rulezi tu, o dată, înainte de deploy-ul de funcții:**
+      `npx firebase functions:secrets:set GEMINI_KEY --project live` și lipești cheia la prompt.
+      Ideal o cheie **nouă**, restricționată la Generative Language API. Cea veche a stat în clar pe
+      7 funcții și în `functions/.env` din mai, într-un folder sincronizat cu Drive.
+      Eu nu am voie să văd cheia.
+      - **Cum arată bine:** `npx firebase functions:secrets:get GEMINI_KEY --project live` arată o
+        singură versiune, ENABLED, de azi.
+      - **Ce se strică dacă nu:** deploy-ul de funcții refuză să pornească. Nu se strică nimic, dar
+        nici nu pleacă nimic din ce s-a reparat pe 24–25.09.
+      - **După deploy**, nu înainte: secretul vechi `GEMINI_API_KEY` (versiunea 1, din 6 mai) e încă
+        legat de `autoSuggestChecklist`. Se șterge numai după ce `functions:list` arată că nu-l mai
+        folosește nimeni; altfel trigger-ul nu mai pornește.
+
+---
+
 ## ⚠️ Cineva putea sa te bage intr-un grup fara sa te intrebe (reparat 22.09)
 
 **Fapt, nu de bifat.** A fost real pe live pana azi.

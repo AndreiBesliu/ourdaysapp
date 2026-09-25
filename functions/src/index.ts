@@ -8,6 +8,7 @@ import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 
 import { GoogleGenAI } from "@google/genai";
+import { GEMINI_KEY } from "./geminiKey";
 import { applyCommand } from "./warlordCombat/combat/engine";
 import { sanitizeDeploy, createPvpBattle } from "./warlordCombat/combat/pvp";
 import type { BattleState, Command } from "./warlordCombat/combat/types";
@@ -67,6 +68,8 @@ admin.initializeApp();
 // Console — avoids locking out clients that aren't yet sending tokens. Set
 // APPCHECK_ENFORCE=true (functions env) to require valid App Check tokens.
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
+/** The four AI callables: the only callables that receive the Gemini key. See geminiKey.ts. */
+const AI_CALLABLE_OPTS = { enforceAppCheck: ENFORCE_APP_CHECK, secrets: [GEMINI_KEY] };
 
 // Require a signed-in caller and apply a basic per-user daily quota on the AI
 // callables to curb abuse / runaway Gemini cost. The `ai_usage` collection is
@@ -270,7 +273,7 @@ async function runAutoChecklist(
   const title = data.title;
   const description = data.description || "";
 
-  const key = process.env.GEMINI_API_KEY_LOCAL;
+  const key = GEMINI_KEY.value();
   if (!key) throw checklistFailure(CHECKLIST_UNCONFIGURED);
   const ai = new GoogleGenAI({ apiKey: key });
 
@@ -331,7 +334,8 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
 }
 
 export const autoSuggestChecklist = onDocumentCreated({
-  document: "events/{eventId}"
+  document: "events/{eventId}",
+  secrets: [GEMINI_KEY],
 }, async (event) => {
   const snapshot = event.data;
   if (!snapshot) return;
@@ -615,7 +619,7 @@ export const onGameCreated = onDocumentCreated("games/{gameId}", async (event) =
   }
 });
 
-export const generateAIChecklist = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+export const generateAIChecklist = onCall(AI_CALLABLE_OPTS, async (request) => {
   const { title, description, language = 'en-US' } = request.data;
   if (!title) {
     throw new HttpsError('invalid-argument', 'Title is required.');
@@ -623,7 +627,7 @@ export const generateAIChecklist = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   const callerUid = await assertAiCallerAllowed(request);
 
   try {
-    const key = process.env.GEMINI_API_KEY_LOCAL;
+    const key = GEMINI_KEY.value();
     if (!key) {
       // Nothing reached the model — there is no model to reach. The unit was taken at the door
       // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
@@ -687,7 +691,7 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
   }
 });
 
-export const suggestEventCategory = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+export const suggestEventCategory = onCall(AI_CALLABLE_OPTS, async (request) => {
   const { title, description } = request.data;
   if (!title) {
     throw new HttpsError('invalid-argument', 'Title is required.');
@@ -695,7 +699,7 @@ export const suggestEventCategory = onCall({ enforceAppCheck: ENFORCE_APP_CHECK 
   const callerUid = await assertAiCallerAllowed(request);
 
   try {
-    const key = process.env.GEMINI_API_KEY_LOCAL;
+    const key = GEMINI_KEY.value();
     if (!key) {
       // Nothing reached the model — there is no model to reach. The unit was taken at the door
       // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
@@ -752,7 +756,7 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
   }
 });
 
-export const generateGroupDigest = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+export const generateGroupDigest = onCall(AI_CALLABLE_OPTS, async (request) => {
   const { groupId, language = 'en-US' } = request.data;
   if (!groupId || typeof groupId !== 'string') {
     throw new HttpsError('invalid-argument', 'groupId is required.');
@@ -769,7 +773,7 @@ export const generateGroupDigest = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   }
 
   try {
-    const key = process.env.GEMINI_API_KEY_LOCAL;
+    const key = GEMINI_KEY.value();
     if (!key) {
       // Nothing reached the model — there is no model to reach. The unit was taken at the door
       // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
@@ -934,7 +938,7 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
   }
 });
 
-export const suggestAssetForText = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+export const suggestAssetForText = onCall(AI_CALLABLE_OPTS, async (request) => {
   const { text, availableAssets } = request.data;
   if (!text || !availableAssets || !Array.isArray(availableAssets)) {
     throw new HttpsError('invalid-argument', 'text and availableAssets are required.');
@@ -942,7 +946,7 @@ export const suggestAssetForText = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   const callerUid = await assertAiCallerAllowed(request);
 
   try {
-    const key = process.env.GEMINI_API_KEY_LOCAL;
+    const key = GEMINI_KEY.value();
     if (!key) {
       // Nothing reached the model — there is no model to reach. The unit was taken at the door
       // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one

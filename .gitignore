@@ -26,6 +26,9 @@ dist-ssr
 # Firebase & Environment Secrets
 .env
 functions/.env
+# The CLI also loads functions/.env.<projectId> and .env.<alias> at deploy (firebase-tools
+# lib/functions/env.js). This repository is PUBLIC; none of them belongs in it.
+functions/.env.*
 .firebase/
 
 # Service-account keys. The real protection is keeping them OUTSIDE this tree —

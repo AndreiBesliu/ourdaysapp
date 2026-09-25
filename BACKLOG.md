@@ -76,8 +76,11 @@ pică exact când se ajunge aici.
 
 ## 3. Cod și operațiuni (C)
 
-- **Cheia Gemini** vine din `process.env.GEMINI_API_KEY_LOCAL` → `defineSecret`. Secretul trebuie
-  creat întâi în Secret Manager (Andrei), altfel deploy-ul pică.
+- **„AI nu e configurat” ajunge la client ca `internal`.** Cele patru callable-uri AI aruncă
+  `failed-precondition`, dar propriul lor `catch` o re-împachetează în `internal: AI Error: …` și o
+  scrie în `errorLogs` la FIECARE apel. Clientul nu poate deosebi o configurare lipsă de un defect,
+  iar o cheie lipsă ar umple jurnalul. Măsurat 25.09 prin `functions/test/geminiSecret.test.ts`.
+  Se repară lăsând `HttpsError`-urile proprii să treacă prin `catch` neschimbate.
 - **Bundle-ul:** chunk-ul principal are 1,5 MB (425 kB gzip). De împărțit pe rute: Wallet, Chat,
   Settings.
 - **Warlord** (repo-ul Warlord, nu aici): 44 de PNG-uri, 28 MB, 800–900 kB fiecare → WebP.
