@@ -15,47 +15,62 @@
 
 ---
 
-## ⛔ Deploy-ul din 24–25.09: aștept doar confirmarea ta
+## ✅ Deploy-ul din 24–25.09: PUBLICAT pe 25.09, la confirmarea ta
 
-**Cheia Gemini rămâne unde e** — ai decis pe 25.09 să mutăm cheia în Secret Manager mai târziu. E
-trecută în `BACKLOG.md` cu rețeta, deci nu ai nimic de pregătit pentru deploy.
+**Fapte, măsurate după deploy (doar citire):**
+- **Ordinea și orele (UTC):**
+  - funcțiile, pornite la 09:46: 50 actualizate, 1 nouă, niciuna ștearsă, toate pe Node 22;
+  - regulile și indecșii Firestore, la 10:03;
+  - regulile Storage, la 10:28;
+  - hosting-ul, la 10:30.
+- **Fereastra 10:03–10:30,** în care un tab web vechi putea întâlni regulile noi, a ținut 27 de minute,
+  nu câteva secunde: fiecare comandă pe live a așteptat aprobarea gărzii de deploy. În fereastra aceea
+  n-a fost nicio scriere în evenimente, mesaje, jocuri, cheltuieli sau invitații, deci n-a pierdut nimeni
+  nimic.
+- **Pe live, acum:**
+  - regulile sunt identice cu repo-ul;
+  - politica TTL pe jurnalul de erori e **ACTIVE**;
+  - toate cele 65 de fișiere web sunt identice cu build-ul;
+  - cheia Gemini e pe aceleași 7 funcții;
+  - nicio eroare și niciun avertisment în log-urile funcțiilor de la deploy încoace.
+- **Nicio ștampilă falsă de expeditor:** 0 din 13 invitații și 0 dintr-o cerere de prietenie.
+- **Ce nu am putut măsura:** tot ce e în spatele logării. De la deploy, nimeni n-a folosit încă AI-ul,
+  chatul sau invitațiile, deci funcțiile lor n-au rulat deloc. Nu au dat erori, dar nici n-au fost puse
+  la probă. Iar proiectul nu păstrează log-uri de acces la date, așa că un refuz de regulă pentru un
+  utilizator logat nu lasă urme pe server.
 
-**Faptul care rămâne, măsurat în sursa CLI-ului:** un deploy de funcții păstrează variabilele de pe
-live **doar** dacă nu există un fișier `functions/.env`. Unul a existat între 24 și 25.09, pentru
-adresa de bootstrap, și deploy-ul l-ar fi pus în locul variabilelor. Cheia Gemini ar fi dispărut de
-pe toate cele 7 funcții, deci tot AI-ul s-ar fi oprit. Nimic nu s-a publicat, deci nimic nu s-a
-stricat.
-- Fișierul e acum **în afara repo-ului**, în `~/.ourdays/`.
-- Un pas nou de predeploy (`scripts/functions-env-guard.mjs`) refuză deploy-ul cât timp un astfel de
-  fișier există fără cheie.
-- Efectul secundar e acceptat: recuperarea adminului prin email de bootstrap rămâne oprită. Și azi
-  e oprită pe live, iar contul tău de admin există.
+- [ ] **Folosește aplicația o dată, 5 minute, pe web:**
+  1. un AI Digest;
+  2. o poză în chat (și una din telefon, dacă e la îndemână);
+  3. o invitație într-un grup, către oricine;
+  4. o editare de eveniment;
+  5. o delogare.
 
-- [ ] **Confirmă-mi deploy-ul, și îl rulez eu în ordinea de mai jos** (tot ce s-a reparat pe 24–25.09;
-      nimic nu e publicat). Înainte de **30.10**, când funcțiile pe Node 20 nu se mai pot publica.
-      1. **Funcțiile** — `--only functions`. Cheia rămâne pe ele; pasul de predeploy o păzește.
-      2. **Regulile și indecșii Firestore** — `--only firestore` (amândouă). Indecșii aduc politica TTL
-         pe jurnalul de erori. **Nu** la orice propunere de a șterge un index care există doar pe live.
-      3. **Regulile Storage** — `--only storage`. Independente de rest.
-      4. **Verificarea ștampilelor** — `node scripts/request-stamps.mjs --before <ora pasului 1>`. Arată
-         dacă cineva a scris o ștampilă falsă de expeditor în fereastra dinaintea regulilor.
-      5. **Hosting, imediat** — `--only hosting`. Până atunci, un tab web vechi întâlnește regulile noi:
-         o editare de ocurență se pierde, clopoțelul arată chei brute.
-      6. **La cel puțin o oră după pasul 1:** `stamp-error-expiry --apply`, cu cheia de scriere de la
-         migrarea datei de naștere.
-      - **Cum arată bine:**
-        - `live-diff` arată în continuare `GEMINI_API_KEY_LOCAL` pe aceleași 7 funcții, iar un AI Digest merge;
-        - tab-ul TTL din consola Firestore arată `errorLogs.expireAt` **ACTIVE**, poate după câteva
-          minute în starea CREATING;
-        - o poză trimisă din telefon și una de pe web ajung în chat.
-      - **Ce se strică dacă se sare pasul 2:** rândurile de eroare primesc data de expirare, dar nu
-        expiră niciodată. Nu dă nicio eroare; se vede doar în tab-ul TTL.
-      - **Ce e pe live acum** (măsurat 25.09 cu `node scripts/live-diff.mjs`, doar citire; se reia chiar
-        înainte de deploy):
-        - regulile Firestore și Storage sunt cele din 22.09;
-        - indecșii sunt identici, deci pasul 2 nu șterge nimic și adaugă doar politica TTL;
-        - 50 de funcții, pe Node 20; deploy-ul nu șterge niciuna și adaugă una;
-        - cheia e variabila `GEMINI_API_KEY_LOCAL`, pe 7 funcții; asta păstrează deploy-ul.
+  Eu citesc apoi, doar citire, că invitația a primit ștampila serverului și că delogarea a scos
+  token-ul acelui dispozitiv.
+  - **Cum arată bine:** toate merg ca înainte.
+  - **Ce se strică dacă ceva e greșit:** exact funcția aceea. N-o poate vedea nimeni altcineva.
+
+- [ ] **DECIZIE, nouă (25.09): contul tău nu mai e recunoscut ca „owner” pe live.**
+  **Am greșit mai sus, în versiunea dinainte a acestui bloc.** Am scris că recuperarea prin emailul de
+  bootstrap „e oprită și azi pe live”. Nu era: codul publicat până azi avea adresa ta scrisă direct în
+  el. Deploy-ul a oprit-o, fiindcă adresa stă acum în afara repo-ului și n-a mai ajuns pe funcții.
+  **Ce înseamnă concret:**
+  - din admin **nu mai poți opri kill switch-ul AI și nu mai poți ridica limitele AI**; poți doar
+    să le faci mai sigure (să pornești kill switch-ul, să cobori limitele);
+  - în lista de admini apari ca „last”, nu ca „owner”;
+  - dacă înregistrarea ta de admin ar fi ștearsă, nimic nu te mai readuce automat.
+
+  Accesul tău de admin **nu** e afectat: îl dă înregistrarea din `admins`, care există.
+  **Ieșire de urgență, dacă ai nevoie azi:** documentul `aiConfig/live` se poate edita direct din
+  consola Firebase.
+  **Variante:**
+  - **(a) Facem acum mutarea în Secret Manager,** ca să se poată întoarce adresa. Tu rulezi o comandă
+    și lipești cheia, iar eu fac restul și un deploy doar de funcții. Asta repară tot și scoate și cheia
+    în clar. **Recomandarea mea.**
+  - **(b) Rămâne așa până la mutare,** cu ieșirea de urgență de mai sus.
+  - **(c) „Owner” citit din înregistrarea ta de admin** (`addedBy: bootstrap`), fără adresă. Repară
+    kill switch-ul și eticheta, dar nu și recuperarea. E o schimbare de autorizare, deci e a ta.
 
 ---
 
@@ -88,14 +103,16 @@ Ai ales varianta 2, cu formatul `0000-MM-DD` (nu `MM-DD`, care ar fi mutat ziua 
 iar 29 februarie apare pe 28 în anii nebisecți. Data completă rămâne în documentul tău privat.
 
 **Rămâne un singur pas, care e al tău:** migrarea profilurilor care au deja data completă.
-Rularea de probă pe live (doar citire): **3 profiluri, 2 cu data completă.**
+Rularea de probă pe live (doar citire): **3 profiluri, 2 cu data completă.** Re-măsurat după deploy
+(25.09): **a rămas unul singur.** Celălalt s-a rescris singur, ca `0000-MM-DD`, la prima logare pe
+codul nou. Asta arată și că regula nouă primește forma scurtă.
 
 - [ ] **Confirmă-mi că rulez migrarea** (`node scripts/migrate-public-birthdays.mjs --apply`). Cere o
       cheie cu drept de scriere, pe care mi-o dai tu, în afara repo-ului — cea de măsurători e doar
       de citire, intenționat.
       - **Ce se strică dacă nu:** nimic nu se strică; cele două date complete rămân vizibile până
         la următoarea logare web a proprietarilor, când oglinda se rescrie singură (după deploy).
-      - **Cu aceeași cheie, după deploy-ul de funcții** (adăugat 25.09):
+      - **Cu aceeași cheie, acum, fiindcă deploy-ul s-a făcut** (adăugat 25.09):
         `node scripts/stamp-error-expiry.mjs --apply` dă o dată de expirare celor 110 rânduri vechi din
         jurnalul de erori. Au emailuri și uid-uri și altfel nu expiră niciodată. Rulat pe live în modul
         de probă, doar citire: niciunul nu trece deja de 90 de zile, deci nu se șterge nimic imediat.

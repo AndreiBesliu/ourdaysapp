@@ -9791,3 +9791,71 @@ cale de ieșire. Mai simplu e să nu existe fișierul.
   mutării, în patru pași, și capcana), `CLAUDE.md` (linia de deploy).
 - **Deploy-ul:** tot neexecutat. Îl rulez doar după confirmarea explicită a lui Andrei. „Da, după ce
   există secretul” era condiționat de un pas care nu mai există, deci se cere din nou.
+
+
+## 2026-09-25 · DEPLOY pe live: funcții → Firestore → Storage → hosting, și ce a măsurat verificarea
+
+**Prompt (Andrei):** „confirm deploy-ul”. **Model:** Claude Opus 5.5.
+
+**Pregătirea:** arbore curat, `HEAD` = `origin/main` = `7969cce`, CI verde. Ștampilele de expeditor
+măsurate înainte: 0 din 13 invitații și 0 dintr-o cerere. `dist/` reconstruit din `HEAD`.
+
+**Ce s-a publicat (UTC):**
+1. **Funcțiile**, pornite la 09:46:13: 50 actualizate, 1 creată (`onGroupInviteCreated`), niciuna
+   ștearsă, 0 eșecuri. Au trecut toate de la Node 20 la Node 22, deci termenul din 30.10 nu mai
+   contează. **Cheia Gemini a rămas** pe aceleași 7 funcții (`live-diff`, imediat după).
+2. **Firestore**, reguli și indecși, la 10:03:16. Indecșii: 14 = 14, iar suprascrierea TTL e pe live.
+3. **Storage**, la 10:28:48.
+4. **Ștampilele create înainte de 09:46:13:** 0, deci nimic fals.
+5. **Hosting**, la 10:30:26: 65 de fișiere, intrarea `index-CgDVwtKL.js`, aceeași ca local.
+
+**Fereastra dintre reguli și hosting a fost de 27 de minute,** nu imediată: fiecare comandă pe live a
+așteptat aprobarea gărzii de deploy. Măsurat după: 0 scrieri în evenimente, mesaje, jocuri, cheltuieli,
+invitații și grupuri în fereastra aceea. Riscul descris (o editare de ocurență pierdută, clopoțelul cu
+chei brute) nu s-a produs.
+
+**Verificarea de după deploy:** un workflow cu patru sonde independente, doar citire, fiecare problemă
+reverificată adversarial, plus un critic de acoperire. 9 agenți.
+- **Funcțiile:**
+  - 51 din 51 ACTIVE pe Node 22, iar fiecare container a trecut sonda de pornire;
+  - 0 intrări WARNING+ în tot proiectul de la deploy (re-măsurat până la 11:02);
+  - 12 rulări `sendDueReminders` și o rulare `expireIdleGames`, toate cu 0 eșecuri;
+  - 10 callable-uri de admin au răspuns 200.
+- **Jurnalul de erori:** TTL **ACTIVE**. 0 rânduri noi de la deploy, deci `expireAt` pe rândurile noi
+  e încă nemăsurat.
+- **Hosting:**
+  - 65 din 65 de fișiere identice octet cu octet;
+  - antetele sunt corecte: HTML `no-cache`, `/assets` imutabile;
+  - pagina publică se încarcă, cu un singur avertisment în consolă, cel vechi, de depreciere.
+- **Regulile, sondate din afară fără cont:** 30 de refuzuri, fiecare cum trebuie. Publicate =
+  locale.
+- **Criticul a măsurat în plus:**
+  - `maxInstances` 10 pe 51 din 51;
+  - un profil s-a rescris singur ca `0000-MM-DD` după hosting; a rămas unul cu data completă;
+  - toate cele 50 de URL-uri media răspund, deci afișarea nu e atinsă de `get`-ul doar pentru proprietar;
+  - noile forme de interogare pe excepții rulează fără index lipsă;
+  - toate precondițiile regulilor noi țin pe datele reale: 3 din 3 cheltuieli, 47 de mesaje, 13
+    invitații, 18 jocuri. Nimic nu rămâne înghețat.
+
+**Problema găsită, cauzată de deploy, și greșeala mea din spatele ei:**
+- **Ce se întâmplă acum:** `BOOTSTRAP_ADMIN_EMAILS` lipsește de pe toate cele 51 de funcții.
+- **Ce era înainte:** codul publicat până azi (`b37aca3`) avea adresa scrisă direct în el. Am scris în
+  `OWNER_VERIFY` că recuperarea „e oprită și azi pe live” fără să citesc codul PUBLICAT. Am citit doar
+  `HEAD`.
+- **Efectul:** `adminSetAiConfig` îl vede pe Andrei ca „admin”, nu „owner”. Din admin nu mai poate opri
+  kill switch-ul AI și nu mai poate ridica limitele. În lista de admini apare „last”, iar recuperarea
+  automată e oprită. Accesul de admin nu e afectat, fiindcă îl dă `admins/{uid}`, care există.
+- **Remedierea:** am corectat blocul și am pus decizia (a/b/c) în `OWNER_VERIFY`. Recomand (a): mutarea
+  în Secret Manager acum, ca adresa să se poată întoarce. Ieșirea de urgență e `aiConfig/live`, editat
+  din consolă.
+
+**Alte constatări, toate mai vechi decât deploy-ul, puse în BACKLOG:**
+- iconițele PWA (`/vite.svg`) lipsesc din mai;
+- avertismentul de depreciere `enableIndexedDbPersistence`;
+- log-urile de acces la date lipsesc;
+- legătura veche `GEMINI_API_KEY@1` a supraviețuit deploy-ului, deci versiunea 1 nu se distruge.
+
+**Rămâne:**
+- pasul 6, `stamp-error-expiry --apply`, cu cheia de scriere a lui Andrei;
+- verificarea din spatele logării (5 minute, lista din `OWNER_VERIFY`);
+- decizia despre owner.

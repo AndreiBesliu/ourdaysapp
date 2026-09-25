@@ -106,6 +106,12 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
      se întoarce la forma din `23544ce` (`geminiSecret.test.ts`).
   3. Deploy de funcții, apoi `live-diff` arată secretul pe exact cele cinci.
   4. Abia după aceea se șterge secretul vechi `GEMINI_API_KEY@1`, legat azi de `autoSuggestChecklist`.
+     **Măsurat după deploy-ul din 25.09:** legătura a supraviețuit deploy-ului, deși codul nu mai
+     declară niciun secret. Deci pasul ăsta trebuie să verifice întâi că a dispărut. **Până atunci
+     versiunea 1 nu se dezactivează și nu se distruge:** instanțele noi ale funcției n-ar mai porni.
+  - **Costul amânării, măsurat după deploy (25.09):** adresa de bootstrap nu mai e pe funcții, deci
+    contul lui Andrei nu mai e „owner”. Din admin nu mai poate opri kill switch-ul AI și nu mai poate
+    ridica limitele AI, iar recuperarea automată e oprită. Decizia (a/b/c) e în `OWNER_VERIFY.md`.
   - **Capcana din `functions/.env`:** un deploy păstrează variabilele de pe live doar fără fișier
     dotenv și fără parametri declarați (`defineSecret` e parametru). Adresa de bootstrap
     (`BOOTSTRAP_ADMIN_EMAILS`) stă acum în afara repo-ului, în `~/.ourdays/functions.env.bootstrap`.
@@ -143,6 +149,18 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Toleranța ±1 zi la excepțiile de recurență** există pe server (`recurrenceServer.ts`), nu și în
   calendar. Contează doar pentru chei scrise de codul vechi: **măsurat pe live 24.09 — 0 chei de
   excepție**, iar cele noi se scriu exact. Nu merită portată decât dacă apar.
+
+- **Iconițele PWA lipsesc din mai.** `public/manifest.json` declară ambele iconițe (192 și 512) ca
+  `/vite.svg`, un fișier care nu există. Hosting-ul răspunde la el cu `index.html`, deci instalarea pe
+  ecranul de start n-are iconiță. Găsit de verificarea de după deploy (25.09). Cere iconițe reale,
+  deci o decizie vizuală.
+- **Consola arată la fiecare încărcare un avertisment de depreciere:** `enableIndexedDbPersistence`.
+  E inofensiv azi. Înlocuitorul (`persistentLocalCache`) schimbă felul în care se deschide Firestore,
+  deci merită o felie a lui, cu probă pe mai multe taburi.
+- **Refuzurile de reguli nu lasă urme pe server.** Proiectul n-are log-uri de acces la date, iar
+  Hosting nu exportă log-uri de cereri, deci o regulă care refuză un utilizator logat sau un chunk
+  care nu se încarcă se vede doar dacă clientul raportează în `errorLogs`. Log-urile de acces la date
+  costă și se pornesc din IAM, deci e decizia lui Andrei.
 
 ## 4. Produs (D) — doar înregistrat
 
