@@ -241,7 +241,7 @@ async function recordChecklistOutcome(snapshot, data, reason) {
         // It goes in the health panel because, unlike the conditions this function RECORDS, a failure
         // to record is not an operating condition: there is no burst, and there is something to fix.
         console.error("could not record the checklist outcome", (err === null || err === void 0 ? void 0 : err.message) || err);
-        void (0, errorLog_1.logServerError)(`could not record the checklist outcome (${reason}): ${(err === null || err === void 0 ? void 0 : err.message) || err}`, "ai:generateChecklist", { uid: typeof (data === null || data === void 0 ? void 0 : data.ownerId) === "string" ? data.ownerId : undefined });
+        await (0, errorLog_1.logServerError)(`could not record the checklist outcome (${reason}): ${(err === null || err === void 0 ? void 0 : err.message) || err}`, "ai:generateChecklist", { uid: typeof (data === null || data === void 0 ? void 0 : data.ownerId) === "string" ? data.ownerId : undefined });
     }
 }
 /**
@@ -345,7 +345,7 @@ exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)({
         // condition, with every real bug underneath it.
         if (reason === aiChecklistOutcome_1.CHECKLIST_ERROR || reason === aiChecklistOutcome_1.CHECKLIST_BAD_OUTPUT) {
             console.error("AI Generation Error", error);
-            void (0, errorLog_1.logServerError)(reason === aiChecklistOutcome_1.CHECKLIST_BAD_OUTPUT
+            await (0, errorLog_1.logServerError)(reason === aiChecklistOutcome_1.CHECKLIST_BAD_OUTPUT
                 ? "model returned a non-array checklist"
                 : ((error === null || error === void 0 ? void 0 : error.message) || "AI generation error"), "ai:generateChecklist", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: ownerId });
         }
@@ -426,7 +426,7 @@ exports.onFriendRequestCreated = (0, firestore_1.onDocumentCreated)("friend_requ
     catch (err) {
         // Fires once; a failure is permanent. The screen then says it could not confirm the sender,
         // which is the honest answer — and this makes the failure visible to the owner.
-        void (0, errorLog_1.logServerError)(`friend-request sender stamp failed: ${String(err)}`, "friends:stamp", { uid: fromId });
+        await (0, errorLog_1.logServerError)(`friend-request sender stamp failed: ${String(err)}`, "friends:stamp", { uid: fromId });
     }
     try {
         // Two ways a request is addressed, and the common one is the second.
@@ -470,7 +470,7 @@ exports.onFriendRequestCreated = (0, firestore_1.onDocumentCreated)("friend_requ
             // Reported, not merely logged: a bell that stopped ringing is otherwise indistinguishable
             // from a bell nobody rang, and this is the one path where a person's request reaches
             // somebody without a notification to announce it.
-            void (0, errorLog_1.logServerError)(`friend-request notification suppressed: daily limit ${NOTIF_DAILY_LIMIT} reached`, "friends:notifyQuota", { uid: fromId });
+            await (0, errorLog_1.logServerError)(`friend-request notification suppressed: daily limit ${NOTIF_DAILY_LIMIT} reached`, "friends:notifyQuota", { uid: fromId });
             return;
         }
         // The stamp's name: the profile name, else the Auth email's local part. It used to fall back on
@@ -524,7 +524,7 @@ exports.onGroupInviteCreated = (0, firestore_1.onDocumentCreated)("group_invites
     }
     catch (err) {
         // Fires once. The screen then says it could not confirm the sender — the honest answer.
-        void (0, errorLog_1.logServerError)(`group-invite sender stamp failed: ${String(err)}`, "invites:stamp", { uid: fromId });
+        await (0, errorLog_1.logServerError)(`group-invite sender stamp failed: ${String(err)}`, "invites:stamp", { uid: fromId });
     }
 });
 exports.onGameCreated = (0, firestore_1.onDocumentCreated)("games/{gameId}", async (event) => {
@@ -630,7 +630,14 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
         }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
-        void (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "AI generation error", "ai:generateChecklist", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
+        // Our OWN refusals, thrown on purpose inside the try — "AI is not configured" above all — pass
+        // through with the code they were given. They were re-wrapped as `internal: AI Error: …` and
+        // filed as a server error on every call, so the client could not tell a missing key from a
+        // bug, and one missing key would have filled the panel (25.09.2026). AFTER the two branches
+        // above: a budget refusal is an HttpsError too, and must still give the quota back.
+        if (error instanceof https_1.HttpsError)
+            throw error;
+        await (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "AI generation error", "ai:generateChecklist", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
@@ -686,7 +693,14 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
         }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
-        void (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "AI category error", "ai:suggestCategory", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
+        // Our OWN refusals, thrown on purpose inside the try — "AI is not configured" above all — pass
+        // through with the code they were given. They were re-wrapped as `internal: AI Error: …` and
+        // filed as a server error on every call, so the client could not tell a missing key from a
+        // bug, and one missing key would have filled the panel (25.09.2026). AFTER the two branches
+        // above: a budget refusal is an HttpsError too, and must still give the quota back.
+        if (error instanceof https_1.HttpsError)
+            throw error;
+        await (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "AI category error", "ai:suggestCategory", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
@@ -849,7 +863,14 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
         }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
-        void (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "AI digest error", "ai:groupDigest", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
+        // Our OWN refusals, thrown on purpose inside the try — "AI is not configured" above all — pass
+        // through with the code they were given. They were re-wrapped as `internal: AI Error: …` and
+        // filed as a server error on every call, so the client could not tell a missing key from a
+        // bug, and one missing key would have filled the panel (25.09.2026). AFTER the two branches
+        // above: a budget refusal is an HttpsError too, and must still give the quota back.
+        if (error instanceof https_1.HttpsError)
+            throw error;
+        await (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "AI digest error", "ai:groupDigest", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
@@ -913,7 +934,14 @@ Do not include any other text or markdown formatting.`;
         }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
-        void (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "AI asset error", "ai:suggestAsset", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
+        // Our OWN refusals, thrown on purpose inside the try — "AI is not configured" above all — pass
+        // through with the code they were given. They were re-wrapped as `internal: AI Error: …` and
+        // filed as a server error on every call, so the client could not tell a missing key from a
+        // bug, and one missing key would have filled the panel (25.09.2026). AFTER the two branches
+        // above: a budget refusal is an HttpsError too, and must still give the quota back.
+        if (error instanceof https_1.HttpsError)
+            throw error;
+        await (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "AI asset error", "ai:suggestAsset", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
@@ -2276,6 +2304,10 @@ exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
         // Notifications addressed to a deleted account are unreachable by anyone: the rules key them to
         // the recipient's own uid, so nothing but this can ever remove them.
         const notifications = await deleteQueryInBatches(db.collection("notifications").where("userId", "==", uid));
+        // Error rows carry the person's uid and, for client reports, their email, user agent and urls.
+        // They expire after 90 days (errorRetention.ts); a deleted account's should not wait for that
+        // (25.09.2026). Drained without the 3,000 cap: a client may write 200 a day.
+        const errorLogs = await deleteQueryInBatches(db.collection("errorLogs").where("uid", "==", uid), Number.MAX_SAFE_INTEGER);
         // Delete the user's uploaded Storage files.
         const storageDeleted = await deleteStoragePrefixes([
             `assets/${uid}/`, `events/${uid}/`, `checklists/${uid}/`,
@@ -2305,7 +2337,7 @@ exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
         catch ( /* already gone */_b) { /* already gone */ }
         return {
             ok: true, deleted: true, authDeleted, storageDeleted,
-            counts: { groups: groupsSnap.size, events, assets, games, expenses, notifications, friendRequests: frFrom + frTo, friendsUnlinked: myFriends.length },
+            counts: { groups: groupsSnap.size, events, assets, games, expenses, notifications, errorLogs, friendRequests: frFrom + frTo, friendsUnlinked: myFriends.length },
             note: "Group chat messages authored by the user are retained as group history.",
         };
     }
@@ -2969,7 +3001,7 @@ exports.aiPreviewScope = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
         // months, and there was no reason for events and chat to be exempt from the lesson.
         for (const [what, src] of [["expenses", expenses], ["events", events], ["chat", chat]]) {
             if (src.unavailable) {
-                void (0, errorLog_1.logServerError)(`${what} ${src.unavailable}`, "ai:previewScope", { uid });
+                await (0, errorLog_1.logServerError)(`${what} ${src.unavailable}`, "ai:previewScope", { uid });
             }
         }
         return {
@@ -3004,7 +3036,7 @@ exports.aiPreviewScope = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
         };
     }
     catch (error) {
-        void (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "aiPreviewScope failed", "ai:previewScope", { stack: error === null || error === void 0 ? void 0 : error.stack });
+        await (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "aiPreviewScope failed", "ai:previewScope", { stack: error === null || error === void 0 ? void 0 : error.stack });
         throw new https_1.HttpsError("internal", "Could not read your data.");
     }
 });

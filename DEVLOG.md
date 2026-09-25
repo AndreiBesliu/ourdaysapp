@@ -9727,3 +9727,36 @@ numere și amprente.
   2. un chunk lipsă ținut în cache un an;
   3. rândurile de eroare ale unui cont șters;
   4. „AI nu e configurat” ajuns la client ca `internal`.
+
+## 2026-09-25 · Recomandările făcute: trei reparații, una lăsată deliberat
+
+**Prompt (Andrei):** „i don't know, what do you recommend?”, la întrebarea despre ce reparații
+urmează. **Model:** Claude Opus 5.5.
+
+1. **Rândurile de eroare de pe server se pierdeau exact pe căile de eșec.** 11 apeluri
+   `void logServerError(…)`, cele mai multe chiar înainte de `throw`. Pe 2nd gen, munca rămasă după
+   răspuns nu are CPU garantat.
+   - **Reparat:** toate cu `await`. `logServerError` nu aruncă niciodată, deci costă doar câteva
+     milisecunde pe calea de eșec.
+   - **Testul:** `src/utils/serverErrorsAwaited.test.ts` citește arborele de sintaxă, nu textul. Pe
+     codul de dinainte numește exact cele 11 locuri.
+2. **Chunk lipsă, ținut în cache un an: NEREPARAT, intenționat, după măsurare.**
+   - Ce contează nu se strică: un tab vechi vede tot „versiune nouă”.
+   - Riscul real apare doar după un rollback de Hosting.
+   - Singura reparație din config atinge rescrierea care servește toate paginile, cu potrivire
+     neverificată în producție. O greșeală ar da 404 pe orice link direct.
+   - În BACKLOG, cu analiza.
+3. **Ștergerea unui cont îi șterge și rândurile de eroare** (uid, email, user-agent), fără plafonul de
+   3.000. Test pe emulatoare prin handler-ul real; mutația care scoate ștergerea → roșu.
+4. **Callable-urile AI își lasă propriile refuzuri să treacă neschimbate.**
+   - „AI is not configured” ajungea ca `internal` și scria un rând de eroare la fiecare apel.
+   - Trecerea e pusă **după** ramura de buget, care trebuie să dea înapoi cota. Testul verifică acum
+     și că după un kill switch cota s-a întors.
+   - **Două mutații prinse:** fără trecere → 4 roșii; trecerea pusă înaintea ramurii de buget, deci
+     fără ramburs → 4 roșii.
+
+**Verde fals prins pe drum:**
+- Heredoc-ul a făcut `'\'` din nou `'\'`, iar fișierul de test nou nici nu se parsa.
+- Filtrul meu pe ieșire păstra doar `Tests …` și arunca `Test Files 1 failed`. Așa că am văzut
+  „3 passed”, venite de la ALT fișier.
+- De acum filtrul păstrează și linia de fișiere.

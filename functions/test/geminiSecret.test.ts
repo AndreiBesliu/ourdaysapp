@@ -117,12 +117,14 @@ async function usedToday(): Promise<number> {
 describe('the callables read GEMINI_KEY, and only GEMINI_KEY', () => {
   it.each(Object.keys(INPUTS))('%s: the old names alone mean "not configured", and cost nothing', async (name) => {
     onlyOldNames();
-    // The handler throws failed-precondition and its own outer catch re-wraps it as
-    // `internal: AI Error: …` — existing behaviour, recorded in BACKLOG, not what this pins.
-    // What this pins is the sentence: the handler found no key under the name it reads.
-    const err = await call(name, INPUTS[name]).then(() => null, (e: unknown) => e as { message?: string });
-    expect(err?.message ?? '').toContain('AI is not configured on the server.');
+    // Exactly the refusal the handler throws: until 25.09 its own outer catch re-wrapped it as
+    // `internal: AI Error: …` and filed a server-error row on every call.
+    await expect(call(name, INPUTS[name])).rejects.toMatchObject({
+      code: 'failed-precondition', message: 'AI is not configured on the server.',
+    });
     expect(await usedToday()).toBe(0);
+    // A missing key is a configuration answer, not a bug: nothing lands in the error panel.
+    expect((await db.collection('errorLogs').get()).size).toBe(0);
   });
 
   it.each(Object.keys(INPUTS))('%s: with GEMINI_KEY it gets past the key, to the kill switch', async (name) => {
@@ -131,6 +133,8 @@ describe('the callables read GEMINI_KEY, and only GEMINI_KEY', () => {
     await expect(call(name, INPUTS[name])).rejects.toMatchObject({
       code: 'resource-exhausted', message: 'ai-budget/kill-switch',
     });
+    // Nothing reached the model, so the caller's daily unit is given back.
+    expect(await usedToday()).toBe(0);
   });
 });
 

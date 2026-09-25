@@ -69,12 +69,9 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   pentru ceilalți membri, deci un membru poate pune orice text pe ecranele blocate ale grupului.
   Mutările din APK nu scriu `lastMoveAt`, deci un joc jucat doar pe telefon poate fi închis de
   expirarea de 24h în timp ce e jucat (dedus din cod, nemăsurat).
-- **Ștergerea unui cont nu-i șterge rândurile din `errorLogs`.** `adminModerateUser` curăță restul,
-  dar aici rămân uid-ul și emailul lui până la expirarea de 90 de zile (din 25.09). Se adaugă o
-  linie în ștergere, dacă Andrei o vrea imediat.
 - **Rândurile de eroare scrise de server n-au plafon zilnic** (cele de client au 200 pe cont). TTL-ul
-  limitează cât trăiesc, nu câte sunt. Și sunt scrise „fire-and-forget” (`void`) chiar înainte de
-  `throw`, deci pe 2nd gen se pot pierde exact pe căile de eșec.
+  limitează cât trăiesc, nu câte sunt. (Că se pierdeau pe căile de eșec e reparat din 25.09: toate
+  sunt așteptate cu `await`.)
 - **Un membru scos poate accepta o a DOUA invitație încă în așteptare** în același grup. Scoaterea
   nu anulează invitațiile și linkurile lui. Asta cere un trigger pe `groups` sau o listă a celor scoși,
   ținută de server. Decizia lui Andrei.
@@ -97,18 +94,20 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 
 ## 3. Cod și operațiuni (C)
 
-- **„AI nu e configurat” ajunge la client ca `internal`.** Cele patru callable-uri AI aruncă
-  `failed-precondition`, dar propriul lor `catch` o re-împachetează în `internal: AI Error: …` și o
-  scrie în `errorLogs` la FIECARE apel. Clientul nu poate deosebi o configurare lipsă de un defect,
-  iar o cheie lipsă ar umple jurnalul. Măsurat 25.09 prin `functions/test/geminiSecret.test.ts`.
-  Se repară lăsând `HttpsError`-urile proprii să treacă prin `catch` neschimbate.
 - **Bundle-ul, pasul următor.** Wallet, Chat și Settings sunt separate din 25.09: chunk-ul principal
   a scăzut de la 1.592 kB la 1.145 kB. Rămân în el două lucruri: coduri de bare și QR
   (`AssetBarcode`, importat de `EventDetailsModal`) și `GroupChatWidget` (importat de `CalendarHome`).
   Candidatul următor e `AssetBarcode`, încărcat la cerere.
 - **Hosting răspunde cu `index.html` la un `/assets/*.js` lipsă**, cu cache imutabil pe un an (măsurat
-  pe live). Un chunk vechi cerut după un deploy primește HTML ținut în cache. Reparația e o rescriere
-  care exclude `/assets/**`, de probat pe emulatorul de hosting.
+  pe live).
+  - **Ce nu se strică:** un tab vechi după un deploy vede tot „versiune nouă”; Chrome, Firefox și
+    Safari raportează eșecul cu mesajele pe care le recunoaște detectorul.
+  - **Ce se strică:** după un **rollback** de Hosting, browserele care au ținut HTML-ul în cache sub
+    URL-urile vechi nu mai pot încărca acele chunk-uri. Durează până expiră cache-ul.
+  - **Nereparat intenționat (25.09):** singura reparație din config schimbă rescrierea care servește
+    TOATE paginile aplicației. Pe emulator potrivirea e minimatch, în producție nu e verificată, iar o
+    greșeală ar da 404 pe orice link direct de pe live. E prea mult risc pentru un caz de rollback.
+    Se reia cu un test pe emulatorul de hosting ȘI o verificare pe live imediat după deploy.
 - **Warlord** (repo-ul Warlord, nu aici): 44 de PNG-uri, 28 MB, 800–900 kB fiecare → WebP.
 - **Node 22 în Cloud Functions:** învechit din **30.04.2027**, scos din uz pe **31.10.2027**. Trecerea
   la Node 24 înainte de prima dată.

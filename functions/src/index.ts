@@ -251,7 +251,7 @@ async function recordChecklistOutcome(
     // It goes in the health panel because, unlike the conditions this function RECORDS, a failure
     // to record is not an operating condition: there is no burst, and there is something to fix.
     console.error("could not record the checklist outcome", (err as any)?.message || err);
-    void logServerError(
+    await logServerError(
       `could not record the checklist outcome (${reason}): ${(err as any)?.message || err}`,
       "ai:generateChecklist",
       { uid: typeof data?.ownerId === "string" ? data.ownerId : undefined },
@@ -377,7 +377,7 @@ export const autoSuggestChecklist = onDocumentCreated({
     // condition, with every real bug underneath it.
     if (reason === CHECKLIST_ERROR || reason === CHECKLIST_BAD_OUTPUT) {
       console.error("AI Generation Error", error);
-      void logServerError(
+      await logServerError(
         reason === CHECKLIST_BAD_OUTPUT
           ? "model returned a non-array checklist"
           : ((error as any)?.message || "AI generation error"),
@@ -471,7 +471,7 @@ export const onFriendRequestCreated = onDocumentCreated("friend_requests/{reques
   } catch (err) {
     // Fires once; a failure is permanent. The screen then says it could not confirm the sender,
     // which is the honest answer — and this makes the failure visible to the owner.
-    void logServerError(`friend-request sender stamp failed: ${String(err)}`, "friends:stamp", { uid: fromId });
+    await logServerError(`friend-request sender stamp failed: ${String(err)}`, "friends:stamp", { uid: fromId });
   }
 
   try {
@@ -516,7 +516,7 @@ export const onFriendRequestCreated = onDocumentCreated("friend_requests/{reques
       // Reported, not merely logged: a bell that stopped ringing is otherwise indistinguishable
       // from a bell nobody rang, and this is the one path where a person's request reaches
       // somebody without a notification to announce it.
-      void logServerError(
+      await logServerError(
         `friend-request notification suppressed: daily limit ${NOTIF_DAILY_LIMIT} reached`,
         "friends:notifyQuota",
         { uid: fromId },
@@ -572,7 +572,7 @@ export const onGroupInviteCreated = onDocumentCreated("group_invites/{inviteId}"
     });
   } catch (err) {
     // Fires once. The screen then says it could not confirm the sender — the honest answer.
-    void logServerError(`group-invite sender stamp failed: ${String(err)}`, "invites:stamp", { uid: fromId });
+    await logServerError(`group-invite sender stamp failed: ${String(err)}`, "invites:stamp", { uid: fromId });
   }
 });
 
@@ -688,7 +688,13 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
       throw new HttpsError('resource-exhausted', (error as any).message);
     }
     if (isProviderQuotaError(error)) throw new HttpsError('resource-exhausted', AI_QUOTA_CODE);
-    void logServerError((error as any)?.message || "AI generation error", "ai:generateChecklist", { stack: (error as any)?.stack, uid: callerUid });
+    // Our OWN refusals, thrown on purpose inside the try — "AI is not configured" above all — pass
+    // through with the code they were given. They were re-wrapped as `internal: AI Error: …` and
+    // filed as a server error on every call, so the client could not tell a missing key from a
+    // bug, and one missing key would have filled the panel (25.09.2026). AFTER the two branches
+    // above: a budget refusal is an HttpsError too, and must still give the quota back.
+    if (error instanceof HttpsError) throw error;
+    await logServerError((error as any)?.message || "AI generation error", "ai:generateChecklist", { stack: (error as any)?.stack, uid: callerUid });
     throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
   }
 });
@@ -753,7 +759,13 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
       throw new HttpsError('resource-exhausted', (error as any).message);
     }
     if (isProviderQuotaError(error)) throw new HttpsError('resource-exhausted', AI_QUOTA_CODE);
-    void logServerError((error as any)?.message || "AI category error", "ai:suggestCategory", { stack: (error as any)?.stack, uid: callerUid });
+    // Our OWN refusals, thrown on purpose inside the try — "AI is not configured" above all — pass
+    // through with the code they were given. They were re-wrapped as `internal: AI Error: …` and
+    // filed as a server error on every call, so the client could not tell a missing key from a
+    // bug, and one missing key would have filled the panel (25.09.2026). AFTER the two branches
+    // above: a budget refusal is an HttpsError too, and must still give the quota back.
+    if (error instanceof HttpsError) throw error;
+    await logServerError((error as any)?.message || "AI category error", "ai:suggestCategory", { stack: (error as any)?.stack, uid: callerUid });
     throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
   }
 });
@@ -935,7 +947,13 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
       throw new HttpsError('resource-exhausted', (error as any).message);
     }
     if (isProviderQuotaError(error)) throw new HttpsError('resource-exhausted', AI_QUOTA_CODE);
-    void logServerError((error as any)?.message || "AI digest error", "ai:groupDigest", { stack: (error as any)?.stack, uid: callerUid });
+    // Our OWN refusals, thrown on purpose inside the try — "AI is not configured" above all — pass
+    // through with the code they were given. They were re-wrapped as `internal: AI Error: …` and
+    // filed as a server error on every call, so the client could not tell a missing key from a
+    // bug, and one missing key would have filled the panel (25.09.2026). AFTER the two branches
+    // above: a budget refusal is an HttpsError too, and must still give the quota back.
+    if (error instanceof HttpsError) throw error;
+    await logServerError((error as any)?.message || "AI digest error", "ai:groupDigest", { stack: (error as any)?.stack, uid: callerUid });
     throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
   }
 });
@@ -1009,7 +1027,13 @@ Do not include any other text or markdown formatting.`;
       throw new HttpsError('resource-exhausted', (error as any).message);
     }
     if (isProviderQuotaError(error)) throw new HttpsError('resource-exhausted', AI_QUOTA_CODE);
-    void logServerError((error as any)?.message || "AI asset error", "ai:suggestAsset", { stack: (error as any)?.stack, uid: callerUid });
+    // Our OWN refusals, thrown on purpose inside the try — "AI is not configured" above all — pass
+    // through with the code they were given. They were re-wrapped as `internal: AI Error: …` and
+    // filed as a server error on every call, so the client could not tell a missing key from a
+    // bug, and one missing key would have filled the panel (25.09.2026). AFTER the two branches
+    // above: a budget refusal is an HttpsError too, and must still give the quota back.
+    if (error instanceof HttpsError) throw error;
+    await logServerError((error as any)?.message || "AI asset error", "ai:suggestAsset", { stack: (error as any)?.stack, uid: callerUid });
     throw new HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
   }
 });
@@ -2407,6 +2431,10 @@ export const adminModerateUser = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
     // Notifications addressed to a deleted account are unreachable by anyone: the rules key them to
     // the recipient's own uid, so nothing but this can ever remove them.
     const notifications = await deleteQueryInBatches(db.collection("notifications").where("userId", "==", uid));
+    // Error rows carry the person's uid and, for client reports, their email, user agent and urls.
+    // They expire after 90 days (errorRetention.ts); a deleted account's should not wait for that
+    // (25.09.2026). Drained without the 3,000 cap: a client may write 200 a day.
+    const errorLogs = await deleteQueryInBatches(db.collection("errorLogs").where("uid", "==", uid), Number.MAX_SAFE_INTEGER);
 
     // Delete the user's uploaded Storage files.
     const storageDeleted = await deleteStoragePrefixes([
@@ -2436,7 +2464,7 @@ export const adminModerateUser = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
 
     return {
       ok: true, deleted: true, authDeleted, storageDeleted,
-      counts: { groups: groupsSnap.size, events, assets, games, expenses, notifications, friendRequests: frFrom + frTo, friendsUnlinked: myFriends.length },
+      counts: { groups: groupsSnap.size, events, assets, games, expenses, notifications, errorLogs, friendRequests: frFrom + frTo, friendsUnlinked: myFriends.length },
       note: "Group chat messages authored by the user are retained as group history.",
     };
   }
@@ -3089,7 +3117,7 @@ export const aiPreviewScope = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
     // months, and there was no reason for events and chat to be exempt from the lesson.
     for (const [what, src] of [["expenses", expenses], ["events", events], ["chat", chat]] as const) {
       if (src.unavailable) {
-        void logServerError(`${what} ${src.unavailable}`, "ai:previewScope", { uid });
+        await logServerError(`${what} ${src.unavailable}`, "ai:previewScope", { uid });
       }
     }
 
@@ -3141,7 +3169,7 @@ export const aiPreviewScope = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
       },
     };
   } catch (error: any) {
-    void logServerError(error?.message || "aiPreviewScope failed", "ai:previewScope", { stack: error?.stack });
+    await logServerError(error?.message || "aiPreviewScope failed", "ai:previewScope", { stack: error?.stack });
     throw new HttpsError("internal", "Could not read your data.");
   }
 });
