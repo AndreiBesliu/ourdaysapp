@@ -33,9 +33,9 @@ describe('the public mirror reflects, and does not invent', () => {
   it('never publishes a placeholder either', () => {
     // "User" is not better than nothing: the server prefers the mirror over the user document
     // (`profiles.name || users.name`), so a placeholder here outranks the real name there.
-    const out = publicMirrorFor({ email: 'besliandrei@gmail.com' } as never, null);
+    const out = publicMirrorFor({ email: 'jdoe@example.com' } as never, null);
     expect(Object.values(out)).not.toContain('User');
-    expect(Object.values(out)).not.toContain('besliandrei');
+    expect(Object.values(out)).not.toContain('jdoe');
   });
 
   it('normalises the other two fields to null rather than leaving them absent', () => {

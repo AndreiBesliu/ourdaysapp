@@ -266,7 +266,7 @@ function App() {
           //
           // It used to fall back to the e-mail prefix, and on a brand-new account it always
           // reached that fallback: this handler reads `users/{uid}` before Login has written
-          // it, and never re-reads. So everybody ELSE saw “besliandrei” instead of the name
+          // it, and never re-reads. So everybody ELSE saw “jdoe” (the prefix) instead of the name
           // typed on the form — the new account’s own screens read the user doc and looked
           // right, which is why nobody reported it. Worse, the server reads
           // `profiles.name || users.name`, so the invented one OUTRANKED the real one, and a

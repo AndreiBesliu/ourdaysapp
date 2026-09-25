@@ -10,7 +10,7 @@
 // reads `users/{uid}` before the signup path has written it, and never re-reads.
 //
 // It used to fill the gap with `currentUser.email?.split('@')[0]`. So somebody who typed
-// "Andrei Besliu" on the form was published to everybody else as "besliandrei" for the whole first
+// "Jane Doe" on the form was published to everybody else as "jdoe" for the whole first
 // session. Their OWN screens read the user document and looked right, which is why it went
 // unreported. And the server prefers the mirror — `profiles.name || users.name` — so the invented
 // name outranked the real one, and a friendship formed during that session copied it across.

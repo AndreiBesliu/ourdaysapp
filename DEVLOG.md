@@ -9859,3 +9859,35 @@ reverificată adversarial, plus un critic de acoperire. 9 agenți.
 - pasul 6, `stamp-error-expiry --apply`, cu cheia de scriere a lui Andrei;
 - verificarea din spatele logării (5 minute, lista din `OWNER_VERIFY`);
 - decizia despre owner.
+
+
+## 2026-09-25 · Mutarea cheii Gemini în Secret Manager: gata în cod, așteaptă secretul (Started)
+
+**Prompt (Andrei):** a ales „Mutarea acum (Recommended)” la întrebarea despre statutul de owner pierdut
+pe live, apoi „fa o pauza cand poti”. **Model:** Claude Opus 5.5.
+
+- **Codul:**
+  - am inversat amânarea (`7969cce`) pe sursă: `defineSecret("GEMINI_KEY")`, pe cele cinci funcții AI;
+  - `functions/test/geminiSecret.test.ts` e restaurat;
+  - `functions/.env`, cu adresa de bootstrap, s-a întors în `functions/` (ignorat de git).
+- **Garda de predeploy, rescrisă:**
+  - cere `BOOTSTRAP_ADMIN_EMAILS` nevid în `.env` / `.env.<proiect>`, citit ca CLI-ul: aceeași ordine,
+    ultima valoare câștigă, fără diferență între litere mari și mici;
+  - refuză orice `.env.<alias>` și orice nume al cheii Gemini dintr-un fișier.
+  - Teste: 10. Mutații: 9, toate roșii (secretul scos de pe o funcție, numele vechi citit, lista cerută
+    golită, lista interzisă golită, verificarea de gol, refuzul pe alias, „ultima valoare câștigă”,
+    literele, ordinea).
+- **Recenzia adversarială** (18 agenți) n-a găsit nimic care să blocheze deploy-ul. Am corectat:
+  - **o afirmație falsă a mea:** un `defineSecret` NU face deploy-ul să folosească doar dotenv-ul; doar
+    un fișier existent o face (sursa CLI-ului, `prepare.js`). Corectat în `geminiKey.ts`, gardă,
+    `CLAUDE.md` și memorie;
+  - **garda păcălibilă:** aliasuri, ultima valoare, `.ENV`;
+  - **adresa ta**, încă în clar într-un test și în două comentarii, înlocuită cu `jdoe@example.com`;
+  - **documentele** care spuneau „făcut” înainte de deploy;
+  - **revocarea cheii vechi**, legată acum de confirmarea din `live-diff`;
+  - **promptul interactiv** pentru un secret lipsă. Deploy-ul de funcții rulează deci doar cu
+    `--non-interactive`.
+- **Porți:** `tsc`, lint, 1903 teste, 442 pe emulatoare, tz, build, split, garda — toate verzi.
+- **NU s-a publicat nimic.** `GEMINI_KEY` nu există încă pe live (404, verificat de patru ori). Pasul
+  lui Andrei e `npx firebase functions:secrets:set GEMINI_KEY --project live`. După el, deploy-ul
+  `--only functions --non-interactive`, apoi `live-diff` și intrarea „Completed”.

@@ -14,11 +14,20 @@ React + TypeScript + Vite + Tailwind, Firebase (Auth, Firestore, Functions, Host
   / `--only firestore:indexes` / `--only storage`. **`firestore:indexes` poartă și politica TTL** pe
   `errorLogs.expireAt` (din 25.09): dacă `firestore.indexes.json` s-a schimbat, pasul ăsta nu e opțional,
   altfel rândurile au dată de expirare și nu expiră niciodată. La el se răspunde **Nu** la ștergerea
-  indecșilor care există doar pe live. **Cheia Gemini e variabila simplă `GEMINI_API_KEY_LOCAL` de pe
-  funcțiile live** (mutarea în Secret Manager e amânată, `BACKLOG.md`). Deploy-ul o păstrează DOAR fără
-  `functions/.env`, `.env.live`, `.env.default` sau `.env.our-days-2a939` (`.env.local` e doar al
-  emulatorului) — un astfel de fișier înlocuiește tot mediul și oprește AI-ul. Predeploy-ul
-  `scripts/functions-env-guard.mjs` refuză deploy-ul atunci; nu-l ocoli.
+  indecșilor care există doar pe live. **Cheia Gemini se citește din Secret Manager** (`GEMINI_KEY`),
+  doar pe cele cinci funcții AI (în cod din 25.09; pe live după primul deploy de funcții de după
+  `secrets:set`). **Deploy-ul de funcții rulează cu `--non-interactive`:** interactiv, un secret lipsă
+  e cerut la prompt și creat pe loc.
+  **Cât timp există `functions/.env`**, fiecare deploy de funcții pune pe funcții exact conținutul lui,
+  plus secretele. Nimic din mediul de pe live nu se păstrează. Fără fișier, mediul de pe live s-ar
+  păstra. Un secret declarat NU schimbă asta (măsurat în sursa CLI-ului pe 25.09).
+  - `functions/.env` trebuie să existe și să conțină `BOOTSTRAP_ADMIN_EMAILS`. Fără adresă, contul
+    lui Andrei nu mai e recunoscut ca owner; s-a întâmplat pe 25.09. Copia stă în
+    `~/.ourdays/functions.env.bootstrap`.
+  - Cheia Gemini nu are voie în fișier.
+  - Fără `.env.live` / `.env.default`: predeploy-ul nu știe ce alias folosește comanda.
+  - Predeploy-ul `scripts/functions-env-guard.mjs` refuză un deploy care încalcă oricare dintre ele;
+    nu-l ocoli.
 - **CI:** `.github/workflows/ci.yml` — typecheck + teste + build la fiecare push pe `main`. **Nu** face deploy: livrarea rămâne manuală și deliberată.
 
 ## ⚠️ Warlord e un SUBMODUL, nu cod din repo-ul ăsta

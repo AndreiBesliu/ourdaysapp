@@ -51,26 +51,31 @@
   - **Cum arată bine:** toate merg ca înainte.
   - **Ce se strică dacă ceva e greșit:** exact funcția aceea. N-o poate vedea nimeni altcineva.
 
-- [ ] **DECIZIE, nouă (25.09): contul tău nu mai e recunoscut ca „owner” pe live.**
-  **Am greșit mai sus, în versiunea dinainte a acestui bloc.** Am scris că recuperarea prin emailul de
-  bootstrap „e oprită și azi pe live”. Nu era: codul publicat până azi avea adresa ta scrisă direct în
-  el. Deploy-ul a oprit-o, fiindcă adresa stă acum în afara repo-ului și n-a mai ajuns pe funcții.
-  **Ce înseamnă concret:**
-  - din admin **nu mai poți opri kill switch-ul AI și nu mai poți ridica limitele AI**; poți doar
-    să le faci mai sigure (să pornești kill switch-ul, să cobori limitele);
-  - în lista de admini apari ca „last”, nu ca „owner”;
-  - dacă înregistrarea ta de admin ar fi ștearsă, nimic nu te mai readuce automat.
+**✅ DECIS (25.09): contul tău pierduse statutul de „owner” pe live — ai ales mutarea în Secret Manager.**
+**Am greșit într-o versiune de mai devreme a acestui bloc.** Am scris că recuperarea prin emailul de
+bootstrap „e oprită și azi pe live”. Nu era: codul publicat până azi avea adresa ta scrisă direct în el.
+Deploy-ul a oprit-o. Concret:
+- din admin nu mai puteai opri kill switch-ul AI și nu mai puteai ridica limitele AI;
+- în lista de admini apăreai ca „last”;
+- recuperarea automată era oprită.
 
-  Accesul tău de admin **nu** e afectat: îl dă înregistrarea din `admins`, care există.
-  **Ieșire de urgență, dacă ai nevoie azi:** documentul `aiConfig/live` se poate edita direct din
-  consola Firebase.
-  **Variante:**
-  - **(a) Facem acum mutarea în Secret Manager,** ca să se poată întoarce adresa. Tu rulezi o comandă
-    și lipești cheia, iar eu fac restul și un deploy doar de funcții. Asta repară tot și scoate și cheia
-    în clar. **Recomandarea mea.**
-  - **(b) Rămâne așa până la mutare,** cu ieșirea de urgență de mai sus.
-  - **(c) „Owner” citit din înregistrarea ta de admin** (`addedBy: bootstrap`), fără adresă. Repară
-    kill switch-ul și eticheta, dar nu și recuperarea. E o schimbare de autorizare, deci e a ta.
+Accesul de admin n-a fost afectat. Codul mutării e gata: cheia vine din `GEMINI_KEY`, doar pe cele cinci
+funcții AI, iar adresa se întoarce din `functions/.env`. Un pas de predeploy refuză de acum orice deploy
+fără adresă.
+
+- [ ] **Rulezi tu, o dată:** `npx firebase functions:secrets:set GEMINI_KEY --project live`, și lipești
+      cheia la prompt. Ideal o cheie **nouă**, restricționată la Generative Language API. Eu nu văd
+      cheia. Imediat după, fac deploy-ul doar de funcții.
+      - **Cum arată bine:**
+        - `live-diff` arată secretul pe exact cele cinci funcții AI și variabila veche pe niciuna;
+        - în admin apari din nou ca „owner”;
+        - un AI Digest merge.
+      - **Ce se strică dacă nu:** live rămâne ca acum, fără owner. Și **orice** deploy de funcții, chiar
+        și o reparație mică, se oprește înainte să schimbe ceva, până există secretul.
+      - **Cheia veche, dacă ai făcut una nouă:** o revoci din Google AI Studio **numai după ce îți
+        confirm eu** două lucruri: deploy-ul s-a terminat fără eroare pe nicio funcție, iar `live-diff`
+        arată variabila veche pe zero funcții. Dacă o revoci înainte, AI-ul se oprește pe orice funcție
+        care încă o folosește.
 
 ---
 
