@@ -9608,3 +9608,64 @@ localhost, și service worker-ul de push în dev.
 - Coduri de bare/QR și `GroupChatWidget` rămân în chunk-ul principal; candidatul următor e
   `AssetBarcode`.
 - Pe live, un `/assets/*.js` lipsă e servit ca `index.html`, cu cache de un an.
+
+## 2026-09-25 · Recenzia adversarială a zilei: patru constatări, toate închise
+
+**Prompt (Andrei):** „continua". **Model:** Claude Opus 5.5.
+
+**Recenzia:**
+- 5 lentile peste cele opt commit-uri de azi (`6fd2929..f788d11`): autorizare, APK și deploy, logică,
+  teste, operațiuni.
+- Fiecare constatare a fost atacată de un sceptic care pornea de la „respins”.
+- **11 agenți, ~1,8M tokeni**, sub estimarea de 3–3,5M: lentilele au găsit puțin.
+- Nimic nu a rămas neverificat; nicio coadă aruncată.
+- Au rezistat 5 constatări, adică 4 probleme distincte, toate mici sau medii.
+
+### 1. Chat-ul create-only refuza reîncercarea automată a APK-ului
+
+Găsită independent de două lentile.
+- **Cum:** APK-ul trimite o poză printr-un singur POST multipart. Dacă răspunsul se pierde după ce
+  obiectul s-a scris, SDK-ul de Storage din bundle trimite același POST, la același nume.
+- **Efect:** create-only refuza reîncercarea. Trimiterea pica, iar în bucket rămânea un orfan.
+- **De ce contează:** era o cerere a APK-ului refuzată fără să fi fost acceptată. Regula lui Andrei
+  spune că nu se refuză ce trimite APK-ul decât cu acceptul lui.
+
+**Reparat:**
+- **`resent()`:** pentru numele vechi, și doar în fereastra de 10 minute, trece aceeași încărcare cu
+  **aceiași bytes** (mărime și `md5Hash` egale). O înlocuire cere bytes diferiți și rămâne refuzată.
+- **Măsurat pe emulator că `md5Hash` e completat:** fără comparația lui, o înlocuire de aceeași mărime
+  trecea; cu ea, e refuzată. Dacă în producție ar lipsi, ramura pică închis, adică exact comportamentul
+  de azi.
+
+### 2. Politica TTL lipsea din pașii de deploy ai owner-ului
+
+Fără `--only firestore:indexes`, rândurile primesc `expireAt` și nu expiră niciodată. Nu apare nicio
+eroare.
+
+**Reparat:**
+- în `OWNER_VERIFY.md`, secvența completă de deploy, în ordine, cu verificările de după;
+- în `CLAUDE.md`, lista de deploy.
+
+### 3. `peek` spunea „ești înăuntru” pentru un link personal folosit, după unfriend
+
+**Reparat:** `peek` verifică acum lista de prieteni a celui care a făcut linkul, cum verifica deja
+apartenența la grup.
+
+### 4. Testul ferestrei acoperea doar pozele, nu și notele vocale
+
+Acum le acoperă pe amândouă. Verifică și citirea, și retrimiterea, cu câte un geamăn cu uid în nume
+drept control.
+
+### Proba
+
+- **Teste noi:**
+  - 7 în Storage, printre care reîncercarea, înlocuirea de aceeași mărime și un fișier cu uid în nume;
+  - 1 caz APK: aceeași poză trimisă de două ori;
+  - fereastra, extinsă la notele vocale;
+  - 1 test pentru `peek`.
+- **Cinci mutații, toate prinse:**
+  - fără `md5Hash` → 2 roșii;
+  - fără fereastră la retrimitere → 2;
+  - fără ramura de reîncercare → 2;
+  - reîncercarea permisă pentru orice nume → 1;
+  - ramura personală din `peek` scoasă → 1.

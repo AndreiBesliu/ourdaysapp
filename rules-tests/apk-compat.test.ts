@@ -160,6 +160,15 @@ describe('Storage: what the installed APK uploads, then reads straight back', ()
     await assertSucceeds(uploadBytes(r, photo(), meta));
     await assertSucceeds(getDownloadURL(r));
   });
+
+  it('a chat photo whose upload response was lost, re-sent by the SDK to the same name', async () => {
+    // Bundle: `JT(n,g)` is one multipart POST; the SDK retries it on a network error, same name,
+    // same bytes — after the first one may already have been written (pre-deploy review, 25.09).
+    const r = ref(filesAs(BOB), `chat-images/${G1}/${TS}_retry.png`);
+    await assertSucceeds(uploadBytes(r, photo()));
+    await assertSucceeds(uploadBytes(r, photo()));
+    await assertSucceeds(getDownloadURL(r));
+  });
 });
 
 describe('what the installed APK writes into a game', () => {

@@ -180,6 +180,14 @@ describe('a personal link (no group)', () => {
     expect(await link(code)).toMatchObject({ uses: 1 });
   });
 
+  it('peek: "already joined" while still friends; spent once unfriended', async () => {
+    const code = await mint(ALICE, null);
+    await call('redeemGroupInviteLink', DAVE, { code });
+    expect(await call('peekGroupInviteLink', DAVE, { code })).toMatchObject({ valid: true, alreadyJoined: true });
+    await call('removeFriend', ALICE, { friendUid: DAVE });
+    expect(await call('peekGroupInviteLink', DAVE, { code })).toMatchObject({ valid: false, reason: 'spent', alreadyJoined: false });
+  });
+
   it('once used, it does not re-friend somebody who was unfriended since', async () => {
     const code = await mint(ALICE, null);
     await call('redeemGroupInviteLink', DAVE, { code });

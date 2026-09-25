@@ -47,6 +47,16 @@ service firebase.storage {
     function justWritten() {
       return request.time < resource.timeCreated + duration.value(10, 'm');
     }
+    // The SAME upload arriving again: identical bytes, within that window. The installed APK sends
+    // a chat photo as one multipart POST, and its Storage SDK re-sends that POST to the same name
+    // when the response is lost — after the object was already written. Create-only refused that
+    // retry: the send failed and left an orphan (pre-deploy review, 25.09.2026). A swap needs
+    // DIFFERENT bytes, which this still refuses. If `md5Hash` is ever absent here, it fails closed.
+    function resent() {
+      return justWritten()
+        && request.resource.size == resource.size
+        && request.resource.md5Hash == resource.md5Hash;
+    }
 
     // ── Per-user upload folders: <root>/{uid}/<file> ──
     //
@@ -101,7 +111,8 @@ service firebase.storage {
     match /chat-images/{groupId}/{fileName} {
       allow get: if namedFor(fileName)
         || (isSignedIn() && fileName.matches('[0-9]+_.*') && justWritten());
-      allow create: if isSignedIn() && resource == null && isImage()
+      allow create: if isSignedIn() && isImage()
+        && (resource == null || (fileName.matches('[0-9]+_.*') && resent()))
         && (fileName.matches(request.auth.uid + '_.*')
             // Transitional: the shape the previous bundle writes, `<millis>_<name>`.
             || fileName.matches('[0-9]+_.*'));
@@ -113,7 +124,8 @@ service firebase.storage {
       // Gated on the TYPE as well as the size, since 19.09: the app wraps the recorder's chunks in
       // `new Blob(chunks, { type: 'audio/webm' })`, so what arrives is that, always. Before, this
       // folder accepted an HTML page or an executable up to 15 MiB.
-      allow create: if isSignedIn() && resource == null &&
+      allow create: if isSignedIn() &&
+        (resource == null || (fileName.matches('[0-9]+\\.webm') && resent())) &&
         request.resource.contentType.matches('audio/.*') &&
         request.resource.size < 15 * 1024 * 1024 &&
         (fileName.matches(request.auth.uid + '_.*')

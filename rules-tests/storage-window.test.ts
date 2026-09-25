@@ -1,12 +1,14 @@
 // rules-tests/storage-window.test.ts
 //
 // The ten-minute window for legacy chat names CLOSES. A legacy name (`<millis>_<name>`, what the
-// installed APK writes) says nobody, so storage.rules lets it be read for a short time after it
-// was written — the uploader's own getDownloadURL — and then by nobody. See storage.rules.
+// installed APK writes; `<millis>.webm` for voice notes from an old web tab) says nobody, so
+// storage.rules lets it be read — and re-sent with identical bytes — for a short time after it
+// was written, and then by nobody. See storage.rules.
 //
 // The emulator's clock cannot be moved, so this loads storage.rules with the window set to ZERO
 // seconds, into its own environment. Everything else is the real file. The needle is asserted to
 // occur exactly once, so renaming the window cannot turn this test into one that tests nothing.
+// Both folders, since 25.09: a voice-note window that never closed passed every test before.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -17,7 +19,7 @@ import { emulatorAt } from './_harness';
 
 const NEEDLE = "duration.value(10, 'm')";
 const RULES = readFileSync(join(__dirname, '..', 'storage.rules'), 'utf8');
-const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+const BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 const ALICE = 'uid-alice';
 
 let env: RulesTestEnvironment;
@@ -33,16 +35,25 @@ afterAll(async () => { await env?.cleanup(); });
 
 const files = () => env.authenticatedContext(ALICE).storage();
 
-describe('the legacy window', () => {
-  it('once closed, not even the uploader reads a legacy name back', async () => {
-    const path = 'chat-images/group-one/1758000000200_p.png';
-    await assertSucceeds(uploadBytes(ref(files(), path), PNG, { contentType: 'image/png' }));
-    await assertFails(getDownloadURL(ref(files(), path)));
+const SHAPES = [
+  ['chat-images/group-one/1758000000200_p.png', `chat-images/group-one/${ALICE}_1758000000200_p.png`, { contentType: 'image/png' }],
+  ['chat-audio/group-one/1758000000200.webm', `chat-audio/group-one/${ALICE}_1758000000200.webm`, { contentType: 'audio/webm' }],
+] as const;
+
+describe('the legacy window, closed', () => {
+  it.each(SHAPES)('%s — not even the uploader reads it back', async (legacy, _named, meta) => {
+    await assertSucceeds(uploadBytes(ref(files(), legacy), BYTES, meta));
+    await assertFails(getDownloadURL(ref(files(), legacy)));
   });
 
-  it('while a uid-named file is unaffected — so it was the window that refused, not the load', async () => {
-    const path = `chat-images/group-one/${ALICE}_1758000000200_p.png`;
-    await assertSucceeds(uploadBytes(ref(files(), path), PNG, { contentType: 'image/png' }));
-    await assertSucceeds(getDownloadURL(ref(files(), path)));
+  it.each(SHAPES)('%s — nor re-sends the same bytes', async (legacy, _named, meta) => {
+    const path = legacy.replace('1758000000200', '1758000000210');
+    await assertSucceeds(uploadBytes(ref(files(), path), BYTES, meta));
+    await assertFails(uploadBytes(ref(files(), path), BYTES, meta));
+  });
+
+  it.each(SHAPES)('while its uid-named twin %s is unaffected — so it was the window, not the load', async (_legacy, named, meta) => {
+    await assertSucceeds(uploadBytes(ref(files(), named), BYTES, meta));
+    await assertSucceeds(getDownloadURL(ref(files(), named)));
   });
 });

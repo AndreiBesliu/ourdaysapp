@@ -278,6 +278,35 @@ describe('an upload never replaces what is already there', () => {
     // …while a NEW legacy name still goes through: the APK always writes a fresh one.
     await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path.replace('1758000000400', '1758000000401')), PNG, meta));
   });
+
+  // The pre-deploy review of 25.09 found the one legitimate "overwrite": the APK's Storage SDK
+  // re-sends a multipart upload to the same name when the response was lost after the write.
+  // Identical bytes, moments later. Allowed for the legacy names the APK writes — and nothing else.
+  const SAME_SIZE_OTHER_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0b]);
+
+  it.each([
+    ['chat-images/group-one/1758000000500_p.png', image],
+    ['chat-audio/group-one/1758000000500.webm', audio],
+  ] as const)('%s — the SAME bytes again are the SDK retrying, and go through', async (path, meta) => {
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path), PNG, meta));
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path), PNG, meta));
+  });
+
+  it.each([
+    ['chat-images/group-one/1758000000501_p.png', image],
+    ['chat-audio/group-one/1758000000501.webm', audio],
+  ] as const)('%s — the same SIZE with other bytes is a swap, and is refused', async (path, meta) => {
+    expect(SAME_SIZE_OTHER_BYTES.length).toBe(PNG.length);
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path), PNG, meta));
+    await assertFails(uploadBytes(ref(filesAs(BOB), path), SAME_SIZE_OTHER_BYTES, meta));
+    await assertFails(uploadBytes(ref(filesAs(ALICE), path), SAME_SIZE_OTHER_BYTES, meta));
+  });
+
+  it('a uid-named chat file gets no such allowance — the web does not re-send that way', async () => {
+    const path = `chat-images/group-one/${ALICE}_1758000000502_p.png`;
+    await assertSucceeds(uploadBytes(ref(filesAs(ALICE), path), PNG, image));
+    await assertFails(uploadBytes(ref(filesAs(ALICE), path), PNG, image));
+  });
 });
 
 describe('deleting what I uploaded', () => {

@@ -157,6 +157,13 @@ export const peekGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
     const g = await admin.firestore().doc(`groups/${d.groupId}`).get();
     const members = g.data()?.members;
     if (!Array.isArray(members) || !members.includes(request.auth.uid)) verdict = "spent";
+  } else if (verdict === "already" && request.auth?.uid && typeof d.createdBy === "string" && d.createdBy) {
+    // A PERSONAL link's one effect is the friendship. Somebody who used it and was unfriended since
+    // is not "in" anything — the same story, told the same way (pre-deploy review, 25.09.2026).
+    const inviter = await admin.firestore().doc(`users/${d.createdBy}`).get();
+    const friends = inviter.data()?.friends;
+    const caller = request.auth.uid;
+    if (!Array.isArray(friends) || !friends.some((f: { uid?: unknown } | null) => f?.uid === caller)) verdict = "spent";
   }
   const alreadyJoined = verdict === 'already';
   const admits = verdict === 'ok' || alreadyJoined;

@@ -40,6 +40,26 @@ mai jos, deploy-ul pică **înainte** să schimbe ceva. Uitarea e zgomotoasă, n
         legat de `autoSuggestChecklist`. Se șterge numai după ce `functions:list` arată că nu-l mai
         folosește nimeni; altfel trigger-ul nu mai pornește.
 
+- [ ] **Confirmă-mi deploy-ul, și îl rulez eu în ordinea de mai jos** (tot ce s-a reparat pe 24–25.09;
+      nimic nu e publicat). Înainte de **30.10**, când funcțiile pe Node 20 nu se mai pot publica.
+      1. **Funcțiile** — `--only functions`. Cere secretul de mai sus.
+      2. **Regulile și indecșii Firestore** — `--only firestore` (amândouă). Indecșii aduc politica TTL
+         pe jurnalul de erori. **Nu** la orice propunere de a șterge un index care există doar pe live.
+      3. **Regulile Storage** — `--only storage`. Independente de rest.
+      4. **Verificarea ștampilelor** — `node scripts/request-stamps.mjs --before <ora pasului 1>`. Arată
+         dacă cineva a scris o ștampilă falsă de expeditor în fereastra dinaintea regulilor.
+      5. **Hosting, imediat** — `--only hosting`. Până atunci, un tab web vechi întâlnește regulile noi:
+         o editare de ocurență se pierde, clopoțelul arată chei brute.
+      6. **La cel puțin o oră după pasul 1:** `stamp-error-expiry --apply`, cu cheia de scriere de la
+         migrarea datei de naștere.
+      - **Cum arată bine:**
+        - `functions:list` arată secretul pe exact cele cinci funcții AI;
+        - tab-ul TTL din consola Firestore arată `errorLogs.expireAt` **ACTIVE**, poate după câteva
+          minute în starea CREATING;
+        - o poză trimisă din telefon și una de pe web ajung în chat.
+      - **Ce se strică dacă se sare pasul 2:** rândurile de eroare primesc data de expirare, dar nu
+        expiră niciodată. Nu dă nicio eroare; se vede doar în tab-ul TTL.
+
 ---
 
 ## ⚠️ Cineva putea sa te bage intr-un grup fara sa te intrebe (reparat 22.09)

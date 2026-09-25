@@ -130,7 +130,7 @@ exports.createGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
  * list, never the creator's uid or email.
  */
 exports.peekGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     const { code } = request.data || {};
     if (typeof code !== "string" || !code || code.length > 64) {
         throw new https_1.HttpsError("invalid-argument", "A code is required.");
@@ -151,6 +151,15 @@ exports.peekGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
         const g = await admin.firestore().doc(`groups/${d.groupId}`).get();
         const members = (_d = g.data()) === null || _d === void 0 ? void 0 : _d.members;
         if (!Array.isArray(members) || !members.includes(request.auth.uid))
+            verdict = "spent";
+    }
+    else if (verdict === "already" && ((_e = request.auth) === null || _e === void 0 ? void 0 : _e.uid) && typeof d.createdBy === "string" && d.createdBy) {
+        // A PERSONAL link's one effect is the friendship. Somebody who used it and was unfriended since
+        // is not "in" anything — the same story, told the same way (pre-deploy review, 25.09.2026).
+        const inviter = await admin.firestore().doc(`users/${d.createdBy}`).get();
+        const friends = (_f = inviter.data()) === null || _f === void 0 ? void 0 : _f.friends;
+        const caller = request.auth.uid;
+        if (!Array.isArray(friends) || !friends.some((f) => (f === null || f === void 0 ? void 0 : f.uid) === caller))
             verdict = "spent";
     }
     const alreadyJoined = verdict === 'already';

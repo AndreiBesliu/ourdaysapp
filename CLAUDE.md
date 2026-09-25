@@ -11,6 +11,10 @@ React + TypeScript + Vite + Tailwind, Firebase (Auth, Firestore, Functions, Host
 - **Build:** `npm run build` (= `tsc -b && vite build`)
 - **Teste:** `npm test` (Vitest, fără DOM — logica jocului Warlord)
 - **Deploy:** `npx firebase deploy --only hosting` / `--only functions` / `--only firestore:rules`
+  / `--only firestore:indexes` / `--only storage`. **`firestore:indexes` poartă și politica TTL** pe
+  `errorLogs.expireAt` (din 25.09): dacă `firestore.indexes.json` s-a schimbat, pasul ăsta nu e opțional,
+  altfel rândurile au dată de expirare și nu expiră niciodată. La el se răspunde **Nu** la ștergerea
+  indecșilor care există doar pe live. Funcțiile cer secretul `GEMINI_KEY` în Secret Manager.
 - **CI:** `.github/workflows/ci.yml` — typecheck + teste + build la fiecare push pe `main`. **Nu** face deploy: livrarea rămâne manuală și deliberată.
 
 ## ⚠️ Warlord e un SUBMODUL, nu cod din repo-ul ăsta
