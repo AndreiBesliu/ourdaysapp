@@ -18,4 +18,7 @@ export default defineConfig({
     // module error.
     dedupe: ['react', 'react-dom'],
   },
+  // dist/.vite/manifest.json: which chunk holds which module. scripts/check-split.mjs reads it to
+  // keep the lazy screens out of what loads at boot. Not published: firebase.json ignores .vite.
+  build: { manifest: true },
 })

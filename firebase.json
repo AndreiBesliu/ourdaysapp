@@ -2,12 +2,14 @@
   "hosting": {
     "predeploy": [
       "node scripts/tree-clean.mjs",
-      "node scripts/check-bundle.mjs"
+      "node scripts/check-bundle.mjs",
+      "node scripts/check-split.mjs"
     ],
     "public": "dist",
     "ignore": [
       "firebase.json",
       "**/.*",
+      "**/.vite/**",
       "**/node_modules/**"
     ],
     "headers": [

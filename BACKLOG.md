@@ -100,8 +100,13 @@ pică exact când se ajunge aici.
   scrie în `errorLogs` la FIECARE apel. Clientul nu poate deosebi o configurare lipsă de un defect,
   iar o cheie lipsă ar umple jurnalul. Măsurat 25.09 prin `functions/test/geminiSecret.test.ts`.
   Se repară lăsând `HttpsError`-urile proprii să treacă prin `catch` neschimbate.
-- **Bundle-ul:** chunk-ul principal are 1,5 MB (425 kB gzip). De împărțit pe rute: Wallet, Chat,
-  Settings.
+- **Bundle-ul, pasul următor.** Wallet, Chat și Settings sunt separate din 25.09: chunk-ul principal
+  a scăzut de la 1.592 kB la 1.145 kB. Rămân în el două lucruri: coduri de bare și QR
+  (`AssetBarcode`, importat de `EventDetailsModal`) și `GroupChatWidget` (importat de `CalendarHome`).
+  Candidatul următor e `AssetBarcode`, încărcat la cerere.
+- **Hosting răspunde cu `index.html` la un `/assets/*.js` lipsă**, cu cache imutabil pe un an (măsurat
+  pe live). Un chunk vechi cerut după un deploy primește HTML ținut în cache. Reparația e o rescriere
+  care exclude `/assets/**`, de probat pe emulatorul de hosting.
 - **Warlord** (repo-ul Warlord, nu aici): 44 de PNG-uri, 28 MB, 800–900 kB fiecare → WebP.
 - **Node 22 în Cloud Functions:** învechit din **30.04.2027**, scos din uz pe **31.10.2027**. Trecerea
   la Node 24 înainte de prima dată.

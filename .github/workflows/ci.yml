@@ -71,6 +71,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The lazy screens (Wallet, Chat, Settings, Admin, the log, Warlord) stay out of what loads at
+      # boot, and so does the Wallet scanner — see scripts/bundleSplit.mjs. Needs no .env.
+      - name: Split guard
+        run: node scripts/check-split.mjs
+
       # The Firestore rules are the only thing standing between a browser and the data, and until
       # 2026-09-20 nothing in CI ran a single one of the 207 tests that probe them. They needed a
       # JDK and an emulator, so they stayed a local-only gate — which means they only ran when

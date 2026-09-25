@@ -12,11 +12,8 @@ import { Capacitor } from '@capacitor/core';
 // Components
 import Login from './screens/Login';
 import CalendarHome from './screens/CalendarHome';
-import Wallet from './screens/Wallet';
-import Settings from './screens/Settings';
 import Friends from './screens/Friends';
 import JoinInvite, { peekPendingInvite } from './screens/JoinInvite';
-import Chat from './screens/Chat';
 import ErrorBoundary from './components/ErrorBoundary';
 import NewVersionNotice from './components/NewVersionNotice';
 import { installGlobalErrorHandlers, reportError } from './reportError';
@@ -25,6 +22,27 @@ const Admin = lazy(() => import('./screens/Admin')); // owner-only, rarely used 
 installGlobalErrorHandlers();
 const Warlord = lazy(() => import('./screens/Warlord')); // large embedded game → lazy chunk
 const PeriodLog = lazy(() => import('./screens/PeriodLog'));
+// Out of the entry chunk since 25.09.2026 — the audit found everything but Warlord, Admin and the
+// log in one 1.5 MB file. Wallet alone carries the barcode scanner (html5-qrcode / ZXing), about
+// 413 kB of it, which almost nobody needs at boot. The loaders are named so the warm-up below can
+// fetch the same chunks while the app is idle; `scripts/check-split.mjs` fails a build that pulls
+// any of them back into what loads at boot.
+const loadWallet = () => import('./screens/Wallet');
+const loadChat = () => import('./screens/Chat');
+const loadSettings = () => import('./screens/Settings');
+const Wallet = lazy(loadWallet);
+const Chat = lazy(loadChat);
+const Settings = lazy(loadSettings);
+import { warmRoutes } from './utils/routeWarmup';
+
+/** What a lazy screen shows for the moment its chunk loads: the app's own spinner, no text. */
+function RouteFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-transparent">
+      <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+    </div>
+  );
+}
 import { useThemeStore } from './store';
 import { shouldUseLightText, primaryTokens } from './utils/themeContrast';
 import { isValidZone, localZone } from './utils/eventTime';
@@ -318,6 +336,22 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // Fetch the lazy screens once somebody is signed in and the browser is idle. While online, so a
+  // first visit to Wallet later — offline, or after a deploy has replaced the chunk — still works:
+  // the module is already in memory. Above the `if (loading)` return, like every hook here.
+  useEffect(() => {
+    if (!user) return;
+    const warm = () => { void warmRoutes([loadWallet, loadChat, loadSettings]); };
+    const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+    const cic = (window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+    if (ric && cic) {
+      const id = ric(warm, { timeout: 5000 });
+      return () => cic(id);
+    }
+    const id = window.setTimeout(warm, 2000);
+    return () => window.clearTimeout(id);
+  }, [user]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-transparent">
@@ -361,12 +395,12 @@ function App() {
         />
         <Route 
           path="/wallet" 
-          element={user ? <Wallet /> : <Navigate to="/login" />} 
+          element={user ? <Suspense fallback={<RouteFallback />}><Wallet /></Suspense> : <Navigate to="/login" />} 
         />
 
         <Route
           path="/settings"
-          element={user ? <Settings /> : <Navigate to="/login" />}
+          element={user ? <Suspense fallback={<RouteFallback />}><Settings /></Suspense> : <Navigate to="/login" />}
         />
         <Route
           path="/friends"
@@ -374,7 +408,7 @@ function App() {
         />
         <Route
           path="/chat"
-          element={user ? <Chat /> : <Navigate to="/login" />}
+          element={user ? <Suspense fallback={<RouteFallback />}><Chat /></Suspense> : <Navigate to="/login" />}
         />
         <Route
           path="/admin"

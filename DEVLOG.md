@@ -9558,3 +9558,53 @@ fiecare test trecea.
 **Ordinea de deploy:** întâi funcțiile, apoi `firestore:indexes`, apoi, peste cel puțin o oră și cu
 confirmarea lui Andrei, `stamp-error-expiry --apply`. La deploy-ul de indecși se răspunde **Nu**
 la orice propunere de a șterge un index care există doar pe live.
+
+## 2026-09-25 · C — bundle-ul: Wallet, Chat și Settings ies din ce se încarcă la pornire
+
+**Prompt (Andrei):** „continua". **Model:** Claude Opus 5.5.
+
+**Ce era:** chunk-ul principal avea ~1,59 MB și conținea tot, în afară de Warlord, Admin și jurnal. Doar
+Wallet aducea scanner-ul de coduri (html5-qrcode / ZXing), cam 413 kB, de care aproape nimeni n-are
+nevoie la pornire.
+
+**Reparat:**
+- **Cele trei ecrane se încarcă la cerere** (`React.lazy`), cu spinner-ul aplicației ca fallback.
+- **Încălzire:** după logare, când browserul e liber, `warmRoutes` aduce cele trei chunk-uri.
+  - Așa, o primă vizită în Wallet mai târziu merge și fără semnal, și după un deploy.
+  - Nu lasă niciodată o respingere neprinsă, altfel raportorul de erori ar trece-o drept crash.
+  - Hook-ul stă deasupra lui `if (loading)`, verificat de poarta de lint.
+- **Manifestul Vite** (`build.manifest`) nu se publică: `firebase.json` ignoră `**/.vite/**`.
+
+**Rezultat:**
+
+| | Înainte | Acum |
+|---|---|---|
+| Chunk-ul principal | 1.592 kB | **1.145 kB** (318 kB gzip) |
+| Wallet | în principal | 413 kB separat |
+| Settings | în principal | 23 kB separat |
+| Chat | în principal | 9 kB separat |
+
+`index.html` preîncarcă doar runtime-ul React și nucleul Capacitor.
+
+**Poarta nouă:**
+- `scripts/check-split.mjs` rulează după build, în CI și în predeploy-ul de hosting. Decizia e în
+  `scripts/bundleSplit.mjs`, pură, cu 7 teste pe fixturi.
+- Face două verificări, fiindcă fiecare e oarbă unde vede cealaltă:
+  - în manifest, ecranele leneșe sunt intrări dinamice, în afara setului de pornire;
+  - în text, scanner-ul nu apare în niciun fișier de pornire.
+- Un marker care nu se mai găsește nicăieri e tot eșec, nu trecere.
+
+**Mutații pe build-uri reale:**
+- Wallet importat iar direct → pică pe manifest și pe marker.
+- Scanner-ul importat dintr-un ecran de pornire → pică doar pe marker. Wallet rămâne chunk separat,
+  deci o verificare doar pe manifest ar fi fost verde.
+
+**Verificat în browser:** aplicația pornește și ecranul de login se afișează. `/wallet` fără cont duce
+la login, cum trebuie. Ecranele leneșe sunt în spatele autentificării, deci pe ele nu le pot deschide
+eu. Cele două erori din consolă sunt vechi: schimbul de token de depanare App Check refuzat pe
+localhost, și service worker-ul de push în dev.
+
+**În BACKLOG:**
+- Coduri de bare/QR și `GroupChatWidget` rămân în chunk-ul principal; candidatul următor e
+  `AssetBarcode`.
+- Pe live, un `/assets/*.js` lipsă e servit ca `index.html`, cu cache de un an.
