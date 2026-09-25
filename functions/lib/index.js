@@ -14,6 +14,7 @@ const crypto = require("crypto");
 const genai_1 = require("@google/genai");
 const geminiKey_1 = require("./geminiKey");
 const groupMedia_1 = require("./groupMedia");
+const errorLog_1 = require("./errorLog");
 const engine_1 = require("./warlordCombat/combat/engine");
 const pvp_1 = require("./warlordCombat/combat/pvp");
 const aiScope_1 = require("./aiScope");
@@ -240,7 +241,7 @@ async function recordChecklistOutcome(snapshot, data, reason) {
         // It goes in the health panel because, unlike the conditions this function RECORDS, a failure
         // to record is not an operating condition: there is no burst, and there is something to fix.
         console.error("could not record the checklist outcome", (err === null || err === void 0 ? void 0 : err.message) || err);
-        void logServerError(`could not record the checklist outcome (${reason}): ${(err === null || err === void 0 ? void 0 : err.message) || err}`, "ai:generateChecklist", { uid: typeof (data === null || data === void 0 ? void 0 : data.ownerId) === "string" ? data.ownerId : undefined });
+        void (0, errorLog_1.logServerError)(`could not record the checklist outcome (${reason}): ${(err === null || err === void 0 ? void 0 : err.message) || err}`, "ai:generateChecklist", { uid: typeof (data === null || data === void 0 ? void 0 : data.ownerId) === "string" ? data.ownerId : undefined });
     }
 }
 /**
@@ -344,7 +345,7 @@ exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)({
         // condition, with every real bug underneath it.
         if (reason === aiChecklistOutcome_1.CHECKLIST_ERROR || reason === aiChecklistOutcome_1.CHECKLIST_BAD_OUTPUT) {
             console.error("AI Generation Error", error);
-            void logServerError(reason === aiChecklistOutcome_1.CHECKLIST_BAD_OUTPUT
+            void (0, errorLog_1.logServerError)(reason === aiChecklistOutcome_1.CHECKLIST_BAD_OUTPUT
                 ? "model returned a non-array checklist"
                 : ((error === null || error === void 0 ? void 0 : error.message) || "AI generation error"), "ai:generateChecklist", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: ownerId });
         }
@@ -425,7 +426,7 @@ exports.onFriendRequestCreated = (0, firestore_1.onDocumentCreated)("friend_requ
     catch (err) {
         // Fires once; a failure is permanent. The screen then says it could not confirm the sender,
         // which is the honest answer — and this makes the failure visible to the owner.
-        void logServerError(`friend-request sender stamp failed: ${String(err)}`, "friends:stamp", { uid: fromId });
+        void (0, errorLog_1.logServerError)(`friend-request sender stamp failed: ${String(err)}`, "friends:stamp", { uid: fromId });
     }
     try {
         // Two ways a request is addressed, and the common one is the second.
@@ -469,7 +470,7 @@ exports.onFriendRequestCreated = (0, firestore_1.onDocumentCreated)("friend_requ
             // Reported, not merely logged: a bell that stopped ringing is otherwise indistinguishable
             // from a bell nobody rang, and this is the one path where a person's request reaches
             // somebody without a notification to announce it.
-            void logServerError(`friend-request notification suppressed: daily limit ${NOTIF_DAILY_LIMIT} reached`, "friends:notifyQuota", { uid: fromId });
+            void (0, errorLog_1.logServerError)(`friend-request notification suppressed: daily limit ${NOTIF_DAILY_LIMIT} reached`, "friends:notifyQuota", { uid: fromId });
             return;
         }
         // The stamp's name: the profile name, else the Auth email's local part. It used to fall back on
@@ -523,7 +524,7 @@ exports.onGroupInviteCreated = (0, firestore_1.onDocumentCreated)("group_invites
     }
     catch (err) {
         // Fires once. The screen then says it could not confirm the sender — the honest answer.
-        void logServerError(`group-invite sender stamp failed: ${String(err)}`, "invites:stamp", { uid: fromId });
+        void (0, errorLog_1.logServerError)(`group-invite sender stamp failed: ${String(err)}`, "invites:stamp", { uid: fromId });
     }
 });
 exports.onGameCreated = (0, firestore_1.onDocumentCreated)("games/{gameId}", async (event) => {
@@ -629,7 +630,7 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
         }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
-        void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI generation error", "ai:generateChecklist", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
+        void (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "AI generation error", "ai:generateChecklist", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
@@ -685,7 +686,7 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
         }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
-        void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI category error", "ai:suggestCategory", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
+        void (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "AI category error", "ai:suggestCategory", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
@@ -848,7 +849,7 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
         }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
-        void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI digest error", "ai:groupDigest", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
+        void (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "AI digest error", "ai:groupDigest", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
@@ -912,7 +913,7 @@ Do not include any other text or markdown formatting.`;
         }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
-        void logServerError((error === null || error === void 0 ? void 0 : error.message) || "AI asset error", "ai:suggestAsset", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
+        void (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "AI asset error", "ai:suggestAsset", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: callerUid });
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
@@ -1269,12 +1270,12 @@ exports.deleteGroupCascade = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_
         }
         catch (err) {
             // Awaited: work left running after the response is not guaranteed CPU on 2nd-gen functions.
-            await logServerError(String((err === null || err === void 0 ? void 0 : err.message) || err), "deleteGroupCascade.media", { uid, stack: err === null || err === void 0 ? void 0 : err.stack });
+            await (0, errorLog_1.logServerError)(String((err === null || err === void 0 ? void 0 : err.message) || err), "deleteGroupCascade.media", { uid, stack: err === null || err === void 0 ? void 0 : err.stack });
             throw new https_1.HttpsError("unavailable", "The group's photos could not be removed yet. Try again.");
         }
     }
     else {
-        await logServerError(`media sweep skipped: group id is not an auto-id or names a direct chat`, "deleteGroupCascade.media", { uid });
+        await (0, errorLog_1.logServerError)(`media sweep skipped: group id is not an auto-id or names a direct chat`, "deleteGroupCascade.media", { uid });
     }
     // The chat lives UNDER the group document, so deleting the parent alone would leave it
     // unreachable and still billed for. `recursiveDelete` takes the messages, the typing flags and the
@@ -1629,20 +1630,7 @@ async function deleteStoragePrefixes(prefixes, bucketOf = () => admin.storage().
         return false;
     }
 }
-// Record a server-side error so it surfaces in the admin Health panel.
-async function logServerError(message, where, extra) {
-    try {
-        await admin.firestore().collection("errorLogs").add({
-            message: String(message || "server error").slice(0, 1000),
-            stack: (extra === null || extra === void 0 ? void 0 : extra.stack) ? String(extra.stack).slice(0, 4000) : null,
-            context: where.slice(0, 200),
-            uid: (extra === null || extra === void 0 ? void 0 : extra.uid) || null,
-            source: "server",
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-    }
-    catch ( /* never let logging break the caller */_a) { /* never let logging break the caller */ }
-}
+// `logServerError` lives in errorLog.ts since 25.09.2026, with the one writer every row goes through.
 // Is the current caller an admin? (Non-throwing for non-admins.)
 exports.adminCheck = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
@@ -1959,7 +1947,8 @@ exports.logClientError = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
     if (!(await tryConsumeQuota(uid, "error_usage", 200)))
         return { ok: false, throttled: true };
     const ua = (_c = (_b = request.rawRequest) === null || _b === void 0 ? void 0 : _b.headers) === null || _c === void 0 ? void 0 : _c["user-agent"];
-    await admin.firestore().collection("errorLogs").add({
+    // Through the one writer, which stamps `createdAt` and the TTL field — see errorLog.ts.
+    await (0, errorLog_1.addErrorLog)({
         message: String(message).slice(0, 1000),
         stack: stack ? String(stack).slice(0, 4000) : null,
         url: url ? String(url).slice(0, 500) : null,
@@ -1968,7 +1957,6 @@ exports.logClientError = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
         email: ((_e = (_d = request.auth) === null || _d === void 0 ? void 0 : _d.token) === null || _e === void 0 ? void 0 : _e.email) || null,
         userAgent: ua ? String(ua).slice(0, 300) : null,
         source: "client",
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     return { ok: true };
 });
@@ -2981,7 +2969,7 @@ exports.aiPreviewScope = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
         // months, and there was no reason for events and chat to be exempt from the lesson.
         for (const [what, src] of [["expenses", expenses], ["events", events], ["chat", chat]]) {
             if (src.unavailable) {
-                void logServerError(`${what} ${src.unavailable}`, "ai:previewScope", { uid });
+                void (0, errorLog_1.logServerError)(`${what} ${src.unavailable}`, "ai:previewScope", { uid });
             }
         }
         return {
@@ -3016,7 +3004,7 @@ exports.aiPreviewScope = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
         };
     }
     catch (error) {
-        void logServerError((error === null || error === void 0 ? void 0 : error.message) || "aiPreviewScope failed", "ai:previewScope", { stack: error === null || error === void 0 ? void 0 : error.stack });
+        void (0, errorLog_1.logServerError)((error === null || error === void 0 ? void 0 : error.message) || "aiPreviewScope failed", "ai:previewScope", { stack: error === null || error === void 0 ? void 0 : error.stack });
         throw new https_1.HttpsError("internal", "Could not read your data.");
     }
 });

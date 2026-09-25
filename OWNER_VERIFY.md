@@ -78,6 +78,10 @@ Rularea de probă pe live (doar citire): **3 profiluri, 2 cu data completă.**
       de citire, intenționat.
       - **Ce se strică dacă nu:** nimic nu se strică; cele două date complete rămân vizibile până
         la următoarea logare web a proprietarilor, când oglinda se rescrie singură (după deploy).
+      - **Cu aceeași cheie, după deploy-ul de funcții** (adăugat 25.09):
+        `node scripts/stamp-error-expiry.mjs --apply` dă o dată de expirare celor 110 rânduri vechi din
+        jurnalul de erori. Au emailuri și uid-uri și altfel nu expiră niciodată. Rulat pe live în modul
+        de probă, doar citire: niciunul nu trece deja de 90 de zile, deci nu se șterge nimic imediat.
 
 ---
 ## ✅ RĂSPUNS (24.09): DA, APK-ul e instalat — și ce rulează el, măsurat

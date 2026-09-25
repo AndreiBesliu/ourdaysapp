@@ -9517,3 +9517,44 @@ fiecare test trecea.
 - **Cele două emulatoare orfane** erau ale noastre (proiect `demo-ourdays-rules`, regulile din repo),
   verificat pe linia de comandă înainte să le opresc.
 - Rularea completă: **23 de fișiere, 427 de teste**, verzi.
+
+## 2026-09-25 · B — jurnalul de erori expiră: 90 de zile, printr-un singur scriitor
+
+**Prompt (Andrei):** „continua". **Model:** Claude Opus 5.5.
+
+**Ce era:** fiecare rând din `errorLogs` rămânea pentru totdeauna. Toate au uid-ul; cele de client au
+și emailul, user-agentul și URL-ul. Scriau două funcții separate, și niciuna nu punea o expirare.
+
+**Reparat:**
+- **Un singur scriitor**, `functions/src/errorLog.ts`. Pune `createdAt` și `expireAt` ULTIMELE, deci
+  niciun apelant nu le poate omite sau suprascrie. Trec prin el și rândurile de client
+  (`logClientError`), și cele de server (`logServerError`, mutat aici).
+- **Păstrarea: 90 de zile** (`functions/src/errorRetention.ts`, pur).
+  - Panoul și digestul grupează ultimele 500 de rânduri, iar judecăți de tip „nu e un defect” cer cel
+    puțin o lună de istoric.
+  - Deciziile adminului stau în `errorGroups`, care **n-are** TTL. Deci o eroare care revine după
+    expirare apare tot ca „regressed”.
+- **Politica TTL e în `firestore.indexes.json`** (`ttl: true`, boolean). Se publică cu
+  `--only firestore:indexes`, fără clic în consolă; CLI-ul folosit o suportă. BACKLOG spunea greșit
+  „din consolă”.
+- **`scripts/stamp-error-expiry.mjs`** pentru cele 110 rânduri vechi. Implicit face doar proba;
+  scrierea cere cheia de scriere a lui Andrei, aceeași ca la migrarea datei de naștere. Probat pe live,
+  doar citire: 110 rânduri, **0** deja trecute de 90 de zile.
+
+**Proba:**
+- `functions/test/errorLogExpiry.test.ts`, pe emulator, prin handler-ul real:
+  - un raport de client are `expireAt` de tip Timestamp la exact 90 de zile de la scriere, iar
+    restul rândului e neschimbat;
+  - peste cota zilnică nu se scrie nimic;
+  - un rând de server are aceeași expirare.
+- `src/utils/errorRetention.test.ts`: o dată calculată pe hârtie (25 sep. + 90 de zile = 24 dec.), și
+  legătura cu `firestore.indexes.json`: exact o politică, pe câmpul pe care îl scrie codul, cu `ttl`
+  boolean.
+- **Pe codul de ieri:** testul de client e roșu.
+- **Șapte mutații, toate prinse:** fără `expireAt` → 2 roșii; `expireAt` ca text → 2; zile în loc de
+  ore → 1; `ttl: "true"` → 1; politica pe alt câmp → 1; rândul de server ocolește scriitorul → 1;
+  scrierea înaintea cotei → 2.
+
+**Ordinea de deploy:** întâi funcțiile, apoi `firestore:indexes`, apoi, peste cel puțin o oră și cu
+confirmarea lui Andrei, `stamp-error-expiry --apply`. La deploy-ul de indecși se răspunde **Nu**
+la orice propunere de a șterge un index care există doar pe live.

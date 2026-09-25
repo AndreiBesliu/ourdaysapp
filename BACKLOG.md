@@ -67,8 +67,12 @@ pică exact când se ajunge aici.
   pentru ceilalți membri, deci un membru poate pune orice text pe ecranele blocate ale grupului.
   Mutările din APK nu scriu `lastMoveAt`, deci un joc jucat doar pe telefon poate fi închis de
   expirarea de 24h în timp ce e jucat (dedus din cod, nemăsurat).
-- **`logClientError`:** 200 de rânduri pe zi per cont, fără expirare. Codul poate scrie un
-  `expireAt`; politica TTL se pornește din consolă.
+- **Ștergerea unui cont nu-i șterge rândurile din `errorLogs`.** `adminModerateUser` curăță restul,
+  dar aici rămân uid-ul și emailul lui până la expirarea de 90 de zile (din 25.09). Se adaugă o
+  linie în ștergere, dacă Andrei o vrea imediat.
+- **Rândurile de eroare scrise de server n-au plafon zilnic** (cele de client au 200 pe cont). TTL-ul
+  limitează cât trăiesc, nu câte sunt. Și sunt scrise „fire-and-forget” (`void`) chiar înainte de
+  `throw`, deci pe 2nd gen se pot pierde exact pe căile de eșec.
 - **Un membru scos poate accepta o a DOUA invitație încă în așteptare** în același grup. Scoaterea
   nu anulează invitațiile și linkurile lui. Asta cere un trigger pe `groups` sau o listă a celor scoși,
   ținută de server. Decizia lui Andrei.

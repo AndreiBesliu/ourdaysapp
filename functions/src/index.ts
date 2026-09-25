@@ -10,6 +10,7 @@ import * as crypto from "crypto";
 import { GoogleGenAI } from "@google/genai";
 import { GEMINI_KEY } from "./geminiKey";
 import { GROUP_ID, groupMedia } from "./groupMedia";
+import { addErrorLog, logServerError } from "./errorLog";
 import { applyCommand } from "./warlordCombat/combat/engine";
 import { sanitizeDeploy, createPvpBattle } from "./warlordCombat/combat/pvp";
 import type { BattleState, Command } from "./warlordCombat/combat/types";
@@ -1784,19 +1785,7 @@ export async function deleteStoragePrefixes(
   } catch { return false; }
 }
 
-// Record a server-side error so it surfaces in the admin Health panel.
-async function logServerError(message: string, where: string, extra?: any): Promise<void> {
-  try {
-    await admin.firestore().collection("errorLogs").add({
-      message: String(message || "server error").slice(0, 1000),
-      stack: extra?.stack ? String(extra.stack).slice(0, 4000) : null,
-      context: where.slice(0, 200),
-      uid: extra?.uid || null,
-      source: "server",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-  } catch { /* never let logging break the caller */ }
-}
+// `logServerError` lives in errorLog.ts since 25.09.2026, with the one writer every row goes through.
 
 // Is the current caller an admin? (Non-throwing for non-admins.)
 export const adminCheck = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
@@ -2085,7 +2074,8 @@ export const logClientError = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
   if (!uid) return { ok: false };
   if (!(await tryConsumeQuota(uid, "error_usage", 200))) return { ok: false, throttled: true };
   const ua = (request.rawRequest as any)?.headers?.["user-agent"];
-  await admin.firestore().collection("errorLogs").add({
+  // Through the one writer, which stamps `createdAt` and the TTL field — see errorLog.ts.
+  await addErrorLog({
     message: String(message).slice(0, 1000),
     stack: stack ? String(stack).slice(0, 4000) : null,
     url: url ? String(url).slice(0, 500) : null,
@@ -2094,7 +2084,6 @@ export const logClientError = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
     email: request.auth?.token?.email || null,
     userAgent: ua ? String(ua).slice(0, 300) : null,
     source: "client",
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
   return { ok: true };
 });
