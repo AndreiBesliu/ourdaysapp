@@ -9669,3 +9669,34 @@ drept control.
   - fără ramura de reîncercare → 2;
   - reîncercarea permisă pentru orice nume → 1;
   - ramura personală din `peek` scoasă → 1.
+
+## 2026-09-25 · Ce e pe live, față de ce ar înlocui deploy-ul (doar citire)
+
+**Prompt (Andrei):** „continua". **Model:** Claude Opus 5.5.
+
+Deploy-ul așteaptă confirmarea lui Andrei și secretul `GEMINI_KEY`, deci nu am publicat nimic. Am
+măsurat în schimb, doar citire, ce ar înlocui el.
+
+**Scriptul:** `scripts/live-diff.mjs`, reutilizabil chiar înainte de deploy. Tipărește doar nume,
+numere și amprente.
+- `functions:list --json` întoarce și VALORILE variabilelor de mediu, inclusiv cheia veche Gemini.
+  Scriptul le reduce la nume, în memorie, și nu le scrie nicăieri.
+- Regulile publicate le citește prin modulele CLI-ului, după rețeta din memorie; `--dry-run` doar
+  compilează. Copiile lor ajung în `%TEMP%`, în afara repo-ului.
+
+**Rezultat:**
+
+| | Pe live | Ce ar aduce deploy-ul |
+|---|---|---|
+| Reguli Firestore | commit-ul `cbf8765`, 22.09, 18:41 | **10 commit-uri**, între ele și cele de pe 23.09 despre `seenBy` |
+| Reguli Storage | `b37aca3`, 22.09 | 2 commit-uri |
+| Indecși | 14 | aceiași 14 (nu se șterge nimic), plus politica TTL |
+| Funcții | 50, pe `nodejs20` | niciuna ștearsă; una nouă (`onGroupInviteCreated`) |
+
+- **Secretele pe live:** `GEMINI_API_KEY_LOCAL` stă în clar pe 7 funcții, iar
+  `GEMINI_API_KEY@1` e legat de `autoSuggestChecklist`.
+- **`GEMINI_KEY` nu există încă (404).** Deploy-ul de funcții rămâne blocat, exact cum s-a vrut.
+- **Hosting-ul de pe live:** bundle-ul `index-HIJIaqaH.js`, fără niciun marker din 24–25.09. Numește
+  pozele din chat cu uid-ul (`rN('chat-images', grup, uid, …)`, forma din 22.09). Deci cele 3 poze cu
+  nume vechi din ultimele 30 de zile au venit de pe telefoane. Ramura de nume vechi din `storage.rules`
+  e încă necesară.

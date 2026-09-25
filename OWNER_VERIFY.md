@@ -59,6 +59,12 @@ mai jos, deploy-ul pică **înainte** să schimbe ceva. Uitarea e zgomotoasă, n
         - o poză trimisă din telefon și una de pe web ajung în chat.
       - **Ce se strică dacă se sare pasul 2:** rândurile de eroare primesc data de expirare, dar nu
         expiră niciodată. Nu dă nicio eroare; se vede doar în tab-ul TTL.
+      - **Ce e pe live acum** (măsurat 25.09 cu `node scripts/live-diff.mjs`, doar citire; se reia chiar
+        înainte de deploy):
+        - regulile Firestore și Storage sunt cele din 22.09;
+        - indecșii sunt identici, deci pasul 2 nu șterge nimic și adaugă doar politica TTL;
+        - 50 de funcții, pe Node 20; deploy-ul nu șterge niciuna și adaugă una;
+        - `GEMINI_KEY` **nu există încă**.
 
 ---
 
