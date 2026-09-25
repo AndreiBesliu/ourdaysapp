@@ -119,12 +119,14 @@ function cli(args) {
       onlyLive_wouldBeDeleted: [...liveNames].filter((n) => !localNames.has(n)),
       onlyLocal_new: [...localNames].filter((n) => !liveNames.has(n)),
       envVarNamesOnLive: envNameCounts,
+      // The key a deploy must keep (functions/src/geminiKey.ts): which live functions carry it.
+      geminiKeyVarOn: list.filter((f) => 'GEMINI_API_KEY_LOCAL' in (f.environmentVariables || {})).map((f) => f.id).sort(),
       secretBindingsOnLive: secretBindings,
     };
   }
 }
 
-// ── The secret the functions deploy needs ─────────────────────────────────────────────────
+// ── The postponed secret (BACKLOG.md): informational, the deploy does not need it ─────────
 {
   const r = cli('functions:secrets:get GEMINI_KEY');
   // Prints versions and states only; never the value (that is `secrets:access`, never run here).

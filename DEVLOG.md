@@ -9760,3 +9760,34 @@ urmează. **Model:** Claude Opus 5.5.
 - Filtrul meu pe ieșire păstra doar `Tests …` și arunca `Test Files 1 failed`. Așa că am văzut
   „3 passed”, venite de la ALT fișier.
 - De acum filtrul păstrează și linia de fișiere.
+
+
+## 2026-09-25 · Cheia Gemini rămâne unde e: mutarea în Secret Manager, amânată
+
+**Prompt (Andrei):** „dar, AI-ul functioneaza, nu inteleg de ce trebuie sa modific cheia Gemini”
+(cu o captură a AI Digest mergând), apoi „facem mutarea in Secret Manager mai tarziu, tine-o minte”.
+**Model:** Claude Opus 5.5.
+
+**De ce funcționa AI-ul:** pe live nu se schimbase nimic. Cheia stă ca variabilă simplă
+`GEMINI_API_KEY_LOCAL` pe 7 funcții. Pericolul era al **următorului deploy**, nu al stării de azi:
+cu `functions/.env` prezent (adresa de bootstrap, din 24.09), CLI-ul pune pe fiecare funcție exact
+conținutul fișierului și nu mai păstrează variabilele de pe live. Mutarea în Secret Manager era o
+cale de ieșire. Mai simplu e să nu existe fișierul.
+
+- **Fișierul a ieșit din repo**, în `~/.ourdays/functions.env.bootstrap`. Valoarea n-a fost afișată.
+  Efectul: recuperarea adminului prin email de bootstrap rămâne oprită, cum e și azi pe live.
+- **Codul revine la variabila de pe live:** `geminiKey()` citește `GEMINI_API_KEY_LOCAL`, iar nicio
+  funcție nu mai declară un secret. `23544ce` rămâne în istorie ca rețeta mutării.
+- **Plasa nouă, `scripts/functions-env-guard.mjs`,** e pas de predeploy la funcții. Refuză deploy-ul
+  cât timp există `functions/.env`, `.env.<proiect>` sau `.env.<alias>` fără cheie și nu afișează
+  decât nume. 6 teste unitare. Rulată direct: cu fișierul vechi pus înapoi → cod 1; fără el → 0.
+- **Testul cheii,** `functions/test/geminiKey.test.ts` (fostul `geminiSecret.test.ts`), 11 teste:
+  - nicio funcție nu declară vreun secret, citit din lib-ul compilat, în modul de descoperire al CLI-ului;
+  - handler-ele citesc doar `GEMINI_API_KEY_LOCAL`: cu celelalte nume răspund „not configured” și
+    nu consumă cotă; cu el trec de cheie și se opresc la kill switch.
+  - **Mutații:** citirea lui `GEMINI_KEY` → 10 roșii; `secrets: ["GEMINI_KEY"]` pe funcțiile AI → 1 roșu.
+- `live-diff` arată acum pe ce funcții stă cheia; `GEMINI_KEY` rămâne doar informativ.
+- Actualizate: blocul de deploy din `OWNER_VERIFY.md` (nu mai cere secretul), `BACKLOG.md` (rețeta
+  mutării, în patru pași, și capcana), `CLAUDE.md` (linia de deploy).
+- **Deploy-ul:** tot neexecutat. Îl rulez doar după confirmarea explicită a lui Andrei. „Da, după ce
+  există secretul” era condiționat de un pas care nu mai există, deci se cere din nou.

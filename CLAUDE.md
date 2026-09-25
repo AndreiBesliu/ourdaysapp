@@ -14,7 +14,11 @@ React + TypeScript + Vite + Tailwind, Firebase (Auth, Firestore, Functions, Host
   / `--only firestore:indexes` / `--only storage`. **`firestore:indexes` poartă și politica TTL** pe
   `errorLogs.expireAt` (din 25.09): dacă `firestore.indexes.json` s-a schimbat, pasul ăsta nu e opțional,
   altfel rândurile au dată de expirare și nu expiră niciodată. La el se răspunde **Nu** la ștergerea
-  indecșilor care există doar pe live. Funcțiile cer secretul `GEMINI_KEY` în Secret Manager.
+  indecșilor care există doar pe live. **Cheia Gemini e variabila simplă `GEMINI_API_KEY_LOCAL` de pe
+  funcțiile live** (mutarea în Secret Manager e amânată, `BACKLOG.md`). Deploy-ul o păstrează DOAR fără
+  `functions/.env`, `.env.live`, `.env.default` sau `.env.our-days-2a939` (`.env.local` e doar al
+  emulatorului) — un astfel de fișier înlocuiește tot mediul și oprește AI-ul. Predeploy-ul
+  `scripts/functions-env-guard.mjs` refuză deploy-ul atunci; nu-l ocoli.
 - **CI:** `.github/workflows/ci.yml` — typecheck + teste + build la fiecare push pe `main`. **Nu** face deploy: livrarea rămâne manuală și deliberată.
 
 ## ⚠️ Warlord e un SUBMODUL, nu cod din repo-ul ăsta

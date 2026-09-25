@@ -1,16 +1,16 @@
-// functions/test/geminiSecret.test.ts
+// functions/test/geminiKey.test.ts
 //
-// The Gemini key comes from Secret Manager (`GEMINI_KEY`, functions/src/geminiKey.ts), reaches
-// exactly the five functions that call the model, and the old environment variable is read by
-// nothing. See geminiKey.ts for why this was urgent: with `functions/.env` present, the next
-// functions deploy would have dropped the plain variable from every function.
+// Where the Gemini key comes from, in the state Andrei chose on 25.09.2026: the plain variable
+// GEMINI_API_KEY_LOCAL that the live functions already carry; the Secret Manager move is postponed
+// (functions/src/geminiKey.ts, BACKLOG.md).
 //
 // Two halves, because each is blind where the other sees:
-//   * WHICH functions receive the secret is read off the COMPILED lib, in the CLI's own discovery
-//     mode (FUNCTIONS_CONTROL_API=true), in a child process — the deploy reads that, not the source,
-//     and a fresh process is the only way to load it as the CLI does.
-//   * WHICH NAME the handlers read is proved by running them: with only the old names set they
-//     answer "not configured"; with the new one set they get past the key and stop at the kill
+//   * The deploy description, read off the COMPILED lib in the CLI's own discovery mode in a child
+//     process: no function declares a secret. One that did would make the deploy demand a secret
+//     that does not exist — and a declared param counts as a dotenv, which would replace the live
+//     environment and drop the key.
+//   * WHICH NAME the handlers read, proved by running them: with only GEMINI_KEY set they answer
+//     "not configured"; with GEMINI_API_KEY_LOCAL set they get past the key and stop at the kill
 //     switch — before any network call, so no key and no Google endpoint is involved.
 
 import { beforeAll, beforeEach, afterEach, describe, it, expect } from 'vitest';
@@ -28,7 +28,7 @@ const AI_FUNCTIONS = [
 ];
 
 describe('the deploy description', () => {
-  it('gives the key to the five functions that call Gemini, and to nothing else', () => {
+  it('declares no secret on any function — the deploy needs none, and keeps the live environment', () => {
     const lib = resolve(process.cwd(), 'functions/lib/index.js').split('\\').join('/');
     const script = `
       const mod = require(${JSON.stringify(lib)});
@@ -47,11 +47,10 @@ describe('the deploy description', () => {
     const secrets = JSON.parse(r.stdout) as Record<string, string[]>;
     // A floor, so a load that yielded nothing cannot pass. 51 on 24.09.2026.
     expect(Object.keys(secrets).length).toBeGreaterThanOrEqual(51);
-    const withKey = Object.entries(secrets).filter(([, keys]) => keys.includes('GEMINI_KEY')).map(([n]) => n).sort();
-    expect(withKey).toEqual(AI_FUNCTIONS);
-    // No other secret anywhere — least privilege, and no stale name coming back.
-    const others = Object.entries(secrets).flatMap(([n, keys]) => keys.filter((k) => k !== 'GEMINI_KEY').map((k) => `${n}:${k}`));
-    expect(others).toEqual([]);
+    const declared = Object.entries(secrets).flatMap(([n, keys]) => keys.map((k) => `${n}:${k}`));
+    expect(declared).toEqual([]);
+    // Every AI function is still exported, so the check above is about them too.
+    for (const n of AI_FUNCTIONS) expect(secrets, n).toHaveProperty(n);
   });
 });
 
@@ -63,7 +62,8 @@ let trigger: { run: (event: unknown) => Promise<unknown> };
 let db: admin.firestore.Firestore;
 
 const ALICE = 'uid-alice';
-const OLD_NAMES = ['GEMINI_API_KEY_LOCAL', 'GEMINI_API_KEY'];
+// The postponed name, and the abandoned one from May: neither may be read.
+const OTHER_NAMES = ['GEMINI_KEY', 'GEMINI_API_KEY'];
 const saved: Record<string, string | undefined> = {};
 
 const call = (name: string, data: Record<string, unknown>) =>
@@ -86,7 +86,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  for (const k of ['GEMINI_KEY', ...OLD_NAMES]) saved[k] = process.env[k];
+  for (const k of ['GEMINI_API_KEY_LOCAL', ...OTHER_NAMES]) saved[k] = process.env[k];
   const res = await fetch(`http://${HOST}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: 'DELETE' });
   expect(res.ok).toBe(true);
   await db.doc('groups/g1').set({ ownerId: ALICE, members: [ALICE], name: 'Family' });
@@ -98,14 +98,14 @@ afterEach(() => {
   }
 });
 
-function onlyOldNames() {
-  delete process.env.GEMINI_KEY;
-  for (const k of OLD_NAMES) process.env[k] = 'old-name-must-not-be-read';
+function onlyOtherNames() {
+  delete process.env.GEMINI_API_KEY_LOCAL;
+  for (const k of OTHER_NAMES) process.env[k] = 'other-name-must-not-be-read';
 }
 
-async function newNameAndKillSwitch() {
-  for (const k of OLD_NAMES) delete process.env[k];
-  process.env.GEMINI_KEY = 'test-not-a-real-key';
+async function realNameAndKillSwitch() {
+  for (const k of OTHER_NAMES) delete process.env[k];
+  process.env.GEMINI_API_KEY_LOCAL = 'test-not-a-real-key';
   await db.doc('aiConfig/live').set({ killSwitch: true });
 }
 
@@ -114,9 +114,9 @@ async function usedToday(): Promise<number> {
   return (snap.data()?.count as number | undefined) ?? 0;
 }
 
-describe('the callables read GEMINI_KEY, and only GEMINI_KEY', () => {
-  it.each(Object.keys(INPUTS))('%s: the old names alone mean "not configured", and cost nothing', async (name) => {
-    onlyOldNames();
+describe('the callables read GEMINI_API_KEY_LOCAL, and only that', () => {
+  it.each(Object.keys(INPUTS))('%s: the other names alone mean "not configured", and cost nothing', async (name) => {
+    onlyOtherNames();
     // Exactly the refusal the handler throws: until 25.09 its own outer catch re-wrapped it as
     // `internal: AI Error: …` and filed a server-error row on every call.
     await expect(call(name, INPUTS[name])).rejects.toMatchObject({
@@ -127,9 +127,9 @@ describe('the callables read GEMINI_KEY, and only GEMINI_KEY', () => {
     expect((await db.collection('errorLogs').get()).size).toBe(0);
   });
 
-  it.each(Object.keys(INPUTS))('%s: with GEMINI_KEY it gets past the key, to the kill switch', async (name) => {
+  it.each(Object.keys(INPUTS))('%s: with GEMINI_API_KEY_LOCAL it gets past the key, to the kill switch', async (name) => {
     // The pair that must differ from the case above — and it stops before any call to Google.
-    await newNameAndKillSwitch();
+    await realNameAndKillSwitch();
     await expect(call(name, INPUTS[name])).rejects.toMatchObject({
       code: 'resource-exhausted', message: 'ai-budget/kill-switch',
     });
@@ -138,22 +138,22 @@ describe('the callables read GEMINI_KEY, and only GEMINI_KEY', () => {
   });
 });
 
-describe('the trigger reads GEMINI_KEY, and only GEMINI_KEY', () => {
+describe('the trigger reads GEMINI_API_KEY_LOCAL, and only that', () => {
   async function fire() {
     await db.doc('events/e1').set({ title: 'Groceries', ownerId: ALICE, assigneeIds: ['ai_assistant'] });
     await trigger.run({ data: await db.doc('events/e1').get(), params: { eventId: 'e1' } });
     return (await db.doc('events/e1').get()).data();
   }
 
-  it('the old names alone: stamped "unconfigured", and the assistant taken off', async () => {
-    onlyOldNames();
+  it('the other names alone: stamped "unconfigured", and the assistant taken off', async () => {
+    onlyOtherNames();
     const ev = await fire();
     expect(ev?.aiChecklist).toMatchObject({ status: 'failed', reason: 'ai-checklist/unconfigured' });
     expect(ev?.assigneeIds).toEqual([]);
   });
 
-  it('with GEMINI_KEY: past the key, stopped by the kill switch', async () => {
-    await newNameAndKillSwitch();
+  it('with GEMINI_API_KEY_LOCAL: past the key, stopped by the kill switch', async () => {
+    await realNameAndKillSwitch();
     const ev = await fire();
     expect(ev?.aiChecklist).toMatchObject({ status: 'failed', reason: 'ai-budget/kill-switch' });
   });

@@ -72,6 +72,7 @@
     "source": "functions",
     "predeploy": [
       "node scripts/tree-clean.mjs",
+      "node scripts/functions-env-guard.mjs",
       "npm --prefix \"$RESOURCE_DIR\" run build"
     ]
   },

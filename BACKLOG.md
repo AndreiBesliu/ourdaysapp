@@ -86,14 +86,32 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   avertismentul. Reparația ar fi o reîncercare în trigger, sau ștampilarea retroactivă de mai sus.
 - **Prietenii nu păstrează dacă emailul era verificat.** La acceptare se scrie emailul, nu și
   `emailVerified`, deci lista de prieteni nu poate deosebi o adresă dovedită de una tastată.
-- **Emailul owner-ului rămâne în istoria git și în DEVLOG.** Din 24.09 vine din `functions/.env`
-  (ignorat), dar repo-ul e public și istoria îl are. Rescrierea istoriei e decizia lui Andrei.
+- **Emailul owner-ului rămâne în istoria git și în DEVLOG.** Din 24.09 nu mai e în cod (din 25.09
+  stă în afara repo-ului, vezi mutarea cheii Gemini), dar repo-ul e public și istoria îl are.
+  Rescrierea istoriei e decizia lui Andrei.
 - **O cheltuială nu mai poate fi corectată după ce un membru pleacă din grup.** `splitIsHonest` cere
   ca toți din `splitAmong` să fie membri, pe documentul REZULTAT — deci orice editare a rândului e
   refuzată cât timp cel plecat e încă pe listă (scoaterea lui schimbă împărțirea). Ștergerea merge.
 
 ## 3. Cod și operațiuni (C)
 
+- **Mutarea cheii Gemini în Secret Manager — amânată de Andrei pe 25.09.** Azi cheia stă ca
+  variabilă simplă, `GEMINI_API_KEY_LOCAL`, pe 7 funcții de pe live. E vizibilă oricui are acces de
+  citire la funcții, iar cea veche a stat și în `functions/.env` din mai, într-un folder sincronizat cu
+  Drive. **Rețeta, în ordine:**
+  1. Andrei rulează `npx firebase functions:secrets:set GEMINI_KEY --project live` și lipește cheia la
+     prompt, ideal una nouă, restricționată la Generative Language API. Eu nu văd cheia.
+  2. Se reaplică `23544ce` pe `functions/src/geminiKey.ts` și `index.ts`: `defineSecret("GEMINI_KEY")`
+     și `secrets: [GEMINI_KEY]` pe cele cinci funcții AI. Testul `functions/test/geminiKey.test.ts`
+     se întoarce la forma din `23544ce` (`geminiSecret.test.ts`).
+  3. Deploy de funcții, apoi `live-diff` arată secretul pe exact cele cinci.
+  4. Abia după aceea se șterge secretul vechi `GEMINI_API_KEY@1`, legat azi de `autoSuggestChecklist`.
+  - **Capcana din `functions/.env`:** un deploy păstrează variabilele de pe live doar fără fișier
+    dotenv și fără parametri declarați (`defineSecret` e parametru). Adresa de bootstrap
+    (`BOOTSTRAP_ADMIN_EMAILS`) stă acum în afara repo-ului, în `~/.ourdays/functions.env.bootstrap`.
+    Se poate întoarce în `functions/` doar după mutare, fiindcă atunci dotenv-ul nu mai are ce
+    șterge. Până atunci `scripts/functions-env-guard.mjs` refuză deploy-ul cu fișierul fără cheie.
+    **La mutare, pragul din guard se schimbă:** `REQUIRED` devine gol, fiindcă cheia vine din secret.
 - **Bundle-ul, pasul următor.** Wallet, Chat și Settings sunt separate din 25.09: chunk-ul principal
   a scăzut de la 1.592 kB la 1.145 kB. Rămân în el două lucruri: coduri de bare și QR
   (`AssetBarcode`, importat de `EventDetailsModal`) și `GroupChatWidget` (importat de `CalendarHome`).

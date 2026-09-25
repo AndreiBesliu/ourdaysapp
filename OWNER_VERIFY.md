@@ -15,34 +15,25 @@
 
 ---
 
-## ⛔ ÎNAINTE de orice deploy de funcții: cheia Gemini în Secret Manager (25.09)
+## ⛔ Deploy-ul din 24–25.09: aștept doar confirmarea ta
 
-**Faptul, măsurat în sursa CLI-ului:** de pe 24.09 există `functions/.env` (adresa de bootstrap).
-Când un astfel de fișier există, deploy-ul de funcții pune pe fiecare funcție **exact** ce e în el.
-Variabilele de azi nu se păstrează. Cheia Gemini stătea tocmai ca variabilă simplă pe 7 funcții de
-pe live, deci deploy-ul din 24.09, așa cum ți l-am descris, ar fi **oprit tot AI-ul**, pe web și pe
-telefoane. Nimic nu s-a publicat, deci nimic nu s-a stricat.
+**Cheia Gemini rămâne unde e** — ai decis pe 25.09 să mutăm cheia în Secret Manager mai târziu. E
+trecută în `BACKLOG.md` cu rețeta, deci nu ai nimic de pregătit pentru deploy.
 
-**Reparat în cod:** cheia se citește acum din Secret Manager, sub numele nou **`GEMINI_KEY`**, și o
-primesc doar cele cinci funcții care vorbesc cu Gemini. Numele e nou intenționat: dacă uiți pasul de
-mai jos, deploy-ul pică **înainte** să schimbe ceva. Uitarea e zgomotoasă, nu tăcută.
-
-- [ ] **Rulezi tu, o dată, înainte de deploy-ul de funcții:**
-      `npx firebase functions:secrets:set GEMINI_KEY --project live` și lipești cheia la prompt.
-      Ideal o cheie **nouă**, restricționată la Generative Language API. Cea veche a stat în clar pe
-      7 funcții și în `functions/.env` din mai, într-un folder sincronizat cu Drive.
-      Eu nu am voie să văd cheia.
-      - **Cum arată bine:** `npx firebase functions:secrets:get GEMINI_KEY --project live` arată o
-        singură versiune, ENABLED, de azi.
-      - **Ce se strică dacă nu:** deploy-ul de funcții refuză să pornească. Nu se strică nimic, dar
-        nici nu pleacă nimic din ce s-a reparat pe 24–25.09.
-      - **După deploy**, nu înainte: secretul vechi `GEMINI_API_KEY` (versiunea 1, din 6 mai) e încă
-        legat de `autoSuggestChecklist`. Se șterge numai după ce `functions:list` arată că nu-l mai
-        folosește nimeni; altfel trigger-ul nu mai pornește.
+**Faptul care rămâne, măsurat în sursa CLI-ului:** un deploy de funcții păstrează variabilele de pe
+live **doar** dacă nu există un fișier `functions/.env`. Unul a existat între 24 și 25.09, pentru
+adresa de bootstrap, și deploy-ul l-ar fi pus în locul variabilelor. Cheia Gemini ar fi dispărut de
+pe toate cele 7 funcții, deci tot AI-ul s-ar fi oprit. Nimic nu s-a publicat, deci nimic nu s-a
+stricat.
+- Fișierul e acum **în afara repo-ului**, în `~/.ourdays/`.
+- Un pas nou de predeploy (`scripts/functions-env-guard.mjs`) refuză deploy-ul cât timp un astfel de
+  fișier există fără cheie.
+- Efectul secundar e acceptat: recuperarea adminului prin email de bootstrap rămâne oprită. Și azi
+  e oprită pe live, iar contul tău de admin există.
 
 - [ ] **Confirmă-mi deploy-ul, și îl rulez eu în ordinea de mai jos** (tot ce s-a reparat pe 24–25.09;
       nimic nu e publicat). Înainte de **30.10**, când funcțiile pe Node 20 nu se mai pot publica.
-      1. **Funcțiile** — `--only functions`. Cere secretul de mai sus.
+      1. **Funcțiile** — `--only functions`. Cheia rămâne pe ele; pasul de predeploy o păzește.
       2. **Regulile și indecșii Firestore** — `--only firestore` (amândouă). Indecșii aduc politica TTL
          pe jurnalul de erori. **Nu** la orice propunere de a șterge un index care există doar pe live.
       3. **Regulile Storage** — `--only storage`. Independente de rest.
@@ -53,7 +44,7 @@ mai jos, deploy-ul pică **înainte** să schimbe ceva. Uitarea e zgomotoasă, n
       6. **La cel puțin o oră după pasul 1:** `stamp-error-expiry --apply`, cu cheia de scriere de la
          migrarea datei de naștere.
       - **Cum arată bine:**
-        - `functions:list` arată secretul pe exact cele cinci funcții AI;
+        - `live-diff` arată în continuare `GEMINI_API_KEY_LOCAL` pe aceleași 7 funcții, iar un AI Digest merge;
         - tab-ul TTL din consola Firestore arată `errorLogs.expireAt` **ACTIVE**, poate după câteva
           minute în starea CREATING;
         - o poză trimisă din telefon și una de pe web ajung în chat.
@@ -64,7 +55,7 @@ mai jos, deploy-ul pică **înainte** să schimbe ceva. Uitarea e zgomotoasă, n
         - regulile Firestore și Storage sunt cele din 22.09;
         - indecșii sunt identici, deci pasul 2 nu șterge nimic și adaugă doar politica TTL;
         - 50 de funcții, pe Node 20; deploy-ul nu șterge niciuna și adaugă una;
-        - `GEMINI_KEY` **nu există încă**.
+        - cheia e variabila `GEMINI_API_KEY_LOCAL`, pe 7 funcții; asta păstrează deploy-ul.
 
 ---
 

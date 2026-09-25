@@ -8,7 +8,7 @@ import * as admin from "firebase-admin";
 import * as crypto from "crypto";
 
 import { GoogleGenAI } from "@google/genai";
-import { GEMINI_KEY } from "./geminiKey";
+import { geminiKey } from "./geminiKey";
 import { GROUP_ID, groupMedia } from "./groupMedia";
 import { addErrorLog, logServerError } from "./errorLog";
 import { applyCommand } from "./warlordCombat/combat/engine";
@@ -70,8 +70,8 @@ admin.initializeApp();
 // Console — avoids locking out clients that aren't yet sending tokens. Set
 // APPCHECK_ENFORCE=true (functions env) to require valid App Check tokens.
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
-/** The four AI callables: the only callables that receive the Gemini key. See geminiKey.ts. */
-const AI_CALLABLE_OPTS = { enforceAppCheck: ENFORCE_APP_CHECK, secrets: [GEMINI_KEY] };
+/** The four AI callables. The key comes from geminiKey.ts; the Secret Manager move is postponed. */
+const AI_CALLABLE_OPTS = { enforceAppCheck: ENFORCE_APP_CHECK };
 
 // Require a signed-in caller and apply a basic per-user daily quota on the AI
 // callables to curb abuse / runaway Gemini cost. The `ai_usage` collection is
@@ -275,7 +275,7 @@ async function runAutoChecklist(
   const title = data.title;
   const description = data.description || "";
 
-  const key = GEMINI_KEY.value();
+  const key = geminiKey();
   if (!key) throw checklistFailure(CHECKLIST_UNCONFIGURED);
   const ai = new GoogleGenAI({ apiKey: key });
 
@@ -337,7 +337,6 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
 
 export const autoSuggestChecklist = onDocumentCreated({
   document: "events/{eventId}",
-  secrets: [GEMINI_KEY],
 }, async (event) => {
   const snapshot = event.data;
   if (!snapshot) return;
@@ -629,7 +628,7 @@ export const generateAIChecklist = onCall(AI_CALLABLE_OPTS, async (request) => {
   const callerUid = await assertAiCallerAllowed(request);
 
   try {
-    const key = GEMINI_KEY.value();
+    const key = geminiKey();
     if (!key) {
       // Nothing reached the model — there is no model to reach. The unit was taken at the door
       // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
@@ -707,7 +706,7 @@ export const suggestEventCategory = onCall(AI_CALLABLE_OPTS, async (request) => 
   const callerUid = await assertAiCallerAllowed(request);
 
   try {
-    const key = GEMINI_KEY.value();
+    const key = geminiKey();
     if (!key) {
       // Nothing reached the model — there is no model to reach. The unit was taken at the door
       // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
@@ -787,7 +786,7 @@ export const generateGroupDigest = onCall(AI_CALLABLE_OPTS, async (request) => {
   }
 
   try {
-    const key = GEMINI_KEY.value();
+    const key = geminiKey();
     if (!key) {
       // Nothing reached the model — there is no model to reach. The unit was taken at the door
       // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
@@ -966,7 +965,7 @@ export const suggestAssetForText = onCall(AI_CALLABLE_OPTS, async (request) => {
   const callerUid = await assertAiCallerAllowed(request);
 
   try {
-    const key = GEMINI_KEY.value();
+    const key = geminiKey();
     if (!key) {
       // Nothing reached the model — there is no model to reach. The unit was taken at the door
       // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
