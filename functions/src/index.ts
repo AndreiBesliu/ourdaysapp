@@ -9,6 +9,7 @@ import * as crypto from "crypto";
 
 import { GoogleGenAI } from "@google/genai";
 import { GEMINI_KEY } from "./geminiKey";
+import { GROUP_ID, groupMedia } from "./groupMedia";
 import { applyCommand } from "./warlordCombat/combat/engine";
 import { sanitizeDeploy, createPvpBattle } from "./warlordCombat/combat/pvp";
 import type { BattleState, Command } from "./warlordCombat/combat/types";
@@ -1325,7 +1326,9 @@ export const deleteGroupCascade = onCall({ enforceAppCheck: ENFORCE_APP_CHECK },
     throw new HttpsError("unauthenticated", "You must be signed in.");
   }
   const { groupId, keepEventIds } = request.data || {};
-  if (!groupId || typeof groupId !== "string") {
+  // A document id, not a path: `g1/typing/uid-bob` resolved to a subcollection document a member
+  // may shape at will (typing docs have no shape rule), which then passed the owner check below.
+  if (typeof groupId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(groupId)) {
     throw new HttpsError("invalid-argument", "groupId is required.");
   }
   // The caller's selection applies only to the caller's OWN events. Ids of anything else are
@@ -1349,11 +1352,17 @@ export const deleteGroupCascade = onCall({ enforceAppCheck: ENFORCE_APP_CHECK },
   let deleted = 0;
   let freed = 0;
   // No cursor is needed: every document this loop touches stops matching `groupId == groupId`
-  // (it is either deleted or re-parented to null), so the same query drains itself. The cap is
-  // there so a write that silently fails cannot turn that into a spin.
-  for (let page = 0; page < 40; page++) {
+  // (it is either deleted or re-parented to null), so the same query drains itself. The bound is
+  // there so a write that silently fails cannot turn that into a spin — and reaching it now STOPS
+  // the cascade before the group goes (25.09.2026). It used to carry on after 40 pages and delete
+  // the group anyway, leaving every event past 12,000 pointing at a group that no longer existed.
+  // Every page is committed, so a retry picks up where this one stopped.
+  for (let page = 0; ; page++) {
     const snap = await db.collection("events").where("groupId", "==", groupId).limit(300).get();
     if (snap.empty) break;
+    if (page >= 200) {
+      throw new HttpsError("deadline-exceeded", "Still clearing the group's events — try again.");
+    }
     const batch = db.batch();
     for (const d of snap.docs) {
       const ev = d.data() || {};
@@ -1371,13 +1380,47 @@ export const deleteGroupCascade = onCall({ enforceAppCheck: ENFORCE_APP_CHECK },
   const invites = await deleteQueryInBatches(
     db.collection("group_invites").where("groupId", "==", groupId),
   );
-  // The chat lives UNDER the group document, so deleting the parent would leave it unreachable
-  // and still billed for. Firestore does not cascade; this is the only place that can.
-  const messages = await deleteQueryInBatches(db.collection(`groups/${groupId}/messages`));
-  await deleteQueryInBatches(db.collection(`groups/${groupId}/typing`));
-  await groupRef.delete();
 
-  return { deleted, freed, invites, messages };
+  // Its links, revoked rather than deleted, so their creators' lists still explain them. A redeem
+  // would answer "group not found" anyway; this keeps "listMyInviteLinks" honest.
+  let links = 0;
+  const linkSnap = await db.collection("invite_links").where("groupId", "==", groupId).get();
+  for (let i = 0; i < linkSnap.docs.length; i += 400) {
+    const batch = db.batch();
+    for (const d of linkSnap.docs.slice(i, i + 400)) {
+      if (d.data()?.revoked === true) continue;
+      batch.update(d.ref, { revoked: true });
+      links++;
+    }
+    await batch.commit();
+  }
+
+  // Its chat media, BEFORE the group goes: if the sweep fails, the group still exists and the owner
+  // can retry — every step above is idempotent — whereas once the document is gone a retry answers
+  // "not found" for ever. Guarded; see groupMedia.ts for why a naive sweep would be a way to wipe
+  // somebody's direct messages.
+  let media: "deleted" | "skipped" = "skipped";
+  if (GROUP_ID.test(groupId) && !(await db.doc(`chats/${groupId}`).get()).exists) {
+    try {
+      await groupMedia.sweep(groupId);
+      media = "deleted";
+    } catch (err: any) {
+      // Awaited: work left running after the response is not guaranteed CPU on 2nd-gen functions.
+      await logServerError(String(err?.message || err), "deleteGroupCascade.media", { uid, stack: err?.stack });
+      throw new HttpsError("unavailable", "The group's photos could not be removed yet. Try again.");
+    }
+  } else {
+    await logServerError(`media sweep skipped: group id is not an auto-id or names a direct chat`, "deleteGroupCascade.media", { uid });
+  }
+
+  // The chat lives UNDER the group document, so deleting the parent alone would leave it
+  // unreachable and still billed for. `recursiveDelete` takes the messages, the typing flags and the
+  // group itself, with no cap — the batch loop it replaces stopped at about 3,200 messages and then
+  // deleted the group anyway, orphaning the rest under a parent nobody could read through.
+  const messages = (await db.collection(`groups/${groupId}/messages`).count().get()).data().count;
+  await db.recursiveDelete(groupRef);
+
+  return { deleted, freed, invites, messages, media, links };
 });
 
 // ── Asset transfer "keep copy" ──
@@ -1727,12 +1770,17 @@ async function deleteQueryInBatches(query: admin.firestore.Query, max = 3000): P
   return deleted;
 }
 
-// Delete all Storage objects under the given prefixes (best-effort).
-async function deleteStoragePrefixes(prefixes: string[]): Promise<boolean> {
+// Delete all Storage objects under the given prefixes (best-effort), and SAY whether it worked.
+// It used to swallow each prefix's failure and return true regardless, so adminModerateUser reported
+// `storageDeleted: true` whether or not anything had been deleted (25.09.2026).
+export async function deleteStoragePrefixes(
+  prefixes: string[],
+  bucketOf: () => { deleteFiles(o: { prefix: string; force: boolean }): Promise<unknown> } = () => admin.storage().bucket(),
+): Promise<boolean> {
   try {
-    const bucket = admin.storage().bucket();
-    await Promise.all(prefixes.map((p) => bucket.deleteFiles({ prefix: p }).catch(() => {})));
-    return true;
+    const bucket = bucketOf();
+    const results = await Promise.allSettled(prefixes.map((p) => bucket.deleteFiles({ prefix: p, force: true })));
+    return results.every((r) => r.status === "fulfilled");
   } catch { return false; }
 }
 

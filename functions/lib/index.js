@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.adminGetAiLedger = exports.adminSetAiConfig = exports.adminGetAiConfig = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onGroupInviteCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
 exports.adminBackfillExpenses = void 0;
+exports.deleteStoragePrefixes = deleteStoragePrefixes;
 // FIRST, before anything that defines a function: the global options apply only to functions
 // defined after them. See globalOptions.ts.
 require("./globalOptions");
@@ -12,6 +13,7 @@ const admin = require("firebase-admin");
 const crypto = require("crypto");
 const genai_1 = require("@google/genai");
 const geminiKey_1 = require("./geminiKey");
+const groupMedia_1 = require("./groupMedia");
 const engine_1 = require("./warlordCombat/combat/engine");
 const pvp_1 = require("./warlordCombat/combat/pvp");
 const aiScope_1 = require("./aiScope");
@@ -1186,13 +1188,15 @@ exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
 // do: other members' events are RE-PARENTED to personal, never deleted. Losing the group should
 // not lose their data, and the owner was never entitled to delete it.
 exports.deleteGroupCascade = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
-    var _a;
+    var _a, _b;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid) {
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
     }
     const { groupId, keepEventIds } = request.data || {};
-    if (!groupId || typeof groupId !== "string") {
+    // A document id, not a path: `g1/typing/uid-bob` resolved to a subcollection document a member
+    // may shape at will (typing docs have no shape rule), which then passed the owner check below.
+    if (typeof groupId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(groupId)) {
         throw new https_1.HttpsError("invalid-argument", "groupId is required.");
     }
     // The caller's selection applies only to the caller's OWN events. Ids of anything else are
@@ -1212,12 +1216,18 @@ exports.deleteGroupCascade = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_
     let deleted = 0;
     let freed = 0;
     // No cursor is needed: every document this loop touches stops matching `groupId == groupId`
-    // (it is either deleted or re-parented to null), so the same query drains itself. The cap is
-    // there so a write that silently fails cannot turn that into a spin.
-    for (let page = 0; page < 40; page++) {
+    // (it is either deleted or re-parented to null), so the same query drains itself. The bound is
+    // there so a write that silently fails cannot turn that into a spin — and reaching it now STOPS
+    // the cascade before the group goes (25.09.2026). It used to carry on after 40 pages and delete
+    // the group anyway, leaving every event past 12,000 pointing at a group that no longer existed.
+    // Every page is committed, so a retry picks up where this one stopped.
+    for (let page = 0;; page++) {
         const snap = await db.collection("events").where("groupId", "==", groupId).limit(300).get();
         if (snap.empty)
             break;
+        if (page >= 200) {
+            throw new https_1.HttpsError("deadline-exceeded", "Still clearing the group's events — try again.");
+        }
         const batch = db.batch();
         for (const d of snap.docs) {
             const ev = d.data() || {};
@@ -1233,12 +1243,46 @@ exports.deleteGroupCascade = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_
         await batch.commit();
     }
     const invites = await deleteQueryInBatches(db.collection("group_invites").where("groupId", "==", groupId));
-    // The chat lives UNDER the group document, so deleting the parent would leave it unreachable
-    // and still billed for. Firestore does not cascade; this is the only place that can.
-    const messages = await deleteQueryInBatches(db.collection(`groups/${groupId}/messages`));
-    await deleteQueryInBatches(db.collection(`groups/${groupId}/typing`));
-    await groupRef.delete();
-    return { deleted, freed, invites, messages };
+    // Its links, revoked rather than deleted, so their creators' lists still explain them. A redeem
+    // would answer "group not found" anyway; this keeps "listMyInviteLinks" honest.
+    let links = 0;
+    const linkSnap = await db.collection("invite_links").where("groupId", "==", groupId).get();
+    for (let i = 0; i < linkSnap.docs.length; i += 400) {
+        const batch = db.batch();
+        for (const d of linkSnap.docs.slice(i, i + 400)) {
+            if (((_b = d.data()) === null || _b === void 0 ? void 0 : _b.revoked) === true)
+                continue;
+            batch.update(d.ref, { revoked: true });
+            links++;
+        }
+        await batch.commit();
+    }
+    // Its chat media, BEFORE the group goes: if the sweep fails, the group still exists and the owner
+    // can retry — every step above is idempotent — whereas once the document is gone a retry answers
+    // "not found" for ever. Guarded; see groupMedia.ts for why a naive sweep would be a way to wipe
+    // somebody's direct messages.
+    let media = "skipped";
+    if (groupMedia_1.GROUP_ID.test(groupId) && !(await db.doc(`chats/${groupId}`).get()).exists) {
+        try {
+            await groupMedia_1.groupMedia.sweep(groupId);
+            media = "deleted";
+        }
+        catch (err) {
+            // Awaited: work left running after the response is not guaranteed CPU on 2nd-gen functions.
+            await logServerError(String((err === null || err === void 0 ? void 0 : err.message) || err), "deleteGroupCascade.media", { uid, stack: err === null || err === void 0 ? void 0 : err.stack });
+            throw new https_1.HttpsError("unavailable", "The group's photos could not be removed yet. Try again.");
+        }
+    }
+    else {
+        await logServerError(`media sweep skipped: group id is not an auto-id or names a direct chat`, "deleteGroupCascade.media", { uid });
+    }
+    // The chat lives UNDER the group document, so deleting the parent alone would leave it
+    // unreachable and still billed for. `recursiveDelete` takes the messages, the typing flags and the
+    // group itself, with no cap — the batch loop it replaces stopped at about 3,200 messages and then
+    // deleted the group anyway, orphaning the rest under a parent nobody could read through.
+    const messages = (await db.collection(`groups/${groupId}/messages`).count().get()).data().count;
+    await db.recursiveDelete(groupRef);
+    return { deleted, freed, invites, messages, media, links };
 });
 // ── Asset transfer "keep copy" ──
 // Creating an asset owned by ANOTHER user can't be a client write (create
@@ -1572,12 +1616,14 @@ async function deleteQueryInBatches(query, max = 3000) {
     }
     return deleted;
 }
-// Delete all Storage objects under the given prefixes (best-effort).
-async function deleteStoragePrefixes(prefixes) {
+// Delete all Storage objects under the given prefixes (best-effort), and SAY whether it worked.
+// It used to swallow each prefix's failure and return true regardless, so adminModerateUser reported
+// `storageDeleted: true` whether or not anything had been deleted (25.09.2026).
+async function deleteStoragePrefixes(prefixes, bucketOf = () => admin.storage().bucket()) {
     try {
-        const bucket = admin.storage().bucket();
-        await Promise.all(prefixes.map((p) => bucket.deleteFiles({ prefix: p }).catch(() => { })));
-        return true;
+        const bucket = bucketOf();
+        const results = await Promise.allSettled(prefixes.map((p) => bucket.deleteFiles({ prefix: p, force: true })));
+        return results.every((r) => r.status === "fulfilled");
     }
     catch (_a) {
         return false;

@@ -9416,3 +9416,53 @@ Plasa pusă ieri și-a făcut treaba pe prima greșeală. Commit-ul ăsta aduce 
 
 Doar `--only storage`, oricând, independent de funcții și de hosting. Primește și numele vechi, și pe
 cele noi, deci nu strică nici APK-ul, nici un tab vechi.
+
+## 2026-09-25 · B — ștergerea unui grup: și media, și tot restul, cu o gardă pentru mesajele directe
+
+**Prompt (Andrei):** „continua". **Model:** Claude Opus 5.5.
+
+`deleteGroupCascade` n-avea niciun test. Citit în întregime:
+
+- **Media nu se ștergea niciodată.** Pozele și notele vocale ale unui grup șters rămâneau în bucket
+  pentru totdeauna, iar clienții nu le pot șterge.
+- **Plafoane tăcute.** Mesajele se ștergeau până pe la 3.200, evenimentele până la 12.000. Apoi grupul
+  se ștergea oricum, iar restul rămânea orfan sub un părinte inexistent.
+- **Capcana pe care o evita doar întâmplarea.** Mesajele directe stau sub ACELAȘI prefix
+  (`chat-images/{chatId}/`), iar id-ul unui chat direct e `<uid>__<uid>`, format din uid-uri publice.
+  Crearea unui grup nu constrânge id-ul. O ștergere a media după id-ul grupului, fără gardă, i-ar fi
+  permis lui Carol să creeze `groups/alice__bob`, să-l dețină, să-l șteargă și să **șteargă pozele
+  private ale lui Alice și Bob**.
+
+### Reparat
+
+- **Media, prin `functions/src/groupMedia.ts`.**
+  - Se șterge doar pentru un id de forma pe care o face `addDoc`: 20 de caractere `[A-Za-z0-9]`,
+    identic pe web și în APK.
+  - Și doar dacă nu există un chat direct cu același id.
+  - Totul se întâmplă **înainte** să dispară grupul. Dacă ștergerea eșuează, apelul pică, grupul
+    rămâne, iar o reîncercare termină treaba.
+  - Măsurat pe live: toate cele 5 grupuri au forma asta.
+- **Mesaje, `typing` și grupul însuși:** `recursiveDelete`, fără plafon.
+- **Evenimente:** bucla merge până se golește. Dacă atinge limita, se OPREȘTE înainte să șteargă
+  grupul, în loc să continue în tăcere.
+- **Linkurile grupului sunt revocate.**
+- **Id-ul grupului trebuie să fie un id, nu o cale.** `g/typing/uid` ajungea într-un document din
+  subcolecție pe care un membru îl poate modela cum vrea.
+- **`deleteStoragePrefixes` spune acum dacă a mers.** Înghițea orice eșec și răspundea `true`, deci
+  adminul vedea „fișierele au fost șterse” și când nu se ștersese nimic.
+
+### Proba
+
+- **Teste noi:** `functions/test/deleteGroupCascade.test.ts`, 10 teste, pe emulatoarele de Firestore
+  și Storage, prin handler-ul real. Printre ele:
+  - un grup cu numele unui chat direct;
+  - un eșec de Storage urmat de o reîncercare reușită;
+  - 3.500 de mesaje.
+- **Pe cascada de ieri:** 7 roșii. Ordinarul și „doar owner-ul” erau deja corecte, deci rămân verzi.
+- **Opt mutații, toate prinse, fiecare de exact un test:** fără garda de formă; fără garda de chat
+  direct; prefix fără `/`; doar pozele, fără audio; eșecul înghițit; mesajele iar plafonate; o cale
+  acceptată drept id; `deleteStoragePrefixes` iar mereu `true`.
+
+**Lăsate intenționat, în BACKLOG, ca decizii ale lui Andrei:**
+- trigger-ul care ar acoperi și ștergerea de grup din APK, care ocolește callable-ul;
+- ce se face cu cheltuielile, jocurile și cardurile partajate ale unui grup șters.

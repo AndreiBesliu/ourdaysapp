@@ -51,8 +51,15 @@ pică exact când se ajunge aici.
 
 - **`hiddenFrom`** — decizia e a lui Andrei (`OWNER_VERIFY.md`). Impunerea reală cere alt model de
   date și vine după reconstruire.
-- **Storage:** `deleteGroupCascade` nu curăță `chat-images/` și `chat-audio/`, deci pozele unui grup
-  șters rămân pentru totdeauna. (Citirea și ștergerea de către proprietar sunt reparate din 25.09.)
+- **Ștergerea unui grup din APK ocolește cascada.** APK-ul șterge grupul direct din client:
+  evenimentele, apoi invitațiile, apoi `groups/{id}`. Lasă în urmă mesajele, `typing` și media.
+  Singurul remediu care acoperă telefoanele e un trigger `onDocumentDeleted('groups/{id}')` cu
+  aceeași gardă ca în `groupMedia.ts`. Decizia lui Andrei; până atunci îl rezolvă reconstruirea.
+- **Ce mai lasă cascada în urmă, intenționat până decide Andrei** (măsurat 25.09):
+  - cheltuielile grupului, care rămân cu un `groupId` mort și devin needitabile;
+  - jocurile grupului;
+  - cardurile partajate cu grupul, care rămân cu `sharedGroupId` mort.
+  Pentru fiecare: ștergere, mutare pe personal, sau nimic.
 - **Storage, apartenența la conversație:** oricine e logat poate încărca un fișier NOU, pe numele
   lui, în folderul oricărei conversații. Închiderea cere regulile cross-service (un grant IAM și o
   citire facturată pe cerere), pe care `storage.rules` le refuză deliberat. Decizia lui Andrei.
@@ -60,8 +67,6 @@ pică exact când se ajunge aici.
   `apk-compat` — APK-ul creează și actualizează jocuri.
 - **`logClientError`:** 200 de rânduri pe zi per cont, fără expirare. Codul poate scrie un
   `expireAt`; politica TTL se pornește din consolă.
-- **Callable-uri fără test pe emulator:** `deleteGroupCascade`. `acceptGroupInvite` și
-  `redeemGroupInviteLink` au teste din 25.09. Harness-ul e în `functions/test/`, cu emulatorul de Auth.
 - **Un membru scos poate accepta o a DOUA invitație încă în așteptare** în același grup. Scoaterea
   nu anulează invitațiile și linkurile lui. Asta cere un trigger pe `groups` sau o listă a celor scoși,
   ținută de server. Decizia lui Andrei.
