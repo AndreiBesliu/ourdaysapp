@@ -63,8 +63,10 @@ pică exact când se ajunge aici.
 - **Storage, apartenența la conversație:** oricine e logat poate încărca un fișier NOU, pe numele
   lui, în folderul oricărei conversații. Închiderea cere regulile cross-service (un grant IAM și o
   citire facturată pe cerere), pe care `storage.rules` le refuză deliberat. Decizia lui Andrei.
-- **Arcade:** un membru poate adăuga străini în `players` (reguli ~640-658). De verificat contra
-  `apk-compat` — APK-ul creează și actualizează jocuri.
+- **Arcade, în interiorul grupului:** `gameType` e text liber la creare și devine titlul push-ului
+  pentru ceilalți membri, deci un membru poate pune orice text pe ecranele blocate ale grupului.
+  Mutările din APK nu scriu `lastMoveAt`, deci un joc jucat doar pe telefon poate fi închis de
+  expirarea de 24h în timp ce e jucat (dedus din cod, nemăsurat).
 - **`logClientError`:** 200 de rânduri pe zi per cont, fără expirare. Codul poate scrie un
   `expireAt`; politica TTL se pornește din consolă.
 - **Un membru scos poate accepta o a DOUA invitație încă în așteptare** în același grup. Scoaterea

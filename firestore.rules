@@ -682,7 +682,14 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
         request.resource.data.createdBy == request.auth.uid &&
         request.resource.data.gameType != 'warlord-battle' &&
-        isMemberOfGroup(request.resource.data.groupId);
+        isMemberOfGroup(request.resource.data.groupId) &&
+        // `players` is the Warlord participant list, and the read rule above grants on it to
+        // whoever it names — group or no group. Arcade seats live in `state.players`; no arcade
+        // client (web or APK) has ever written the top-level key. Until 25.09.2026 nothing enforced
+        // that, so a member could name a stranger there and hand them the game — board, members,
+        // rummy hands — and put it in the stranger's "my battles" listener. Measured on live:
+        // 18 arcade games, none carrying the key.
+        !('players' in request.resource.data);
       // Warlord docs are fully server-owned: clients may not update them at all
       // (every mutation goes through the callables, which bypass rules). Arcade
       // games keep the original client-authoritative behavior.
@@ -704,7 +711,12 @@ service cloud.firestore {
         // caller's fields and a timestamp — and no caller passes any of these three.
         request.resource.data.createdBy == resource.data.createdBy &&
         request.resource.data.gameType == resource.data.gameType &&
-        request.resource.data.groupId == resource.data.groupId;
+        request.resource.data.groupId == resource.data.groupId &&
+        // Nor may `players` be ADDED or CHANGED (see create). Judged on the DIFF, not on the
+        // resulting document: a game that already carries the key must stay playable, and taking
+        // the key away removes a reader, which is allowed.
+        !request.resource.data.diff(resource.data).addedKeys().hasAny(['players']) &&
+        !request.resource.data.diff(resource.data).changedKeys().hasAny(['players']);
       // Warlord battles are never client-deletable (cancelling a waiting challenge
       // goes through forfeitWarlordBattle, which also cleans the private deploy doc).
       allow delete: if isSignedIn() &&

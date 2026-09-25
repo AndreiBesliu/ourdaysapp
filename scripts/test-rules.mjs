@@ -10,7 +10,8 @@
 //        npm run test:rules -- -t foo  (extra args are passed through to vitest)
 
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 
@@ -62,6 +63,19 @@ if (!chosen) {
 }
 
 const env = { ...process.env };
+
+// A temp directory of this run's OWN. The Storage emulator keeps its blobs in
+// <tmp>/firebase/storage/blobs and DELETES that directory when it stops (firebase-tools
+// lib/emulator/storage/index.js, stop → persistence.deleteAll). Every emulator on the machine
+// shares <tmp>, so any other one stopping — another project's session, or an earlier run of this
+// one — pulled the directory out from under a running suite, which died mid-upload with ENOENT and
+// left its Firestore emulator orphaned on the port (measured 25.09.2026, twice in ten minutes).
+// And our own stop was doing the same to theirs.
+const runTmp = join(os.tmpdir(), 'ourdays-emulators', String(process.pid));
+mkdirSync(runTmp, { recursive: true });
+env.TMP = runTmp;
+env.TEMP = runTmp;
+env.TMPDIR = runTmp;
 if (chosen.home) {
   env.JAVA_HOME = chosen.home;
   env.PATH = `${join(chosen.home, 'bin')}${process.platform === 'win32' ? ';' : ':'}${env.PATH}`;
@@ -93,4 +107,5 @@ const cmd = `npx firebase emulators:exec --only firestore,storage,auth --project
 const r = spawnSync(cmd, {
   stdio: 'inherit', env, shell: true, cwd: join(import.meta.dirname, '..'),
 });
+try { rmSync(runTmp, { recursive: true, force: true }); } catch { /* best effort */ }
 process.exit(r.status ?? 1);

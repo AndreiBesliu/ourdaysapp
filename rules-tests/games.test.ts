@@ -13,8 +13,10 @@
 // were repaired hours ago. Here the field is `createdBy`.
 
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
-import { beforeAll, afterAll, beforeEach, describe, it } from 'vitest';
+import {
+  addDoc, collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where,
+} from 'firebase/firestore';
+import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { ALICE, BOB, CAROL, DAVE, G1, G2, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
 
 beforeAll(async () => { await startEnv('demo-ourdays-games'); });
@@ -73,6 +75,65 @@ describe('an arcade game: client-authoritative, but not owner-rewritable', () =>
 
   it('nor move it into a group they are not in', async () => {
     await assertFails(updateDoc(doc(as(BOB), 'games', 'g-arcade'), { groupId: G2 }));
+  });
+});
+
+// ── 25.09.2026: an arcade game names no reader outside its group ─────────────────────────────
+// The read rule grants a game to whoever its top-level `players` names — that is how a global
+// Warlord battle is read by its two players. Arcade seats live in `state.players`, and no arcade
+// client has ever written the top-level key, but nothing enforced it: a member could name a
+// stranger and hand them the game, and put it in the stranger's "my battles" listener.
+
+/** The installed APK's tic-tac-toe create, field for field from the bundle. */
+const APK_TTT = (uid: string) => ({
+  groupId: G1, date: '2026-09-25', gameType: 'tic-tac-toe', status: 'waiting',
+  createdAt: serverTimestamp(), createdBy: uid,
+  state: { board: Array(9).fill(null), xIsNext: true, players: { X: uid, O: null }, scores: { X: 0, O: 0 } },
+  winner: null,
+});
+
+describe('an arcade game names no reader outside its group', () => {
+  beforeEach(async () => {
+    // A game that already carries the key — the case the rule must keep playable.
+    await seed(async (db) => {
+      await setDoc(doc(db, 'games', 'g-legacy'), { ...APK_TTT(ALICE), createdAt: new Date(), players: [DAVE] });
+    });
+  });
+
+  it('a member cannot create one that names a stranger — nor one that names only themselves', async () => {
+    await assertFails(addDoc(collection(as(BOB), 'games'), { ...APK_TTT(BOB), players: [DAVE] }));
+    await assertFails(addDoc(collection(as(BOB), 'games'), { ...APK_TTT(BOB), players: [BOB] }));
+  });
+
+  it('a member cannot add it to a game in play, nor slip it into a real move', async () => {
+    await assertFails(updateDoc(doc(as(BOB), 'games', 'g-arcade'), { players: [DAVE] }));
+    await assertFails(updateDoc(doc(as(BOB), 'games', 'g-arcade'), { board: ['X', '', ''], players: [DAVE] }));
+  });
+
+  it('so the stranger can neither open the game nor find it', async () => {
+    await updateDoc(doc(as(BOB), 'games', 'g-arcade'), { players: [DAVE] }).catch(() => undefined);
+    await assertFails(getDoc(doc(as(DAVE), 'games', 'g-arcade')));
+    const mine = await getDocs(query(collection(as(DAVE), 'games'), where('players', 'array-contains', DAVE)));
+    expect(mine.docs.map((d) => d.id)).toEqual(['g-legacy']);
+  });
+
+  it('a game that already carries the key stays playable', async () => {
+    await assertSucceeds(updateDoc(doc(as(BOB), 'games', 'g-legacy'), { 'state.players.O': BOB, status: 'playing' }));
+  });
+
+  it('but its list cannot change', async () => {
+    await assertFails(updateDoc(doc(as(BOB), 'games', 'g-legacy'), { players: [DAVE, CAROL] }));
+  });
+
+  it('and a member may remove it, which takes the stranger\u2019s access away', async () => {
+    await assertSucceeds(getDoc(doc(as(DAVE), 'games', 'g-legacy')));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'games', 'g-legacy'), { players: deleteField() }));
+    await assertFails(getDoc(doc(as(DAVE), 'games', 'g-legacy')));
+  });
+
+  it('the Warlord "my battles" listener still proves', async () => {
+    const mine = await getDocs(query(collection(as(ALICE), 'games'), where('players', 'array-contains', ALICE)));
+    expect(mine.docs.map((d) => d.id)).toContain('g-battle');
   });
 });
 

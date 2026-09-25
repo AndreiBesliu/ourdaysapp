@@ -46,7 +46,7 @@
 import { beforeAll, afterAll, beforeEach, describe, it } from 'vitest';
 import { assertSucceeds } from '@firebase/rules-unit-testing';
 import {
-  addDoc, arrayUnion, collection, doc, serverTimestamp, setDoc, updateDoc, writeBatch,
+  addDoc, arrayUnion, collection, deleteDoc, doc, serverTimestamp, setDoc, updateDoc, writeBatch,
 } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { ALICE, BOB, G1, EMAIL, as, filesAs, resetBucket, resetWorld, seed, startEnv, stopEnv } from './_harness';
@@ -101,10 +101,26 @@ describe('what the installed APK creates', () => {
     }));
   });
 
-  it('a game', async () => {
+  // Until 25.09 this case created a 'connect4' game with an empty state — a payload the APK can
+  // never send (it has tic-tac-toe and rummy-45 only). These are its two, from the bundle.
+  it('a game: tic-tac-toe', async () => {
     await assertSucceeds(addDoc(collection(as(BOB), 'games'), {
-      groupId: G1, date: '2026-09-24', gameType: 'connect4', status: 'waiting',
-      createdAt: serverTimestamp(), createdBy: BOB, state: {}, winner: null,
+      groupId: G1, date: '2026-09-24', gameType: 'tic-tac-toe', status: 'waiting',
+      createdAt: serverTimestamp(), createdBy: BOB,
+      state: { board: Array(9).fill(null), xIsNext: true, players: { X: BOB, O: null }, scores: { X: 0, O: 0 } },
+      winner: null,
+    }));
+  });
+
+  it('a game: rummy-45', async () => {
+    await assertSucceeds(addDoc(collection(as(BOB), 'games'), {
+      groupId: G1, date: '2026-09-24', gameType: 'rummy-45', status: 'waiting',
+      createdAt: serverTimestamp(), createdBy: BOB,
+      state: {
+        players: { [BOB]: { uid: BOB, hand: [], hasMelded: false, score: 0 } }, playerIds: [BOB],
+        turnIndex: 0, turnPhase: 'draw', deck: [], discardPile: [], melds: [], status: 'waiting', winner: null,
+      },
+      winner: null,
     }));
   });
 
@@ -143,6 +159,60 @@ describe('Storage: what the installed APK uploads, then reads straight back', ()
     const r = ref(filesAs(BOB), path);
     await assertSucceeds(uploadBytes(r, photo(), meta));
     await assertSucceeds(getDownloadURL(r));
+  });
+});
+
+describe('what the installed APK writes into a game', () => {
+  // The bundle's update payloads, field for field. Since 25.09 an arcade game may not gain a
+  // top-level `players`; none of these touches it, and all must stay allowed.
+  beforeEach(async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'games', 'apk-ttt'), {
+        groupId: G1, date: '2026-09-24', gameType: 'tic-tac-toe', status: 'waiting', createdAt: new Date(),
+        createdBy: ALICE,
+        state: { board: Array(9).fill(null), xIsNext: true, players: { X: ALICE, O: null }, scores: { X: 0, O: 0 } },
+        winner: null,
+      });
+      await setDoc(doc(db, 'games', 'apk-rummy'), {
+        groupId: G1, date: '2026-09-24', gameType: 'rummy-45', status: 'waiting', createdAt: new Date(), createdBy: ALICE,
+        state: {
+          players: { [ALICE]: { uid: ALICE, hand: [], hasMelded: false, score: 0 } }, playerIds: [ALICE], turnIndex: 0,
+          turnPhase: 'draw', deck: [], discardPile: [], melds: [], status: 'waiting', winner: null,
+        },
+        winner: null,
+      });
+    });
+  });
+
+  it('tic-tac-toe: join, move, reset', async () => {
+    const g = doc(as(BOB), 'games', 'apk-ttt');
+    await assertSucceeds(updateDoc(g, { 'state.players.O': BOB, status: 'playing' }));
+    await assertSucceeds(updateDoc(g, {
+      'state.board': ['X', null, null, null, null, null, null, null, null], 'state.xIsNext': false,
+      'state.scores': { X: 0, O: 0 }, status: 'playing', winner: null,
+    }));
+    await assertSucceeds(updateDoc(g, { 'state.board': Array(9).fill(null), status: 'playing', winner: null }));
+  });
+
+  it('rummy: join, then the creator starts it by replacing the whole state', async () => {
+    await assertSucceeds(updateDoc(doc(as(BOB), 'games', 'apk-rummy'), {
+      'state.playerIds': [ALICE, BOB],
+      'state.players': {
+        [ALICE]: { uid: ALICE, hand: [], hasMelded: false, score: 0 },
+        [BOB]: { uid: BOB, hand: [], hasMelded: false, score: 0 },
+      },
+    }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'games', 'apk-rummy'), {
+      state: {
+        players: {}, playerIds: [ALICE, BOB], turnIndex: 0, turnPhase: 'draw',
+        deck: [], discardPile: [], melds: [], status: 'playing', winner: null,
+      },
+      status: 'playing',
+    }));
+  });
+
+  it('the creator deletes it', async () => {
+    await assertSucceeds(deleteDoc(doc(as(ALICE), 'games', 'apk-ttt')));
   });
 });
 

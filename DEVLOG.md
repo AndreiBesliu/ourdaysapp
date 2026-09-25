@@ -9466,3 +9466,54 @@ cele noi, deci nu strică nici APK-ul, nici un tab vechi.
 **Lăsate intenționat, în BACKLOG, ca decizii ale lui Andrei:**
 - trigger-ul care ar acoperi și ștergerea de grup din APK, care ocolește callable-ul;
 - ce se face cu cheltuielile, jocurile și cardurile partajate ale unui grup șters.
+
+## 2026-09-25 · B — jocurile din arcade nu mai pot numi un străin drept cititor
+
+**Prompt (Andrei):** „continua". **Model:** Claude Opus 5.5.
+
+**Ce era:**
+- Regula de citire a jocurilor dă un joc oricui îl numește `players` de pe primul nivel. Așa își
+  citesc cei doi jucători o bătălie Warlord globală.
+- La arcade, locurile stau în `state.players`, iar niciun client, web sau APK, n-a scris vreodată
+  cheia de pe primul nivel. Comentariul din 13.07 spunea exact asta, dar nicio regulă n-o impunea.
+- Deci un membru putea numi un străin: la creare, sau strecurat într-o mutare reală. Străinul primea
+  jocul (tabla, uid-urile membrilor, cărțile de la rummy), și jocul apărea în lista lui „my battles”.
+
+**Măsurat pe live:** 18 jocuri de arcade, **0** cu cheia `players`. Nu trebuie curățat nimic.
+
+**Reparat:**
+- La creare, un joc de arcade nu poate purta `players`.
+- La update, cheia nu poate fi **adăugată** și nici **schimbată**, judecat pe diferență, nu pe
+  documentul rezultat. Un joc care o are deja rămâne jucabil, iar un membru o poate scoate, ceea ce
+  îi ia străinului accesul.
+- Ramura de citire Warlord a rămas neatinsă. Restrânsă după `gameType`, lista „my battles” ar fi
+  refuzată în bloc (e o interogare LIST), iar o mutație o arată.
+
+**Plasa APK corectată:**
+- `apk-compat` crea un joc `connect4` cu stare goală, un payload pe care APK-ul nu-l poate trimite
+  niciodată. Acum are cele două create-uri reale, tic-tac-toe și rummy-45.
+- Plus mutările: intrarea, mutarea și reluarea la tic-tac-toe, intrarea și pornirea la rummy,
+  ștergerea. Toate copiate din bundle.
+
+**Proba:**
+- 7 teste noi în `games.test.ts`. Pe regulile de ieri, exact **4 roșii**, cele ale defectului; cele
+  care fixează ce trebuie să rămână (jucabil, se poate scoate, lista Warlord) sunt verzi pe ambele.
+- **Șase mutații, toate prinse:** creare cu `players` → 1 roșu; adăugare la update → 2; schimbare →
+  1; forma pe documentul rezultat (care ar îngheța jocurile vechi) → 1; blocare completă (care ar
+  împiedica scoaterea) → 1; citire restrânsă la Warlord (care ar goli lista) → 3.
+
+**Trecute în BACKLOG:**
+- `gameType` e text liber și ajunge titlu de push în grup.
+- Mutările din APK nu scriu `lastMoveAt` (dedus din cod, nemăsurat).
+
+**Pe drum, în rularea completă:** suita de emulator a căzut de două ori în zece minute. Pe rând,
+fiecare test trecea.
+- **Cauza, citită în sursa CLI-ului:** emulatorul de Storage ține blob-urile în
+  `%TEMP%/firebase/storage/blobs`, comun tuturor emulatoarelor de pe mașină, și șterge dosarul când se
+  oprește. Orice alt emulator care se oprea scotea dosarul de sub suita noastră: ENOENT în mijlocul
+  unei încărcări, CLI-ul mort, emulatorul Java orfan pe port.
+- **Reparat:** `scripts/test-rules.mjs` dă fiecărei rulări un `TEMP` propriu și îl șterge la final.
+- **Verificat mecanismul, nu doar verdele:** după o rulare de Storage, dosarul comun rămâne absent.
+- **Cele două emulatoare orfane** erau ale noastre (proiect `demo-ourdays-rules`, regulile din repo),
+  verificat pe linia de comandă înainte să le opresc.
+- Rularea completă: **23 de fișiere, 427 de teste**, verzi.
