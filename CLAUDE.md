@@ -31,6 +31,11 @@ React + TypeScript + Vite + Tailwind, Firebase (Auth, Firestore, Functions, Host
   - Fără `.env.live` / `.env.default`: predeploy-ul nu știe ce alias folosește comanda.
   - Predeploy-ul `scripts/functions-env-guard.mjs` refuză un deploy care încalcă oricare dintre ele;
     nu-l ocoli.
+- **Hosting-ul are o dependență de funcții, de la 26.09:** repetarea zilnică cu filtru (`onlyOn`, în
+  `recurrenceCore.ts`). Un hosting publicat înaintea funcțiilor lasă serverul vechi să trimită
+  memento-uri în zilele pe care seria le sare, fără ca utilizatorul să aibă ce șterge. Ordinea rămâne
+  **functions → hosting**. Hosting singur doar cu acordul explicit al lui Andrei, spus în aceste
+  cuvinte.
 - **CI:** `.github/workflows/ci.yml` — typecheck + teste + build la fiecare push pe `main`. **Nu** face deploy: livrarea rămâne manuală și deliberată.
 
 ## ⚠️ Warlord e un SUBMODUL, nu cod din repo-ul ăsta

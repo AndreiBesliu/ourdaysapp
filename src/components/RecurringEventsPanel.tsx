@@ -1,12 +1,12 @@
 import { X, Repeat, Trash2, Edit2, Calendar as CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
-import { eventDayAsLocalDate } from '../utils/dayLabel';
+import { eventDayAsLocalDate, dayAsLocalDate } from '../utils/dayLabel';
 import { deleteDoc, doc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { useState } from 'react';
 import { useDialog } from '../hooks/useDialog';
-import { getRecurrenceEndDate, getFrequencyKey } from '../utils/recurrence';
-import { seriesStartDay } from '../utils/recurrenceCore';
+import { getRecurrenceEndDate, getFrequencyKey, repeatLabelKey } from '../utils/recurrence';
+import { seriesStartDay, firstOccurrenceDay, isFrequency } from '../utils/recurrenceCore';
 import { t, getDateLocale } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { reportError } from '../reportError';
@@ -134,8 +134,18 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
                       // with it. This is the second live instance of the bug `dayLabel.ts` exists to
                       // fix; the guard written alongside it could not see this one, because the Date
                       // is bound to a variable before it reaches `format`.
-                      const startDate = eventDayAsLocalDate(ev.date) ?? new Date(NaN);
-                      const endDate = getRecurrenceEndDate(seriesStartDay(ev.date), freq as any);
+                      //
+                      // Both ends from the core, as days that actually have an occurrence: a
+                      // weekdays-only series stored as starting on a Saturday begins on the Monday,
+                      // and its horizon may be a day it skips (26.09.2026).
+                      const onlyOn = ev.recurrenceRule?.onlyOn;
+                      const seriesStart = seriesStartDay(ev.date);
+                      const firstDay = seriesStart && isFrequency(freq) ? firstOccurrenceDay(seriesStart, freq, onlyOn) : null;
+                      const startDate = (firstDay ? dayAsLocalDate(firstDay) : null) ?? eventDayAsLocalDate(ev.date) ?? new Date(NaN);
+                      const endDate = getRecurrenceEndDate(seriesStart, freq as any, onlyOn);
+                      // Under the "Daily" header, name the filter on the row: "Weekdays (Mon–Fri)".
+                      const filterKey = repeatLabelKey(ev.recurrenceRule);
+                      const showFilter = !!filterKey && filterKey !== getFrequencyKey(freq as any);
                       const isOwner = ev.ownerId === auth.currentUser?.uid;
                       
                       return (
@@ -145,6 +155,9 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
                         >
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100 truncate">{ev.title}</p>
+                            {showFilter && (
+                              <p className="text-xs text-indigo-600 dark:text-indigo-300 mt-0.5">🔁 {t(filterKey as string, language)}</p>
+                            )}
                             <div className="flex items-center gap-2 mt-1 flex-wrap">
                               <span className="text-xs text-zinc-500 flex items-center gap-1">
                                 <CalendarIcon className="w-3 h-3" />

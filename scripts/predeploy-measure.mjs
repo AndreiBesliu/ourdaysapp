@@ -58,7 +58,8 @@ for (const s of series) {
   if (!start) continue;
   if ((f === 'monthly' || f === 'yearly') && Number(start.slice(8, 10)) >= 29) r.monthlyOrYearlyOnDay29to31++;
   const end = horizonEndDay(start, f);
-  const days = new Set(occurrenceDaysInWindow(start, f, start, end || start));
+  const days = new Set(occurrenceDaysInWindow(start, f, start, end || start, 0, s.recurrenceRule.onlyOn));
+  if (s.recurrenceRule.onlyOn !== undefined) r.withDayFilter = (r.withDayFilter || 0) + 1;
   for (const key of Array.isArray(s.recurrenceExceptions) ? s.recurrenceExceptions : []) {
     if (typeof key !== 'string') continue;
     r.exceptionKeys++;

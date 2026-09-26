@@ -116,7 +116,10 @@ function expandInWindow(docs, fromDay, toDay) {
             continue;
         const exceptions = new Set((Array.isArray(ev.recurrenceExceptions) ? ev.recurrenceExceptions : [])
             .filter((x) => typeof x === "string"));
-        for (const day of (0, recurrenceCore_1.occurrenceDaysInWindow)(startDay, freq, fromDay, toDay, spanDays)) {
+        // The rule's day filter too, or reminders and the digest would keep the Saturdays the calendar
+        // no longer shows. `frequencyOf` returned a frequency, so the rule is an object here.
+        const onlyOn = ev.recurrenceRule.onlyOn;
+        for (const day of (0, recurrenceCore_1.occurrenceDaysInWindow)(startDay, freq, fromDay, toDay, spanDays, onlyOn)) {
             const ms = Date.parse(`${day}T00:00:00.000Z`);
             const suppressed = freq === "daily"
                 ? exceptions.has(day)

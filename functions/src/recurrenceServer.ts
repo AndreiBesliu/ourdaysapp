@@ -45,7 +45,8 @@ export const SHORT_FREQUENCIES: readonly Frequency[] = ["daily", "weekly", "mont
 export interface EventDoc {
   id: string;
   date?: unknown;
-  recurrenceRule?: { frequency?: unknown } | null;
+  /** `onlyOn` keeps only weekdays or weekends of a DAILY series; see recurrenceCore.ts. */
+  recurrenceRule?: { frequency?: unknown; onlyOn?: unknown } | null;
   recurrenceExceptions?: unknown;
   overrideOfParent?: unknown;
   [k: string]: unknown;
@@ -142,7 +143,10 @@ export function expandInWindow(docs: readonly EventDoc[], fromDay: string, toDay
         .filter((x): x is string => typeof x === "string")
     );
 
-    for (const day of occurrenceDaysInWindow(startDay, freq, fromDay, toDay, spanDays)) {
+    // The rule's day filter too, or reminders and the digest would keep the Saturdays the calendar
+    // no longer shows. `frequencyOf` returned a frequency, so the rule is an object here.
+    const onlyOn = (ev.recurrenceRule as { onlyOn?: unknown }).onlyOn;
+    for (const day of occurrenceDaysInWindow(startDay, freq, fromDay, toDay, spanDays, onlyOn)) {
       const ms = Date.parse(`${day}T00:00:00.000Z`);
       const suppressed = freq === "daily"
         ? exceptions.has(day)

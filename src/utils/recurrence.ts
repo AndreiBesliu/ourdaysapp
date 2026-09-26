@@ -1,11 +1,72 @@
 import { isValidDayOffset, localDayKey } from './eventTime';
 import { dayAsLocalDate } from './dayLabel';
 import {
-  seriesStartDay, horizonEndDay, occurrenceDaysInWindow, isFrequency,
+  seriesStartDay, lastOccurrenceDay, firstOccurrenceDay, occurrenceDaysInWindow, isFrequency, dayFilterOf, type DayFilter,
 } from './recurrenceCore';
 
 export interface RecurrenceRule {
   frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  /** Daily only: keep just weekdays or just weekends. See recurrenceCore.ts. */
+  onlyOn?: DayFilter;
+}
+
+/**
+ * What the repeat dropdown offers. Two of them are not frequencies: "weekdays" and "weekends" are a
+ * DAILY rule with a day filter. One value for the whole choice, so a filter can never be left
+ * behind on a weekly series by a second control that was not reset.
+ */
+export type RepeatChoice = 'none' | 'daily' | 'weekdays' | 'weekends' | 'weekly' | 'monthly' | 'yearly';
+
+export const REPEAT_CHOICES: readonly RepeatChoice[] = ['none', 'daily', 'weekdays', 'weekends', 'weekly', 'monthly', 'yearly'];
+
+/** For a value restored from a draft, which any bundle — older or newer — may have written. */
+export function isRepeatChoice(x: unknown): x is RepeatChoice {
+  return typeof x === 'string' && (REPEAT_CHOICES as readonly string[]).includes(x);
+}
+
+/**
+ * How a choice goes into the new-event draft (`ourDays_draftEvent`, one localStorage key shared by
+ * every open tab, whatever bundle each runs). A tab from before 26.09 restores `repeat` UNCHECKED
+ * and stores `{ frequency: repeat }`: handed 'weekdays', it would have saved a frequency every
+ * reader treats as "does not repeat" — one event instead of a series. So a filtered choice is
+ * written as 'daily' plus `repeatOnlyOn`: the older tab restores plain daily (every day, the same
+ * way every older reader shows such a series), and this bundle restores the exact choice.
+ */
+export function draftFieldsForRepeat(choice: RepeatChoice): { repeat: RepeatChoice; repeatOnlyOn?: DayFilter } {
+  return choice === 'weekdays' || choice === 'weekends'
+    ? { repeat: 'daily', repeatOnlyOn: choice }
+    : { repeat: choice };
+}
+
+/** The choice a draft holds, or null when it holds none this bundle knows. */
+export function repeatFromDraft(draft: { repeat?: unknown; repeatOnlyOn?: unknown } | null | undefined): RepeatChoice | null {
+  const only = draft?.repeatOnlyOn;
+  if (draft?.repeat === 'daily' && (only === 'weekdays' || only === 'weekends')) return only;
+  return isRepeatChoice(draft?.repeat) ? draft!.repeat as RepeatChoice : null;
+}
+
+/** The stored rule for a dropdown choice; null for "does not repeat". */
+export function ruleForRepeatChoice(choice: RepeatChoice): RecurrenceRule | null {
+  switch (choice) {
+    case 'none': return null;
+    case 'weekdays': return { frequency: 'daily', onlyOn: 'weekdays' };
+    case 'weekends': return { frequency: 'daily', onlyOn: 'weekends' };
+    default: return { frequency: choice };
+  }
+}
+
+/**
+ * The i18n key naming a stored rule: "Daily", or "Weekdays (Mon–Fri)" / "Weekends (Sat–Sun)" when a
+ * daily series keeps only those. Null for a rule the app cannot read. Every badge goes through this;
+ * `getFrequencyKey` alone would call a weekdays-only series "Daily".
+ */
+export function repeatLabelKey(rule: { frequency?: unknown; onlyOn?: unknown } | null | undefined): string | null {
+  const freq = rule?.frequency;
+  if (!isFrequency(freq)) return null;
+  const filter = dayFilterOf(freq, rule?.onlyOn);
+  if (filter === 'weekdays') return 'freqWeekdays';
+  if (filter === 'weekends') return 'freqWeekends';
+  return getFrequencyKey(freq);
 }
 
 /**
@@ -20,9 +81,15 @@ export interface RecurrenceRule {
  * EARLY for the series panel, which passed a LOCAL midnight: in Bucharest summer that is 21:00 UTC
  * the evening before. Found by the pre-deploy review, the same day the version with a Date shipped
  * to no one. A label has no zone to get wrong. The panel passes `seriesStartDay(ev.date)`.
+ *
+ * With a day filter it is the last KEPT day, not the horizon (26.09.2026): the horizon of a
+ * weekdays-only series can be a Saturday, and the form would have promised an occurrence the
+ * calendar never shows.
  */
-export function getRecurrenceEndDate(startDay: string | null, frequency: RecurrenceRule['frequency']): Date | null {
-  const end = startDay && isFrequency(frequency) ? horizonEndDay(startDay, frequency) : null;
+export function getRecurrenceEndDate(
+  startDay: string | null, frequency: RecurrenceRule['frequency'], onlyOn?: unknown,
+): Date | null {
+  const end = startDay && isFrequency(frequency) ? lastOccurrenceDay(startDay, frequency, onlyOn) : null;
   return end ? dayAsLocalDate(end) : null;
 }
 
@@ -86,6 +153,7 @@ export function expandRecurringEvents(
     // calendar's cells), and a local Date's label is its local calendar day.
     const days = occurrenceDaysInWindow(
       startDay, frequency, localDayKey(windowStart), localDayKey(windowEnd), spanDays,
+      (event.recurrenceRule as RecurrenceRule).onlyOn,
     );
 
     for (const dateStr of days) {
@@ -133,6 +201,7 @@ export function expandRecurringEvents(
  */
 export function shiftedSeriesStart(
   parentDate: unknown, occurrenceDay: unknown, newDay: unknown,
+  rule?: { frequency?: unknown; onlyOn?: unknown } | null,
 ): string | null {
   if (typeof occurrenceDay !== 'string' || typeof newDay !== 'string') return null;
   // Unchanged: the overwhelmingly common case, and the one that used to destroy the series.
@@ -145,9 +214,16 @@ export function shiftedSeriesStart(
 
   const deltaDays = Math.round((to - from) / 86_400_000);
   if (deltaDays === 0) return null;
+  // A day-filtered series moves from its first KEPT day, not its stored start (26.09.2026). Stored
+  // on a Saturday, a weekdays-only series first occurs on the Monday; shifting the Saturday by one
+  // gave a Sunday — the same first Monday, so moving Monday to Tuesday changed nothing visible.
+  const freq = rule?.frequency;
+  const anchor = isFrequency(freq) && dayFilterOf(freq, rule?.onlyOn)
+    ? firstOccurrenceDay(startDay, freq, rule?.onlyOn) ?? startDay
+    : startDay;
   // In day labels, then back to the stored form. This was `addDays(start, deltaDays)` on the
   // LOCAL clock, which across the March DST change stored 23:00Z — a Wednesday the server read
   // as a Tuesday, so every reminder for the moved series came a day early.
-  const moved = new Date(Date.parse(`${startDay}T00:00:00.000Z`) + deltaDays * 86_400_000);
+  const moved = new Date(Date.parse(`${anchor}T00:00:00.000Z`) + deltaDays * 86_400_000);
   return `${moved.toISOString().slice(0, 10)}T00:00:00.000Z`;
 }

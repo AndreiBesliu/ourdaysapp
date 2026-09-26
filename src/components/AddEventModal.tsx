@@ -17,7 +17,7 @@ import { generateChecklistForTask, suggestEventCategoryAI, suggestAssetForTextAI
 import { notifyUsers } from '../notifications';
 import { createEventOverride } from '../serverActions';
 import { format } from 'date-fns';
-import { getRecurrenceEndDate, getFrequencyKey } from '../utils/recurrence';
+import { getRecurrenceEndDate, repeatLabelKey, ruleForRepeatChoice, isRepeatChoice, draftFieldsForRepeat, repeatFromDraft, type RepeatChoice } from '../utils/recurrence';
 import { useDialog } from '../hooks/useDialog';
 import { useMenu } from '../hooks/useMenu';
 import { useThemeStore } from '../store';
@@ -116,7 +116,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   }, [description]);
   const [users, setUsers] = useState<{id: string, name: string}[]>([]);
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('none');
+  const [repeat, setRepeat] = useState<RepeatChoice>('none');
   const [editScope, setEditScope] = useState<'this' | 'all' | null>(null);
   // Who is deliberately left OUT. The field used to be `visibleTo` — who may see it,
   // snapshotted when the event was written — and an allow-list cannot tell "excluded" from
@@ -360,7 +360,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             if (parsed.assigneeIds) setAssigneeIds(parsed.assigneeIds);
             if (parsed.hiddenFrom) setHiddenFrom(parsed.hiddenFrom);
             if (parsed.selectedGroupId) setSelectedGroupId(parsed.selectedGroupId);
-            if (parsed.repeat) setRepeat(parsed.repeat);
+            // Checked: a draft may come from any bundle, and an unknown value would reach the stored rule.
+            // An unknown value is "does not repeat", not whatever the previous add session left.
+            setRepeat(repeatFromDraft(parsed) ?? 'none');
             if (parsed.rsvpEnabled !== undefined) setRsvpEnabled(parsed.rsvpEnabled);
             if (parsed.location !== undefined) setLocation(parsed.location);
             if (parsed.reminderMinutes !== undefined) applyReminder(parsed.reminderMinutes);
@@ -413,7 +415,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   useEffect(() => {
     if (isOpen && !editEvent) {
       const draft = {
-        title, eventDate, eventTime, endDate, endTime, description, checklistItems, categoryId: category.id, color, emoji, isTask, assigneeIds, hiddenFrom, selectedGroupId, repeat, rsvpEnabled, location, reminderMinutes,
+        title, eventDate, eventTime, endDate, endTime, description, checklistItems, categoryId: category.id, color, emoji, isTask, assigneeIds, hiddenFrom, selectedGroupId, ...draftFieldsForRepeat(repeat), rsvpEnabled, location, reminderMinutes,
         // A ref, so not a dependency: it is set in the same gesture that changes `eventDate`,
         // which is, so the draft saved after a hand-picked date carries it.
         dateChosenByHand: dateChosenByHand.current,
@@ -557,8 +559,10 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   if (!isOpen) return null;
 
   // "Repeats until …" for the dropdown and the notice under it. `eventDate` is already a day label.
-  const repeatEndText = (freq: 'daily' | 'weekly' | 'monthly' | 'yearly', fallback: string) => {
-    const end = eventDate ? getRecurrenceEndDate(eventDate, freq) : null;
+  // The last day that choice actually keeps: for weekdays-only it is never a Saturday.
+  const repeatEndText = (choice: RepeatChoice, fallback: string) => {
+    const rule = ruleForRepeatChoice(choice);
+    const end = eventDate && rule ? getRecurrenceEndDate(eventDate, rule.frequency, rule.onlyOn) : null;
     return end ? format(end, 'd MMM yyyy', { locale: getDateLocale(language) }) : fallback;
   };
 
@@ -902,7 +906,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             const parentRef = doc(db, 'events', parentId);
             const parentSnap = await getDoc(parentRef);
             const nextStart = shiftedSeriesStart(
-              parentSnap.data()?.date, editEvent.recurrenceDate, eventDate,
+              parentSnap.data()?.date, editEvent.recurrenceDate, eventDate, parentSnap.data()?.recurrenceRule,
             );
             await updateDoc(parentRef, {
               ...baseEventData,
@@ -918,7 +922,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         return; // Early return for edit
       } else {
         // Create new event
-        const recurrenceRule = repeat !== 'none' ? { frequency: repeat } : null;
+        const recurrenceRule = ruleForRepeatChoice(repeat);
         await addDoc(collection(db, 'events'), {
           ...baseEventData,
           date: new Date(eventDate).toISOString(),
@@ -1622,11 +1626,13 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('repeat', language)}</label>
                 <select 
                   value={repeat}
-                  onChange={(e) => setRepeat(e.target.value as any)}
+                  onChange={(e) => { if (isRepeatChoice(e.target.value)) setRepeat(e.target.value); }}
                   className="w-full px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
                 >
                   <option value="none">{t('doesNotRepeat', language)}</option>
                   <option value="daily">{t('repeatUntil', language).replace('{freq}', t('freqDaily', language)).replace('{date}', repeatEndText('daily', '...'))}</option>
+                  <option value="weekdays">{t('repeatUntil', language).replace('{freq}', t('freqWeekdays', language)).replace('{date}', repeatEndText('weekdays', '...'))}</option>
+                  <option value="weekends">{t('repeatUntil', language).replace('{freq}', t('freqWeekends', language)).replace('{date}', repeatEndText('weekends', '...'))}</option>
                   <option value="weekly">{t('repeatUntil', language).replace('{freq}', t('freqWeekly', language)).replace('{date}', repeatEndText('weekly', '...'))}</option>
                   <option value="monthly">{t('repeatUntil', language).replace('{freq}', t('freqMonthly', language)).replace('{date}', repeatEndText('monthly', '...'))}</option>
                   <option value="yearly">{t('repeatUntil', language).replace('{freq}', t('freqYearly', language)).replace('{date}', repeatEndText('yearly', '...'))}</option>
@@ -1643,7 +1649,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             {occurrenceEdit && (
               <div className="flex flex-col gap-2 border border-indigo-200 dark:border-indigo-700/50 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-500/10">
                 <p className="text-sm font-medium text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
-                  🔁 {t('recurringEventIs', language).replace('{freq}', t(getFrequencyKey(editEvent.recurrenceRule?.frequency || editEvent.parentFrequency || 'weekly'), language))}
+                  🔁 {t('recurringEventIs', language).replace('{freq}', t(repeatLabelKey(editEvent.recurrenceRule) ?? 'recurring', language))}
                 </p>
                 <div className="flex gap-2">
                   <button

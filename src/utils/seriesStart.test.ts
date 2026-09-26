@@ -10,6 +10,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { expandRecurringEvents, shiftedSeriesStart } from './recurrence';
+import { dayAsLocalDate } from './dayLabel';
 
 const WEEKLY = {
   id: 'series-1',
@@ -93,5 +94,30 @@ describe('refusing to write, which is always the safe direction', () => {
       expect(() => shiftedSeriesStart(junk, junk, junk)).not.toThrow();
       expect(shiftedSeriesStart(junk, junk, junk)).toBeNull();
     }
+  });
+});
+
+// ── A day-filtered daily series moves from its first KEPT day (26.09.2026) ─────────────────────
+describe('moving a weekdays-only series stored on a Saturday', () => {
+  const WEEKDAYS = { frequency: 'daily', onlyOn: 'weekdays' };
+  const SAT = '2026-10-10T00:00:00.000Z'; // first occurrence: Monday the 12th
+
+  it('Monday → Tuesday moves the series one day: its first occurrence becomes Tuesday', () => {
+    const moved = shiftedSeriesStart(SAT, '2026-10-12', '2026-10-13', WEEKDAYS);
+    expect(moved).toBe('2026-10-13T00:00:00.000Z');
+    const days = expandRecurringEvents(
+      [{ id: 'w', date: moved, recurrenceRule: WEEKDAYS }], dayAsLocalDate('2026-10-10')!, dayAsLocalDate('2026-10-16')!,
+    ).map((o) => o.recurrenceDate);
+    expect(days[0]).toBe('2026-10-13');
+  });
+
+  it('without the rule it would have shifted the Saturday — the same Monday, nothing visible', () => {
+    // What the call used to do, kept as the contrast: the anchor is what makes the move real.
+    expect(shiftedSeriesStart(SAT, '2026-10-12', '2026-10-13')).toBe('2026-10-11T00:00:00.000Z');
+  });
+
+  it('a plain daily, weekly or unfiltered series still moves from its stored start', () => {
+    expect(shiftedSeriesStart(SAT, '2026-10-12', '2026-10-13', { frequency: 'daily' })).toBe('2026-10-11T00:00:00.000Z');
+    expect(shiftedSeriesStart(SAT, '2026-10-17', '2026-10-18', { frequency: 'weekly', onlyOn: 'weekdays' })).toBe('2026-10-11T00:00:00.000Z');
   });
 });

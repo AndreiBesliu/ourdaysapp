@@ -154,6 +154,19 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   care nu se încarcă se vede doar dacă clientul raportează în `errorLogs`. Log-urile de acces la date
   costă și se pornesc din IAM, deci e decizia lui Andrei.
 
+- **Repetarea zilnică cu filtru (26.09) — ce a rămas deliberat în afară:**
+  - **Serverul acceptă o ocurență editată pe o zi pe care seria o sare.** Asta se poate întâmpla doar
+    dintr-un tab vechi, care încă vede seria în fiecare zi. `createEventOverride` verifică doar că data
+    e o zi reală, nu că e o ocurență. Garda se pune pe server, deci așteaptă deploy-ul de funcții.
+  - **O serie mai veche, stocată la 22:00–23:59 UTC**, se mută o zi mai devreme când îi deschizi
+    formularul de editare. Formularul citește ziua cu `dayOf`, nucleul cu `seriesStartDay`. Bugul e mai
+    vechi decât filtrul, iar filtrul doar îl face mai vizibil, prin eticheta de start din panou.
+  - **Tipul de repetare nu se poate schimba după creare.** Asta nu e nou: nici frecvența nu se putea
+    schimba.
+  - **Testul `geminiSecret.test.ts` are lista funcțiilor AI scrisă de mână.** E același tip de risc ca
+    lista de apelanți ai nucleului: o funcție nouă care uită `onlyOn` n-ar fi prinsă de nimic în afara
+    testului care compară calendarul cu serverul.
+
 ## 4. Produs (D) — doar înregistrat
 
 - **Cont:** lipsesc resetarea parolei, ștergerea contului și schimbarea emailului sau a parolei.

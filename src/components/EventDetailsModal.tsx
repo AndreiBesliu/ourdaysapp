@@ -13,7 +13,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { format } from 'date-fns';
 import { useDialog } from '../hooks/useDialog';
 import { useMenu } from '../hooks/useMenu';
-import { getFrequencyKey } from '../utils/recurrence';
+import { repeatLabelKey } from '../utils/recurrence';
 import { deletePlanFor, type DeleteScope } from '../utils/deleteScope';
 import { writeChecklistOp } from '../utils/checklistOps';
 import SeriesScopeDialog from './SeriesScopeDialog';
@@ -728,9 +728,12 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                   );
                 })()}
               </p>
-              {(event.isRecurringInstance || event.recurrenceRule) && (
+              {/* Only a rule the app can read. The calendar shows an unreadable one as the plain
+                  event it is, and the old fallback to `parentFrequency` — which nothing writes —
+                  called it "Weekly". */}
+              {(event.isRecurringInstance || event.recurrenceRule) && repeatLabelKey(event.recurrenceRule) && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-medium rounded-full">
-                  🔁 {t(getFrequencyKey(event.recurrenceRule?.frequency || event.parentFrequency || 'weekly'), language)}
+                  🔁 {t(repeatLabelKey(event.recurrenceRule) as string, language)}
                 </span>
               )}
               {owner && (

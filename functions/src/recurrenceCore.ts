@@ -38,6 +38,46 @@ export function isFrequency(f: unknown): f is Frequency {
   return typeof f === 'string' && (FREQUENCIES as readonly string[]).includes(f);
 }
 
+// ── Which days a DAILY series keeps (26.09.2026) ────────────────────────────────────────────
+//
+// `recurrenceRule.onlyOn`: 'weekdays' (Monday to Friday) or 'weekends' (Saturday and Sunday). It is a
+// field NEXT TO `frequency: 'daily'`, not a new frequency, on purpose: every reader that predates it
+// — an open tab, the server until its next deploy — ignores it and shows the series every day, too
+// many days rather than none. A new frequency value would have read as "does not repeat" there, and
+// the server's exception matching is exact only for 'daily'.
+//
+// It filters the days an occurrence STARTS on; the span still runs over any day. It applies to daily
+// series only, so a value left on another frequency cannot empty it, and a value the app does not
+// know reads as no filter — the same plain daily series an older reader shows. The weekday is taken
+// from the day LABEL in UTC, where a label has no zone to move it (`getDay` on a stored midnight-UTC
+// instant is a day early west of Greenwich; a local constructor read with `getUTCDay`, east of it).
+
+export type DayFilter = 'weekdays' | 'weekends';
+
+export const DAY_FILTERS: readonly DayFilter[] = ['weekdays', 'weekends'];
+
+/** The filter a series actually uses: only for 'daily', and only a value the app knows. */
+export function dayFilterOf(freq: Frequency, onlyOn: unknown): DayFilter | null {
+  return freq === 'daily' && typeof onlyOn === 'string' && (DAY_FILTERS as readonly string[]).includes(onlyOn)
+    ? (onlyOn as DayFilter)
+    : null;
+}
+
+/** 0 = Sunday … 6 = Saturday, of a day label; null when it is not one. */
+export function weekdayOf(day: string): number | null {
+  const p = parts(day);
+  return p ? new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay() : null;
+}
+
+/** Whether a filtered daily series has an occurrence on `day`. No filter keeps every day. */
+export function dayAllowed(day: string, filter: DayFilter | null): boolean {
+  if (!filter) return true;
+  const w = weekdayOf(day);
+  if (w === null) return false;
+  const weekend = w === 0 || w === 6;
+  return filter === 'weekends' ? weekend : !weekend;
+}
+
 function parts(day: string): [number, number, number] | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
   return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
@@ -110,22 +150,51 @@ export function horizonEndDay(startDay: string, freq: Frequency): string | null 
 }
 
 /**
+ * The last day a series actually has an occurrence on: the horizon, or for a filtered daily series
+ * the last kept day on or before it. This, not the horizon, is what "repeats until …" may promise:
+ * a weekdays-only series started on Thursday 8 October 2026 reaches its horizon on Saturday the
+ * 7th of November, and its last occurrence is Friday the 6th. Null when there is none.
+ */
+export function lastOccurrenceDay(startDay: string, freq: Frequency, onlyOn: unknown = null): string | null {
+  const end = horizonEndDay(startDay, freq);
+  const filter = dayFilterOf(freq, onlyOn);
+  for (let day: string | null = end; day && day >= startDay; day = plusDays(day, -1)) {
+    if (dayAllowed(day, filter)) return day;
+  }
+  return null;
+}
+
+/** The first day a series actually has an occurrence on: its start, or the first kept day after it. */
+export function firstOccurrenceDay(startDay: string, freq: Frequency, onlyOn: unknown = null): string | null {
+  const end = horizonEndDay(startDay, freq);
+  const filter = dayFilterOf(freq, onlyOn);
+  for (let day: string | null = startDay; day && end && day <= end; day = plusDays(day, 1)) {
+    if (dayAllowed(day, filter)) return day;
+  }
+  return null;
+}
+
+/**
  * The occurrence days of a series that touch [fromDay, toDay], in order. `spanDays` is how many
  * days after its first day an occurrence lasts (0 for a one-day event); an occurrence counts when
  * ANY of its days is inside the window, so one that started yesterday and runs today is included.
+ * `onlyOn` is the rule's day filter (see `dayFilterOf`), applied to the day an occurrence starts.
  */
 export function occurrenceDaysInWindow(
-  startDay: string, freq: Frequency, fromDay: string, toDay: string, spanDays = 0,
+  startDay: string, freq: Frequency, fromDay: string, toDay: string, spanDays = 0, onlyOn: unknown = null,
 ): string[] {
   const end = horizonEndDay(startDay, freq);
   if (!end) return [];
   const span = Number.isInteger(spanDays) && spanDays > 0 ? spanDays : 0;
+  const filter = dayFilterOf(freq, onlyOn);
   const out: string[] = [];
   // The horizon bounds this to at most 53 steps; the cap is the guard against a start that
   // somehow defeats it.
   for (let n = 0; n < 4000; n++) {
     const day = nthOccurrenceDay(startDay, freq, n);
     if (!day || day > end || day > toDay) break;
+    // A skipped day is not the end of the series: step over it, never stop on it.
+    if (!dayAllowed(day, filter)) continue;
     const lastDay = plusDays(day, span) ?? day;
     if (lastDay >= fromDay) out.push(day);
   }

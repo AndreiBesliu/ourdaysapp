@@ -9911,3 +9911,83 @@ pe live, apoi „fa o pauza cand poti”. **Model:** Claude Opus 5.5.
   `BACKLOG` și `CLAUDE.md`:** până atunci orice deploy de funcții se oprește în `prepare`, iar live
   rămâne fără owner. Am adăugat calea din consolă, fără terminal.
 - **Nu se mai întreabă de secret până nu e nevoie de un deploy de funcții.**
+
+
+## 2026-09-26 · Repetare zilnică doar în zilele lucrătoare / doar în weekend (Task Started)
+
+**Prompt (Andrei):** „daca pun un eveniment ca repeatable si selectez daily, vreau sa am optiunea sa
+exclud weekends, sau invers luni-vineri” (cu o captură a lunii octombrie 2026 și o serie zilnică
+28.09–28.10). **Model:** Claude Opus 5.5.
+
+Plan: întâi harta a tot ce atinge o repetare (formular, calendar, server, reguli, APK, teste), cu
+cititori în paralel. Apoi modelul de date, implementarea, recenzia adversarială, porțile și deploy-ul.
+
+
+## 2026-09-26 · Repetare zilnică doar în zilele lucrătoare / doar în weekend (Task Completed)
+
+**Prompt (Andrei):** „daca pun un eveniment ca repeatable si selectez daily, vreau sa am optiunea sa
+exclud weekends, sau invers luni-vineri”, apoi „si vreau dupa sa imi dai ce pasi trebuie sa urmez eu, cu
+detalii clare si simple, si cu link-uri unde trebuie sa merg”. **Model:** Claude Opus 5.5.
+
+**Harta întâi:** 4 cititori în paralel (client, server, reguli + APK, teste) plus un critic. Au decis
+modelul de date.
+- **Câmp lângă `daily`, nu o frecvență nouă:** `recurrenceRule: { frequency: 'daily', onlyOn:
+  'weekdays' | 'weekends' }`. Serverul vechi (live până la deploy-ul de funcții) și taburile vechi
+  ignoră câmpul și arată seria în fiecare zi: prea multe zile, niciodată niciuna. O frecvență nouă ar
+  fi fost citită ca „nu se repetă” (cel mult un memento, apoi tăcere). Pe server ar fi căzut și pe
+  ramura de excepții ±1 zi, care ascunde și zilele vecine.
+- **Nicio regulă Firestore** nu validează `recurrenceRule`, deci nu e nevoie de deploy de reguli.
+- **APK-ul** nu vede calendarul din mai, iar editările lui nu șterg câmpul.
+
+**Ce s-a schimbat:**
+- **Nucleul comun** (`recurrenceCore.ts`, identic octet cu octet pe server):
+  - funcții noi: `dayFilterOf`, `weekdayOf`, `dayAllowed`, `firstOccurrenceDay`,
+    `lastOccurrenceDay`;
+  - `occurrenceDaysInWindow` primește filtrul;
+  - filtrul se aplică doar la `daily` și doar pe ziua în care începe o ocurență;
+  - ziua săptămânii se ia din eticheta zilei, în UTC;
+  - orizontul de 30 de zile rămâne.
+- **Ambii apelanți** transmit `onlyOn`: calendarul și serverul (memento-uri, rezumat, AI). La fel scriptul
+  de măsurători.
+- **Formularul:**
+  - două opțiuni noi în aceeași listă, după „Zilnic”; o singură valoare de stare, deci nu rămâne un
+    filtru uitat pe o serie săptămânală;
+  - „până pe” arată ultima ocurență reală;
+  - ciorna scrie `repeat: 'daily'` + `repeatOnlyOn`, ca un tab vechi să restaureze „zilnic”, nu o
+    valoare pe care ar salva-o ca frecvență necunoscută;
+  - o valoare necunoscută în ciornă devine „Nu se repetă”.
+- **Afișarea:**
+  - eticheta vine din `repeatLabelKey`: „Zile lucrătoare (lun–vin)” / „Weekend (sâm–dum)”, în 6 limbi;
+  - panoul „Recurente” arată prima și ultima ocurență reală, plus eticheta filtrului;
+  - insigna apare doar pentru o regulă pe care aplicația o poate citi;
+  - bannerul de editare nu mai pune paranteze duble.
+- **„Editează toată seria”** mută o serie filtrată pornind de la prima ei zi păstrată.
+
+**Probe:**
+- **Teste noi:**
+  - 9 cazuri în `recurrenceZones` (calendarul și serverul dau aceleași zile), rulate în UTC, București
+    și New York;
+  - `repeatChoice.test.ts` (10);
+  - 3 în `seriesStart`.
+- **Mutații, 11, toate roșii:** filtrul neaplicat; serverul, apoi clientul, fără `onlyOn`; `getDay()`
+  (roșu doar în New York); constructorul local + `getUTCDay` (roșu doar în București); filtrul pe orice
+  frecvență; data „până pe” = orizontul; eticheta care ignoră filtrul; ciorna scrisă ca atare;
+  restaurarea care ignoră `repeatOnlyOn`; mutarea fără ancoră.
+- **Banc temporar pe formularul și panoul ADEVĂRATE** (apoi șters):
+  - opțiunile, datele „până pe”, ciorna salvată și restaurată, valoarea necunoscută;
+  - panoul în română și germană;
+  - 0 erori în consolă.
+  - Primele 448 de erori „Maximum update depth” veneau din bancul însuși, care dădea un `{}` nou la
+    fiecare randare. Am dovedit asta cu un contor instalat înainte de montare, nu am presupus-o.
+- **Recenzia adversarială** (16 agenți):
+  - 5 constatări reparate: paranteze duble, ciorna veche, insigna „Weekly”, reset-ul ciornei, mutarea
+    seriei;
+  - 2 respinse, fiindcă erau deja reparate;
+  - 3 trecute în BACKLOG.
+  - **Constatarea care contează la publicare:** hosting-ul fără funcții trimite memento-uri în zilele
+    sărite, fără ca utilizatorul să aibă ce șterge. Scris în `OWNER_VERIFY` și `CLAUDE.md`: ordinea e
+    functions → hosting.
+- **Porți:** `tsc`, lint, teste unitare, 442 pe emulatoare, tz 46+46, build, split, bundle.
+
+**NU s-a publicat nimic.** Pentru ambele jumătăți e nevoie de secretul `GEMINI_KEY`, apoi de
+confirmarea lui Andrei.

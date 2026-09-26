@@ -29,16 +29,43 @@
 //
 // Pure, and imports nothing: it has to compile unchanged inside a Cloud Function.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FREQUENCIES = void 0;
+exports.DAY_FILTERS = exports.FREQUENCIES = void 0;
 exports.isFrequency = isFrequency;
+exports.dayFilterOf = dayFilterOf;
+exports.weekdayOf = weekdayOf;
+exports.dayAllowed = dayAllowed;
 exports.seriesStartDay = seriesStartDay;
 exports.nthOccurrenceDay = nthOccurrenceDay;
 exports.horizonEndDay = horizonEndDay;
+exports.lastOccurrenceDay = lastOccurrenceDay;
+exports.firstOccurrenceDay = firstOccurrenceDay;
 exports.occurrenceDaysInWindow = occurrenceDaysInWindow;
 exports.FREQUENCIES = ['daily', 'weekly', 'monthly', 'yearly'];
 const DAY_MS = 86400000;
 function isFrequency(f) {
     return typeof f === 'string' && exports.FREQUENCIES.includes(f);
+}
+exports.DAY_FILTERS = ['weekdays', 'weekends'];
+/** The filter a series actually uses: only for 'daily', and only a value the app knows. */
+function dayFilterOf(freq, onlyOn) {
+    return freq === 'daily' && typeof onlyOn === 'string' && exports.DAY_FILTERS.includes(onlyOn)
+        ? onlyOn
+        : null;
+}
+/** 0 = Sunday … 6 = Saturday, of a day label; null when it is not one. */
+function weekdayOf(day) {
+    const p = parts(day);
+    return p ? new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay() : null;
+}
+/** Whether a filtered daily series has an occurrence on `day`. No filter keeps every day. */
+function dayAllowed(day, filter) {
+    if (!filter)
+        return true;
+    const w = weekdayOf(day);
+    if (w === null)
+        return false;
+    const weekend = w === 0 || w === 6;
+    return filter === 'weekends' ? weekend : !weekend;
 }
 function parts(day) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
@@ -109,16 +136,43 @@ function horizonEndDay(startDay, freq) {
     }
 }
 /**
+ * The last day a series actually has an occurrence on: the horizon, or for a filtered daily series
+ * the last kept day on or before it. This, not the horizon, is what "repeats until …" may promise:
+ * a weekdays-only series started on Thursday 8 October 2026 reaches its horizon on Saturday the
+ * 7th of November, and its last occurrence is Friday the 6th. Null when there is none.
+ */
+function lastOccurrenceDay(startDay, freq, onlyOn = null) {
+    const end = horizonEndDay(startDay, freq);
+    const filter = dayFilterOf(freq, onlyOn);
+    for (let day = end; day && day >= startDay; day = plusDays(day, -1)) {
+        if (dayAllowed(day, filter))
+            return day;
+    }
+    return null;
+}
+/** The first day a series actually has an occurrence on: its start, or the first kept day after it. */
+function firstOccurrenceDay(startDay, freq, onlyOn = null) {
+    const end = horizonEndDay(startDay, freq);
+    const filter = dayFilterOf(freq, onlyOn);
+    for (let day = startDay; day && end && day <= end; day = plusDays(day, 1)) {
+        if (dayAllowed(day, filter))
+            return day;
+    }
+    return null;
+}
+/**
  * The occurrence days of a series that touch [fromDay, toDay], in order. `spanDays` is how many
  * days after its first day an occurrence lasts (0 for a one-day event); an occurrence counts when
  * ANY of its days is inside the window, so one that started yesterday and runs today is included.
+ * `onlyOn` is the rule's day filter (see `dayFilterOf`), applied to the day an occurrence starts.
  */
-function occurrenceDaysInWindow(startDay, freq, fromDay, toDay, spanDays = 0) {
+function occurrenceDaysInWindow(startDay, freq, fromDay, toDay, spanDays = 0, onlyOn = null) {
     var _a;
     const end = horizonEndDay(startDay, freq);
     if (!end)
         return [];
     const span = Number.isInteger(spanDays) && spanDays > 0 ? spanDays : 0;
+    const filter = dayFilterOf(freq, onlyOn);
     const out = [];
     // The horizon bounds this to at most 53 steps; the cap is the guard against a start that
     // somehow defeats it.
@@ -126,6 +180,9 @@ function occurrenceDaysInWindow(startDay, freq, fromDay, toDay, spanDays = 0) {
         const day = nthOccurrenceDay(startDay, freq, n);
         if (!day || day > end || day > toDay)
             break;
+        // A skipped day is not the end of the series: step over it, never stop on it.
+        if (!dayAllowed(day, filter))
+            continue;
         const lastDay = (_a = plusDays(day, span)) !== null && _a !== void 0 ? _a : day;
         if (lastDay >= fromDay)
             out.push(day);

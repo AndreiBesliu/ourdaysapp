@@ -18,7 +18,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { expandRecurringEvents, shiftedSeriesStart, getRecurrenceEndDate } from './recurrence';
-import { seriesStartDay } from './recurrenceCore';
+import { seriesStartDay, firstOccurrenceDay } from './recurrenceCore';
 import { dayAsLocalDate } from './dayLabel';
 import { expandInWindow } from '../../functions/src/recurrenceServer';
 
@@ -121,6 +121,86 @@ describe(`recurrence under ${ACTUAL}`, () => {
   });
 });
 
+// ── A daily series that keeps only weekdays or only weekends (26.09.2026) ────────────────────
+//
+// The weekday of a day LABEL, the same on both sides and in every zone. The two ways to get it wrong
+// are zone-shaped, which is why these live in this file: `getDay()` on a stored midnight-UTC instant
+// is a day early in New York, and a local constructor read with `getUTCDay()` is a day early in
+// Bucharest. Only the runs under those zones can see either.
+describe(`daily, only weekdays or only weekends, under ${ACTUAL}`, () => {
+  const only = (id: string, date: string, onlyOn: unknown, extra: Record<string, unknown> = {}) =>
+    ({ id, date, recurrenceRule: { frequency: 'daily', onlyOn }, ...extra });
+
+  it('weekdays: Monday to Friday, the same on both sides', () => {
+    // 8 Oct 2026 is a Thursday; the 10th–11th and 17th–18th are the weekends.
+    const want = ['2026-10-08', '2026-10-09', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-19', '2026-10-20'];
+    const { client, server } = both(only('wd', '2026-10-08T00:00:00.000Z', 'weekdays'), '2026-10-08', '2026-10-20');
+    expect(client).toEqual(want);
+    expect(server).toEqual(want);
+  });
+
+  it('weekends: Saturday and Sunday, across the October DST change in both zones', () => {
+    // Europe changes on 25 October, New York on 1 November — both inside this window.
+    const want = ['2026-10-24', '2026-10-25', '2026-10-31', '2026-11-01'];
+    const { client, server } = both(only('we', '2026-10-20T00:00:00.000Z', 'weekends'), '2026-10-20', '2026-11-02');
+    expect(client).toEqual(want);
+    expect(server).toEqual(want);
+  });
+
+  it('a start on a skipped day is not an occurrence: the series begins on the next kept day', () => {
+    // The core always used to emit the start (occurrence 0). Weekdays from Saturday 10 October.
+    const want = ['2026-10-12', '2026-10-13', '2026-10-14'];
+    const { client, server } = both(only('sat', '2026-10-10T00:00:00.000Z', 'weekdays'), '2026-10-09', '2026-10-14');
+    expect(client).toEqual(want);
+    expect(server).toEqual(want);
+    expect(firstOccurrenceDay('2026-10-10', 'daily', 'weekdays')).toBe('2026-10-12');
+  });
+
+  it('a legacy start stored at 23:00Z is filtered on the day it means, not the day it reads as', () => {
+    // 2026-10-09T23:00Z means Saturday the 10th (seriesStartDay). A filter that took the weekday
+    // from the stored instant would call it Friday and emit the 9th.
+    const want = ['2026-10-12', '2026-10-13'];
+    const { client, server } = both(only('legacy-wd', '2026-10-09T23:00:00.000Z', 'weekdays'), '2026-10-09', '2026-10-13');
+    expect(client).toEqual(want);
+    expect(server).toEqual(want);
+  });
+
+  it('the filter touches DAILY only: a weekly series that carries one is untouched', () => {
+    // A value left on another frequency must not empty it — Saturday 10 October, weekly.
+    const ev = { id: 'wk', date: '2026-10-10T00:00:00.000Z', recurrenceRule: { frequency: 'weekly', onlyOn: 'weekdays' } };
+    const want = ['2026-10-10', '2026-10-17', '2026-10-24'];
+    const { client, server } = both(ev, '2026-10-01', '2026-10-25');
+    expect(client).toEqual(want);
+    expect(server).toEqual(want);
+  });
+
+  it('a value the app does not know reads as plain daily — what an older reader shows', () => {
+    for (const odd of ['mondays', '', 7, null, ['weekdays']]) {
+      const { client, server } = both(only('odd', '2026-10-09T00:00:00.000Z', odd), '2026-10-09', '2026-10-12');
+      const want = ['2026-10-09', '2026-10-10', '2026-10-11', '2026-10-12'];
+      expect(client, String(odd)).toEqual(want);
+      expect(server, String(odd)).toEqual(want);
+    }
+  });
+
+  it('a deleted occurrence hides that day only, on both sides', () => {
+    // The server matches exceptions exactly only for 'daily' — the reason the filter is a field on
+    // 'daily' and not a new frequency, which would also have hidden the neighbouring days.
+    const ev = only('ex', '2026-10-08T00:00:00.000Z', 'weekdays', { recurrenceExceptions: ['2026-10-12'] });
+    const want = ['2026-10-09', '2026-10-13'];
+    const { client, server } = both(ev, '2026-10-09', '2026-10-13');
+    expect(client).toEqual(want);
+    expect(server).toEqual(want);
+  });
+
+  it('the filter is on the day an occurrence STARTS: Friday running into Saturday is still there on Saturday', () => {
+    const ev = only('span', '2026-10-08T00:00:00.000Z', 'weekdays', { endDayOffset: 1 });
+    const { client, server } = both(ev, '2026-10-10', '2026-10-10');
+    expect(client).toEqual(['2026-10-09']);
+    expect(server).toEqual(['2026-10-09']);
+  });
+});
+
 /** The day a LOCAL formatter would print for this Date. */
 function localLabel(d: Date | null): string | null {
   if (!d) return null;
@@ -144,6 +224,19 @@ describe(`"repeats until" under ${ACTUAL}`, () => {
     expect(localLabel(getRecurrenceEndDate(seriesStartDay(stored), 'weekly'))).toBe('2027-06-30');
     expect(localLabel(getRecurrenceEndDate(seriesStartDay(stored), 'monthly'))).toBe('2027-07-01');
     expect(localLabel(getRecurrenceEndDate(seriesStartDay(stored), 'yearly'))).toBe('2031-07-01');
+  });
+
+  it('with a day filter it promises the last KEPT day, never a skipped one', () => {
+    // Weekdays from Thursday 8 October: the horizon is Saturday 7 November, the last occurrence Friday the 6th.
+    const wd = localLabel(getRecurrenceEndDate('2026-10-08', 'daily', 'weekdays'));
+    expect(wd).toBe('2026-11-06');
+    expect(clientDays({ id: 'wd', date: '2026-10-08T00:00:00.000Z', recurrenceRule: { frequency: 'daily', onlyOn: 'weekdays' } }, '2026-11-01', '2026-11-10').at(-1)).toBe(wd);
+    // Weekends from Wednesday 1 July: the horizon is Friday 31 July, the last occurrence Sunday the 26th.
+    const we = localLabel(getRecurrenceEndDate('2026-07-01', 'daily', 'weekends'));
+    expect(we).toBe('2026-07-26');
+    expect(clientDays({ id: 'we', date: '2026-07-01T00:00:00.000Z', recurrenceRule: { frequency: 'daily', onlyOn: 'weekends' } }, '2026-07-20', '2026-08-05').at(-1)).toBe(we);
+    // Without a filter nothing moves: plain daily still ends on its horizon.
+    expect(localLabel(getRecurrenceEndDate('2026-10-08', 'daily'))).toBe('2026-11-07');
   });
 
   it('says nothing rather than a wrong date when there is no start', () => {

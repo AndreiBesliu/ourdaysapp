@@ -15,6 +15,31 @@
 
 ---
 
+## 🆕 Repetare zilnică „doar lucrătoare” / „doar weekend” (26.09) — gata în cod, NEPUBLICAT
+
+**Fapt:** în lista „Repetare” apar, după „Zilnic”, două opțiuni noi: **„Zile lucrătoare (lun–vin)”** și
+**„Weekend (sâm–dum)”**. Calendarul, panoul „Recurente” și ecranul evenimentului le arată corect. Am probat
+pe formularul adevărat: opțiunile, datele „până pe”, ciorna și panoul.
+
+**Fapt, și ce contează la publicare:** memento-urile, rezumatul AI și asistentul rulează pe **server**.
+Serverul primește codul nou doar la un deploy de funcții, adică după ce pui secretul `GEMINI_KEY`.
+- **Cât timp serverul e cel vechi**, o serie „doar lucrătoare” care are memento **sună și sâmbăta și
+  duminica**: 8–10 notificări în plus pe serie. Invers, la „doar weekend”, sună și în zilele lucrătoare.
+- **Zilele acelea nu apar în calendar,** deci nu ai ce șterge ca să oprești notificările.
+- **Fără memento pe serie, nu se strică nimic.**
+- **Ordinea sigură:** funcțiile, apoi hosting-ul.
+
+- [ ] **După publicare:** creează o serie „Zile lucrătoare”, cu o zi de start într-o sâmbătă.
+      - **Cum arată bine:**
+        - în calendar apare de luni până vineri, iar sâmbăta și duminica sunt goale;
+        - în „Recurente”, rândul ei are eticheta „Zile lucrătoare (lun–vin)” și începe luni;
+        - dacă îi pui memento, nu sună în weekend. Asta e valabil doar după deploy-ul de funcții.
+      - **Ce se strică dacă e greșit:** doar seriile noi cu filtru. Cele vechi nu se ating.
+      - **Seria ta zilnică din 28.09** nu se poate transforma, fiindcă tipul de repetare se alege doar la
+        creare. O ștergi din „Recurente” și o faci din nou cu „Zile lucrătoare”.
+
+---
+
 ## ✅ Deploy-ul din 24–25.09: PUBLICAT pe 25.09, la confirmarea ta
 
 **Fapte, măsurate după deploy (doar citire):**
