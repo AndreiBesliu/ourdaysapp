@@ -1263,10 +1263,10 @@ export default function Admin() {
                       <div key={r.id} className="flex items-center gap-2 px-3 py-2 text-[11px]">
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${r.ok === false ? 'bg-red-500' : 'bg-emerald-500'}`} />
                         <span className="font-medium text-zinc-700 dark:text-zinc-300 w-36 truncate">{r.feature}</span>
-                        <span className="text-zinc-400 w-40 truncate">{r.model}</span>
+                        <span className="text-zinc-400 w-40 truncate" title={r.servedModel ? `asked ${r.model}, served by ${r.servedModel}` : undefined}>{r.servedModel ? `${r.model} → ${r.servedModel}` : r.model}</span>
                         {/* The reason, not just the fact. `http-429` is the quota refusal that used
                             to fill three quarters of the error log. */}
-                        <span className="flex-1 text-red-500 truncate">{r.ok === false ? (r.errorCode || 'failed') : ''}</span>
+                        <span className={`flex-1 truncate ${r.ok === false ? 'text-red-500' : 'text-amber-500'}`}>{r.ok === false ? (r.errorCode || 'failed') : (r.errorCode || '')}</span>
                         <span className="text-zinc-400 tabular-nums">{(r.promptTokens || 0) + (r.completionTokens || 0)} tok</span>
                         <span className="text-zinc-500 tabular-nums w-16 text-right">${(r.costUsd || 0).toFixed(4)}</span>
                       </div>

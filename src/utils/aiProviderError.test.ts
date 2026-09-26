@@ -6,39 +6,86 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  AI_QUOTA_CODE, isProviderQuotaError, isOwnBudgetRefusal, providerErrorCode,
+  AI_QUOTA_CODE, AI_BUSY_CODE, isProviderQuotaError, isProviderBusy, isProviderOutOfCredit,
+  isOwnBudgetRefusal, providerErrorCode,
 } from '../../functions/src/aiProviderError';
 
-/** The real thing, copied from the production log on 2026-09-14. */
-const REAL_429 = Object.assign(
-  new Error('[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent: [429 Too Many Requests] You exceeded your current quota, please check your plan and billing details.'),
-  { status: 429, statusText: 'Too Many Requests', name: 'GoogleGenerativeAIFetchError' },
-);
+/**
+ * What the Anthropic SDK throws on a rate limit (26.09.2026, the app moved from Gemini to Claude):
+ * an `APIError` subclass with a numeric `status` and the API's error `type`. Duck-typed on purpose —
+ * the predicate cannot import the SDK (functionsPurity.test.ts).
+ */
+class AnthropicLikeError extends Error {
+  status: number;
+  type: string;
+  constructor(status: number, type: string, message: string, name: string) {
+    super(message);
+    this.status = status;
+    this.type = type;
+    this.name = name;
+  }
+}
+const RATE_LIMIT = new AnthropicLikeError(429, 'rate_limit_error', '429 {"type":"error","error":{"type":"rate_limit_error","message":"Number of request tokens has exceeded your per-minute rate limit"}}', 'RateLimitError');
 
-describe('recognising a quota refusal', () => {
-  it('recognises the error that actually filled the log', () => {
-    expect(isProviderQuotaError(REAL_429)).toBe(true);
-  });
-
-  it('recognises it by status alone, with no message to read', () => {
+describe('recognising a capacity or billing refusal', () => {
+  it('a rate limit, by status and by type', () => {
+    expect(isProviderQuotaError(RATE_LIMIT)).toBe(true);
     expect(isProviderQuotaError({ status: 429 })).toBe(true);
+    expect(isProviderQuotaError({ type: 'rate_limit_error' })).toBe(true);
   });
 
-  it('recognises it by message alone, with no status', () => {
-    // A 429 that reaches us re-wrapped, having lost its fields on the way.
-    expect(isProviderQuotaError(new Error('Error: [429 Too Many Requests] try later'))).toBe(true);
-    expect(isProviderQuotaError(new Error('8 RESOURCE_EXHAUSTED: quota'))).toBe(true);
+  it('an overloaded API (529) is capacity, not a defect', () => {
+    expect(isProviderQuotaError(new AnthropicLikeError(529, 'overloaded_error', 'Overloaded', 'InternalServerError'))).toBe(true);
+    expect(isProviderQuotaError({ type: 'overloaded_error' })).toBe(true);
   });
 
-  it('is case-insensitive', () => {
-    expect(isProviderQuotaError(new Error('YOU EXCEEDED YOUR CURRENT QUOTA'))).toBe(true);
+  it('an account out of credit — 402, or a 400 whose message says so', () => {
+    expect(isProviderQuotaError(new AnthropicLikeError(402, 'billing_error', 'billing', 'APIError'))).toBe(true);
+    expect(isProviderQuotaError(new AnthropicLikeError(400, 'invalid_request_error',
+      'Your credit balance is too low to access the Anthropic API.', 'BadRequestError'))).toBe(true);
+  });
+
+  it('is case-insensitive about the credit message', () => {
+    expect(isProviderQuotaError(new Error('YOUR CREDIT BALANCE IS TOO LOW'))).toBe(true);
+  });
+});
+
+describe('busy for a minute, or out of credit — two different things to tell a person', () => {
+  it('busy: 429 and 529, by status or type — and not out of credit', () => {
+    for (const e of [RATE_LIMIT, { status: 529 }, { type: 'overloaded_error' }, { type: 'rate_limit_error' }]) {
+      expect(isProviderBusy(e), JSON.stringify(e)).toBe(true);
+      expect(isProviderOutOfCredit(e), JSON.stringify(e)).toBe(false);
+    }
+  });
+
+  it('out of credit: 402, billing_error, or the credit message — and not busy', () => {
+    for (const e of [{ status: 402 }, { type: 'billing_error' }, new Error('Your credit balance is too low')]) {
+      expect(isProviderOutOfCredit(e)).toBe(true);
+      expect(isProviderBusy(e)).toBe(false);
+    }
+  });
+
+  it('the two codes the client translates differ', () => {
+    expect(AI_BUSY_CODE).toBe('ai-budget/provider-busy');
+    expect(AI_BUSY_CODE).not.toBe(AI_QUOTA_CODE);
   });
 });
 
 describe('what it must NOT swallow', () => {
-  it('a provider that is merely overloaded is not a quota refusal', () => {
-    // 503 is transient and worth seeing; filing it as "nothing to worry about" buries it.
-    expect(isProviderQuotaError({ status: 503, message: 'The model is overloaded' })).toBe(false);
+  it('an internal server error (500, 503) is not capacity — somebody should see it', () => {
+    expect(isProviderQuotaError({ status: 500, message: 'Internal server error' })).toBe(false);
+    expect(isProviderQuotaError({ status: 503, message: 'Service unavailable' })).toBe(false);
+  });
+
+  it('authentication and a wrong model id are ours to fix: the federation setup, the model name', () => {
+    expect(isProviderQuotaError(new AnthropicLikeError(401, 'authentication_error', 'Authentication failed', 'AuthenticationError'))).toBe(false);
+    expect(isProviderQuotaError(new AnthropicLikeError(403, 'permission_error', 'forbidden', 'PermissionDeniedError'))).toBe(false);
+    expect(isProviderQuotaError(new AnthropicLikeError(404, 'not_found_error', 'model: claude-x', 'NotFoundError'))).toBe(false);
+  });
+
+  it('the Gemini-era quota messages no longer count: nothing produces them now', () => {
+    expect(isProviderQuotaError(new Error('You exceeded your current quota'))).toBe(false);
+    expect(isProviderQuotaError(new Error('8 RESOURCE_EXHAUSTED: quota'))).toBe(false);
   });
 
   it('a malformed request is our bug, not their limit', () => {
@@ -66,8 +113,8 @@ describe('the ledger label', () => {
   it('turns the SDK error into something that names the status', () => {
     // It used to record "GoogleGenerativeAIFetchError" for a 429, a 400 and a 503 alike, so the
     // ledger could not answer the only question it is kept for.
-    expect(providerErrorCode(REAL_429)).toBe('http-429');
-    expect(providerErrorCode({ status: 503, name: 'GoogleGenerativeAIFetchError' })).toBe('http-503');
+    expect(providerErrorCode(RATE_LIMIT)).toBe('http-429');
+    expect(providerErrorCode(new AnthropicLikeError(529, 'overloaded_error', 'x', 'InternalServerError'))).toBe('http-529');
   });
 
   it('still prefers a real string code when there is one', () => {
@@ -81,6 +128,20 @@ describe('the ledger label', () => {
     expect(providerErrorCode(null)).toBe('error');
   });
 
+  it('names a failed federation exchange by its status, not as "Error"', () => {
+    // The SDK's WorkloadIdentityError carries `statusCode`, not `status`.
+    expect(providerErrorCode(Object.assign(new Error('Authentication failed'), { statusCode: 401 }))).toBe('federation-http-401');
+  });
+
+  it('names an SDK error by its class when `name` is the generic "Error"', () => {
+    // The SDK never sets `name`, so a timeout, an abort and a connection failure all read "Error".
+    class APIConnectionTimeoutError extends Error {}
+    class APIUserAbortError extends Error {}
+    expect(providerErrorCode(new APIConnectionTimeoutError('Request timed out.'))).toBe('APIConnectionTimeoutError');
+    expect(providerErrorCode(new APIUserAbortError('Request was aborted.'))).toBe('APIUserAbortError');
+    expect(providerErrorCode(new Error('plain'))).toBe('Error');
+  });
+
   it('never returns an empty label', () => {
     for (const junk of [{ code: '' }, { name: '' }, { code: '', name: '' }]) {
       expect(providerErrorCode(junk)).toBeTruthy();
@@ -92,41 +153,6 @@ describe('the code the client translates', () => {
   it('is the one src/ai.ts already looks for', () => {
     // aiErrorMessage() matches this literal; if it drifts the user gets a raw English provider URL.
     expect(AI_QUOTA_CODE).toBe('ai-budget/global-budget');
-  });
-});
-
-describe('surviving the SDK change', () => {
-  // The app moved from `@google/generative-ai` to `@google/genai`. That matters here more than
-  // anywhere: this predicate is the reason a quota refusal goes to the AI ledger instead of the
-  // error log, and it is why 74 rows of "GoogleGenerativeAI Error" once buried every real defect.
-  //
-  // The new SDK throws `ApiError extends Error` carrying `status: number` — checked against the
-  // shipped type declaration, not assumed. These cases state that the detector still bites.
-  class ApiError extends Error {
-    status: number;
-    constructor(status: number, message: string) {
-      super(message);
-      this.name = 'ApiError';
-      this.status = status;
-    }
-  }
-
-  it('still recognises a quota refusal from the current SDK', () => {
-    const err = new ApiError(429, 'got status: 429 RESOURCE_EXHAUSTED');
-    expect(isProviderQuotaError(err)).toBe(true);
-    expect(providerErrorCode(err)).toBe('http-429');
-  });
-
-  it('still refuses to call an overload or a bad request a quota problem', () => {
-    // The whole point of the predicate being narrow: these are things somebody should look at.
-    expect(isProviderQuotaError(new ApiError(503, 'model overloaded'))).toBe(false);
-    expect(isProviderQuotaError(new ApiError(400, 'invalid argument'))).toBe(false);
-    expect(providerErrorCode(new ApiError(503, 'x'))).toBe('http-503');
-  });
-
-  it('recognises the retired SDK shape too, so nothing in flight is misfiled', () => {
-    const legacy = Object.assign(new Error('[GoogleGenerativeAI Error]: [429 Too Many Requests]'), { status: 429 });
-    expect(isProviderQuotaError(legacy)).toBe(true);
   });
 });
 
@@ -148,7 +174,7 @@ describe('our own refusal is not an error', () => {
 
   it('says NO to a provider error, so the two stay separable', () => {
     // They are thrown for different reasons and one of them IS worth looking at.
-    expect(isOwnBudgetRefusal(REAL_429)).toBe(false);
+    expect(isOwnBudgetRefusal(RATE_LIMIT)).toBe(false);
     expect(isOwnBudgetRefusal({ message: 'resource_exhausted' })).toBe(false);
     expect(isOwnBudgetRefusal({ code: 'resource-exhausted' })).toBe(false);
   });

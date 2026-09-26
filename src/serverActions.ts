@@ -341,7 +341,7 @@ export async function adminSetAiConfig(
 }
 
 export interface AiLedgerRow {
-  id: string; uid: string; feature: string; model: string;
+  id: string; uid: string; feature: string; model: string; servedModel?: string | null;
   ok: boolean | null; errorCode: string | null;
   promptTokens: number; completionTokens: number; costUsd: number; computeMs: number;
   /** ISO. Null only for a row written before the column existed. Rows arrive newest-first. */

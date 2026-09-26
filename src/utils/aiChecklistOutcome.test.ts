@@ -61,9 +61,13 @@ describe('which reason gets recorded', () => {
 
   it('tells the provider rationing us apart from something being broken', () => {
     expect(checklistReason({ status: 429, message: 'Too Many Requests' })).toBe(CHECKLIST_BUSY);
-    expect(checklistReason(new Error('exceeded your current quota'))).toBe(CHECKLIST_BUSY);
-    // Deliberately narrow: a 503 or a 400 is somebody's problem to look at.
-    expect(checklistReason({ status: 503, message: 'overloaded' })).toBe(CHECKLIST_ERROR);
+    expect(checklistReason({ status: 529, type: 'overloaded_error', message: 'Overloaded' })).toBe(CHECKLIST_BUSY);
+    // Out of CREDIT is not busy: it is the app's limit, told with the callables' own code.
+    expect(checklistReason(new Error('Your credit balance is too low to access the Anthropic API.'))).toBe('ai-budget/global-budget');
+    expect(checklistReason({ status: 402, type: 'billing_error', message: 'billing' })).toBe('ai-budget/global-budget');
+    // Deliberately narrow: a 503, a 400 or a 401 is somebody's problem to look at.
+    expect(checklistReason({ status: 503, message: 'Service unavailable' })).toBe(CHECKLIST_ERROR);
+    expect(checklistReason({ status: 401, type: 'authentication_error', message: 'Authentication failed' })).toBe(CHECKLIST_ERROR);
   });
 
   it('never throws on the shapes an unknown failure actually arrives in', () => {
@@ -93,11 +97,15 @@ describe('what a reason implies', () => {
     // `tryConsumeQuota` returning false means nothing was consumed. Refunding there would hand
     // back an allowance nobody spent — one free call per event created, for as long as it lasted.
     expect(refundsQuota(CHECKLIST_QUOTA)).toBe(false);
-    // These two reached the provider. The model answered badly, or the provider refused us after
-    // taking the request — either way the attempt was made and the allowance is spent.
+    // These reached the model: it answered badly, or something broke. The allowance is spent.
     expect(refundsQuota(CHECKLIST_BAD_OUTPUT)).toBe(false);
-    expect(refundsQuota(CHECKLIST_BUSY)).toBe(false);
     expect(refundsQuota(CHECKLIST_ERROR)).toBe(false);
+  });
+
+  it('refunds a busy provider — nothing was generated (26.09.2026, Claude)', () => {
+    // Claude's 429 / 529 is a minute's capacity, not a spent daily allowance. The callables give
+    // the unit back for it; the trigger does the same, or the card and Retry would charge differently.
+    expect(refundsQuota(CHECKLIST_BUSY)).toBe(true);
   });
 
   it('offers a retry for everything except a server with no key', () => {
@@ -149,8 +157,10 @@ describe('every reason has a sentence, in every language', () => {
     //
     // Two codes, deliberately: the ledger and the health panel want to know WHICH limit. One
     // sentence, equally deliberately: the reader does not.
+    // Under Claude (26.09.2026) the callables say "busy, try again in a minute"
+    // (`ai-budget/provider-busy`), and so does the card.
     const fromTrigger = checklistReasonKey(CHECKLIST_BUSY);
-    const fromCallable = checklistReasonKey('ai-budget/global-budget');
+    const fromCallable = checklistReasonKey('ai-budget/provider-busy');
     expect(fromTrigger).not.toBe(fromCallable);
     for (const lang of LANGS) {
       expect(translations[lang]?.[fromTrigger], `${lang}: the trigger's wording`)
@@ -161,7 +171,7 @@ describe('every reason has a sentence, in every language', () => {
   it('gives each reason its own KEY — which is not the same as its own sentence', () => {
     // What this checks is key uniqueness, and the comment used to claim it checked that no two
     // reasons "read alike". They are different things, and since the provider-rationing sentence
-    // was deliberately made identical to the global-budget one, the stronger claim is now FALSE
+    // is deliberately identical to the callables' "busy" one, the stronger claim is now FALSE
     // by design — so stating it here would have been a test lying about its own subject.
     //
     // Key uniqueness is still worth holding: it is what stops a generic fallback swallowing every

@@ -36,6 +36,8 @@ const CODES: ReadonlyArray<readonly [string, string]> = [
   ['ai-budget/user-budget', 'aiBudgetUser'],
   ['ai-budget/global-budget', 'aiBudgetGlobal'],
   ['ai-budget/kill-switch', 'aiBudgetOff'],
+  // Claude's 429 / 529: busy for a minute, not out for the day (26.09.2026).
+  ['ai-budget/provider-busy', 'aiBusy'],
   ['ai-checklist/quota', 'aiChecklistQuota'],
   ['ai-checklist/provider', 'aiChecklistBusy'],
   ['ai-checklist/unconfigured', 'aiChecklistUnavailable'],

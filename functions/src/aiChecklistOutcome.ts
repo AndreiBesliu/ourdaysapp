@@ -36,7 +36,7 @@
 // Pure: no imports outside this folder's own pure module, so the app's suite tests it.
 // See `functionsPurity.test.ts`.
 
-import { isOwnBudgetRefusal, isProviderQuotaError } from "./aiProviderError";
+import { isOwnBudgetRefusal, isProviderBusy, isProviderOutOfCredit } from "./aiProviderError";
 
 /** The owner's shared daily AI allowance was already spent when the event was created. */
 export const CHECKLIST_QUOTA = "ai-checklist/quota";
@@ -55,10 +55,15 @@ export const CHECKLIST_BAD_OUTPUT = "ai-checklist/bad-output";
  *
  * What did need fixing is what the PERSON reads. The card used to say "the AI was busy, try again
  * in a minute" while pressing Retry — which runs the callable — said "the app has reached today's
- * AI limit, try again tomorrow". Same condition, same screen, one minute apart. The callables are
- * the ones telling the truth: the dominant cause of this predicate firing is the project's
- * free-tier allowance for the DAY being spent, which put 74 of 95 rows in the health panel. So the
- * sentence behind this code now says the same thing as theirs; only the code stays distinct.
+ * AI limit, try again tomorrow". Same condition, same screen, one minute apart. Under Gemini the
+ * callables were the ones telling the truth: the dominant cause was the free tier's allowance for
+ * the DAY being spent (74 of 95 rows in the health panel), so this code was given their sentence.
+ *
+ * Under Claude (26.09.2026) it is the other way round. A 429 is a per-minute limit and a 529 a
+ * momentary overload, so "busy, try again in a minute" is the truth again, and the callables now
+ * say it too (`ai-budget/provider-busy` → `aiBusy`). The same sentence on the card and on Retry is
+ * kept; only which sentence changed. An account out of CREDIT is not "busy": the trigger records
+ * the callables' "today's AI limit" code for it (`checklistReason`).
  */
 export const CHECKLIST_BUSY = "ai-checklist/provider";
 /** Anything else. Deliberately the fallback, never the guess. */
@@ -120,7 +125,9 @@ export function checklistReason(err: unknown): string {
     return hit || CHECKLIST_ERROR;
   }
 
-  if (isProviderQuotaError(err)) return CHECKLIST_BUSY;
+  // Busy is a minute; out of credit is the app's limit, told with the callables' own sentence.
+  if (isProviderBusy(err)) return CHECKLIST_BUSY;
+  if (isProviderOutOfCredit(err)) return "ai-budget/global-budget";
   return CHECKLIST_ERROR;
 }
 
@@ -143,7 +150,9 @@ export function checklistReason(err: unknown): string {
  */
 export function refundsQuota(reason: string): boolean {
   return (BUDGET_CODES as readonly string[]).includes(reason)
-    || reason === CHECKLIST_UNCONFIGURED;
+    || reason === CHECKLIST_UNCONFIGURED
+    // A busy provider generated nothing: the callables give the unit back too (26.09.2026).
+    || reason === CHECKLIST_BUSY;
 }
 
 /**

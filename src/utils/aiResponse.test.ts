@@ -1,102 +1,138 @@
 // src/utils/aiResponse.test.ts
 //
-// The app moved from `@google/generative-ai` (retired 30 November 2025, unmaintained, no access to
-// recent models) to `@google/genai`, and from gemini-2.5-flash-lite to gemini-3.8-flash.
+// Reading a Claude reply (26.09.2026: the app moved from Gemini to Claude Opus 5.5).
 //
-// The two SDKs hand back different shapes, and both ways of getting it wrong are SILENT:
+// Both ways of getting it wrong are SILENT, which is why the adapter is tested against the real
+// shape and not merely typechecked (it takes `unknown`):
 //
-//   · usage in the wrong place  → zeros → a ledger row that looks perfectly ordinary and prices
-//                                 every call at nothing.
-//   · text as a getter vs a method → `.text()` throws "text is not a function" at runtime, on a
-//                                 path that only runs when somebody actually uses the feature.
-//
-// Neither is caught by a typecheck against `unknown`, which is what these adapters take. So they
-// are tested against both shapes, on purpose.
+//   · usage not found     → it used to be zeros: every call priced at $0, every budget hold
+//                           refunded in full, the admin panel showing $0 — no error anywhere. It is
+//                           now `null`, and the ledger keeps the pessimistic hold instead.
+//   · text not found      → every feature answers "nothing" while every call is still billed.
 
 import { describe, it, expect } from 'vitest';
-import { usageOf, textOf } from '../../functions/src/aiResponse';
+import { usageOf, textOf, stopReasonOf, unfinishedReason, jsonOf } from '../../functions/src/aiResponse';
 
-// What @google/genai returns: usage on the result, `text` a string getter.
-const modern = (over: Record<string, unknown> = {}) => ({
-  text: 'hello',
-  usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20 },
+// The shape of an Anthropic Messages API `Message` (and the beta one the fallback opt-in returns).
+const message = (over: Record<string, unknown> = {}) => ({
+  id: 'msg_1',
+  type: 'message',
+  role: 'assistant',
+  model: 'claude-opus-5-5',
+  stop_reason: 'end_turn',
+  content: [
+    { type: 'thinking', thinking: '', signature: 'sig' },
+    { type: 'text', text: '{"items":["Milk","Bread"]}' },
+  ],
+  usage: {
+    input_tokens: 120,
+    output_tokens: 480,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+  },
   ...over,
 });
 
-// What @google/generative-ai returned: everything under `response`, `text` a method.
-const legacy = (over: Record<string, unknown> = {}) => ({
-  response: {
-    text: () => 'hello',
-    usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20 },
-    ...over,
-  },
-});
-
-describe('usage, from either SDK', () => {
-  it('reads the current shape', () => {
-    expect(usageOf(modern())).toEqual({ promptTokens: 100, completionTokens: 20 });
+describe('usage of a Claude reply', () => {
+  it('reads input and output tokens, and which model served it', () => {
+    expect(usageOf(message())).toEqual({ promptTokens: 120, completionTokens: 480, model: 'claude-opus-5-5' });
   });
 
-  it('still reads the retired shape', () => {
-    expect(usageOf(legacy())).toEqual({ promptTokens: 100, completionTokens: 20 });
+  it('counts thinking as output, because that is what it is billed as', () => {
+    // Opus 5.5 always thinks; `output_tokens` already includes it. Billing only the visible text
+    // would repeat the Gemini-era mistake with `thoughtsTokenCount`.
+    const r = message({ usage: { input_tokens: 10, output_tokens: 900, output_tokens_details: { thinking_tokens: 850 } } });
+    expect(usageOf(r)?.completionTokens).toBe(900);
   });
 
-  it('counts thinking tokens as output, because that is what they are charged as', () => {
-    // Gemini 3 models reason before answering and report those tokens separately. Counting only
-    // `candidatesTokenCount` would have billed a fraction of the real output — quietly, and in the
-    // direction nobody checks a bill.
-    expect(usageOf(modern({
-      usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20, thoughtsTokenCount: 480 },
-    }))).toEqual({ promptTokens: 100, completionTokens: 500 });
+  it('counts cache writes and reads as input', () => {
+    const r = message({ usage: { input_tokens: 5, output_tokens: 1, cache_creation_input_tokens: 100, cache_read_input_tokens: 40 } });
+    expect(usageOf(r)?.promptTokens).toBe(145);
   });
 
-  it('returns zeros rather than throwing on anything unexpected', () => {
-    for (const junk of [null, undefined, 42, 'text', {}, { response: {} }, { usageMetadata: null }]) {
-      expect(() => usageOf(junk)).not.toThrow();
-      expect(usageOf(junk)).toEqual({ promptTokens: 0, completionTokens: 0 });
+  it('a fallback turn: every billed attempt, each with its own model, and the totals over all', () => {
+    // Anthropic bills the DECLINED attempt too, at its own model's rate; the top-level usage
+    // describes only the attempt that answered. `iterations` is the per-attempt record.
+    const r = message({
+      model: 'claude-opus-5',
+      usage: {
+        input_tokens: 300, output_tokens: 100,
+        iterations: [
+          { type: 'message', model: 'claude-opus-5-5', input_tokens: 300, output_tokens: 900, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+          { type: 'fallback_message', model: 'claude-opus-5', input_tokens: 300, output_tokens: 100, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+        ],
+      },
+    });
+    const u = usageOf(r)!;
+    expect(u.attempts).toEqual([
+      { model: 'claude-opus-5-5', promptTokens: 300, completionTokens: 900 },
+      { model: 'claude-opus-5', promptTokens: 300, completionTokens: 100 },
+    ]);
+    expect(u).toMatchObject({ promptTokens: 600, completionTokens: 1000, model: 'claude-opus-5' });
+  });
+
+  it('names the model that ACTUALLY served it — a fallback bills at its own rate', () => {
+    expect(usageOf(message({ model: 'claude-opus-5' }))?.model).toBe('claude-opus-5');
+  });
+
+  it('returns null — never zeros — for anything it cannot read', () => {
+    // Zeros priced every call at $0 and refunded every hold. Null makes the ledger keep the estimate.
+    for (const junk of [null, undefined, 0, 'x', {}, [], { usage: null }, { usage: {} },
+      { usage: { input_tokens: '120', output_tokens: 5 } },
+      // The old Gemini shape: must not be mistaken for a readable Claude one.
+      { usageMetadata: { promptTokenCount: 120, candidatesTokenCount: 30 } }]) {
+      expect(usageOf(junk), JSON.stringify(junk)).toBeNull();
     }
   });
 
   it('refuses nonsense numbers instead of writing them to the ledger', () => {
-    expect(usageOf(modern({
-      usageMetadata: { promptTokenCount: -5, candidatesTokenCount: Number.NaN },
-    }))).toEqual({ promptTokens: 0, completionTokens: 0 });
-    expect(usageOf(modern({
-      usageMetadata: { promptTokenCount: '100', candidatesTokenCount: Infinity },
-    }))).toEqual({ promptTokens: 0, completionTokens: 0 });
+    const r = message({ usage: { input_tokens: -5, output_tokens: Number.POSITIVE_INFINITY } });
+    expect(usageOf(r)).toEqual({ promptTokens: 0, completionTokens: 0, model: 'claude-opus-5-5' });
   });
 
   it('floors fractional counts rather than storing a fraction of a token', () => {
-    expect(usageOf(modern({
-      usageMetadata: { promptTokenCount: 10.9, candidatesTokenCount: 2.4 },
-    }))).toEqual({ promptTokens: 10, completionTokens: 2 });
+    const r = message({ usage: { input_tokens: 10.7, output_tokens: 3.2 } });
+    expect(usageOf(r)).toMatchObject({ promptTokens: 10, completionTokens: 3 });
   });
 });
 
-describe('reply text, from either SDK', () => {
-  it('reads the current getter', () => {
-    expect(textOf(modern())).toBe('hello');
+describe('the text of a Claude reply', () => {
+  it('joins the text blocks and skips thinking', () => {
+    const r = message({ content: [
+      { type: 'thinking', thinking: 'secret reasoning' },
+      { type: 'text', text: 'Hello ' },
+      { type: 'text', text: 'there' },
+    ] });
+    expect(textOf(r)).toBe('Hello there');
   });
 
-  it('still calls the retired method', () => {
-    expect(textOf(legacy())).toBe('hello');
-  });
-
-  it('returns empty rather than undefined when the model produced no text', () => {
-    // A refusal or a safety stop yields a result with no text part. Callers do `.trim()` on this
-    // immediately, so undefined here is a crash on the user's screen.
-    expect(textOf(modern({ text: undefined }))).toBe('');
-    expect(textOf({ usageMetadata: {} })).toBe('');
-  });
-
-  it('survives a method that throws', () => {
-    expect(textOf({ response: { text: () => { throw new Error('no candidates'); } } })).toBe('');
-  });
-
-  it('never throws and always returns a string', () => {
-    for (const junk of [null, undefined, 42, {}, { text: 42 }, { response: null }, { response: { text: 7 } }]) {
-      expect(() => textOf(junk)).not.toThrow();
-      expect(typeof textOf(junk)).toBe('string');
+  it('is empty, not a throw, for anything without text', () => {
+    for (const junk of [null, undefined, {}, { content: null }, { content: [{ type: 'thinking' }] },
+      // The old Gemini getter must not be read as a Claude reply either.
+      { text: 'gemini text' }]) {
+      expect(textOf(junk), JSON.stringify(junk)).toBe('');
     }
+  });
+});
+
+describe('a reply that was billed but is not an answer', () => {
+  it('a finished reply is an answer', () => {
+    expect(stopReasonOf(message())).toBe('end_turn');
+    expect(unfinishedReason(message())).toBeNull();
+  });
+
+  it('a refusal, a cut-off and anything unknown are not, each named for the ledger', () => {
+    expect(unfinishedReason(message({ stop_reason: 'refusal' }))).toBe('refusal');
+    expect(unfinishedReason(message({ stop_reason: 'max_tokens' }))).toBe('max-tokens');
+    expect(unfinishedReason(message({ stop_reason: 'pause_turn' }))).toBe('stop-pause_turn');
+    expect(unfinishedReason({})).toBe('stop-unknown');
+  });
+
+  it('structured output: parsed only from a finished reply', () => {
+    expect(jsonOf(message())).toEqual({ items: ['Milk', 'Bread'] });
+    // Cut off mid-JSON: not an answer, even if the fragment happened to parse.
+    expect(jsonOf(message({ stop_reason: 'max_tokens' }))).toBeNull();
+    expect(jsonOf(message({ stop_reason: 'refusal', content: [] }))).toBeNull();
+    expect(jsonOf(message({ content: [{ type: 'text', text: 'not json' }] }))).toBeNull();
   });
 });

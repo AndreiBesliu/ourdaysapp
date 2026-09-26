@@ -8,11 +8,11 @@ exports.deleteStoragePrefixes = deleteStoragePrefixes;
 require("./globalOptions");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
+const params_1 = require("firebase-functions/params");
 const bootstrapAdmins_1 = require("./bootstrapAdmins");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
-const genai_1 = require("@google/genai");
-const geminiKey_1 = require("./geminiKey");
+const claude_1 = require("./claude");
 const groupMedia_1 = require("./groupMedia");
 const errorLog_1 = require("./errorLog");
 const engine_1 = require("./warlordCombat/combat/engine");
@@ -66,10 +66,30 @@ admin.initializeApp();
 // Console — avoids locking out clients that aren't yet sending tokens. Set
 // APPCHECK_ENFORCE=true (functions env) to require valid App Check tokens.
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
-/** The four AI callables: the only callables that receive the Gemini key. See geminiKey.ts. */
-const AI_CALLABLE_OPTS = { enforceAppCheck: ENFORCE_APP_CHECK, secrets: [geminiKey_1.GEMINI_KEY] };
+/**
+ * The Google service account the five AI functions run as — the ONLY identity the Claude federation
+ * rule accepts (claude.ts). From functions/.env, as `name@` or the full address. Empty until Andrei
+ * creates it: the functions then keep the default account, and Claude is simply not configured.
+ * A param, not `process.env`: the CLI hands `.env` to the deploy, not to the code discovery that
+ * reads these options, and an empty value means "the default account" there (cloudfunctionsv2.js).
+ */
+const AI_SERVICE_ACCOUNT = (0, params_1.defineString)("AI_SERVICE_ACCOUNT", { default: "" });
+/**
+ * The options every AI function carries. 120 s leaves room for the client's one retry of a 50 s
+ * attempt (claude.ts); the platform's 60 s default could kill a call with its ledger row open.
+ *
+ * `secrets: []` is not a no-op. An OLD binding — the Gemini-era secret GEMINI_API_KEY v1, on
+ * autoSuggestChecklist — survived the deploy of 25.09.2026, because a function that declares no
+ * secrets sends no `secretEnvironmentVariables` at all and the CLI leaves the field out of the update
+ * mask. Declared EMPTY, it is in the mask and the binding is cleared. It has to go before the AI
+ * service account arrives: Cloud Run would require that account to read the retired secret, and the
+ * function would not start.
+ */
+const AI_FUNCTION_OPTS = { serviceAccount: AI_SERVICE_ACCOUNT, timeoutSeconds: 120, secrets: [] };
+/** The four AI callables. */
+const AI_CALLABLE_OPTS = Object.assign({ enforceAppCheck: ENFORCE_APP_CHECK }, AI_FUNCTION_OPTS);
 // Require a signed-in caller and apply a basic per-user daily quota on the AI
-// callables to curb abuse / runaway Gemini cost. The `ai_usage` collection is
+// callables to curb abuse / runaway model cost. The `ai_usage` collection is
 // written only by the Admin SDK here (clients have no matching rule → denied).
 const AI_DAILY_LIMIT = Number(process.env.AI_DAILY_LIMIT || 50);
 const NOTIF_DAILY_LIMIT = Number(process.env.NOTIF_DAILY_LIMIT || 100);
@@ -81,14 +101,7 @@ const AI_MAX_PERIOD_DAYS = Number(process.env.AI_MAX_PERIOD_DAYS || 400);
 // Documents one turn may read, distributed as `limit()` values BEFORE any read — you do not
 // pay Firestore to fetch a corpus you are then going to throw away at the token ceiling.
 const AI_DOC_BUDGET = Number(process.env.AI_DOC_BUDGET || 600);
-// One place for the model id, so the ledger's `model` column and the call can never disagree.
-// Gemini 3.8 Flash: the newest STABLE model in the Gemini 3 Flash line.
-//
-// Andrei asked for "Gemini 3 Flash" after seeing `gemini-3-flash-preview` in AI Studio. That one is
-// the preview of the original 3 Flash and has since been superseded by stable releases in the same
-// family — and it is cheaper to run 3.8 than 3.5, so the newest is also not the dearest. A preview
-// model can change under you or be withdrawn; this sits on five paths a family actually uses.
-const AI_MODEL = "gemini-3.8-flash";
+// The model id lives in aiModel.ts, next to its price, so the ledger and the call cannot disagree.
 const WARLORD_CHALLENGE_DAILY_LIMIT = Number(process.env.WARLORD_CHALLENGE_DAILY_LIMIT || 30);
 // A battle where the opponent simply stops playing would otherwise lock the units
 // staked in it forever (they are excluded from new deployments). After this many hours
@@ -244,6 +257,59 @@ async function recordChecklistOutcome(snapshot, data, reason) {
         await (0, errorLog_1.logServerError)(`could not record the checklist outcome (${reason}): ${(err === null || err === void 0 ? void 0 : err.message) || err}`, "ai:generateChecklist", { uid: typeof (data === null || data === void 0 ? void 0 : data.ownerId) === "string" ? data.ownerId : undefined });
     }
 }
+// ── Claude: one paid path for every AI feature (26.09.2026) ─────────────────────────────────
+/**
+ * One paid generation: the budget hold, the ledger row, the call, and — for a reply that was billed
+ * but is not an answer (refused, cut off) — a row that says so. Every AI feature goes through here,
+ * so none can skip the ledger or price itself on its own (src/utils/aiLedgerShape.test.ts).
+ */
+async function paidGenerate(feature, uid, req) {
+    const chars = (0, claude_1.requestChars)(req);
+    return (0, aiLedger_1.withLedger)({ feature, model: aiLedger_1.AI_MODEL, uid }, (0, aiLedger_1.estimateUsdFor)(aiLedger_1.AI_MODEL, chars, await (0, aiLedger_1.charsPerToken)(uid)), () => (0, claude_1.generate)(req), aiLedger_1.usageOf, 
+    // What the per-user chars-per-token ratio is LEARNED from — only a call whose tokens are all
+    // characters we sent. With a schema, the API also counts the structured-output instructions
+    // it adds, which have no characters here, so the ratio would ratchet down to its floor.
+    req.schema ? undefined : chars, aiLedger_1.unfinishedReason);
+}
+/**
+ * The caller's locale, as it goes into the SYSTEM prompt — which is ours, not the caller's. Only a
+ * locale-shaped value; anything else is English.
+ */
+function aiLocale(x) {
+    return typeof x === "string" && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,2}$/.test(x) ? x : "en-US";
+}
+/** Structured output for a checklist: the reply IS `{ "items": [...] }` when it finishes. */
+const CHECKLIST_SCHEMA = {
+    type: "object",
+    properties: { items: { type: "array", items: { type: "string" } } },
+    required: ["items"],
+    additionalProperties: false,
+};
+/**
+ * The checklist request, for the trigger and the callable alike. `language` is the caller's locale
+ * when the app knows it; the trigger does not, and asks the model to follow the event's own language.
+ * Instructions in `system`, the user's words in `prompt` — never mixed.
+ */
+function checklistRequest(title, description, language) {
+    return {
+        system: [
+            "You write short checklists for events and tasks in a family organization app.",
+            language
+                ? `Write every item in this language: ${language}.`
+                : "Write every item in the same language as the event's title and description.",
+            "If the event is a grocery or shopping list, group the items by supermarket aisle, written as \"Aisle: item\" (for example \"Dairy: Milk\").",
+            "Otherwise, list 3 to 7 brief, actionable steps or items needed to complete it.",
+        ].join("\n"),
+        prompt: `Title: "${title}"${description ? `\nDescription: "${description}"` : ""}`,
+        effort: "low",
+        schema: CHECKLIST_SCHEMA,
+    };
+}
+/** The items of a checklist reply, or null when the reply is no answer. */
+function checklistItemsOf(result) {
+    const reply = (0, aiLedger_1.jsonOf)(result);
+    return reply && Array.isArray(reply.items) ? reply.items.map(String) : null;
+}
 /**
  * The generation itself: it either writes the checklist, or it THROWS.
  *
@@ -255,35 +321,18 @@ async function recordChecklistOutcome(snapshot, data, reason) {
 async function runAutoChecklist(snapshot, data, ownerId) {
     const title = data.title;
     const description = data.description || "";
-    const key = geminiKey_1.GEMINI_KEY.value();
-    if (!key)
+    if (!(0, claude_1.claudeConfigured)())
         throw (0, aiChecklistOutcome_1.checklistFailure)(aiChecklistOutcome_1.CHECKLIST_UNCONFIGURED);
-    const ai = new genai_1.GoogleGenAI({ apiKey: key });
-    const prompt = `You are a helpful AI Assistant for a family organization app.
-The user created a task/event titled "${title}".
-${description ? `The description is: "${description}".` : ""}
-
-IMPORTANT: Analyze the language used in the title and description above. You MUST write the entire checklist translated into that exact same language.
-
-If this looks like a Grocery or Shopping list, generate a checklist grouped by supermarket aisles (e.g., "Dairy: Milk", "Produce: Apples").
-Otherwise, generate a checklist of 3 to 7 actionable, brief steps or items needed to complete this task.
-Return ONLY a valid JSON array of strings, nothing else. No markdown formatting.
-Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1", "Step 2"]`;
-    const result = await (0, aiLedger_1.withLedger)({ feature: 'auto-checklist', model: AI_MODEL, uid: ownerId || 'system' }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(ownerId || 'system')), 
-    // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
-    // the output at this ceiling, and without it nothing stopped a response from exceeding it.
-    () => ai.models.generateContent({
-        model: AI_MODEL, contents: prompt,
-        config: { maxOutputTokens: aiLedger_1.AI_MAX_OUTPUT_TOKENS },
-    }), aiLedger_1.usageOf, prompt.length);
-    const text = (0, aiLedger_1.textOf)(result);
-    const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const list = JSON.parse(cleanText);
-    // `JSON.parse` succeeds for `{"items":[...]}`, so this is not the catch's business — and it used
-    // to be the path that simply fell off the end. The call was already PAID FOR: the ledger row
-    // closed ok, the hold settled, and one of the owner's fifty was spent.
-    if (!Array.isArray(list))
-        throw (0, aiChecklistOutcome_1.checklistFailure)(aiChecklistOutcome_1.CHECKLIST_BAD_OUTPUT);
+    const result = await paidGenerate("auto-checklist", ownerId || "system", checklistRequest(title, description, null));
+    const list = checklistItemsOf(result);
+    // A refused or cut-off reply is not an answer, and it used to be the path that simply fell off
+    // the end. The call was already PAID FOR: the hold settled, one of the owner's fifty was spent,
+    // and the ledger row names why (`refusal`, `max-tokens`).
+    if (!list) {
+        const err = (0, aiChecklistOutcome_1.checklistFailure)(aiChecklistOutcome_1.CHECKLIST_BAD_OUTPUT);
+        err.unfinished = (0, aiLedger_1.unfinishedReason)(result);
+        throw err;
+    }
     const newItems = list.map((itemText) => ({
         id: Date.now().toString() + Math.random().toString().slice(2, 6),
         text: String(itemText),
@@ -306,10 +355,7 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
     });
     console.log(`Successfully generated checklist for: ${title}`);
 }
-exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)({
-    document: "events/{eventId}",
-    secrets: [geminiKey_1.GEMINI_KEY],
-}, async (event) => {
+exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)(Object.assign({ document: "events/{eventId}" }, AI_FUNCTION_OPTS), async (event) => {
     const snapshot = event.data;
     if (!snapshot)
         return;
@@ -322,7 +368,7 @@ exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)({
     const ownerId = data.ownerId;
     try {
         // Rate-limited by the event owner, sharing the same daily allowance as the callables —
-        // otherwise this is a free path to spam Gemini by creating events with the assignee.
+        // otherwise this is a free path to spam the model by creating events with the assignee.
         if (ownerId && !(await tryConsumeQuota(ownerId, "ai_usage", AI_DAILY_LIMIT))) {
             throw (0, aiChecklistOutcome_1.checklistFailure)(aiChecklistOutcome_1.CHECKLIST_QUOTA);
         }
@@ -346,7 +392,7 @@ exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)({
         if (reason === aiChecklistOutcome_1.CHECKLIST_ERROR || reason === aiChecklistOutcome_1.CHECKLIST_BAD_OUTPUT) {
             console.error("AI Generation Error", error);
             await (0, errorLog_1.logServerError)(reason === aiChecklistOutcome_1.CHECKLIST_BAD_OUTPUT
-                ? "model returned a non-array checklist"
+                ? `model reply was not a checklist (${(error === null || error === void 0 ? void 0 : error.unfinished) || "unparseable"})`
                 : ((error === null || error === void 0 ? void 0 : error.message) || "AI generation error"), "ai:generateChecklist", { stack: error === null || error === void 0 ? void 0 : error.stack, uid: ownerId });
         }
         else {
@@ -577,8 +623,7 @@ exports.generateAIChecklist = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (reque
     }
     const callerUid = await assertAiCallerAllowed(request);
     try {
-        const key = geminiKey_1.GEMINI_KEY.value();
-        if (!key) {
+        if (!(0, claude_1.claudeConfigured)()) {
             // Nothing reached the model — there is no model to reach. The unit was taken at the door
             // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
             // of the caller's fifty per attempt, and a misconfiguration nobody can see from the app
@@ -587,31 +632,8 @@ exports.generateAIChecklist = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (reque
             await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
         }
-        const ai = new genai_1.GoogleGenAI({ apiKey: key });
-        const prompt = `You are a helpful AI Assistant for a family organization app. 
-The user is creating a task/event titled "${title}".
-${description ? `The description is: "${description}".` : ""}
-
-IMPORTANT: You MUST write the entire checklist translated into this exact language locale: "${language}".
-
-If this looks like a Grocery or Shopping list, generate a checklist grouped by supermarket aisles (e.g., "Dairy: Milk", "Produce: Apples").
-Otherwise, generate a checklist of 3 to 7 actionable, brief steps or items needed to complete this task.
-Return ONLY a valid JSON array of strings, nothing else. No markdown formatting.
-Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1", "Step 2"]`;
-        const result = await (0, aiLedger_1.withLedger)({ feature: 'checklist', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), 
-        // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
-        // the output at this ceiling, and without it nothing stopped a response from exceeding it.
-        () => ai.models.generateContent({
-            model: AI_MODEL, contents: prompt,
-            config: { maxOutputTokens: aiLedger_1.AI_MAX_OUTPUT_TOKENS },
-        }), aiLedger_1.usageOf, prompt.length);
-        const text = (0, aiLedger_1.textOf)(result);
-        const cleanText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-        const list = JSON.parse(cleanText);
-        if (Array.isArray(list)) {
-            return { suggestions: list.map(String) };
-        }
-        return { suggestions: [] };
+        const result = await paidGenerate("checklist", callerUid, checklistRequest(title, description || "", aiLocale(language)));
+        return { suggestions: checklistItemsOf(result) || [] };
     }
     catch (error) {
         console.error("AI Generation Error", error);
@@ -627,6 +649,11 @@ Example output: ["Dairy: Milk", "Produce: Apples", "Bakery: Bread"] or ["Step 1"
             // Nothing reached the model, so the call must not cost the caller one of their fifty.
             await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('resource-exhausted', error.message);
+        }
+        // Busy for a minute (429 / 529): its own sentence, and the unit back — nothing was generated.
+        if ((0, aiProviderError_1.isProviderBusy)(error)) {
+            await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
+            throw new https_1.HttpsError('unavailable', aiProviderError_1.AI_BUSY_CODE);
         }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
@@ -648,8 +675,7 @@ exports.suggestEventCategory = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (requ
     }
     const callerUid = await assertAiCallerAllowed(request);
     try {
-        const key = geminiKey_1.GEMINI_KEY.value();
-        if (!key) {
+        if (!(0, claude_1.claudeConfigured)()) {
             // Nothing reached the model — there is no model to reach. The unit was taken at the door
             // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
             // of the caller's fifty per attempt, and a misconfiguration nobody can see from the app
@@ -658,23 +684,27 @@ exports.suggestEventCategory = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (requ
             await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
         }
-        const ai = new genai_1.GoogleGenAI({ apiKey: key });
-        const prompt = `You are a helpful AI Assistant. Given an event title and optional description, categorize it into exactly one of the following category IDs: "work", "family_time", "chores", "health", "other".
-Title: "${title}"
-${description ? `Description: "${description}"` : ""}
-
-Return ONLY the category ID string, nothing else. No markdown formatting.`;
-        const result = await (0, aiLedger_1.withLedger)({ feature: 'category', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), 
-        // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
-        // the output at this ceiling, and without it nothing stopped a response from exceeding it.
-        () => ai.models.generateContent({
-            model: AI_MODEL, contents: prompt,
-            config: { maxOutputTokens: aiLedger_1.AI_MAX_OUTPUT_TOKENS },
-        }), aiLedger_1.usageOf, prompt.length);
-        const text = (0, aiLedger_1.textOf)(result).trim().toLowerCase();
         const validCategories = ["work", "family_time", "chores", "health", "other"];
-        const matchedCategory = validCategories.find(c => text.includes(c)) || "other";
-        return { categoryId: matchedCategory };
+        const result = await paidGenerate("category", callerUid, {
+            system: "You sort events in a family organization app into exactly one category: "
+                + "work, family_time (time with family or friends), chores (errands, cleaning, shopping), "
+                + "health (medical, fitness, wellbeing) or other.",
+            prompt: `Title: "${title}"${description ? `\nDescription: "${description}"` : ""}`,
+            effort: "low",
+            // An enum, so the reply IS one of the five. It used to be free text matched by `includes`,
+            // which read any reply naming two categories as "work", the first in the list.
+            schema: {
+                type: "object",
+                properties: { categoryId: { type: "string", enum: validCategories } },
+                required: ["categoryId"],
+                additionalProperties: false,
+            },
+        });
+        const reply = (0, aiLedger_1.jsonOf)(result);
+        const categoryId = typeof (reply === null || reply === void 0 ? void 0 : reply.categoryId) === "string" && validCategories.includes(reply.categoryId)
+            ? reply.categoryId
+            : "other";
+        return { categoryId };
     }
     catch (error) {
         console.error("AI Category Suggestion Error", error);
@@ -690,6 +720,11 @@ Return ONLY the category ID string, nothing else. No markdown formatting.`;
             // Nothing reached the model, so the call must not cost the caller one of their fifty.
             await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('resource-exhausted', error.message);
+        }
+        // Busy for a minute (429 / 529): its own sentence, and the unit back — nothing was generated.
+        if ((0, aiProviderError_1.isProviderBusy)(error)) {
+            await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
+            throw new https_1.HttpsError('unavailable', aiProviderError_1.AI_BUSY_CODE);
         }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
@@ -720,8 +755,7 @@ exports.generateGroupDigest = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (reque
         throw new https_1.HttpsError('permission-denied', 'You are not a member of that group.');
     }
     try {
-        const key = geminiKey_1.GEMINI_KEY.value();
-        if (!key) {
+        if (!(0, claude_1.claudeConfigured)()) {
             // Nothing reached the model — there is no model to reach. The unit was taken at the door
             // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
             // of the caller's fifty per attempt, and a misconfiguration nobody can see from the app
@@ -822,23 +856,25 @@ exports.generateGroupDigest = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (reque
                 ? "(No upcoming events)\n"
                 : selection.lines.join("\n") + "\n";
         }
-        const ai = new genai_1.GoogleGenAI({ apiKey: key });
-        const prompt = `You are a helpful AI Assistant for a family/group organization app.
-Summarize the recent activity and upcoming events for the group "${groupName}".
-Translate your summary to this exact locale language: "${language}".
-
-${chatHistory}
-
-${upcomingEvents}
-
-Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highlights what happened recently and what is coming up. Keep it concise. No markdown headers.`;
-        const result = await (0, aiLedger_1.withLedger)({ feature: 'group-digest', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), 
-        // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
-        // the output at this ceiling, and without it nothing stopped a response from exceeding it.
-        () => ai.models.generateContent({
-            model: AI_MODEL, contents: prompt,
-            config: { maxOutputTokens: aiLedger_1.AI_MAX_OUTPUT_TOKENS },
-        }), aiLedger_1.usageOf, prompt.length);
+        const result = await paidGenerate("group-digest", callerUid, {
+            system: [
+                "You write short digests for a group in a family organization app.",
+                `Write in this language: ${aiLocale(language)}.`,
+                "Summarize what happened recently in the group's chat and what is coming up in its calendar, "
+                    + "in one or two friendly, conversational paragraphs.",
+                // The app shows the digest as plain text (GroupChatWidget, whitespace-pre-wrap): markdown
+                // would arrive as literal asterisks.
+                "Plain text only: no markdown, no headings, no bullet points, no bold.",
+            ].join("\n"),
+            prompt: `Group: "${groupName}"\n\n${chatHistory}\n${upcomingEvents}`,
+            // Low, like every route: Opus 5.5's thinking counts toward `max_tokens`, and a digest cut
+            // off there is billed and thrown away.
+            effort: "low",
+        });
+        // A refused or cut-off digest is not a digest. The ledger row names why; the person gets the
+        // app's own "could not make the digest" instead of an empty or half sentence.
+        if ((0, aiLedger_1.unfinishedReason)(result))
+            throw new https_1.HttpsError("unavailable", "ai/unfinished");
         const text = (0, aiLedger_1.textOf)(result).trim();
         // The caller is told when the window was cut, so a partial digest can say so instead of
         // reading as the whole story. BOTH halves can cut it — the chat window and the event window
@@ -861,6 +897,11 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
             await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('resource-exhausted', error.message);
         }
+        // Busy for a minute (429 / 529): its own sentence, and the unit back — nothing was generated.
+        if ((0, aiProviderError_1.isProviderBusy)(error)) {
+            await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
+            throw new https_1.HttpsError('unavailable', aiProviderError_1.AI_BUSY_CODE);
+        }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
         // Our OWN refusals, thrown on purpose inside the try — "AI is not configured" above all — pass
@@ -875,14 +916,14 @@ Provide a brief, friendly, conversational digest (1-2 paragraphs max) that highl
     }
 });
 exports.suggestAssetForText = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (request) => {
+    var _a;
     const { text, availableAssets } = request.data;
     if (!text || !availableAssets || !Array.isArray(availableAssets)) {
         throw new https_1.HttpsError('invalid-argument', 'text and availableAssets are required.');
     }
     const callerUid = await assertAiCallerAllowed(request);
     try {
-        const key = geminiKey_1.GEMINI_KEY.value();
-        if (!key) {
+        if (!(0, claude_1.claudeConfigured)()) {
             // Nothing reached the model — there is no model to reach. The unit was taken at the door
             // by `assertAiCallerAllowed`, so without this a service with no API key silently eats one
             // of the caller's fifty per attempt, and a misconfiguration nobody can see from the app
@@ -891,31 +932,44 @@ exports.suggestAssetForText = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (reque
             await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
         }
-        const ai = new genai_1.GoogleGenAI({ apiKey: key });
-        const prompt = `You are an AI that maps text to the most relevant asset card.
-Text: "${text}"
-
-Available Assets:
-${availableAssets.map((a) => `- ID: ${a.id}, Name: ${a.name}`).join('\n')}
-
-Rules:
-1. If the text clearly implies groceries, supermarkets, or food shopping, match a supermarket/loyalty card if one exists (e.g. Kaufland, Mega Image, Lidl, Carrefour, Profi, Auchan, Penny).
-2. If the text implies health, doctor, or medical, match a health card (e.g. SanoPass, Medicover, Regina Maria).
-3. If it implies gym or fitness, match a gym card (e.g. 7Card, WorldClass).
-4. Return ONLY the exact string ID of the best matching asset.
-5. If no asset matches reasonably well, return the exact string "none".
-Do not include any other text or markdown formatting.`;
-        const result = await (0, aiLedger_1.withLedger)({ feature: 'asset-suggest', model: AI_MODEL, uid: callerUid }, (0, aiLedger_1.estimateUsdFor)(AI_MODEL, prompt.length, await (0, aiLedger_1.charsPerToken)(callerUid)), 
-        // `maxOutputTokens` is what makes the pessimistic hold honest: `estimateUsdFor` prices
-        // the output at this ceiling, and without it nothing stopped a response from exceeding it.
-        () => ai.models.generateContent({
-            model: AI_MODEL, contents: prompt,
-            config: { maxOutputTokens: aiLedger_1.AI_MAX_OUTPUT_TOKENS },
-        }), aiLedger_1.usageOf, prompt.length);
-        const resultText = (0, aiLedger_1.textOf)(result).trim();
-        // Validate that the returned ID is actually in the list, unless it's "none"
-        const matchedAsset = availableAssets.find((a) => a.id === resultText);
-        return { assetId: matchedAsset ? matchedAsset.id : null };
+        // The client sends the list; nothing bounds it. Ids only as strings, each once, at most 200 —
+        // they become the reply's enum, so the model can only name a card that exists.
+        const seen = new Set();
+        const assets = [];
+        for (const a of availableAssets) {
+            if (assets.length >= 200)
+                break;
+            // Card ids are Firestore ids; anything else is not one of ours and must not reach the schema.
+            if (!a || typeof a.id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(a.id) || seen.has(a.id))
+                continue;
+            seen.add(a.id);
+            assets.push({ id: a.id, name: String((_a = a.name) !== null && _a !== void 0 ? _a : "").slice(0, 100) });
+        }
+        if (assets.length === 0) {
+            await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
+            return { assetId: null };
+        }
+        const result = await paidGenerate("asset-suggest", callerUid, {
+            system: [
+                "You pick the wallet card that fits what a person is about to do, in a family organization app.",
+                "Groceries, supermarkets or food shopping: a supermarket or loyalty card, if there is one "
+                    + "(for example Kaufland, Mega Image, Lidl, Carrefour, Profi, Auchan, Penny).",
+                "Health, a doctor or anything medical: a health card (for example SanoPass, Medicover, Regina Maria).",
+                "Gym or fitness: a gym card (for example 7Card, WorldClass).",
+                "Answer with the card's id, or \"none\" when no card fits reasonably well.",
+            ].join("\n"),
+            prompt: `Text: "${String(text).slice(0, 2000)}"\n\nCards:\n${assets.map((a) => `- id: ${a.id}, name: ${a.name}`).join("\n")}`,
+            effort: "low",
+            schema: {
+                type: "object",
+                properties: { assetId: { type: "string", enum: [...assets.map((a) => a.id), "none"] } },
+                required: ["assetId"],
+                additionalProperties: false,
+            },
+        });
+        const reply = (0, aiLedger_1.jsonOf)(result);
+        const matched = assets.find((a) => a.id === (reply === null || reply === void 0 ? void 0 : reply.assetId));
+        return { assetId: matched ? matched.id : null };
     }
     catch (error) {
         console.error("AI Asset Suggestion Error", error);
@@ -931,6 +985,11 @@ Do not include any other text or markdown formatting.`;
             // Nothing reached the model, so the call must not cost the caller one of their fifty.
             await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('resource-exhausted', error.message);
+        }
+        // Busy for a minute (429 / 529): its own sentence, and the unit back — nothing was generated.
+        if ((0, aiProviderError_1.isProviderBusy)(error)) {
+            await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
+            throw new https_1.HttpsError('unavailable', aiProviderError_1.AI_BUSY_CODE);
         }
         if ((0, aiProviderError_1.isProviderQuotaError)(error))
             throw new https_1.HttpsError('resource-exhausted', aiProviderError_1.AI_QUOTA_CODE);
@@ -3326,6 +3385,7 @@ exports.adminGetAiLedger = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CH
                 uid: r.uid || "",
                 feature: r.feature || "",
                 model: r.model || "",
+                servedModel: r.servedModel || null,
                 ok: r.ok,
                 errorCode: r.errorCode || null,
                 promptTokens: r.promptTokens || 0,

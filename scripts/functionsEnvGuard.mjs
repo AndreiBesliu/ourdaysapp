@@ -21,14 +21,39 @@
 //     would merge the live value back, but this step cannot see live, so the file is the one truth.
 //   * no per-alias file — a predeploy step is not told the alias, so a `.env.live` / `.env.default`
 //     would make the result depend on how the command was typed;
-//   * FORBIDDEN — the Gemini key, under any name it had, in any deploy-loaded file. It lives in Secret
-//     Manager; a copy in a dotenv is the plain-text key the move removed, in a folder synced to Drive.
+//   * PRESENT — a param the code declares (`AI_SERVICE_ACCOUNT`, index.ts) must have a LINE in the
+//     file, even a blank one: a `--non-interactive` deploy refuses a declared param missing from the
+//     dotenv, default or not (firebase-tools deploy/functions/params.js, resolveParams). Caught here,
+//     with a sentence that says what to add, instead of halfway through `prepare`.
+//   * FEDERATION — Claude authenticates by Workload Identity Federation (functions/src/claude.ts,
+//     26.09.2026): the rule, organization and Anthropic service account IDs, and the Google service
+//     account the AI functions run as. All four filled, or all four blank. A partial set deploys
+//     cleanly and then fails every AI call. All blank deploys too — with a warning, because it means
+//     every AI feature answers "not configured".
+//   * FORBIDDEN — an AI key in plain text, under any name: the Gemini ones (retired 26.09) and the
+//     Anthropic ones. The functions hold no key at all — they federate — and a key in this file would
+//     sit in a folder synced to Drive.
 
 /** Variables every deploy must carry, non-empty. */
 export const REQUIRED = ['BOOTSTRAP_ADMIN_EMAILS'];
 
-/** Names that must never be written into a dotenv file (the Gemini key, under any name it had). */
-export const FORBIDDEN = ['GEMINI_KEY', 'GEMINI_API_KEY', 'GEMINI_API_KEY_LOCAL'];
+/** Declared params: each needs a line in the file, which may be blank. */
+export const PRESENT = ['AI_SERVICE_ACCOUNT'];
+
+/** Claude federation: all filled or all blank. */
+export const FEDERATION = [
+  'ANTHROPIC_FEDERATION_RULE_ID', 'ANTHROPIC_ORGANIZATION_ID', 'ANTHROPIC_SERVICE_ACCOUNT_ID', 'AI_SERVICE_ACCOUNT',
+];
+
+/**
+ * Names that must never be written into a dotenv file: an AI key, under any name it had or has — and
+ * the two Anthropic variables that would redirect the calls or rewrite their headers (claude.ts pins
+ * the host and drops custom headers, but a file that sets them is a mistake worth stopping).
+ */
+export const FORBIDDEN = [
+  'GEMINI_KEY', 'GEMINI_API_KEY', 'GEMINI_API_KEY_LOCAL',
+  'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_CUSTOM_HEADERS',
+];
 
 /**
  * How the CLI treats a file in functions/. Case-insensitive: on Windows `fs.existsSync('.env')`
@@ -108,14 +133,60 @@ export function envGuardProblems(files, projectId, aliases) {
     );
   }
 
+  const present = new Set(always.flatMap((f) => keyNames(f.text)));
+  const absent = PRESENT.filter((k) => !present.has(k));
+  if (absent.length) {
+    problems.push(
+      `functions/.env has no ${absent.join(', ')} line. The code declares it as a param, and a `
+      + `--non-interactive deploy stops when the file lacks one. Add "${absent[0]}=" (blank is fine until the `
+      + `AI service account exists).`,
+    );
+  }
+
+  // A service account is `name@` or `name@project.iam.gserviceaccount.com`. The CLI rejects anything
+  // else only per function, during the release — a partial deploy. Judged here on the shape alone,
+  // the value never printed.
+  let sa = null;
+  for (const f of always) for (const m of entries(f.text)) if (m[1] === 'AI_SERVICE_ACCOUNT') sa = m[2];
+  const saValue = sa === null ? '' : sa.replace(/(^|\s+)#.*$/, '').trim().replace(/^(['"])(.*)\1$/, '$2').trim();
+  if (saValue && !/^[a-z][a-z0-9-]{4,28}[a-z0-9]@([a-z0-9-]+\.iam\.gserviceaccount\.com)?$/.test(saValue)) {
+    problems.push(
+      'AI_SERVICE_ACCOUNT is not a service account address: it must be "name@" or '
+      + '"name@<project>.iam.gserviceaccount.com".',
+    );
+  }
+
+  const fed = FEDERATION.filter((k) => filled.get(k) === true);
+  if (fed.length > 0 && fed.length < FEDERATION.length) {
+    const blank = FEDERATION.filter((k) => filled.get(k) !== true);
+    problems.push(
+      `Claude federation is half set up: ${blank.join(', ')} ${blank.length === 1 ? 'is' : 'are'} missing or empty. `
+      + `All four together or none — a partial set deploys and then fails every AI call.`,
+    );
+  }
+
   for (const f of [...always, ...perAlias]) {
     const leaked = [...new Set(keyNames(f.text).filter((k) => FORBIDDEN.includes(k)))];
     if (leaked.length) {
       problems.push(
-        `functions/${f.name} contains ${leaked.join(', ')}. The Gemini key lives in Secret Manager (GEMINI_KEY); `
-        + `remove it from the file (by hand; never paste it into a chat).`,
+        `functions/${f.name} contains ${leaked.join(', ')}. The functions hold no AI key: Claude is reached by `
+        + `federation (functions/src/claude.ts) and the Gemini key is retired. Remove it from the file (by hand; `
+        + `never paste it into a chat).`,
       );
     }
   }
   return problems;
+}
+
+/** Not a refusal — a deploy that is allowed but worth saying out loud. Names only. */
+export function envGuardWarnings(files, projectId, aliases) {
+  const always = files.filter((f) => loadKind(f.name, projectId, aliases) === 'always');
+  const filled = new Map();
+  for (const f of always) {
+    for (const m of entries(f.text)) filled.set(m[1], !isBlank(m[2]));
+  }
+  return FEDERATION.every((k) => filled.get(k) !== true)
+    ? ['Claude is not configured (no federation IDs in functions/.env): after this deploy every AI feature '
+      + 'answers "AI is not configured on the server".']
+    : [];
 }

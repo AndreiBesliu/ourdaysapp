@@ -36,26 +36,13 @@
 import * as admin from "firebase-admin";
 import { providerErrorCode } from "./aiProviderError";
 import { clampAiLimits, type AiLimits } from "./aiLimits";
-export { usageOf, textOf, type Usage } from "./aiResponse";
-import type { Usage } from "./aiResponse";
+export { usageOf, textOf, jsonOf, stopReasonOf, unfinishedReason, type Usage } from "./aiResponse";
+import type { Usage, Attempt } from "./aiResponse";
+import { priceUsd } from "./aiModel";
+export { AI_MODEL, MODEL_PRICING, priceUsd } from "./aiModel";
 import { HttpsError } from "firebase-functions/v2/https";
 
-/** USD per MILLION tokens. Kept in code so a row can be priced the moment it is written. */
-export const MODEL_PRICING: Record<string, { inPerM: number; outPerM: number }> = {
-  "gemini-2.5-flash-lite": { inPerM: 0.10, outPerM: 0.40 },
-  "gemini-2.5-flash": { inPerM: 0.30, outPerM: 2.50 },
-  // Introductory pricing: $0.75 / $3.75 through 31 December 2026, then $1.50 / $7.50. Written as
-  // the price being charged TODAY, because the ledger prices a row the moment it is written and
-  // a future number here would misprice every row until that date.
-  "gemini-3.8-flash": { inPerM: 0.75, outPerM: 3.75 },
-};
-
-const DEFAULT_PRICING = { inPerM: 0.30, outPerM: 2.50 };
-
-export function priceUsd(model: string, inTokens: number, outTokens: number): number {
-  const p = MODEL_PRICING[model] || DEFAULT_PRICING;
-  return (inTokens / 1_000_000) * p.inPerM + (outTokens / 1_000_000) * p.outPerM;
-}
+// The price table and `priceUsd` live in aiModel.ts (pure), next to the model id they price.
 
 /**
  * Stored as micro-USD integers: floats accumulate error and Firestore has no decimal type.
@@ -315,14 +302,46 @@ export async function openLedgerRow(entry: LedgerEntry): Promise<LedgerHandle> {
   return { id: ref.id, startedAt: Date.now(), entry };
 }
 
-/** Close the row with what actually happened, and roll it up. `errorCode` is stable text. */
+/**
+ * The model a call is priced at: the one that actually SERVED it whenever the reply names one (a
+ * server-side fallback bills at the fallback model's rate), else the one asked. An unknown served
+ * model is priced at the table's dearest rate by `priceUsd` — never at the asked model's.
+ */
+export function pricedModel(asked: string, usage?: Usage | null): string {
+  const served = usage?.model;
+  return typeof served === "string" && served ? served : asked;
+}
+
+/**
+ * What a turn cost, attempt by attempt. A fallback turn is billed for the declined attempt at its
+ * model's rate AND the answering one at its own; the top-level usage names only the latter. An
+ * attempt that does not name its model is priced as the one asked.
+ */
+export function attemptsOf(asked: string, usage: Usage): Attempt[] {
+  return usage.attempts && usage.attempts.length > 0
+    ? usage.attempts
+    : [{ model: pricedModel(asked, usage), promptTokens: usage.promptTokens, completionTokens: usage.completionTokens }];
+}
+
+export function costOf(asked: string, usage: Usage): number {
+  return attemptsOf(asked, usage)
+    .reduce((sum, a) => sum + priceUsd(a.model || asked, a.promptTokens, a.completionTokens), 0);
+}
+
+/**
+ * Close the row with what actually happened, and roll it up. `errorCode` is stable text.
+ * `costUsd`, when given, is charged as is — for a billed reply whose usage could not be read.
+ */
 export async function closeLedgerRow(
   handle: LedgerHandle,
-  outcome: { ok: boolean; usage?: Usage; errorCode?: string; chars?: number }
+  outcome: { ok: boolean; usage?: Usage | null; errorCode?: string; chars?: number; costUsd?: number }
 ): Promise<number> {
   const db = admin.firestore();
   const usage = outcome.usage || { promptTokens: 0, completionTokens: 0 };
-  const costUsd = priceUsd(handle.entry.model, usage.promptTokens, usage.completionTokens);
+  const model = pricedModel(handle.entry.model, outcome.usage);
+  const costUsd = typeof outcome.costUsd === "number"
+    ? outcome.costUsd
+    : outcome.usage ? costOf(handle.entry.model, outcome.usage) : 0;
   const date = today();
 
   const batch = db.batch();
@@ -333,6 +352,7 @@ export async function closeLedgerRow(
     completionTokens: usage.completionTokens,
     costUsd,
     computeMs: Date.now() - handle.startedAt,
+    ...(model !== handle.entry.model ? { servedModel: model } : {}),
   }, { merge: true });
 
   const inc = admin.firestore.FieldValue.increment;
@@ -343,15 +363,40 @@ export async function closeLedgerRow(
     completionTokens: inc(usage.completionTokens),
     microUsd: inc(toMicro(costUsd)),
   };
-  // ── A rule for whoever adds the second model ───────────────────────────────────────────
-  // `model` is on the raw ledger row and in NONE of these three rollups. That is harmless only
-  // while `AI_MODEL` is a single hard-coded constant, so every row in the database carries one
-  // value and a per-model report would be a column of identicals. The moment a second model
-  // exists, the `models` rollup path ships in the SAME commit — added afterwards, it can only
-  // describe calls made after it, and the history it would have explained is unreconstructable.
+  // ── The second model arrived (26.09.2026: Gemini → Claude) ─────────────────────────────
+  // The rule written here while there was one model: "the moment a second model exists, the
+  // `models` rollup path ships in the SAME commit — added afterwards, it can only describe calls
+  // made after it". It ships with the switch. Keyed by the model the call was PRICED at, so a
+  // fallback-served call is counted where its cost was charged.
   batch.set(db.doc(`aiSpendDaily/${date}`), { date, ...roll }, { merge: true });
   batch.set(db.doc(`aiSpendDaily/${date}/users/${handle.entry.uid}`), { date, ...roll }, { merge: true });
   batch.set(db.doc(`aiSpendDaily/${date}/features/${handle.entry.feature}`), { date, ...roll }, { merge: true });
+  // Per model, per ATTEMPT: a fallback turn charges the declined model and the answering one each
+  // their own tokens and cost; the call itself is counted once, under the model that answered.
+  const perModel = new Map<string, { calls: number; failures: number; promptTokens: number; completionTokens: number; usd: number }>();
+  const attempts = outcome.usage && typeof outcome.costUsd !== "number"
+    ? attemptsOf(handle.entry.model, outcome.usage)
+    : [{ model, promptTokens: usage.promptTokens, completionTokens: usage.completionTokens }];
+  for (const a of attempts) {
+    const m = a.model || handle.entry.model;
+    const cur = perModel.get(m) || { calls: 0, failures: 0, promptTokens: 0, completionTokens: 0, usd: 0 };
+    cur.promptTokens += a.promptTokens;
+    cur.completionTokens += a.completionTokens;
+    cur.usd += typeof outcome.costUsd === "number" ? outcome.costUsd : priceUsd(m, a.promptTokens, a.completionTokens);
+    perModel.set(m, cur);
+  }
+  const answered = perModel.get(model) || { calls: 0, failures: 0, promptTokens: 0, completionTokens: 0, usd: 0 };
+  answered.calls = 1;
+  answered.failures = outcome.ok ? 0 : 1;
+  perModel.set(model, answered);
+  for (const [m, t] of perModel) {
+    batch.set(db.doc(`aiSpendDaily/${date}/models/${m}`), {
+      date, model: m,
+      calls: inc(t.calls), failures: inc(t.failures),
+      promptTokens: inc(t.promptTokens), completionTokens: inc(t.completionTokens),
+      microUsd: inc(toMicro(t.usd)),
+    }, { merge: true });
+  }
   await batch.commit();
 
   if (outcome.chars && usage.promptTokens) {
@@ -370,8 +415,10 @@ export async function withLedger<T>(
   entry: LedgerEntry,
   estimateUsd: number,
   run: () => Promise<T>,
-  usageFrom: (result: T) => Usage,
+  usageFrom: (result: T) => Usage | null,
   chars?: number,
+  /** A billed reply that is not an answer (refused, cut off): its stable code, else null. */
+  unfinishedFrom?: (result: T) => string | null,
 ): Promise<T> {
   const hold = await holdBudget(entry.uid, estimateUsd);
   const handle = await openLedgerRow(entry);
@@ -412,7 +459,13 @@ export async function withLedger<T>(
   let cost = estimateUsd;                       // the pessimistic hold, kept if we cannot do better
   try {
     const usage = usageFrom(result);
-    cost = await closeLedgerRow(handle, { ok: true, usage, chars });
+    const unfinished = unfinishedFrom ? unfinishedFrom(result) : null;
+    // An unreadable usage is charged at the estimate, NEVER at zero: a zero here refunds the whole
+    // hold and the budgets stop bounding anything — the failure the Gemini-shaped reader would have
+    // produced on every Claude reply.
+    cost = await closeLedgerRow(handle, usage
+      ? { ok: !unfinished, usage, chars, ...(unfinished ? { errorCode: unfinished } : {}) }
+      : { ok: !unfinished, errorCode: unfinished || "usage-unreadable", costUsd: estimateUsd });
   } catch (bookkeeping: any) {
     // The ledger row and the rollups are lost; the CHARGE is not. Priced from the usage if we can
     // read it, and otherwise left at the estimate — an over-charge, which is recoverable, rather
@@ -421,7 +474,7 @@ export async function withLedger<T>(
       bookkeeping?.message || bookkeeping);
     try {
       const usage = usageFrom(result);
-      cost = priceUsd(entry.model, usage.promptTokens, usage.completionTokens);
+      if (usage) cost = costOf(entry.model, usage);
     } catch { /* keep the estimate */ }
   }
   await settleBudget(hold, cost).catch(() => undefined);
@@ -438,17 +491,21 @@ export async function withLedger<T>(
  * typical.
  */
 /**
- * The output ceiling the hold is calculated against — and the one the MODEL is given.
+ * The output ceiling the hold is calculated against — and the one the MODEL is given
+ * (`max_tokens`, claude.ts). Every generation carries it, so the pessimistic hold is a real ceiling
+ * (src/utils/aiLedgerShape.test.ts).
  *
- * The comment above says output is assumed to be the maximum. That was an assumption, not a
- * fact: no call site passed `maxOutputTokens`, so nothing stopped a response from exceeding
- * 2048 and the “pessimistic” hold from under-estimating the very call it was bounding.
+ * On Claude Opus 5.5 (26.09.2026) it bounds THINKING plus the reply: thinking cannot be switched
+ * off, it counts toward `max_tokens`, and it is billed as output. It was 2048 under Gemini, argued
+ * as "far beyond a two-paragraph digest" — true of the visible text only. A reply cut off here is
+ * billed and then thrown away (`max-tokens` in the ledger), so the cap leaves room for the thinking;
+ * every route also runs at effort "low", which keeps that thinking short. The hold is priced at this
+ * ceiling ($0.08 on Opus 5.5) and settles to the real cost after the call.
  *
- * Fixed by making the assumption TRUE rather than by weakening the comment. Every generation
- * now carries this limit. 2048 tokens is roughly 1,500 words — far beyond a two-paragraph
- * digest, a checklist or a one-word category, so nothing this app asks for can reach it.
+ * Not a ceiling across a server-side FALLBACK: that turn can bill a declined attempt and a full
+ * answering one. The settle charges both (`costOf`); the hold covers one.
  */
-export const AI_MAX_OUTPUT_TOKENS = 2048;
+export const AI_MAX_OUTPUT_TOKENS = 4096;
 
 export function estimateUsdFor(
   model: string, promptChars: number, cpt: number, maxOutTokens = AI_MAX_OUTPUT_TOKENS,

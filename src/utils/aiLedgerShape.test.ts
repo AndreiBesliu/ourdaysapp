@@ -127,19 +127,20 @@ describe('the pessimistic hold is a real ceiling', () => {
     return out;
   }
 
-  /** Every `*.generateContent({...})` call, with its argument text. */
-  function generationCalls(): { file: string; line: number; text: string }[] {
-    const out: { file: string; line: number; text: string }[] = [];
+  interface Site { file: string; line: number; text: string; node: ts.Node; sf: ts.SourceFile }
+
+  function collect(match: (n: ts.CallExpression, sf: ts.SourceFile) => boolean): Site[] {
+    const out: Site[] = [];
     for (const file of tsFiles(FUNCTIONS_SRC)) {
       const sf = parse(file);
       const visit = (n: ts.Node): void => {
-        if (ts.isCallExpression(n)
-            && ts.isPropertyAccessExpression(n.expression)
-            && n.expression.name.getText(sf) === 'generateContent') {
+        if (ts.isCallExpression(n) && match(n, sf)) {
           out.push({
             file: file.slice(FUNCTIONS_SRC.length + 1).replace(/\\/g, '/'),
             line: sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1,
             text: n.getText(sf),
+            node: n,
+            sf,
           });
         }
         ts.forEachChild(n, visit);
@@ -149,21 +150,79 @@ describe('the pessimistic hold is a real ceiling', () => {
     return out;
   }
 
-  const calls = generationCalls();
+  /**
+   * Every call INTO the model: `<x>.messages.create|stream|parse(...)` — Anthropic's Messages API
+   * (26.09.2026; it was `*.generateContent` while the app ran on Gemini). Matched on the `messages`
+   * receiver, so Firestore's own `tx.create(...)` / `ref.create(...)` are not counted as calls.
+   */
+  const calls = collect((n, sf) => ts.isPropertyAccessExpression(n.expression)
+    && ['create', 'stream', 'parse'].includes(n.expression.name.getText(sf))
+    && ts.isPropertyAccessExpression(n.expression.expression)
+    && n.expression.expression.name.getText(sf) === 'messages');
 
-  it('found the generation calls, so an empty pass cannot be a silent pass', () => {
-    expect(calls.length).toBeGreaterThanOrEqual(5);
+  /** The name of the function a node sits in. */
+  function enclosingFunctionName(node: ts.Node, sf: ts.SourceFile): string | null {
+    for (let p: ts.Node | undefined = node.parent; p; p = p.parent) {
+      if (ts.isFunctionDeclaration(p) && p.name) return p.name.getText(sf);
+    }
+    return null;
+  }
+
+  it('found the generation call, so an empty pass cannot be a silent pass', () => {
+    expect(calls.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('caps the output of every one of them', () => {
-    // A new call site added without this makes the hold under-estimate silently — there is no
-    // error, just a budget that stops bounding under concurrency.
-    const uncapped = calls.filter((c) => !c.text.includes('maxOutputTokens'));
-    expect(
-      uncapped.map((c) => `${c.file}:${c.line}`),
-      'Pass config: { maxOutputTokens: AI_MAX_OUTPUT_TOKENS } — estimateUsdFor prices the output '
-      + 'at that ceiling, and without it nothing enforces one.',
-    ).toEqual([]);
+  it('there is exactly ONE, in claude.ts — every feature reaches the model through `generate()`', () => {
+    // A second direct call is a second place the cap, the model id and the fallback can drift.
+    expect(calls.map((c) => `${c.file}:${c.line}`)).toEqual([expect.stringMatching(/^claude\.ts:\d+$/)]);
+  });
+
+  it('caps the output of it', () => {
+    // Without the cap nothing enforces the ceiling `estimateUsdFor` prices the output at, and the
+    // hold under-estimates silently — no error, just a budget that stops bounding under concurrency.
+    for (const c of calls) {
+      expect(c.text, `${c.file}:${c.line} — pass max_tokens: AI_MAX_OUTPUT_TOKENS`).toMatch(/max_tokens:\s*AI_MAX_OUTPUT_TOKENS/);
+    }
+  });
+
+  it('`generate()` is only ever called from `paidGenerate`, which runs it inside `withLedger`', () => {
+    // A call outside it would reach the model with no budget hold and no ledger row.
+    const gens = collect((n, sf) => ts.isIdentifier(n.expression) && n.expression.getText(sf) === 'generate');
+    expect(gens.length, 'no call to generate() found').toBeGreaterThanOrEqual(1);
+    for (const g of gens) {
+      expect(enclosingFunctionName(g.node, g.sf), `${g.file}:${g.line}`).toBe('paidGenerate');
+    }
+    const paid = collect((n, sf) => ts.isIdentifier(n.expression) && n.expression.getText(sf) === 'withLedger');
+    const inPaid = paid.filter((p) => enclosingFunctionName(p.node, p.sf) === 'paidGenerate');
+    expect(inPaid, 'paidGenerate must call withLedger').toHaveLength(1);
+    expect(inPaid[0].text).toContain('generate(req)');
+    // And with the readers that make the charge honest: usage from the reply, and the mark for a
+    // billed reply that is no answer. Dropping either stays green everywhere else.
+    const args = (inPaid[0].node as ts.CallExpression).arguments.map((a) => a.getText(inPaid[0].sf));
+    expect(args[3]).toBe('usageOf');
+    // Calibration learns only from calls whose every input token is a character we sent.
+    expect(args[4]).toBe('req.schema ? undefined : chars');
+    expect(args[5]).toBe('unfinishedReason');
+  });
+
+  it('every AI request runs at effort "low"', () => {
+    // Claude Opus 5.5 always thinks, and thinking counts toward `max_tokens`. A higher effort thinks
+    // longer, and a reply cut off at the cap is billed and thrown away (`max-tokens` in the ledger).
+    const index = parse(join(FUNCTIONS_SRC, 'index.ts'));
+    const efforts: string[] = [];
+    const visit = (n: ts.Node): void => {
+      if (ts.isPropertyAssignment(n) && n.name.getText(index) === 'effort') efforts.push(n.initializer.getText(index));
+      ts.forEachChild(n, visit);
+    };
+    visit(index);
+    expect(efforts.length).toBeGreaterThanOrEqual(4);
+    expect([...new Set(efforts)]).toEqual(['"low"']);
+  });
+
+  it('all five AI features go through `paidGenerate`', () => {
+    const features = collect((n, sf) => ts.isIdentifier(n.expression) && n.expression.getText(sf) === 'paidGenerate')
+      .map((c) => (c.node as ts.CallExpression).arguments[0]?.getText(c.sf));
+    expect(features.sort()).toEqual(['"asset-suggest"', '"auto-checklist"', '"category"', '"checklist"', '"group-digest"']);
   });
 
   it('uses the same constant the estimate is priced against', () => {
@@ -173,5 +232,7 @@ describe('the pessimistic hold is a real ceiling', () => {
     expect(ledger).toMatch(/export const AI_MAX_OUTPUT_TOKENS = \d+;/);
     expect(ledger).toContain('maxOutTokens = AI_MAX_OUTPUT_TOKENS');
     for (const c of calls) expect(c.text, `${c.file}:${c.line}`).toContain('AI_MAX_OUTPUT_TOKENS');
+    // And the model the call names is the one the estimate and the ledger price.
+    for (const c of calls) expect(c.text, `${c.file}:${c.line}`).toMatch(/model:\s*AI_MODEL/);
   });
 });

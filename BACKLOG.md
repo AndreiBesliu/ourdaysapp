@@ -96,19 +96,26 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 
 ## 3. Cod și operațiuni (C)
 
-- **Curățenia de după mutarea cheii Gemini** (decisă pe 25.09; codul e gata, iar pe live e adevărată abia
-  după primul deploy de funcții de după `secrets:set GEMINI_KEY`). **Secretul e amânat de Andrei pe 26.09.**
-  Până îl pune, orice deploy de funcții se oprește în `prepare`, iar live rămâne fără owner:
-  - **secretul vechi `GEMINI_API_KEY`**, versiunea 1 din 6 mai, era legat de `autoSuggestChecklist`.
-    Legătura a supraviețuit deja unui deploy care nu declara niciun secret. Se șterge secretul **numai
-    după** ce `live-diff` arată că nu-l mai folosește nicio funcție; altfel instanțele noi ale funcției
-    nu mai pornesc. Ștergerea e ireversibilă, deci se face la confirmarea lui Andrei.
-  - **dacă Andrei a pus o cheie nouă,** cea veche se revocă numai după ce `live-diff` arată variabila
-    veche pe zero funcții (`OWNER_VERIFY.md`).
-  - **Testul `geminiSecret.test.ts` are lista funcțiilor AI scrisă de mână.** O funcție nouă care
-    cheamă Gemini fără `secrets: [GEMINI_KEY]` ar trece testul și n-ar avea cheie pe live. Lista ar
-    trebui derivată: fiecare funcție exportată al cărei handler ajunge la `GEMINI_KEY.value()`. Găsit
-    de recenzia din 25.09; nu blochează nimic azi.
+- **AI-ul pe Claude (26.09): ce a rămas deliberat în afara livrării.**
+  - **Cheia Gemini veche și secretul `GEMINI_API_KEY` (v1)** se șterg numai după ce `live-diff` arată
+    două lucruri: variabila veche pe zero funcții și nicio legătură la secret. Deploy-ul o scoate pe a
+    doua (`secrets: []` pe funcțiile AI). Ștergerea e ireversibilă, deci se face la confirmarea lui
+    Andrei (`OWNER_VERIFY.md`, pasul 6).
+  - **Rezervarea pe apel nu e un plafon peste un fallback.** Un apel refuzat de Opus 5.5 și servit de
+    alt model plătește ambele încercări. Decontarea le încasează pe amândouă (`costOf`), dar rezervarea
+    acoperă una singură. Sub concurență, bugetul poate fi depășit cu cel mult o încercare. Se lasă
+    așa: fallback-urile ar trebui să fie rare. De reluat dacă ledger-ul arată altceva.
+  - **Panoul Admin nu arată încă rollup-ul pe model** (`aiSpendDaily/{zi}/models/{model}`). Datele se
+    scriu de la prima zi, ca istoria să poată fi separată; ecranul e un pas separat.
+  - **Confidențialitatea:** rezumatul grupului trimite până la 50 de mesaje din chat, iar sugestia de
+    card trimite numele cardurilor din portofel. Până pe 26.09 mergeau la Google, acum merg la
+    Anthropic. Aplicația n-are o pagină de confidențialitate care să spună asta. Decizia e a lui Andrei.
+  - **Aceeași organizație Anthropic ca Presto?** Atunci limitele de rată și cheltuiala sunt comune: o
+    rafală Presto ar apărea în OurDays ca „AI-ul e ocupat”. Un workspace separat pentru OurDays, cu
+    limita lui de cheltuială, le separă. Decizia e a lui Andrei.
+  - **Lista funcțiilor AI** e scrisă de mână în `claudeAuth.test.ts`. Plasa reală e alta: o funcție nouă
+    care cheamă `paidGenerate` fără să intre în lista de cinci pică `aiLedgerShape.test.ts`, deci nu
+    trece neobservată.
 
 - **Bundle-ul, pasul următor.** Wallet, Chat și Settings sunt separate din 25.09: chunk-ul principal
   a scăzut de la 1.592 kB la 1.145 kB. Rămân în el două lucruri: coduri de bare și QR
@@ -163,9 +170,8 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     vechi decât filtrul, iar filtrul doar îl face mai vizibil, prin eticheta de start din panou.
   - **Tipul de repetare nu se poate schimba după creare.** Asta nu e nou: nici frecvența nu se putea
     schimba.
-  - **Testul `geminiSecret.test.ts` are lista funcțiilor AI scrisă de mână.** E același tip de risc ca
-    lista de apelanți ai nucleului: o funcție nouă care uită `onlyOn` n-ar fi prinsă de nimic în afara
-    testului care compară calendarul cu serverul.
+  - **Apelanții nucleului de repetare:** o funcție nouă care uită `onlyOn` n-ar fi prinsă de nimic în
+    afara testului care compară calendarul cu serverul.
 
 ## 4. Produs (D) — doar înregistrat
 

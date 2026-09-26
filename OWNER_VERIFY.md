@@ -15,6 +15,81 @@
 
 ---
 
+## 🆕 AI-ul trece pe Claude Opus 5.5 (26.09) — gata în cod, NEPUBLICAT. Pașii tăi
+
+**Fapte:**
+- Cele cinci funcții AI (checklist, checklist automat, categorie, card din portofel, rezumatul
+  grupului) vorbesc acum cu **Claude Opus 5.5**, ales de tine, nu cu Gemini.
+- **Nu există nicio cheie.** Funcțiile dovedesc cine sunt cu un token Google, pe care Anthropic îl
+  acceptă printr-o regulă setată de tine o dată.
+- **Cost:** în jur de $0.005 pentru un checklist, o categorie sau un card, și $0.01–0.02 pentru un rezumat.
+- Am probat totul fără rețea: tokenul Google, schimbul la Anthropic, cererea, prețul fiecărei
+  încercări și bugetele. Nu am putut proba un apel real: pentru asta e nevoie de pașii de mai jos.
+- **Până faci pașii 1–2**, un deploy de funcții lasă AI-ul oprit („AI is not configured”, fără cost).
+  Asta din cauza cheii Gemini vechi: deploy-ul o scoate de pe funcții. De aceea, **întâi pașii 1–2,
+  apoi deploy-ul.**
+
+- [ ] **Pasul 1 — Google Cloud: contul cu care rulează funcțiile AI** (5 minute)
+      1. Mergi la https://console.cloud.google.com/iam-admin/serviceaccounts/create?project=our-days-2a939
+      2. **Service account name:** `ourdays-ai`. Apasă **Create and continue**.
+      3. La **Grant this service account access to project**, adaugă trei roluri cu **+ Add another role**:
+         - **Cloud Datastore User**;
+         - **Eventarc Event Receiver**;
+         - **Cloud Run Invoker**.
+         Apoi **Continue** și **Done**.
+      4. În listă (https://console.cloud.google.com/iam-admin/serviceaccounts?project=our-days-2a939)
+         dă click pe `ourdays-ai`. Pe pagina **Details** copiază **Unique ID**, un număr lung de ~21
+         de cifre.
+      - **Cum arată bine:** contul `ourdays-ai@our-days-2a939.iam.gserviceaccount.com` apare în listă.
+      - **Ce se strică fără cele trei roluri:** checklist-ul automat nu primește evenimentele și nu lasă
+        nicio urmă, iar funcțiile nu pot citi Firestore.
+
+- [ ] **Pasul 2 — Anthropic: regula care acceptă doar contul de mai sus** (5 minute)
+      1. Mergi la https://platform.claude.com/settings/workload-identity-federation și apasă
+         **Connect workload**.
+      2. Alege **Google Cloud**. La potrivire completezi:
+         - **audience:** `https://api.anthropic.com`;
+         - **sub:** Unique ID-ul de la pasul 1;
+         - **email:** `ourdays-ai@our-days-2a939.iam.gserviceaccount.com`.
+         Restul lași cum propune.
+      3. La final, asistentul îți arată ID-urile. Trimite-mi-le în chat, **nu sunt secrete**:
+         - rule ID (`fdrl_…`);
+         - service account ID (`svac_…`);
+         - organization ID;
+         - workspace ID (`wrkspc_…`), dacă îl arată.
+      4. Verifică și că ai credit sau o metodă de plată: https://platform.claude.com/settings/billing.
+         Fără credit, fiecare apel e refuzat.
+      - **Cum arată bine:** regula apare în listă. Testul de conexiune se poate rula după deploy,
+        de pe pagina regulii.
+
+- [ ] **Pasul 3 — confirmă-mi deploy-ul** (funcțiile, apoi aplicația web). Eu:
+      - pun ID-urile în `functions/.env`;
+      - fac deploy-ul;
+      - verific cu `live-diff`: contul `ourdays-ai` pe exact cele cinci funcții AI, cheia Gemini pe zero
+        funcții, iar tu din nou „owner”.
+
+- [ ] **Pasul 4 — încearcă, 5 minute**, pe https://our-days-2a939.web.app :
+      1. un rezumat AI în chatul unui grup;
+      2. un eveniment nou cu „Asistent AI” la membri: checklist-ul trebuie să apară;
+      3. o categorie sugerată.
+      - **Cum arată bine:** toate trei răspund. În Admin → AI Center apar rânduri cu
+        `claude-opus-5-5` și un cost mai mare decât zero.
+
+- [ ] **Pasul 5 — decizie: bugetul AI de persoană.**
+      - Azi: $0.25 pe zi de persoană și $5 pe zi pentru toată aplicația, dimensionate pentru Gemini.
+      - Pe Claude, un apel rezervă întâi ~$0.08, apoi plătește doar cât a costat, deci merge. Dar $0.25
+        înseamnă ~12–25 de rezumate pe zi de persoană.
+      - **Recomandarea mea: $1 pe zi de persoană.** Se schimbă din Admin → AI Center → Budget, după
+        deploy (atunci ești iar „owner”).
+
+- [ ] **Pasul 6 — după ce îți confirm că merge:**
+      1. Ștergi cheia Gemini veche din https://aistudio.google.com/apikey. Înainte de confirmare, AI-ul
+         de pe live încă o folosește.
+      2. Secretul vechi `GEMINI_API_KEY` din Secret Manager se poate șterge și el. Deploy-ul îl scoate
+         de pe ultima funcție; eu verific asta înainte să-ți spun.
+
+---
+
 ## 🆕 Repetare zilnică „doar lucrătoare” / „doar weekend” (26.09) — gata în cod, NEPUBLICAT
 
 **Fapt:** în lista „Repetare” apar, după „Zilnic”, două opțiuni noi: **„Zile lucrătoare (lun–vin)”** și
@@ -22,7 +97,8 @@
 pe formularul adevărat: opțiunile, datele „până pe”, ciorna și panoul.
 
 **Fapt, și ce contează la publicare:** memento-urile, rezumatul AI și asistentul rulează pe **server**.
-Serverul primește codul nou doar la un deploy de funcții, adică după ce pui secretul `GEMINI_KEY`.
+Serverul primește codul nou doar la un deploy de funcții. Acesta nu mai așteaptă niciun secret (26.09):
+îl fac la confirmarea ta, împreună cu trecerea pe Claude.
 - **Cât timp serverul e cel vechi**, o serie „doar lucrătoare” care are memento **sună și sâmbăta și
   duminica**: 8–10 notificări în plus pe serie. Invers, la „doar weekend”, sună și în zilele lucrătoare.
 - **Zilele acelea nu apar în calendar,** deci nu ai ce șterge ca să oprești notificările.
@@ -76,37 +152,11 @@ Serverul primește codul nou doar la un deploy de funcții, adică după ce pui 
   - **Cum arată bine:** toate merg ca înainte.
   - **Ce se strică dacă ceva e greșit:** exact funcția aceea. N-o poate vedea nimeni altcineva.
 
-**✅ DECIS (25.09): contul tău pierduse statutul de „owner” pe live — ai ales mutarea în Secret Manager.**
-**Am greșit într-o versiune de mai devreme a acestui bloc.** Am scris că recuperarea prin emailul de
-bootstrap „e oprită și azi pe live”. Nu era: codul publicat până azi avea adresa ta scrisă direct în el.
-Deploy-ul a oprit-o. Concret:
-- din admin nu mai puteai opri kill switch-ul AI și nu mai puteai ridica limitele AI;
-- în lista de admini apăreai ca „last”;
-- recuperarea automată era oprită.
-
-Accesul de admin n-a fost afectat. Codul mutării e gata: cheia vine din `GEMINI_KEY`, doar pe cele cinci
-funcții AI, iar adresa se întoarce din `functions/.env`. Un pas de predeploy refuză de acum orice deploy
-fără adresă.
-
-- [ ] **Rulezi tu, o dată — AMÂNAT de tine pe 26.09 („mai târziu”):**
-      `npx firebase functions:secrets:set GEMINI_KEY --project live`, și lipești cheia la prompt.
-      **Sau fără terminal:** în consola Google Cloud, Secret Manager (proiectul `our-days-2a939`) →
-      Create secret → numele exact `GEMINI_KEY` → lipești cheia → Create.
-      Ideal o cheie **nouă**, restricționată la Generative Language API. Eu nu văd cheia. Îmi spui când e
-      gata, și fac imediat deploy-ul doar de funcții.
-      - **Până atunci** (fapt): AI-ul merge, dar nu ești recunoscut ca owner. Și **orice** deploy de
-        funcții, chiar și o reparație urgentă, se oprește înainte să schimbe ceva, fiindcă codul cere
-        secretul. Nu te mai întreb de el până nu e nevoie de un deploy de funcții.
-      - **Cum arată bine:**
-        - `live-diff` arată secretul pe exact cele cinci funcții AI și variabila veche pe niciuna;
-        - în admin apari din nou ca „owner”;
-        - un AI Digest merge.
-      - **Ce se strică dacă nu:** live rămâne ca acum, fără owner. Și **orice** deploy de funcții, chiar
-        și o reparație mică, se oprește înainte să schimbe ceva, până există secretul.
-      - **Cheia veche, dacă ai făcut una nouă:** o revoci din Google AI Studio **numai după ce îți
-        confirm eu** două lucruri: deploy-ul s-a terminat fără eroare pe nicio funcție, iar `live-diff`
-        arată variabila veche pe zero funcții. Dacă o revoci înainte, AI-ul se oprește pe orice funcție
-        care încă o folosește.
+**Istoric, nu de făcut:**
+- Pe 25.09, deploy-ul a oprit recuperarea prin emailul de bootstrap. Contul tău nu mai era „owner” pe
+  live (kill switch-ul AI nu se mai putea opri din app). Am greșit o dată spunând altceva.
+- Adresa stă acum în `functions/.env`, iar următorul deploy de funcții o pune înapoi.
+- **Pasul cu `GEMINI_KEY` în Secret Manager e anulat:** pe 26.09 ai ales Claude, fără nicio cheie (secțiunea de sus).
 
 ---
 

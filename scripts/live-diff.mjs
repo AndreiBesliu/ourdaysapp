@@ -119,19 +119,19 @@ function cli(args) {
       onlyLive_wouldBeDeleted: [...liveNames].filter((n) => !localNames.has(n)),
       onlyLocal_new: [...localNames].filter((n) => !liveNames.has(n)),
       envVarNamesOnLive: envNameCounts,
-      // The OLD plain key: should be on no function once the Secret Manager deploy is out.
+      // The OLD plain Gemini key: on no function once the first Claude deploy is out (26.09.2026).
       geminiKeyVarOn: list.filter((f) => 'GEMINI_API_KEY_LOCAL' in (f.environmentVariables || {})).map((f) => f.id).sort(),
+      // Claude federation (functions/src/claude.ts). The IDs come from functions/.env, which the CLI
+      // puts on EVERY function, so once set this lists all of them (they are not secrets). What
+      // must be exactly the five AI functions is the next field: only they run as the AI account,
+      // and only that account's Google token matches the federation rule.
+      claudeFederationOn: list.filter((f) => 'ANTHROPIC_FEDERATION_RULE_ID' in (f.environmentVariables || {})).map((f) => f.id).sort(),
+      customServiceAccount: Object.fromEntries(list
+        .map((f) => [f.id, f.serviceAccount || f.serviceAccountEmail || null])
+        .filter(([, sa]) => sa && !String(sa).endsWith('-compute@developer.gserviceaccount.com'))),
       secretBindingsOnLive: secretBindings,
     };
   }
-}
-
-// ── The secret the functions deploy needs (functions/src/geminiKey.ts) ──────────────────────
-{
-  const r = cli('functions:secrets:get GEMINI_KEY');
-  // Prints versions and states only; never the value (that is `secrets:access`, never run here).
-  const lines = (r.stdout + r.stderr).split('\n').map((l) => l.trim()).filter((l) => /^\d+\s|ENABLED|DISABLED|DESTROYED|not found|NOT_FOUND|does not exist/i.test(l));
-  out.GEMINI_KEY = { exit: r.status, exists: r.status === 0, lines: lines.slice(0, 6) };
 }
 
 console.log(JSON.stringify(out, null, 2));

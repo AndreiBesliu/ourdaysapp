@@ -14,23 +14,34 @@ React + TypeScript + Vite + Tailwind, Firebase (Auth, Firestore, Functions, Host
   / `--only firestore:indexes` / `--only storage`. **`firestore:indexes` poartă și politica TTL** pe
   `errorLogs.expireAt` (din 25.09): dacă `firestore.indexes.json` s-a schimbat, pasul ăsta nu e opțional,
   altfel rândurile au dată de expirare și nu expiră niciodată. La el se răspunde **Nu** la ștergerea
-  indecșilor care există doar pe live. **Cheia Gemini se citește din Secret Manager** (`GEMINI_KEY`),
-  doar pe cele cinci funcții AI (în cod din 25.09; pe live după primul deploy de funcții de după
-  `secrets:set`). **Pe 26.09 Andrei a amânat punerea secretului:** până atunci ORICE deploy de funcții se
-  oprește în `prepare`, iar live rămâne cu cheia veche și fără owner (`OWNER_VERIFY.md`). Nu-l întreba
-  din nou decât când e nevoie de un deploy de funcții.
-  **Deploy-ul de funcții rulează cu `--non-interactive`:** interactiv, un secret lipsă e cerut la prompt
-  și creat pe loc.
-  **Cât timp există `functions/.env`**, fiecare deploy de funcții pune pe funcții exact conținutul lui,
-  plus secretele. Nimic din mediul de pe live nu se păstrează. Fără fișier, mediul de pe live s-ar
-  păstra. Un secret declarat NU schimbă asta (măsurat în sursa CLI-ului pe 25.09).
-  - `functions/.env` trebuie să existe și să conțină `BOOTSTRAP_ADMIN_EMAILS`. Fără adresă, contul
-    lui Andrei nu mai e recunoscut ca owner; s-a întâmplat pe 25.09. Copia stă în
-    `~/.ourdays/functions.env.bootstrap`.
-  - Cheia Gemini nu are voie în fișier.
+  indecșilor care există doar pe live.
+  **AI-ul e Claude Opus 5.5** (`claude-opus-5-5`, din 26.09; înainte Gemini), prin
+  `functions/src/claude.ts`, și **nu are nicio cheie**: se autentifică prin Workload Identity
+  Federation. Funcția ia de la serverul de metadate Google un token al contului de serviciu cu care
+  rulează, iar Anthropic îl schimbă pe un token scurt. Regula din consola Claude acceptă un singur cont
+  Google, iar doar cele cinci funcții AI rulează ca el (`AI_SERVICE_ACCOUNT`).
+  - **Nu cere niciodată o cheie Anthropic sau Gemini.** Nu pune `ANTHROPIC_API_KEY` nicăieri: SDK-ul o
+    preferă federării (clientul o anulează explicit, iar garda o refuză în `.env`).
+  - Fără ID-urile federării, orice funcție AI răspunde „AI is not configured on the server”, gratuit.
+    Asta NU blochează deploy-ul, doar îl avertizează.
+  **Cât timp există `functions/.env`**, fiecare deploy de funcții pune pe TOATE funcțiile exact
+  conținutul lui. Nimic din mediul de pe live nu se păstrează. Fără fișier, mediul de pe live s-ar
+  păstra. Un secret declarat NU schimbă asta (măsurat în sursa CLI-ului pe 25.09). Fișierul conține
+  numai ID-uri, nimic secret. Copia stă în `~/.ourdays/functions.env.bootstrap`.
+  - `BOOTSTRAP_ADMIN_EMAILS`, completat. Fără adresă, contul lui Andrei nu mai e recunoscut ca owner;
+    s-a întâmplat pe 25.09.
+  - O linie `AI_SERVICE_ACCOUNT=`, chiar goală. E param declarat, iar un deploy `--non-interactive`
+    se oprește dacă lipsește (`firebase-tools` `params.js`). Goală = contul implicit, deci AI oprit.
+  - Federarea completă sau deloc: `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`,
+    `ANTHROPIC_SERVICE_ACCOUNT_ID` și `AI_SERVICE_ACCOUNT` (`nume@`). `ANTHROPIC_WORKSPACE_ID` e opțional.
+  - Nicio cheie AI în fișier, și nici `ANTHROPIC_BASE_URL` / `ANTHROPIC_CUSTOM_HEADERS`.
   - Fără `.env.live` / `.env.default`: predeploy-ul nu știe ce alias folosește comanda.
   - Predeploy-ul `scripts/functions-env-guard.mjs` refuză un deploy care încalcă oricare dintre ele;
     nu-l ocoli.
+  **Contul AI (`ourdays-ai@…`) are nevoie de trei roluri**, pe care CLI-ul NU le dă (le dă doar contului
+  implicit): `roles/datastore.user`, `roles/eventarc.eventReceiver` și `roles/run.invoker`. Fără ele,
+  checklist-ul automat (un trigger Firestore) nu primește evenimentele și nu lasă nicio urmă.
+  **Deploy-ul de funcții rulează cu `--non-interactive`:** interactiv, un param lipsă e cerut la prompt.
 - **Hosting-ul are o dependență de funcții, de la 26.09:** repetarea zilnică cu filtru (`onlyOn`, în
   `recurrenceCore.ts`). Un hosting publicat înaintea funcțiilor lasă serverul vechi să trimită
   memento-uri în zilele pe care seria le sare, fără ca utilizatorul să aibă ce șterge. Ordinea rămâne

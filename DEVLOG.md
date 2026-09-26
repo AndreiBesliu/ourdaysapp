@@ -9991,3 +9991,103 @@ modelul de date.
 
 **NU s-a publicat nimic.** Pentru ambele jumătăți e nevoie de secretul `GEMINI_KEY`, apoi de
 confirmarea lui Andrei.
+
+
+## 2026-09-26 · AI-ul aplicației trece de la Gemini la Claude (Task Started)
+
+**Prompt (Andrei):** „sti ce, vreau sa trecem pe AI de la Claude”. **Model:** Claude Opus 5.5.
+
+Plan:
+1. Harta întâi: apelurile, prompturile, ledger-ul de cost, bugetele, testele, gărzile, textele care
+   numesc Google ca furnizor.
+2. SDK-ul oficial `@anthropic-ai/sdk`, iar cheia în Secret Manager (nu mai `GEMINI_KEY`).
+3. Modelul implicit, după referința Claude API: `claude-opus-5`.
+4. Recenzia adversarială, porțile, pașii lui Andrei cu link-uri.
+
+Pașii 1–2 din mesajul anterior (cheia Gemini) sunt anulați.
+
+
+## 2026-09-26 · AI-ul aplicației trece de la Gemini la Claude Opus 5.5, fără cheie (Task Completed)
+
+**Prompturi (Andrei):**
+- „sti ce, vreau sa trecem pe AI de la Claude”;
+- captura cu „identity federation” și „vad ca avem optiunea asta, ce zici, e mai ok?”, apoi
+  „Identity federation (Recommended)”;
+- la model: „Putem folosi Opus 5.5, inteleg ca e mai ieftin ca 5”.
+
+**Model:** Claude Opus 5.5.
+
+**Harta întâi** (4 cititori + critic) a găsit capcanele tăcute ale unei simple înlocuiri:
+- ledger-ul la $0 (cititorul de usage știa doar forma Gemini), deci bugetele nu mai limitau nimic;
+- răspunsuri goale: categoria mereu „other”, checklist-urile căzute, fiecare apel plătit;
+- un model lipsă din tabelul de prețuri, taxat la prețul Gemini, deci de până la 10 ori prea puțin;
+- 402 și 529 neclasificate, deci inundarea jurnalului de erori.
+
+**Ce s-a schimbat:**
+- **Clientul, `functions/src/claude.ts`:**
+  - `@anthropic-ai/sdk` 0.128.0, Workload Identity Federation: tokenul Google de la serverul de metadate
+    e schimbat la Anthropic, fără nicio cheie;
+  - clientul fixează `apiKey`/`authToken` la null și gazda. SDK-ul ar prefera altfel `ANTHROPIC_API_KEY`
+    din mediu, lucru găsit în sursa lui;
+  - clientul șterge `ANTHROPIC_CUSTOM_HEADERS`;
+  - termene pe fiecare pas, totul sub cele 70 s după care aplicația renunță;
+  - `beta.messages.create` cu `fallbacks: "default"`, ieșiri structurate (schema JSON) și effort
+    „low” peste tot.
+- **Cele cinci funcții** trec printr-o singură cale plătită, `paidGenerate`:
+  - instrucțiunile stau în `system`, textul omului în `prompt`;
+  - enum pentru categorie și card, deci răspunsul nu mai poate fi altceva;
+  - rezumatul e text simplu, fără markdown.
+- **Costul:**
+  - fiecare încercare e taxată la prețul ei, inclusiv cea refuzată înaintea unui fallback
+    (`usage.iterations`);
+  - un model necunoscut e taxat la cel mai scump preț;
+  - usage ilizibil înseamnă estimarea, niciodată $0;
+  - rollup pe model, cerut de regula scrisă în ledger;
+  - un răspuns plătit dar fără răspuns (`refusal`, `max-tokens`) e marcat.
+  - Plafonul de ieșire crește la 4096, fiindcă gândirea lui Opus 5.5 intră în el.
+- **Erorile:**
+  - „ocupat” (429/529) are acum mesaj propriu în 6 limbi („încearcă peste un minut”) și unitatea zilnică
+    se întoarce;
+  - „fără credit” rămâne „limita aplicației”;
+  - cardul și Retry spun același lucru.
+- **Deploy:**
+  - funcțiile AI rulează ca un cont Google dedicat (param `AI_SERVICE_ACCOUNT`, gol până îl creează
+    Andrei);
+  - `secrets: []` șterge legătura veche `GEMINI_API_KEY@1`. Un câmp absent nu intra în masca de
+    actualizare, de aceea supraviețuise;
+  - garda cere linia de param (altfel `--non-interactive` pică), federarea completă sau deloc, o adresă
+    de cont validă, și refuză cheile AI și variabilele Anthropic periculoase.
+- `geminiKey.ts` și `@google/genai` au fost scoase.
+
+**Probe:**
+- **Teste noi:**
+  - `claudeAuth.test.ts`:
+    - descrierea de deploy;
+    - handler-ele pe emulator („not configured” chiar cu o cheie-momeală în mediu; kill switch-ul înaintea
+      oricărui apel de rețea);
+    - lanțul complet cu rețeaua simulată: token Google, schimb, cerere;
+  - `aiLedgerSettle.test.ts`, prima probă pe emulator pentru `withLedger`;
+  - `aiModel.test.ts`, plus cele rescrise.
+- **Mutații, 22, toate roșii:** 11 înainte de recenzie și 11 pe reparațiile ei.
+- **Manifestul real de deploy** (`functions.yaml`) a fost generat și citit.
+- **Porți:** `tsc`, lint, 1947 de teste unitare, 453 pe emulatoare, tz 46+46, build, split, bundle,
+  lock sincronizat.
+
+**Recenzia adversarială** (28 de agenți) a găsit 25 de constatări, niciuna blocantă. Au fost reparate:
+- facturarea pe fallback;
+- plafonul cu gândire;
+- „ocupat” ≠ „limita pe azi”;
+- termenele față de cele 70 s ale aplicației;
+- codurile de eroare;
+- anteturile custom;
+- forma contului;
+- dedup-ul O(n²);
+- calibrarea;
+- limba în prompt;
+- două teste care rămâneau verzi.
+
+În BACKLOG au intrat rezervarea peste un fallback, panoul pe model, confidențialitatea și organizația
+comună cu Presto.
+
+**NU s-a publicat nimic.** Pașii lui Andrei (contul Google, regula Anthropic, confirmarea) stau în
+`OWNER_VERIFY.md`, cu link-uri.

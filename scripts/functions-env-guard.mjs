@@ -1,12 +1,13 @@
 // scripts/functions-env-guard.mjs
 //
 // Functions predeploy step (firebase.json): refuse a deploy whose dotenv would drop the bootstrap
-// address from the live functions, or that carries the Gemini key in plain text. See
-// functionsEnvGuard.mjs. Reads variable NAMES only and prints no value.
+// address from the live functions, lacks a declared param, half-configures the Claude federation, or
+// carries an AI key in plain text. See functionsEnvGuard.mjs. Reads variable NAMES only and prints
+// no value.
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { envGuardProblems } from './functionsEnvGuard.mjs';
+import { envGuardProblems, envGuardWarnings } from './functionsEnvGuard.mjs';
 
 const root = join(import.meta.dirname, '..');
 const rc = JSON.parse(readFileSync(join(root, '.firebaserc'), 'utf8'));
@@ -25,4 +26,7 @@ if (problems.length) {
   for (const p of new Set(problems)) console.error(`functions-env-guard: ${p}`);
   process.exit(1);
 }
-console.log('functions-env-guard: the deploy dotenv carries the bootstrap address and no Gemini key.');
+for (const w of new Set(projectIds.flatMap((id) => envGuardWarnings(files, id, aliases)))) {
+  console.warn(`functions-env-guard: WARNING — ${w}`);
+}
+console.log('functions-env-guard: the deploy dotenv carries the bootstrap address, the declared params and no AI key.');

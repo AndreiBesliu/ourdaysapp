@@ -19,7 +19,7 @@ export const app = initializeApp(firebaseConfig);
 
 // ── App Check ──
 // Attests that requests come from our genuine app, protecting Firestore,
-// Storage and the callable Gemini functions from abuse. Only initialised when a
+// Storage and the callable AI functions from abuse. Only initialised when a
 // reCAPTCHA v3 site key is configured (VITE_APPCHECK_RECAPTCHA_KEY), so local
 // dev / builds without it keep working. Enforcement itself is toggled server-side
 // (Firebase Console + the APPCHECK_ENFORCE function flag), so shipping this alone

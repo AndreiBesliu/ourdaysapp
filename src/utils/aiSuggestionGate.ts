@@ -7,8 +7,9 @@
 // edit asked the model the same question again, so a six-item list sent roughly thirteen calls,
 // about half of them identical to one already answered.
 //
-// That was cheap on gemini-2.5-flash-lite. On gemini-3.8-flash an output token costs 9.4 times as
-// much, so the same habit is now the most expensive thing the app does by accident.
+// That was cheap on gemini-2.5-flash-lite. On gemini-3.8-flash an output token cost 9.4 times as
+// much, and on Claude Opus 5.5 (since 26.09.2026) it costs 50 times as much, so the same habit is
+// the most expensive thing the app does by accident.
 //
 // The timing half of the fix (a debounce) belongs to the component; this is the half that can be
 // decided without a clock, so it is the half that gets tested.

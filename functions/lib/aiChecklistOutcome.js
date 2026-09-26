@@ -60,10 +60,15 @@ exports.CHECKLIST_BAD_OUTPUT = "ai-checklist/bad-output";
  *
  * What did need fixing is what the PERSON reads. The card used to say "the AI was busy, try again
  * in a minute" while pressing Retry — which runs the callable — said "the app has reached today's
- * AI limit, try again tomorrow". Same condition, same screen, one minute apart. The callables are
- * the ones telling the truth: the dominant cause of this predicate firing is the project's
- * free-tier allowance for the DAY being spent, which put 74 of 95 rows in the health panel. So the
- * sentence behind this code now says the same thing as theirs; only the code stays distinct.
+ * AI limit, try again tomorrow". Same condition, same screen, one minute apart. Under Gemini the
+ * callables were the ones telling the truth: the dominant cause was the free tier's allowance for
+ * the DAY being spent (74 of 95 rows in the health panel), so this code was given their sentence.
+ *
+ * Under Claude (26.09.2026) it is the other way round. A 429 is a per-minute limit and a 529 a
+ * momentary overload, so "busy, try again in a minute" is the truth again, and the callables now
+ * say it too (`ai-budget/provider-busy` → `aiBusy`). The same sentence on the card and on Retry is
+ * kept; only which sentence changed. An account out of CREDIT is not "busy": the trigger records
+ * the callables' "today's AI limit" code for it (`checklistReason`).
  */
 exports.CHECKLIST_BUSY = "ai-checklist/provider";
 /** Anything else. Deliberately the fallback, never the guess. */
@@ -119,8 +124,11 @@ function checklistReason(err) {
         const hit = BUDGET_CODES.find((code) => message.includes(code));
         return hit || exports.CHECKLIST_ERROR;
     }
-    if ((0, aiProviderError_1.isProviderQuotaError)(err))
+    // Busy is a minute; out of credit is the app's limit, told with the callables' own sentence.
+    if ((0, aiProviderError_1.isProviderBusy)(err))
         return exports.CHECKLIST_BUSY;
+    if ((0, aiProviderError_1.isProviderOutOfCredit)(err))
+        return "ai-budget/global-budget";
     return exports.CHECKLIST_ERROR;
 }
 /**
@@ -142,7 +150,9 @@ function checklistReason(err) {
  */
 function refundsQuota(reason) {
     return BUDGET_CODES.includes(reason)
-        || reason === exports.CHECKLIST_UNCONFIGURED;
+        || reason === exports.CHECKLIST_UNCONFIGURED
+        // A busy provider generated nothing: the callables give the unit back too (26.09.2026).
+        || reason === exports.CHECKLIST_BUSY;
 }
 /**
  * Is retrying worth offering?

@@ -57,6 +57,24 @@ describe('the keys it names actually exist', () => {
   });
 });
 
+describe('a busy provider (26.09.2026, Claude)', () => {
+  it('has its own sentence, in all six languages, and it is not the daily-limit one', () => {
+    expect(aiErrorKey('ai-budget/provider-busy')).toBe('aiBusy');
+    expect(aiErrorKey({ message: 'unavailable: ai-budget/provider-busy' })).toBe('aiBusy');
+    for (const lang of Object.keys(translations)) {
+      expect(typeof translations[lang].aiBusy, `${lang}.aiBusy`).toBe('string');
+      expect(translations[lang].aiBusy, lang).not.toBe(translations[lang].aiBudgetGlobal);
+    }
+  });
+
+  it('is the code the server throws for it', () => {
+    const errs = readFileSync(join(process.cwd(), 'functions', 'src', 'aiProviderError.ts'), 'utf8');
+    expect(errs).toContain('export const AI_BUSY_CODE = "ai-budget/provider-busy";');
+    const index = readFileSync(join(process.cwd(), 'functions', 'src', 'index.ts'), 'utf8');
+    expect(index.match(/throw new HttpsError\('unavailable', AI_BUSY_CODE\)/g)?.length).toBe(4);
+  });
+});
+
 describe('the codes still match what the server throws', () => {
   it('every code this file knows is still produced by aiLedger.ts', () => {
     // The two sides are a contract across a network boundary, and the server can rename a code

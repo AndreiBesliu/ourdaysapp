@@ -31,28 +31,51 @@
 export const AI_QUOTA_CODE = "ai-budget/global-budget";
 
 /**
- * Did the AI provider refuse this call for rate or quota reasons?
+ * The provider is busy for a MINUTE, not out for the day (26.09.2026). Under Gemini the dominant
+ * provider refusal was the free tier's daily allowance, so it was told as "try again tomorrow";
+ * Claude's 429 is a per-minute limit and its 529 a momentary overload. Its own sentence in six
+ * languages (`aiBusy`), and the person's daily unit is given back — nothing was generated.
+ */
+export const AI_BUSY_CODE = "ai-budget/provider-busy";
+
+/**
+ * Did the AI provider refuse this call for capacity, rate or billing reasons?
  *
- * Deliberately narrow. A provider being briefly overloaded (503), a malformed request (400) and a
- * bug in our own code are all things somebody should look at, and widening this predicate would
- * post them all to a screen that says "nothing to worry about".
+ * Deliberately narrow: these are OPERATING CONDITIONS — nobody's input is wrong and there is no line
+ * of code to change — and each one recurs by construction, so writing them to the error log hides
+ * every real defect under them. The ledger still records each one (`http-429`, `http-529`, ...).
+ *
+ * Since 26.09.2026 the provider is Anthropic (Claude), whose SDK errors carry a numeric `status` and
+ * an error `type`:
+ *   * 429 `rate_limit_error` — a per-minute limit, not a daily one;
+ *   * 529 `overloaded_error` — the API is briefly overloaded (the Gemini-era rule kept a 503 out of
+ *     here as "somebody should look"; a 529 is Anthropic's documented capacity signal, and there is
+ *     nothing for anybody to fix);
+ *   * 402 `billing_error`, and a 400 whose message says the credit balance is too low — the account
+ *     is out of credit. That one IS for somebody: the owner. The ledger row and the admin AI panel
+ *     are where he looks; a row per failed call in the health log would bury everything else.
+ * A 400 for any other reason, a 401/403 (authentication — the federation setup), a 404 (a wrong
+ * model id) and our own bugs all stay OUT, so they reach the error log.
  */
 export function isProviderQuotaError(err: unknown): boolean {
+  return isProviderBusy(err) || isProviderOutOfCredit(err);
+}
+
+/** 429 `rate_limit_error` or 529 `overloaded_error`: capacity, for a minute. */
+export function isProviderBusy(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const e = err as Record<string, unknown>;
+  return e.status === 429 || e.status === 529
+    || e.type === "rate_limit_error" || e.type === "overloaded_error";
+}
 
-  // The SDK's own shape. `GoogleGenerativeAIFetchError` carries `status`, never `code` — which is
-  // also why the ledger could not tell a 429 from any other fetch failure.
-  if (e.status === 429) return true;
-  if (typeof e.code === "number" && e.code === 429) return true;
-
+/** 402 `billing_error`, or a 400 saying the credit balance is too low: the account needs topping up. */
+export function isProviderOutOfCredit(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const e = err as Record<string, unknown>;
+  if (e.status === 402 || e.type === "billing_error") return true;
   const message = typeof e.message === "string" ? e.message.toLowerCase() : "";
-  if (!message) return false;
-
-  return message.includes("429 too many requests")
-    || message.includes("exceeded your current quota")
-    || message.includes("resource_exhausted")
-    || message.includes("quota exceeded for metric");
+  return !!message && message.includes("credit balance is too low");
 }
 
 /**
@@ -92,8 +115,15 @@ export function providerErrorCode(err: unknown): string {
   const e = err as Record<string, unknown>;
 
   if (typeof e.status === "number") return `http-${e.status}`;
+  // The federation token exchange fails with a `statusCode`, not a `status` (the SDK's
+  // WorkloadIdentityError): a rule or account that does not match reads `federation-http-401`.
+  if (typeof e.statusCode === "number") return `federation-http-${e.statusCode}`;
   if (typeof e.code === "string" && e.code) return e.code;
   if (typeof e.code === "number") return `http-${e.code}`;
+  // The SDK's errors never set `name`, so every connection, timeout, abort and metadata failure
+  // read as the one word "Error". The class says which.
+  const ctor = (err as { constructor?: { name?: unknown } }).constructor?.name;
+  if (e.name === "Error" && typeof ctor === "string" && ctor && ctor !== "Error" && ctor !== "Object") return ctor;
   if (typeof e.name === "string" && e.name) return e.name;
   return "error";
 }
