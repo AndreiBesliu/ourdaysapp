@@ -9891,3 +9891,23 @@ pe live, apoi „fa o pauza cand poti”. **Model:** Claude Opus 5.5.
 - **NU s-a publicat nimic.** `GEMINI_KEY` nu există încă pe live (404, verificat de patru ori). Pasul
   lui Andrei e `npx firebase functions:secrets:set GEMINI_KEY --project live`. După el, deploy-ul
   `--only functions --non-interactive`, apoi `live-diff` și intrarea „Completed”.
+
+
+## 2026-09-26 · Secretul `GEMINI_KEY`, amânat de Andrei: starea măsurată și consecința
+
+**Prompt (Andrei):** „continua” (de două ori), apoi „Mai târziu” la întrebarea despre secret.
+**Model:** Claude Opus 5.5.
+
+- **Re-măsurat după pauză (26.09, 05:49 UTC), doar citire:**
+  - repo-ul e curat pe `bad637e`, iar CI-ul e verde;
+  - garda trece;
+  - `GEMINI_KEY` nu există (404);
+  - live e identic cu deploy-ul din 25.09: 51 de funcții, cheia veche pe 7, adresa de bootstrap pe
+    niciuna;
+  - de la deploy, 20 de ore fără nicio folosire măsurabilă: 0 apeluri AI, 0 invitații, 0 cereri,
+    0 rânduri de eroare;
+  - `aiConfig/live` n-are kill switch și nici limite proprii.
+- **Decizia lui Andrei:** secretul se pune mai târziu. **Consecința, scrisă în `OWNER_VERIFY`,
+  `BACKLOG` și `CLAUDE.md`:** până atunci orice deploy de funcții se oprește în `prepare`, iar live
+  rămâne fără owner. Am adăugat calea din consolă, fără terminal.
+- **Nu se mai întreabă de secret până nu e nevoie de un deploy de funcții.**

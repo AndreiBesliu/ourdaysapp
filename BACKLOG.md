@@ -97,7 +97,8 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 ## 3. Cod și operațiuni (C)
 
 - **Curățenia de după mutarea cheii Gemini** (decisă pe 25.09; codul e gata, iar pe live e adevărată abia
-  după primul deploy de funcții de după `secrets:set GEMINI_KEY`):
+  după primul deploy de funcții de după `secrets:set GEMINI_KEY`). **Secretul e amânat de Andrei pe 26.09.**
+  Până îl pune, orice deploy de funcții se oprește în `prepare`, iar live rămâne fără owner:
   - **secretul vechi `GEMINI_API_KEY`**, versiunea 1 din 6 mai, era legat de `autoSuggestChecklist`.
     Legătura a supraviețuit deja unui deploy care nu declara niciun secret. Se șterge secretul **numai
     după** ce `live-diff` arată că nu-l mai folosește nicio funcție; altfel instanțele noi ale funcției

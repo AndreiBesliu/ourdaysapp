@@ -63,9 +63,15 @@ Accesul de admin n-a fost afectat. Codul mutării e gata: cheia vine din `GEMINI
 funcții AI, iar adresa se întoarce din `functions/.env`. Un pas de predeploy refuză de acum orice deploy
 fără adresă.
 
-- [ ] **Rulezi tu, o dată:** `npx firebase functions:secrets:set GEMINI_KEY --project live`, și lipești
-      cheia la prompt. Ideal o cheie **nouă**, restricționată la Generative Language API. Eu nu văd
-      cheia. Imediat după, fac deploy-ul doar de funcții.
+- [ ] **Rulezi tu, o dată — AMÂNAT de tine pe 26.09 („mai târziu”):**
+      `npx firebase functions:secrets:set GEMINI_KEY --project live`, și lipești cheia la prompt.
+      **Sau fără terminal:** în consola Google Cloud, Secret Manager (proiectul `our-days-2a939`) →
+      Create secret → numele exact `GEMINI_KEY` → lipești cheia → Create.
+      Ideal o cheie **nouă**, restricționată la Generative Language API. Eu nu văd cheia. Îmi spui când e
+      gata, și fac imediat deploy-ul doar de funcții.
+      - **Până atunci** (fapt): AI-ul merge, dar nu ești recunoscut ca owner. Și **orice** deploy de
+        funcții, chiar și o reparație urgentă, se oprește înainte să schimbe ceva, fiindcă codul cere
+        secretul. Nu te mai întreb de el până nu e nevoie de un deploy de funcții.
       - **Cum arată bine:**
         - `live-diff` arată secretul pe exact cele cinci funcții AI și variabila veche pe niciuna;
         - în admin apari din nou ca „owner”;

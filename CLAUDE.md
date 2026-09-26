@@ -16,8 +16,11 @@ React + TypeScript + Vite + Tailwind, Firebase (Auth, Firestore, Functions, Host
   altfel rândurile au dată de expirare și nu expiră niciodată. La el se răspunde **Nu** la ștergerea
   indecșilor care există doar pe live. **Cheia Gemini se citește din Secret Manager** (`GEMINI_KEY`),
   doar pe cele cinci funcții AI (în cod din 25.09; pe live după primul deploy de funcții de după
-  `secrets:set`). **Deploy-ul de funcții rulează cu `--non-interactive`:** interactiv, un secret lipsă
-  e cerut la prompt și creat pe loc.
+  `secrets:set`). **Pe 26.09 Andrei a amânat punerea secretului:** până atunci ORICE deploy de funcții se
+  oprește în `prepare`, iar live rămâne cu cheia veche și fără owner (`OWNER_VERIFY.md`). Nu-l întreba
+  din nou decât când e nevoie de un deploy de funcții.
+  **Deploy-ul de funcții rulează cu `--non-interactive`:** interactiv, un secret lipsă e cerut la prompt
+  și creat pe loc.
   **Cât timp există `functions/.env`**, fiecare deploy de funcții pune pe funcții exact conținutul lui,
   plus secretele. Nimic din mediul de pe live nu se păstrează. Fără fișier, mediul de pe live s-ar
   păstra. Un secret declarat NU schimbă asta (măsurat în sursa CLI-ului pe 25.09).
