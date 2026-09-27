@@ -10484,3 +10484,36 @@ birthday!” deasupra calendarului).
 
 **NU s-a publicat:** e doar client. Pleacă la același deploy de hosting cu raportarea erorilor
 (`214db53`), la cuvântul lui Andrei. Verificarea lui, după aceea, e în `OWNER_VERIFY.md`: o reîncărcare.
+
+## 2026-09-27 · Bannerul, a doua rundă: „încă îmi apare după refresh” — un canal de citire care nu ajunge (Task Completed)
+
+**Prompt (Andrei):** „inca imi apare dupa refresh” (captură, pe live, cu codul vechi: reparația de la
+`0ca1e3f` nu era publicată).
+**Model:** Claude Opus 5.5.
+
+**Măsurat (cheia de citire, doar pentru contul lui):**
+- `users/{uid}` a fost scris la 18:09:57 UTC, iar profilul la 18:09:28. Deci **scrierile din browserul
+  lui ajung pe server.**
+- Plafonul de rapoarte de eroare are ultima zi 20.09, deci **nicio citire n-a eșuat de atunci**: `getDoc`
+  nu aruncă.
+- **Bundle-ul de pe live** (`index-Dt8u_cLG`) e identic cu sursa: condiția bannerului, bucla, `getDoc`.
+
+**Singura citire care se potrivește cu toate:**
+- **Canalul `Listen` al Firestore nu ajunge la server** din acel browser. De obicei îl blochează un ad
+  blocker, care lasă canalul `Write` să treacă.
+- Firestore se declară offline pentru citiri, iar `getDoc` răspunde din cache, fără eroare, cu un
+  document de dinainte de ziua de naștere și de X. Raportul de eroare nu apare, fiindcă nu există
+  eroare.
+- Nedovedit: fără browserul lui nu se vede. Reparația din `0ca1e3f` ascunde oricum bannerul în starea
+  asta, fiindcă cere confirmarea serverului.
+
+**Adăugat, ca problema de fond să nu rămână ascunsă:**
+- **Ce face:** dacă documentul propriu nu e confirmat de server în 30 s de la încărcare, `CalendarHome`
+  raportează o dată (`CalendarHome.listenStale`).
+- Raportul pleacă prin callable, care nu folosește canalul blocat. Nu pleacă dacă dispozitivul chiar e
+  offline.
+- Timer-ul citește o referință, nu starea capturată.
+- **Probe:** o fixare pe sursă în `ownUserDoc.test.ts`; 2013 teste unitare; `tsc`, `lint-gate`, build,
+  split, bundle.
+
+**Publicarea** (hosting singur, împreună cu `214db53` și `0ca1e3f`) așteaptă cuvintele lui Andrei.

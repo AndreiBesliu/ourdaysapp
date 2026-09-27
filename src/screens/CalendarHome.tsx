@@ -72,6 +72,8 @@ export default function CalendarHome() {
   // utils/ownUserDoc.ts. `undefined` until the listener first answers.
   const [ownData, setOwnData] = useState<Record<string, any> | null | undefined>(undefined);
   const [ownFromServer, setOwnFromServer] = useState(false);
+  // The same fact for a timer, which would otherwise read the value it was created with.
+  const ownConfirmed = useRef(false);
   // The member map with the person's own entry taken from that live document, so a dismissed
   // banner, a birthday set in Settings or a read that failed inside the groups loop cannot leave
   // it stale. Same map object while neither input changes (AddEventModal resets its form on a new one).
@@ -155,6 +157,24 @@ export default function CalendarHome() {
     startY.current = 0;
   };
 
+  // A listener that never reaches the server does not fail. Firestore calls itself offline and keeps
+  // answering from the local cache — old data, and no error anywhere, while writes may still go
+  // through on their own channel (an ad blocker can block the Listen channel alone). That is the
+  // likeliest reading of 27.09.2026: Andrei's settings reached the server, and his screen still
+  // showed a document from before them. So it is said once per load, through the reporter, whose
+  // callable does not use that channel. Not when the device itself is offline: nothing to fix there.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!ownConfirmed.current && auth.currentUser && navigator.onLine !== false) {
+        reportError(
+          'The account document was not confirmed by the server within 30 s: this screen is showing cached data (listen channel blocked or unreachable?)',
+          { context: 'CalendarHome.listenStale' },
+        );
+      }
+    }, 30_000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Listen to user's groups and build userMap
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -168,6 +188,7 @@ export default function CalendarHome() {
         // hand the form below a new `userMap` while somebody is typing.
         setOwnData((prev) => (sameDoc(prev, data) ? prev : data));
         setOwnFromServer(!meta.fromCache);
+        if (!meta.fromCache) ownConfirmed.current = true;
       },
       // Losing it hides the birthday banner and falls back to the one-off read below for the own
       // entry. Reported anyway, because a failing read of your OWN document usually means

@@ -114,6 +114,11 @@ Acum ecranul ascultă documentul tău live, iar bannerul apare doar pe baza răs
       - **Cum arată bine:** bannerul nu mai apare.
       - **Ce e greșit:** dacă totuși apare, spune-mi. Pe server datele tale sunt corecte, deci ar
         însemna că ecranul primește altceva decât ce e pe server, iar asta vreau să văd.
+      - **De știut:** cel mai probabil, browserul tău trimite scrieri, dar nu primește date live. De obicei
+        vinovat e un ad blocker (uBlock, AdGuard, scuturile din Brave) care blochează canalul `Listen` al
+        Firestore. Atunci aplicația arată date vechi din cache, fără nicio eroare. De la publicare,
+        aplicația raportează singură, o dată pe încărcare, dacă datele tale nu sunt confirmate de server
+        în 30 de secunde. Eu văd raportul, deci n-ai nimic de verificat.
 
 ---
 

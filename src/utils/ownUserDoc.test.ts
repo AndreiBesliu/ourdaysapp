@@ -99,6 +99,14 @@ describe('CalendarHome uses them', () => {
     expect(call![0]).toContain('setOwnFromServer(!meta.fromCache);');
   });
 
+  it('a listener stuck on the cache is reported once, 30 s in, through the reporter', () => {
+    // Firestore "offline" for reads raises no error at all — the likeliest reading of Andrei's
+    // banner on 27.09. The timer reads a ref: state captured by the closure would be stale.
+    expect(src).toContain('if (!meta.fromCache) ownConfirmed.current = true;');
+    const effect = /setTimeout\(\(\) => \{\s*if \(!ownConfirmed\.current && auth\.currentUser && navigator\.onLine !== false\) \{[\s\S]*?context: 'CalendarHome\.listenStale'[\s\S]*?\}, 30_000\);\s*return \(\) => clearTimeout\(timer\);\s*\}, \[\]\);/.exec(src);
+    expect(effect, 'the one-shot stale-listener report').toBeTruthy();
+  });
+
   it('every child gets the map WITH the live own entry', () => {
     expect(src).toMatch(/const userMap = useMemo\(\s*\(\) => withOwnEntry\(loadedUserMap, auth\.currentUser\?\.uid, ownData\),\s*\[loadedUserMap, ownData\],?\s*\);/);
     // The loop's setter writes the loaded map, never the one handed down.
