@@ -100,13 +100,19 @@
 
 ---
 
-## 🆕 Joburile programate au acum o stare în Admin (27.09) — gata în cod, NEPUBLICAT
+## 🆕 Joburile programate au acum o stare în Admin (27.09) — PUBLICAT pe 27.09, la „Publica”
 
 **Fapt:** memento-urile (la 5 minute), închiderea jocurilor abandonate (la oră) și rezumatul de erori
 (la 6 ore) lasă fiecare un marcaj la fiecare rulare. Un job care se oprește nu lasă nicio eroare:
 memento-uri netrimise arată exact ca memento-uri pe care nu le-a pus nimeni. Acum se vede. Marcajele le
 citesc și eu, fără cont, deci după deploy verific singur că scriu. De la tine e nevoie doar de o privire
 pe ecran.
+
+**Verificat de mine după deploy, doar prin citire:**
+- memento-urile au rulat la 17:55 și la 18:00, ora României (14:55 și 15:00 UTC), ambele „ok”;
+- jocurile au rulat la 18:00 (15:00 UTC): 18 scanate, 0 eșecuri;
+- rezumatul de erori rulează prima dată la 21:00, ora României (18:00 UTC);
+- în jurnale, 0 erori de la deploy.
 
 - [ ] **După deploy: Admin → Health → „Scheduled jobs”** (1 minut)
       - **Cum arată bine:** trei rânduri. „Event reminders” și „Idle arcade sessions” sunt verzi, cu

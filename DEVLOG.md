@@ -10311,3 +10311,54 @@ la confirmarea lui Andrei.
   - build (chunk-ul Admin +2,5 kB), split, bundle.
 
 **BACKLOG:** punctul despre orarul rezumatului e închis de acest commit.
+
+## 2026-09-27 · Publicarea marcajelor de rulare (Task Started)
+
+**Prompt (Andrei):** „Publica”
+**Model:** Claude Opus 5.5.
+**Plan:**
+- funcțiile, apoi hosting-ul (regulile sunt identice pe live);
+- verificarea orarelor noi, a primelor marcaje și a jurnalelor.
+
+## 2026-09-27 · Publicarea marcajelor de rulare (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Înainte:**
+- CI verde pe `485f7bb`;
+- deploy-ul de probă (`--dry-run`) a trecut;
+- `live-diff`: regulile și indecșii identici, 51 de funcții, niciuna nouă sau ștearsă.
+
+**Publicat:**
+- **Funcțiile:** 51 actualizate. Joburile Cloud Scheduler au fost actualizate la 14:50–14:51 UTC.
+- **Hosting-ul:**
+  - bundle-ul `index-Dt8u_cLG`, pe care live-ul îl servește;
+  - chunk-ul `Admin-BWaSxmXx`, care conține secțiunea „Scheduled jobs”.
+
+**Orarele, citite din Cloud Scheduler după deploy:**
+
+| job | orar | următoarea rulare |
+|---|---|---|
+| `sendDueReminders` | `*/5 * * * *` | 14:55 |
+| `expireIdleGames` | `0 * * * *` | 15:00 |
+| `logErrorDigest` | `0 */6 * * *` | 18:00 |
+
+Ultima rulare a rezumatului sub vechiul „every 6 hours” a fost la 14:45, adică la 11 ore după cea de la
+03:48. Asta confirmă, pe live, măsurătoarea de dimineață.
+
+**Marcajele pe live** (cheia de citire):
+- `sendDueReminders` la 14:55:03 și la 15:00:49, ambele `ok`, cu „due 0, sent 0, already sent 0,
+  failed 0”;
+- `expireIdleGames` la 15:00:02, `ok`, „scanned 18, idle 0, closed 0, failed 0”;
+- `startedAt` e înlocuit la final, cum trebuie;
+- verdictul pe care îl arată ecranul: două rânduri verzi, iar rezumatul „not run yet” până la 18:00 UTC.
+
+**Starea de pe live s-a păstrat** (`live-diff`):
+- adresa de owner pe 51 de funcții;
+- contul AI pe exact cele 5 funcții AI;
+- nicio legătură la secrete.
+
+**Jurnale:** 0 intrări WARNING și peste de la 14:45 (prima citire). A doua citire a picat pe o eroare
+internă a API-ului de loguri, deci nu contează ca probă. Proba sunt marcajele.
+
+**Rămâne la Andrei:** o privire în Admin → Health → „Scheduled jobs” (`OWNER_VERIFY.md`).
