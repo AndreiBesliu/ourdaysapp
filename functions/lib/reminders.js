@@ -35,6 +35,7 @@ const admin = require("firebase-admin");
 const recurrenceServer_1 = require("./recurrenceServer");
 const notify_1 = require("./notify");
 const remindersCore_1 = require("./remindersCore");
+const jobRuns_1 = require("./jobRuns");
 /** Delete dedupe rows older than this. They are only needed while their window is still in reach. */
 const LOG_TTL_DAYS = 45;
 const dayString = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -46,7 +47,9 @@ const dayString = (ms) => new Date(ms).toISOString().slice(0, 10);
 const MAX_LEAD_DAYS = 31;
 /** How wide a net each run casts behind itself. Generous on purpose; the dedupe makes overlap free. */
 const WINDOW_MS = 15 * 60 * 1000;
-exports.sendDueReminders = (0, scheduler_1.onSchedule)({ schedule: "every 5 minutes", timeZone: "UTC", retryCount: 0 }, async () => {
+exports.sendDueReminders = (0, scheduler_1.onSchedule)(
+// Cron, not "every 5 minutes": that form restarts its count at every deploy (jobHealthCore.ts).
+{ schedule: "*/5 * * * *", timeZone: "UTC", retryCount: 0 }, () => (0, jobRuns_1.runJob)("sendDueReminders", async () => {
     const db = admin.firestore();
     const now = Date.now();
     const from = now - WINDOW_MS;
@@ -58,6 +61,12 @@ exports.sendDueReminders = (0, scheduler_1.onSchedule)({ schedule: "every 5 minu
     const done = () => {
         console.log("REMINDERS_RUN " + JSON.stringify(Object.assign({ at: new Date(now).toISOString() }, counts)));
     };
+    // The same counters, for the health panel. `failed` decides whether the run was ok: a run whose
+    // every reminder failed to send is not a green run.
+    const outcome = () => ({
+        failed: counts.failed,
+        detail: `due ${counts.due}, sent ${counts.sent}, already sent ${counts.dupes}, failed ${counts.failed}`,
+    });
     // Everything below sits in a try so that the finally can keep the promise made above: one
     // REMINDERS_RUN line per run, whatever the run did — including a run that delivered three
     // reminders and then died in housekeeping. Without this, a throw anywhere lost the line and
@@ -86,7 +95,7 @@ exports.sendDueReminders = (0, scheduler_1.onSchedule)({ schedule: "every 5 minu
         const docs = [...byId.values()];
         counts.candidates = docs.length;
         if (docs.length === 0)
-            return;
+            return outcome();
         const occurrences = (0, recurrenceServer_1.expandInWindow)(docs, fromDay, toDay)
             .map((o) => ({ source: o.source, day: o.day }));
         // Owners' zones, for the all-day fallback. One read per distinct owner, not per event.
@@ -100,7 +109,7 @@ exports.sendDueReminders = (0, scheduler_1.onSchedule)({ schedule: "every 5 minu
         counts.occurrences = occurrences.length;
         counts.due = due.length;
         if (due.length === 0)
-            return;
+            return outcome();
         // ── send, at most once each ─────────────────────────────────────────────
         for (const d of due) {
             const logRef = db.doc(`reminder_log/${d.key}`);
@@ -155,9 +164,10 @@ exports.sendDueReminders = (0, scheduler_1.onSchedule)({ schedule: "every 5 minu
             stale.docs.forEach((s) => batch.delete(s.ref));
             await batch.commit();
         }
+        return outcome();
     }
     finally {
         done();
     }
-});
+}));
 //# sourceMappingURL=reminders.js.map

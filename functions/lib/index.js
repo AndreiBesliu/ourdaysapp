@@ -30,6 +30,7 @@ const overrideRsvps_1 = require("./overrideRsvps");
 const notify_1 = require("./notify");
 const errorGrouping_1 = require("./errorGrouping");
 const errorFixes_1 = require("./errorFixes");
+const jobHealthCore_1 = require("./jobHealthCore");
 const errorState_1 = require("./errorState");
 const aiProviderError_1 = require("./aiProviderError");
 const aiChecklistOutcome_1 = require("./aiChecklistOutcome");
@@ -2159,6 +2160,30 @@ exports.adminGetHealth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
     let notifToday = 0;
     notifSnap.forEach((d) => { const u = d.data(); if (u.date === today)
         notifToday += u.count || 0; });
+    // ── are the scheduled jobs running? ─────────────────────────────────────
+    //
+    // One line per job, judged by jobHealthCore.ts from the markers in `jobRuns`. A job with no
+    // document at all is stamped `firstMissingAt` here (merge), the first time this is opened, so
+    // "never ran" gets an age and turns red instead of reading "not yet" for ever. `null` when the
+    // markers cannot be read: the panel then says so, rather than showing nothing — which would look
+    // like nothing to worry about.
+    let jobs = null;
+    try {
+        const nowMs = Date.now();
+        const markers = {};
+        (await db.collection("jobRuns").get()).forEach((d) => { markers[d.id] = d.data(); });
+        for (const name of (0, jobHealthCore_1.jobsNeedingMissingStamp)(markers)) {
+            try {
+                await db.doc(`jobRuns/${name}`).set({ firstMissingAt: nowMs }, { merge: true });
+                markers[name] = { firstMissingAt: nowMs };
+            }
+            catch ( /* one stamp must not hide the other lines */_a) { /* one stamp must not hide the other lines */ }
+        }
+        jobs = (0, jobHealthCore_1.jobHealthChecks)(markers, nowMs);
+    }
+    catch (e) {
+        console.warn("adminGetHealth: job markers unreadable", e);
+    }
     return {
         errors, errorGroups, errorCounts, errorTotal: errCount,
         // Says plainly whether the counts above cover the whole log or only its newest slice.
@@ -2166,6 +2191,7 @@ exports.adminGetHealth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
         truncated: aiSnap.size >= 3000 || notifSnap.size >= 3000,
         ai: { today: aiToday, dailyLimitPerUser: AI_DAILY_LIMIT, activeUsers: aiTop.length, top: aiTop.slice(0, 10) },
         notifications: { today: notifToday, rowsToday: notifRowsToday, dailyLimitPerUser: NOTIF_DAILY_LIMIT },
+        jobs,
     };
 });
 /**

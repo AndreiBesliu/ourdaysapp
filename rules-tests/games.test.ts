@@ -43,6 +43,7 @@ beforeEach(async () => {
     // See `aiLedger.ts`: the rollup goes to `aiSpendDaily/{date}/users/{uid}`.
     await setDoc(doc(db, 'aiSpendDaily', '2026-09-19', 'users', ALICE), { total: 0.42 });
     await setDoc(doc(db, 'errorGroups', 'grp1'), { status: 'open', count: 3 });
+    await setDoc(doc(db, 'jobRuns', 'sendDueReminders'), { at: 1, ok: true, detail: 'due 0', failStreak: 0 });
     await setDoc(doc(db, 'warlordPlayers', ALICE), { name: 'Alice', rank: 1, wins: 2, losses: 0 });
   });
 });
@@ -209,9 +210,19 @@ describe('the server-only collections really refuse', () => {
     await assertFails(updateDoc(doc(as(ALICE), 'ai_budget', 'b1'), { limit: 9999 }));
   });
 
+  it('the scheduled-job run markers', async () => {
+    // No rule names `jobRuns` at all (27.09.2026): Firestore refuses what nothing matches. Asserted
+    // rather than assumed, because a writable marker could paint a stopped reminder job green — and
+    // so a future wildcard that grants too much turns this red.
+    await assertFails(getDoc(doc(as(ALICE), 'jobRuns', 'sendDueReminders')));
+    await assertFails(setDoc(doc(as(ALICE), 'jobRuns', 'sendDueReminders'), { at: Date.now(), ok: true }));
+    await assertFails(setDoc(doc(as(DAVE), 'jobRuns', 'logErrorDigest'), { at: Date.now(), ok: true }));
+  });
+
   it('and none of them can be listed', async () => {
     await assertFails(getDocs(collection(as(ALICE), 'reminder_log')));
     await assertFails(getDocs(collection(as(ALICE), 'aiLedger')));
+    await assertFails(getDocs(collection(as(ALICE), 'jobRuns')));
   });
 });
 

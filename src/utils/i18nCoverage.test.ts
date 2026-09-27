@@ -65,7 +65,10 @@ const SRC = join(__dirname, '..');
 
 /** The game is a submodule with its own English-only decision; admin is Andrei's own console. */
 const SKIP_DIRS = new Set(['warlord', 'warlordPvp', 'warlordAdmin', 'node_modules']);
-const SKIP_FILES = new Set(['Admin.tsx', 'Warlord.tsx']);
+// `JobHealthList.tsx` is a piece of the admin console (its Health tab) kept in its own file so it
+// could be rendered outside the login. src/utils/jobHealth.test.ts holds it to one importer,
+// Admin.tsx, so this exemption cannot quietly spread to a screen users see.
+const SKIP_FILES = new Set(['Admin.tsx', 'Warlord.tsx', 'JobHealthList.tsx']);
 
 /**
  * Text that is meant to stay exactly as written.

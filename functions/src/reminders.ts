@@ -33,6 +33,7 @@ import * as admin from "firebase-admin";
 import { expandInWindow, type EventDoc } from "./recurrenceServer";
 import { notify } from "./notify";
 import { dueIn } from "./remindersCore";
+import { runJob, type JobOutcome } from "./jobRuns";
 
 /** Delete dedupe rows older than this. They are only needed while their window is still in reach. */
 const LOG_TTL_DAYS = 45;
@@ -50,8 +51,9 @@ const MAX_LEAD_DAYS = 31;
 const WINDOW_MS = 15 * 60 * 1000;
 
 export const sendDueReminders = onSchedule(
-  { schedule: "every 5 minutes", timeZone: "UTC", retryCount: 0 },
-  async () => {
+  // Cron, not "every 5 minutes": that form restarts its count at every deploy (jobHealthCore.ts).
+  { schedule: "*/5 * * * *", timeZone: "UTC", retryCount: 0 },
+  () => runJob("sendDueReminders", async () => {
     const db = admin.firestore();
     const now = Date.now();
     const from = now - WINDOW_MS;
@@ -64,6 +66,12 @@ export const sendDueReminders = onSchedule(
     const done = () => {
       console.log("REMINDERS_RUN " + JSON.stringify({ at: new Date(now).toISOString(), ...counts }));
     };
+    // The same counters, for the health panel. `failed` decides whether the run was ok: a run whose
+    // every reminder failed to send is not a green run.
+    const outcome = (): JobOutcome => ({
+      failed: counts.failed,
+      detail: `due ${counts.due}, sent ${counts.sent}, already sent ${counts.dupes}, failed ${counts.failed}`,
+    });
     // Everything below sits in a try so that the finally can keep the promise made above: one
     // REMINDERS_RUN line per run, whatever the run did — including a run that delivered three
     // reminders and then died in housekeeping. Without this, a throw anywhere lost the line and
@@ -94,7 +102,7 @@ export const sendDueReminders = onSchedule(
       }
       const docs = [...byId.values()];
       counts.candidates = docs.length;
-      if (docs.length === 0) return;
+      if (docs.length === 0) return outcome();
 
       const occurrences = expandInWindow(docs, fromDay, toDay)
         .map((o) => ({ source: o.source as EventDoc & Record<string, unknown>, day: o.day }));
@@ -110,7 +118,7 @@ export const sendDueReminders = onSchedule(
       const due = dueIn(occurrences, ownerZones, from, now);
       counts.occurrences = occurrences.length;
       counts.due = due.length;
-      if (due.length === 0) return;
+      if (due.length === 0) return outcome();
 
       // ── send, at most once each ─────────────────────────────────────────────
       for (const d of due) {
@@ -165,8 +173,9 @@ export const sendDueReminders = onSchedule(
         stale.docs.forEach((s) => batch.delete(s.ref));
         await batch.commit();
       }
+      return outcome();
     } finally {
       done();
     }
-  },
+  }),
 );

@@ -155,12 +155,6 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Consola arată la fiecare încărcare un avertisment de depreciere:** `enableIndexedDbPersistence`.
   E inofensiv azi. Înlocuitorul (`persistentLocalCache`) schimbă felul în care se deschide Firestore,
   deci merită o felie a lui, cu probă pe mai multe taburi.
-- **Rezumatul de erori își repornește ceasul la fiecare deploy de funcții.** `logErrorDigest` are
-  „every 6 hours”, iar Cloud Scheduler numără cele 6 ore de la ultima actualizare a jobului. Deploy-ul îl
-  actualizează de fiecare dată. **Măsurat pe 27.09:** ultima rulare la 03:48, deploy la 08:45, următoarea
-  abia la 14:45, deci 11 ore fără rezumat. Remediul e un orar fix (`0 */6 * * *`): un rând în
-  `errorDigest.ts`, care intră în vigoare la următorul deploy de funcții. Memento-urile (la 5 minute) și
-  expirarea jocurilor (la oră) au aceeași mecanică, dar acolo întârzierea nu contează.
 - **Refuzurile de reguli nu lasă urme pe server.** Proiectul n-are log-uri de acces la date, iar
   Hosting nu exportă log-uri de cereri, deci o regulă care refuză un utilizator logat sau un chunk
   care nu se încarcă se vede doar dacă clientul raportează în `errorLogs`. Log-urile de acces la date

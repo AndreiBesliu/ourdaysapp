@@ -19,6 +19,7 @@ import {
   closedSessionFields,
   type ExpiryRefusal,
 } from "./gameSession";
+import { runJob, type JobOutcome } from "./jobRuns";
 
 /**
  * How many to close per run.
@@ -45,8 +46,9 @@ const PER_RUN = 200;
 const SCAN_LIMIT = 2000;
 
 export const expireIdleGames = onSchedule(
-  { schedule: "every 60 minutes", timeZone: "UTC", retryCount: 0 },
-  async () => {
+  // Cron, not "every 60 minutes": that form restarts its count at every deploy (jobHealthCore.ts).
+  { schedule: "0 * * * *", timeZone: "UTC", retryCount: 0 },
+  () => runJob("expireIdleGames", async () => {
     const db = admin.firestore();
     const now = Date.now();
 
@@ -60,6 +62,13 @@ export const expireIdleGames = onSchedule(
         at: new Date(now).toISOString(), idleHours: IDLE_MS / 3_600_000, ...counts, skipped,
       }));
     };
+    // For the health panel. A saturated scan counts against the run: it never looked at the games
+    // past the limit, and "closed 0" from a blind sweep must not read as a clean one.
+    const outcome = (): JobOutcome => ({
+      failed: counts.failed + counts.saturated,
+      detail: `scanned ${counts.scanned}, idle ${counts.due}, closed ${counts.closed}, failed ${counts.failed}`
+        + (counts.saturated ? `, scan limit ${SCAN_LIMIT} reached` : ""),
+    });
 
     try {
       const snap = await db.collection("games").limit(SCAN_LIMIT).get();
@@ -118,11 +127,12 @@ export const expireIdleGames = onSchedule(
           due: due.length, attemptedThisRun: PER_RUN, remaining: due.length - PER_RUN,
         }));
       }
+      return outcome();
     } finally {
       // The promise above is one line per run, including a run that closed three games and then
       // died in the fourth — the same reason sendDueReminders wraps its counters in a finally.
       done();
     }
-  },
+  }),
 );
 

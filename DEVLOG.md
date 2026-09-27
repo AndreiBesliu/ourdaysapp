@@ -10218,3 +10218,96 @@ cheia de citire pentru Firestore.
     astfel de starturi (mutarea pe ceasul local) e înlocuit din 26.09 de `shiftedSeriesStart`, care
     scrie miezul nopții UTC. Nu mai are pe cine atinge.
 - **Adăugat:** rezumatul de erori, al cărui ceas se repornește la fiecare deploy.
+
+## 2026-09-27 · Joburile programate lasă marcaje de rulare, citite în Admin → Health (Task Started)
+
+**Prompt (Andrei):** „O sa fac setarile alta data. Tu continua”
+**Model:** Claude Opus 5.5.
+**De ce asta:** regula permanentă a lui Andrei (11.07.2026) cere monitorizare de erori ȘI o vedere de
+sănătate în fiecare aplicație. Memoria despre joburile programate trecea OurDays ca „neverificat”, iar
+Presto și DataRead au modelul din 25–26.09.
+**Plan:**
+- marcaje la pornire și la final pentru cele trei `onSchedule`;
+- un verdict pur, calculat pe server;
+- o secțiune în Admin → Health;
+- orare cron, fiindcă forma „every N” se reancorează la fiecare deploy.
+
+## 2026-09-27 · Joburile programate lasă marcaje de rulare, citite în Admin → Health (Task Completed)
+
+**Model:** Claude Opus 5.5. **NU s-a publicat nimic:** e nevoie de un deploy de funcții, apoi de hosting,
+la confirmarea lui Andrei.
+
+**Ce s-a schimbat:**
+- **`functions/src/jobHealthCore.ts`** (pur):
+  - `JOB_SCHEDULE` (3 joburi, cu intervalul fiecăruia);
+  - `cronMinutes`, care refuză forma „every N”;
+  - verdictul `jobHealthChecks`, care judecă în ordine:
+    1. o pornire fără final (omorât / în curs);
+    2. „n-a rulat niciodată”, cu vârsta dată de `firstMissingAt`;
+    3. vârsta ultimului final (întârziat la 1,5×, oprit la 3×);
+    4. rezultatul, galben la un eșec, roșu la al doilea la rând.
+  - Regula e cea din Presto/DataRead: fără fapt, fără bifă verde.
+- **`functions/src/jobRuns.ts`:**
+  - `runJob(name, body)` înfășoară fiecare job:
+    - `startedAt` + `startsSinceEnd` (increment, merge) la pornire;
+    - la final `{ at, ok, detail, failStreak }`, care ÎNLOCUIEȘTE documentul;
+    - la o excepție: un rând în `errorLogs`, marcaj `ok: false`, apoi eroarea e aruncată mai departe.
+  - `ok` doar dacă niciun element n-a eșuat. Un rulaj cu eșecuri lasă UN rând în `errorLogs`, nu unul
+    pe element.
+- **Cele trei joburi** trec prin `runJob` și pe cron:
+  - `*/5 * * * *` (memento-uri);
+  - `0 * * * *` (jocuri);
+  - `0 */6 * * *` (rezumat), adică 00/06/12/18 UTC.
+  - La memento-uri, rezultatul poartă contoarele (de trimis, trimise, deja trimise, eșuate). La jocuri,
+    o scanare saturată contează ca eșec: n-a văzut tot.
+- **`adminGetHealth`** întoarce `jobs`:
+  - pune ștampila `firstMissingAt` pe joburile fără document;
+  - `null` dacă marcajele nu se pot citi.
+- **Admin → Health → „Scheduled jobs”** (`src/components/JobHealthList.tsx`):
+  - un rând pe job, cu verdict, mesaj și unde să te uiți;
+  - „server vechi” (câmp absent) și „necitibil” (`null`) sunt stări separate, niciuna goală;
+  - tabul Health primește „!” când un job cere atenție și nu există erori.
+- **`jobRuns`** nu are nicio regulă, deci Firestore refuză orice client. Refuzul e probat în
+  `rules-tests/games.test.ts`.
+- **i18n:** componenta e în scutirea declarată a consolei admin. Un test ține ca singurul ei importator
+  să fie `Admin.tsx`.
+
+**Două capcane găsite pe drum, trecute și în memorie, pentru toate proiectele:**
+1. **„every 6 hours” se numără de la ultima actualizare a jobului în Cloud Scheduler.** Măsurat azi:
+   03:48, apoi deploy la 08:45, apoi 14:45.
+2. **La un job la 5 minute, pragul „blocat” de 15 minute nu se atinge niciodată:** fiecare pornire
+   reîmprospătează `startedAt`. Primul meu verdict ar fi arătat un job omorât la fiecare rulare ca
+   „rulează pentru prima dată” la nesfârșit. Remediul: `startsSinceEnd`, iar ≥3 înseamnă roșu.
+
+**Probe:**
+- **`src/utils/jobHealth.test.ts` (27):**
+  - cron;
+  - verdictul, pe toate ramurile;
+  - fiecare `onSchedule` cheamă `runJob` cu propriul nume, verificat pe corpul funcției, nu pe fișier;
+  - cum citește ecranul cele trei stări;
+  - importatorul unic.
+- **`functions/test/jobRuns.test.ts` (13, pe emulator, prin handler-ele reale):**
+  - paritatea pe `__endpoint`: exact joburile din listă, cron, intervalul, UTC, `STUCK_MS` față de
+    timeout;
+  - succesul fiecărui job;
+  - eșecul fiecărui job, injectat la prima citire: eroarea e aruncată mai departe, un rând de eroare,
+    `failStreak` 1 → 2 → 0;
+  - un element eșuat la jocuri;
+  - marcajul de pornire;
+  - `adminGetHealth`: ștampila pusă o singură dată, verde după o rulare, roșu după 3 porniri fără
+    final, doar pentru admin.
+- **Mutații, 13, toate roșii,** fiecare verificată că s-a aplicat și restaurată octet cu octet: escaladarea
+  eșecurilor, pornirile fără final, ramura „blocat”, „niciodată”, orarul „every”, `failStreak`, eroarea
+  înghițită, elementele ignorate, marcajul de pornire, ștampila, eșecurile de la jocuri, numele greșit,
+  lista goală citită ca răspuns.
+- **Banc temporar** pe componenta reală, cu verdictele reale, apoi șters:
+  - toate cele cinci stări, luminos și întunecat, la 1280 și la 375 px;
+  - 0 erori în consolă, 0 depășiri pe orizontală.
+- **Porți:**
+  - `tsc` și `lint-gate`;
+  - **1974** de teste unitare (de la 1947);
+  - **467** pe emulatoare (de la 453);
+  - tz 46+46;
+  - build (chunk-ul Admin +2,5 kB), split, bundle.
+
+**BACKLOG:** punctul despre orarul rezumatului e închis de acest commit.

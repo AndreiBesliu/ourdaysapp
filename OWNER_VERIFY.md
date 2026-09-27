@@ -100,6 +100,24 @@
 
 ---
 
+## 🆕 Joburile programate au acum o stare în Admin (27.09) — gata în cod, NEPUBLICAT
+
+**Fapt:** memento-urile (la 5 minute), închiderea jocurilor abandonate (la oră) și rezumatul de erori
+(la 6 ore) lasă fiecare un marcaj la fiecare rulare. Un job care se oprește nu lasă nicio eroare:
+memento-uri netrimise arată exact ca memento-uri pe care nu le-a pus nimeni. Acum se vede. Marcajele le
+citesc și eu, fără cont, deci după deploy verific singur că scriu. De la tine e nevoie doar de o privire
+pe ecran.
+
+- [ ] **După deploy: Admin → Health → „Scheduled jobs”** (1 minut)
+      - **Cum arată bine:** trei rânduri. „Event reminders” și „Idle arcade sessions” sunt verzi, cu
+        „Ran … ago” și ce au făcut. „Error digest” poate fi gri („Has not run yet”) până la următoarea
+        oră fixă: 03:00, 09:00, 15:00 sau 21:00, ora României (după 25 octombrie, cu o oră mai devreme).
+      - **Ce e greșit:** textul „This server does not report its scheduled jobs yet” înseamnă că
+        deploy-ul de funcții n-a ajuns. Un rând roșu spune ce job, de când și unde să te uiți.
+      - **Ce se strică dacă nu te uiți:** nimic. E doar o fereastră spre ce rulează pe server.
+
+---
+
 ## 🆕 Repetare zilnică „doar lucrătoare” / „doar weekend” (26.09) — PUBLICAT pe 27.09 (funcțiile, apoi hosting-ul)
 
 **Fapt:** în lista „Repetare” apar, după „Zilnic”, două opțiuni noi: **„Zile lucrătoare (lun–vin)”** și

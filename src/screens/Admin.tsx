@@ -10,6 +10,8 @@ import {
 import { auth } from '../firebase';
 import { useDialog } from '../hooks/useDialog';
 import { errorStatusOf, inErrorState, landingErrorFilter, type ErrorFilter } from '../utils/errorFilterState';
+import { jobsNeedingAttention } from '../utils/jobHealthView';
+import JobHealthList from '../components/JobHealthList';
 import {
   adminCheck, adminGetStats, adminListProfiles, adminListAdmins, adminSetAdmin,
   adminGetHealth, adminSetErrorStatus, adminGetAiLedger, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
@@ -465,6 +467,9 @@ export default function Admin() {
             <button key={t} onClick={() => setTab(t)} className={`relative px-4 py-2 rounded-lg text-sm font-bold capitalize whitespace-nowrap transition-all ${tab === t ? 'bg-white dark:bg-zinc-700 shadow-sm text-primary' : 'text-zinc-500'}`}>
               {TAB_LABEL[t]}{t === 'profiles' && profiles.length ? ` (${profiles.length})` : ''}{t === 'groups' && groups.length ? ` (${groups.length})` : ''}{t === 'admins' && admins.length ? ` (${admins.length})` : ''}
               {t === 'health' && health?.errors?.length > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{health.errorTotal}</span>}
+              {/* A stopped job logs nothing, so the error count above can be 0 while reminders
+                  have not gone out for a day. The tab says so on its own. */}
+              {t === 'health' && !(health?.errors?.length > 0) && jobsNeedingAttention(health?.jobs) > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">!</span>}
             </button>
           ))}
         </div>
@@ -737,6 +742,15 @@ export default function Admin() {
                   read 0 beside eight rows that had just been created. */}
               <Stat label="Notifs today · bell rows" value={health?.notifications?.rowsToday} />
             </div>
+
+            {/* Whether the scheduled jobs RUN. A job that stops leaves no error behind — reminders
+                that were never sent look exactly like reminders nobody set — so this is the only
+                place that can say so. Judged on the server (functions/src/jobHealthCore.ts). */}
+            {health && (
+              <Section icon={<Activity className="w-4 h-4 text-primary" />} title="Scheduled jobs">
+                <JobHealthList jobs={health.jobs} />
+              </Section>
+            )}
 
             {/* Distinct problems, most frequent first.
                 Eighty logged errors is rarely eighty problems: it is usually four or five, each

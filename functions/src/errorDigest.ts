@@ -26,6 +26,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import { groupErrors } from "./errorGrouping";
 import { groupDocId, joinState } from "./errorState";
+import { runJob } from "./jobRuns";
 
 /** How many rows to group over. Matches ERROR_SCAN_LIMIT in index.ts — the same window, so the
  *  digest and the panel cannot disagree about a count. */
@@ -41,8 +42,12 @@ export const logErrorDigest = onSchedule(
   // Six-hourly, not daily: the log is the only way the maintainer sees these at all, and a
   // regression that appears at 09:00 should not wait until tomorrow to become visible. The
   // read is a few hundred documents, so four runs a day costs nothing worth saving.
-  { schedule: "every 6 hours", timeZone: "UTC", retryCount: 0 },
-  async () => {
+  //
+  // At 00:00, 06:00, 12:00 and 18:00 UTC. It was "every 6 hours", which Cloud Scheduler counts from
+  // the last time the job was updated — and every functions deploy updates it: on 27.09.2026 the
+  // 08:45 deploy moved the next run to 14:45, eleven hours after the one before (jobHealthCore.ts).
+  { schedule: "0 */6 * * *", timeZone: "UTC", retryCount: 0 },
+  () => runJob("logErrorDigest", async () => {
     const db = admin.firestore();
 
     const [snap, total] = await Promise.all([
@@ -99,5 +104,9 @@ export const logErrorDigest = onSchedule(
 
     // One line, one prefix, so `firebase functions:log | grep ERROR_DIGEST` is the whole protocol.
     console.log(`ERROR_DIGEST ${JSON.stringify(digest)}`);
-  },
+    return {
+      failed: 0,
+      detail: `${grouped.length} problem(s) in ${scanned.length} row(s)` + (digest.truncated ? `, newest ${SCAN_LIMIT} only` : ""),
+    };
+  }),
 );

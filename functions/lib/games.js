@@ -16,6 +16,7 @@ exports.expireIdleGames = void 0;
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const gameSession_1 = require("./gameSession");
+const jobRuns_1 = require("./jobRuns");
 /**
  * How many to close per run.
  *
@@ -38,7 +39,9 @@ const PER_RUN = 200;
  * like a clean sweep.
  */
 const SCAN_LIMIT = 2000;
-exports.expireIdleGames = (0, scheduler_1.onSchedule)({ schedule: "every 60 minutes", timeZone: "UTC", retryCount: 0 }, async () => {
+exports.expireIdleGames = (0, scheduler_1.onSchedule)(
+// Cron, not "every 60 minutes": that form restarts its count at every deploy (jobHealthCore.ts).
+{ schedule: "0 * * * *", timeZone: "UTC", retryCount: 0 }, () => (0, jobRuns_1.runJob)("expireIdleGames", async () => {
     const db = admin.firestore();
     const now = Date.now();
     // One line per run, whatever the run did — same shape as REMINDERS_RUN and ERROR_DIGEST, so
@@ -49,6 +52,13 @@ exports.expireIdleGames = (0, scheduler_1.onSchedule)({ schedule: "every 60 minu
     const done = () => {
         console.log("GAMES_EXPIRY_RUN " + JSON.stringify(Object.assign(Object.assign({ at: new Date(now).toISOString(), idleHours: gameSession_1.IDLE_MS / 3600000 }, counts), { skipped })));
     };
+    // For the health panel. A saturated scan counts against the run: it never looked at the games
+    // past the limit, and "closed 0" from a blind sweep must not read as a clean one.
+    const outcome = () => ({
+        failed: counts.failed + counts.saturated,
+        detail: `scanned ${counts.scanned}, idle ${counts.due}, closed ${counts.closed}, failed ${counts.failed}`
+            + (counts.saturated ? `, scan limit ${SCAN_LIMIT} reached` : ""),
+    });
     try {
         const snap = await db.collection("games").limit(SCAN_LIMIT).get();
         counts.scanned = snap.size;
@@ -105,11 +115,12 @@ exports.expireIdleGames = (0, scheduler_1.onSchedule)({ schedule: "every 60 minu
                 due: due.length, attemptedThisRun: PER_RUN, remaining: due.length - PER_RUN,
             }));
         }
+        return outcome();
     }
     finally {
         // The promise above is one line per run, including a run that closed three games and then
         // died in the fourth — the same reason sendDueReminders wraps its counters in a finally.
         done();
     }
-});
+}));
 //# sourceMappingURL=games.js.map

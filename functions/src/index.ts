@@ -30,6 +30,7 @@ import { overrideRsvps } from "./overrideRsvps";
 import { notify } from "./notify";
 import { groupErrors, fingerprint } from "./errorGrouping";
 import { fixFor, fixVerdict } from "./errorFixes";
+import { jobHealthChecks, jobsNeedingMissingStamp, type JobCheck } from "./jobHealthCore";
 import {
   ERROR_STATUSES, STATUS_RANK, groupDocId, isErrorStatus, joinState,
 } from "./errorState";
@@ -2262,6 +2263,30 @@ export const adminGetHealth = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
   aiTop.sort((a, b) => b.count - a.count);
   let notifToday = 0;
   notifSnap.forEach((d) => { const u = d.data(); if (u.date === today) notifToday += u.count || 0; });
+
+  // ── are the scheduled jobs running? ─────────────────────────────────────
+  //
+  // One line per job, judged by jobHealthCore.ts from the markers in `jobRuns`. A job with no
+  // document at all is stamped `firstMissingAt` here (merge), the first time this is opened, so
+  // "never ran" gets an age and turns red instead of reading "not yet" for ever. `null` when the
+  // markers cannot be read: the panel then says so, rather than showing nothing — which would look
+  // like nothing to worry about.
+  let jobs: JobCheck[] | null = null;
+  try {
+    const nowMs = Date.now();
+    const markers: Record<string, unknown> = {};
+    (await db.collection("jobRuns").get()).forEach((d) => { markers[d.id] = d.data(); });
+    for (const name of jobsNeedingMissingStamp(markers)) {
+      try {
+        await db.doc(`jobRuns/${name}`).set({ firstMissingAt: nowMs }, { merge: true });
+        markers[name] = { firstMissingAt: nowMs };
+      } catch { /* one stamp must not hide the other lines */ }
+    }
+    jobs = jobHealthChecks(markers, nowMs);
+  } catch (e) {
+    console.warn("adminGetHealth: job markers unreadable", e);
+  }
+
   return {
     errors, errorGroups, errorCounts, errorTotal: errCount,
     // Says plainly whether the counts above cover the whole log or only its newest slice.
@@ -2269,6 +2294,7 @@ export const adminGetHealth = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
     truncated: aiSnap.size >= 3000 || notifSnap.size >= 3000,
     ai: { today: aiToday, dailyLimitPerUser: AI_DAILY_LIMIT, activeUsers: aiTop.length, top: aiTop.slice(0, 10) },
     notifications: { today: notifToday, rowsToday: notifRowsToday, dailyLimitPerUser: NOTIF_DAILY_LIMIT },
+    jobs,
   };
 });
 

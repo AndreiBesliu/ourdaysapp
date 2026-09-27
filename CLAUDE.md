@@ -47,6 +47,16 @@ React + TypeScript + Vite + Tailwind, Firebase (Auth, Firestore, Functions, Host
   memento-uri în zilele pe care seria le sare, fără ca utilizatorul să aibă ce șterge. Ordinea rămâne
   **functions → hosting**. Hosting singur doar cu acordul explicit al lui Andrei, spus în aceste
   cuvinte.
+- **Joburile programate (din 27.09) lasă marcaje de rulare**, citite în Admin → Health → „Scheduled
+  jobs”. Un job care nu pornește nu lasă nicio eroare, iar memento-urile sunt singura funcție care
+  lucrează când nu are nimeni aplicația deschisă.
+  - Fiecare `onSchedule` își învelește handler-ul în `runJob("<numele lui>", …)`
+    (`functions/src/jobRuns.ts`) și apare în `JOB_SCHEDULE` (`functions/src/jobHealthCore.ts`).
+  - **Orarul e cron** (`*/5 * * * *`), **nu** „every 5 minutes”: forma „every N” își numără intervalul
+    de la ultima actualizare a jobului în Cloud Scheduler, iar fiecare deploy de funcții îl actualizează.
+    Pe 27.09, rezumatul de erori a stat astfel 11 ore fără să ruleze.
+  - Un job nou care nu respectă una dintre ele pică `src/utils/jobHealth.test.ts` (per corp de funcție)
+    și `functions/test/jobRuns.test.ts` (pe `__endpoint`, ce citește deploy-ul).
 - **CI:** `.github/workflows/ci.yml` — typecheck + teste + build la fiecare push pe `main`. **Nu** face deploy: livrarea rămâne manuală și deliberată.
 
 ## ⚠️ Warlord e un SUBMODUL, nu cod din repo-ul ăsta
