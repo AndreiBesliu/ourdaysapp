@@ -19,8 +19,18 @@
 // So the error argument is not optional here. `onError` is required, and the failure is reported
 // with a context string that says which screen and which collection it was.
 
-import { onSnapshot, type Query, type DocumentReference, type DocumentData, type Unsubscribe } from 'firebase/firestore';
+import {
+  onSnapshot, type Query, type DocumentReference, type DocumentData, type DocumentSnapshot, type Unsubscribe,
+} from 'firebase/firestore';
 import { reportError } from '../reportError';
+
+/** Where a document snapshot's data came from. */
+export interface DocMeta {
+  /** Read from the local cache, not (yet) confirmed by the server — possibly stale. */
+  fromCache: boolean;
+  /** Includes a local write the server has not acknowledged yet. */
+  hasPendingWrites: boolean;
+}
 
 /**
  * Subscribe, and turn a failure into something the caller can render.
@@ -56,22 +66,31 @@ export function liveQuery<T = DocumentData>(
  * A denied document read is quieter still than a denied query: the callback never runs, so the
  * screen keeps whatever it had before — usually the defaults it was constructed with. That is how
  * a profile read failing turns into "you belong to no groups" rather than into an error.
+ *
+ * `onNext` also gets where the data came from. A screen that is about to CLAIM something from a
+ * document — "you have not set your birthday" — needs to know whether it is reading the server's
+ * answer or a cache that may be months old; with `includeMetadataChanges` it is also told when a
+ * cached snapshot is confirmed, which otherwise raises no event because the data did not change.
  */
 export function liveDoc<T = DocumentData>(
   ref: DocumentReference<DocumentData>,
   context: string,
-  onNext: (data: (T & { id: string }) | null) => void,
+  onNext: (data: (T & { id: string }) | null, meta: DocMeta) => void,
   onError: (err: unknown) => void,
+  options?: { includeMetadataChanges?: boolean },
 ): Unsubscribe {
-  return onSnapshot(
-    ref,
-    (snap) => onNext(snap.exists() ? ({ id: snap.id, ...(snap.data() as T) }) : null),
-    (err) => {
-      reportError(err?.message || 'document snapshot failed', {
-        context,
-        stack: (err as { code?: string })?.code ? `code=${(err as { code?: string }).code}` : undefined,
-      });
-      onError(err);
-    },
+  const next = (snap: DocumentSnapshot<DocumentData>) => onNext(
+    snap.exists() ? ({ id: snap.id, ...(snap.data() as T) }) : null,
+    { fromCache: snap.metadata.fromCache, hasPendingWrites: snap.metadata.hasPendingWrites },
   );
+  const error = (err: { message?: string; code?: string }) => {
+    reportError(err?.message || 'document snapshot failed', {
+      context,
+      stack: err?.code ? `code=${err.code}` : undefined,
+    });
+    onError(err);
+  };
+  return options?.includeMetadataChanges
+    ? onSnapshot(ref, { includeMetadataChanges: true }, next, error)
+    : onSnapshot(ref, next, error);
 }

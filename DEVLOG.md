@@ -10422,3 +10422,65 @@ internă a API-ului de loguri, deci nu contează ca probă. Proba sunt marcajele
 
 **NU s-a publicat:** e doar client, deci doar hosting. Pe server nu s-a schimbat nimic de la deploy-ul de
 azi. CLAUDE.md cere, pentru hosting singur, acordul explicit al lui Andrei.
+
+## 2026-09-27 · Bannerul cu ziua de naștere: pe documentul live, doar pe cuvântul serverului (Task Started)
+
+**Prompt (Andrei):** „tot imi apare chestia cu birthday, dar eu o am setata” (captură: „Add your
+birthday!” deasupra calendarului).
+**Model:** Claude Opus 5.5.
+**Plan:**
+- să măsor ce e pe server, fără valori;
+- să găsesc de ce ecranul vede altceva;
+- să repar fără să pot vedea browserul lui Andrei.
+
+## 2026-09-27 · Bannerul cu ziua de naștere: pe documentul live, doar pe cuvântul serverului (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Măsurat pe live** (cheia de citire; doar formate, nicio valoare sau identitate):
+- un singur cont e în toate cele trei grupuri din captură (B&D, Family, Gym): contul de admin al lui
+  Andrei, cu Google + parolă și email verificat;
+- `users/{uid}` are `birthday` în formatul `yyyy-MM-dd` ȘI `hideBirthdayPrompt: true`, iar profilul public
+  are forma `0000-MM-DD`;
+- oricare dintre cele două ar fi trebuit să ascundă bannerul.
+
+**De ce apărea:**
+- **Bannerul și intrarea proprie din `userMap` veneau dintr-un singur `getDoc`** din callback-ul
+  grupurilor, pe care nimic nu-l reîmprospăta:
+  - X-ul scria `hideBirthdayPrompt: true` pe server, iar bannerul rămânea pe ecran (bug sigur, citit în cod);
+  - o citire care eșua, sau venea dintr-un cache vechi cât Firestore se credea offline, lăsa intrarea ca
+    „sămânța” din Auth (id, email, nume), pe care bannerul o citea drept „fără zi de naștere”. Raportul
+    unei astfel de citiri se pierde exact atunci (offline), ceea ce se potrivește cu 0 rânduri în jurnal.
+- Mecanismul exact din browserul lui nu se poate vedea de aici. Remediul le acoperă pe toate.
+
+**Reparat:**
+- **`liveDoc`** spune sursa datelor (`fromCache`, `hasPendingWrites`) și, la cerere, se abonează la
+  schimbările de metadate. Așa află când un instantaneu din cache e confirmat de server. Ceilalți 7
+  apelanți rămân neschimbați.
+- **`src/utils/ownUserDoc.ts`** (pur):
+  - `wantsBirthdayPrompt(doc, fromServer)`: bannerul apare doar pe cuvântul serverului;
+  - `withOwnEntry`: intrarea proprie din `userMap` e documentul live, peste „sămânță”;
+  - `sameDoc`: un eveniment doar de metadate nu produce un obiect nou.
+- **`CalendarHome`:**
+  - ascultă documentul propriu (listenerul exista deja, pentru familie);
+  - bannerul trece prin `wantsBirthdayPrompt`;
+  - fiecare componentă copil primește `userMap`-ul cu intrarea proprie live.
+  - Același obiect dacă nu s-a schimbat nimic: `AddEventModal` își reinițializează formularul la un
+    `userMap` nou, deci un eveniment de metadate cât scrie cineva i-ar fi șters evenimentul.
+- **Efecte secundare, tot corecte:** propria zi de naștere din calendar și propriul avatar nu mai depind
+  de acea citire unică.
+
+**Probe:**
+- **Teste noi, 19:**
+  - `ownUserDoc.test.ts` (15), cu fixare pe sursa `CalendarHome` (fără DOM; spus ca atare);
+  - `liveDoc.test.ts` (4), cu SDK-ul simulat.
+- **Mutații, 8, toate roșii:** bannerul pe cache, condiția veche, un `userMap` nou de fiecare dată,
+  `sameDoc` mereu fals, opțiunea de metadate ignorată, `fromCache` nepredat, date înlocuite la fiecare
+  instantaneu, „sămânța” peste document.
+- **Porți:**
+  - `tsc` și `lint-gate` (hook-urile noi stau înaintea oricărui `return`);
+  - **2012** teste unitare (de la 1993);
+  - build, split, bundle.
+
+**NU s-a publicat:** e doar client. Pleacă la același deploy de hosting cu raportarea erorilor
+(`214db53`), la cuvântul lui Andrei. Verificarea lui, după aceea, e în `OWNER_VERIFY.md`: o reîncărcare.

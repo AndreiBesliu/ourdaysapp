@@ -100,6 +100,23 @@
 
 ---
 
+## 🆕 Bannerul „Add your birthday!” (27.09) — reparat în cod, NEPUBLICAT
+
+**Fapt:** pe server, documentul tău are ziua de naștere ȘI bannerul închis (`hideBirthdayPrompt: true`).
+Bannerul apărea totuși din două motive:
+- **ecranul se baza pe o citire unică, pe care nimic n-o reîmprospăta**, deci X-ul scria pe server, dar
+  bannerul rămânea;
+- **o citire eșuată sau venită dintr-un cache vechi** era luată drept „n-are zi de naștere”.
+
+Acum ecranul ascultă documentul tău live, iar bannerul apare doar pe baza răspunsului confirmat de server.
+
+- [ ] **După publicare: reîncarcă pagina calendarului** (10 secunde)
+      - **Cum arată bine:** bannerul nu mai apare.
+      - **Ce e greșit:** dacă totuși apare, spune-mi. Pe server datele tale sunt corecte, deci ar
+        însemna că ecranul primește altceva decât ce e pe server, iar asta vreau să văd.
+
+---
+
 ## 🆕 Joburile programate au acum o stare în Admin (27.09) — PUBLICAT pe 27.09, la „Publica”
 
 **Fapt:** memento-urile (la 5 minute), închiderea jocurilor abandonate (la oră) și rezumatul de erori

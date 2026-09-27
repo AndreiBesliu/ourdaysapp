@@ -4,6 +4,7 @@ import { auth, db, messaging } from '../firebase';
 import { getToken, onMessage } from 'firebase/messaging';
 import { collection, query, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
 import { liveQuery, liveDoc } from '../utils/liveQuery';
+import { wantsBirthdayPrompt, withOwnEntry, sameDoc } from '../utils/ownUserDoc';
 import { eventsForTab, pendingInvitesFor } from '../utils/eventScope';
 import { reportError } from '../reportError';
 import { vapidKeyProblem } from '../utils/webPush';
@@ -66,7 +67,18 @@ export default function CalendarHome() {
   const [overviewModalType, setOverviewModalType] = useState<'total' | 'pending' | 'completed' | null>(null);
   const [isGroupSettingsOpen, setIsGroupSettingsOpen] = useState(false);
   const [isGamesHubOpen, setIsGamesHubOpen] = useState(false);
-  const [userMap, setUserMap] = useState<Record<string, any>>({});
+  const [loadedUserMap, setUserMap] = useState<Record<string, any>>({});
+  // The signed-in person's own document, LIVE, and whether the server has confirmed it — see
+  // utils/ownUserDoc.ts. `undefined` until the listener first answers.
+  const [ownData, setOwnData] = useState<Record<string, any> | null | undefined>(undefined);
+  const [ownFromServer, setOwnFromServer] = useState(false);
+  // The member map with the person's own entry taken from that live document, so a dismissed
+  // banner, a birthday set in Settings or a read that failed inside the groups loop cannot leave
+  // it stale. Same map object while neither input changes (AddEventModal resets its form on a new one).
+  const userMap = useMemo(
+    () => withOwnEntry(loadedUserMap, auth.currentUser?.uid, ownData),
+    [loadedUserMap, ownData],
+  );
   const [activeGames, setActiveGames] = useState<any[]>([]);
   const [isFabExpanded, setIsFabExpanded] = useState(false);
   const [isRecurringPanelOpen, setIsRecurringPanelOpen] = useState(false);
@@ -150,10 +162,19 @@ export default function CalendarHome() {
     // Legacy support for familyMembers just in case
     let legacyFamily: string[] = [];
     const unsubUser = liveDoc<any>(doc(db, 'users', auth.currentUser.uid), 'CalendarHome.userDoc',
-      (data) => { if (data) legacyFamily = data.familyMembers || []; },
-      // Legacy-only enrichment: losing it costs a few avatars, not the calendar. Reported anyway,
-      // because a failing read of your OWN document usually means something bigger is wrong.
-      () => {});
+      (data, meta) => {
+        if (data) legacyFamily = data.familyMembers || [];
+        // Same content keeps the same object: a metadata-only event (cache → server) must not
+        // hand the form below a new `userMap` while somebody is typing.
+        setOwnData((prev) => (sameDoc(prev, data) ? prev : data));
+        setOwnFromServer(!meta.fromCache);
+      },
+      // Losing it hides the birthday banner and falls back to the one-off read below for the own
+      // entry. Reported anyway, because a failing read of your OWN document usually means
+      // something bigger is wrong.
+      () => {},
+      // Told when a cached snapshot is confirmed, which otherwise raises nothing.
+      { includeMetadataChanges: true });
 
     const qGroups = query(collection(db, 'groups'), where('members', 'array-contains', auth.currentUser.uid));
     const unsubscribeGroups = liveQuery<any>(qGroups, 'CalendarHome.groups', async (fetchedGroups) => {
@@ -731,8 +752,10 @@ export default function CalendarHome() {
         {/* Email verification prompt (email/password users only) */}
         <VerifyEmailBanner />
 
-        {/* Birthday Prompt */}
-        {auth.currentUser && userMap[auth.currentUser.uid] && !userMap[auth.currentUser.uid].birthday && !userMap[auth.currentUser.uid].hideBirthdayPrompt && (
+        {/* Birthday Prompt — only on the server's word about the person's own document, read live:
+            it used to trust a one-off read that nothing refreshed, so X did not close it and a
+            failed read asked people who had set their birthday (utils/ownUserDoc.ts). */}
+        {wantsBirthdayPrompt(ownData, ownFromServer) && (
           <div className="bg-gradient-to-r from-pink-500/10 to-rose-500/10 border border-pink-500/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in slide-in-from-top-4 fade-in mb-2">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-pink-500/20 text-pink-600 dark:text-pink-400 rounded-lg shrink-0">
