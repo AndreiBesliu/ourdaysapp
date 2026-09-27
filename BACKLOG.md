@@ -97,10 +97,6 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 ## 3. Cod și operațiuni (C)
 
 - **AI-ul pe Claude (26.09): ce a rămas deliberat în afara livrării.**
-  - **Cheia Gemini veche și secretul `GEMINI_API_KEY` (v1)** se șterg numai după ce `live-diff` arată
-    două lucruri: variabila veche pe zero funcții și nicio legătură la secret. Deploy-ul o scoate pe a
-    doua (`secrets: []` pe funcțiile AI). Ștergerea e ireversibilă, deci se face la confirmarea lui
-    Andrei (`OWNER_VERIFY.md`, pasul 6).
   - **Rezervarea pe apel nu e un plafon peste un fallback.** Un apel refuzat de Opus 5.5 și servit de
     alt model plătește ambele încercări. Decontarea le încasează pe amândouă (`costOf`), dar rezervarea
     acoperă una singură. Sub concurență, bugetul poate fi depășit cu cel mult o încercare. Se lasă
@@ -110,9 +106,12 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   - **Confidențialitatea:** rezumatul grupului trimite până la 50 de mesaje din chat, iar sugestia de
     card trimite numele cardurilor din portofel. Până pe 26.09 mergeau la Google, acum merg la
     Anthropic. Aplicația n-are o pagină de confidențialitate care să spună asta. Decizia e a lui Andrei.
-  - **Aceeași organizație Anthropic ca Presto?** Atunci limitele de rată și cheltuiala sunt comune: o
-    rafală Presto ar apărea în OurDays ca „AI-ul e ocupat”. Un workspace separat pentru OurDays, cu
-    limita lui de cheltuială, le separă. Decizia e a lui Andrei.
+  - **Workspace-ul separat există din 27.09** (`ourdays`, singurul pe regula de federare), deci
+    cheltuiala OurDays se vede separat în consolă. Au rămas două lucruri:
+    - **limita de cheltuială** pe workspace se pune din consolă;
+    - **limitele de rată** Anthropic sunt pe organizație. Un alt proiect pe aceeași organizație poate
+      face ca OurDays să răspundă „AI-ul e ocupat”.
+    Decizia e a lui Andrei.
   - **Lista funcțiilor AI** e scrisă de mână în `claudeAuth.test.ts`. Plasa reală e alta: o funcție nouă
     care cheamă `paidGenerate` fără să intre în lista de cinci pică `aiLedgerShape.test.ts`, deci nu
     trece neobservată.
@@ -156,18 +155,18 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Consola arată la fiecare încărcare un avertisment de depreciere:** `enableIndexedDbPersistence`.
   E inofensiv azi. Înlocuitorul (`persistentLocalCache`) schimbă felul în care se deschide Firestore,
   deci merită o felie a lui, cu probă pe mai multe taburi.
+- **Rezumatul de erori își repornește ceasul la fiecare deploy de funcții.** `logErrorDigest` are
+  „every 6 hours”, iar Cloud Scheduler numără cele 6 ore de la ultima actualizare a jobului. Deploy-ul îl
+  actualizează de fiecare dată. **Măsurat pe 27.09:** ultima rulare la 03:48, deploy la 08:45, următoarea
+  abia la 14:45, deci 11 ore fără rezumat. Remediul e un orar fix (`0 */6 * * *`): un rând în
+  `errorDigest.ts`, care intră în vigoare la următorul deploy de funcții. Memento-urile (la 5 minute) și
+  expirarea jocurilor (la oră) au aceeași mecanică, dar acolo întârzierea nu contează.
 - **Refuzurile de reguli nu lasă urme pe server.** Proiectul n-are log-uri de acces la date, iar
   Hosting nu exportă log-uri de cereri, deci o regulă care refuză un utilizator logat sau un chunk
   care nu se încarcă se vede doar dacă clientul raportează în `errorLogs`. Log-urile de acces la date
   costă și se pornesc din IAM, deci e decizia lui Andrei.
 
 - **Repetarea zilnică cu filtru (26.09) — ce a rămas deliberat în afară:**
-  - **Serverul acceptă o ocurență editată pe o zi pe care seria o sare.** Asta se poate întâmpla doar
-    dintr-un tab vechi, care încă vede seria în fiecare zi. `createEventOverride` verifică doar că data
-    e o zi reală, nu că e o ocurență. Garda se pune pe server, deci așteaptă deploy-ul de funcții.
-  - **O serie mai veche, stocată la 22:00–23:59 UTC**, se mută o zi mai devreme când îi deschizi
-    formularul de editare. Formularul citește ziua cu `dayOf`, nucleul cu `seriesStartDay`. Bugul e mai
-    vechi decât filtrul, iar filtrul doar îl face mai vizibil, prin eticheta de start din panou.
   - **Tipul de repetare nu se poate schimba după creare.** Asta nu e nou: nici frecvența nu se putea
     schimba.
   - **Apelanții nucleului de repetare:** o funcție nouă care uită `onlyOn` n-ar fi prinsă de nimic în

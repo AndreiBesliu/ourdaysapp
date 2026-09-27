@@ -10158,3 +10158,63 @@ comună cu Presto.
 
 Amândouă sunt în `OWNER_VERIFY.md`, pasul 4. Tot acolo, pasul 6: ștergerea cheii și a secretului
 Gemini, acum sigure.
+
+## 2026-09-27 · După deploy: traseul checklist-ului automat, jurnalele, joburile, BACKLOG-ul (Task Started)
+
+**Prompt (Andrei):** „O sa fac setarile alta data. Tu continua”
+**Model:** Claude Opus 5.5.
+**Plan:** să închid ce se poate verifica fără Andrei și fără să scriu pe live:
+- traseul Eventarc al checklist-ului automat;
+- jurnalele de după deploy;
+- joburile programate;
+- punctele din BACKLOG pe care deploy-ul de azi le-a schimbat.
+
+## 2026-09-27 · După deploy: traseul checklist-ului automat, jurnalele, joburile, BACKLOG-ul (Task Completed)
+
+**Model:** Claude Opus 5.5. Totul doar prin citire: tokenul CLI-ului Firebase pentru API-urile Google,
+cheia de citire pentru Firestore.
+
+**Checklist-ul automat** (`autoSuggestChecklist`, singura funcție AI pornită de o scriere):
+- triggerul Eventarc (europe-central2, `events/{eventId}` creat) are acum contul `ourdays-ai`,
+  actualizat la 08:45:50;
+- abonamentul Pub/Sub care livrează e `ACTIVE`, cu tokenul OIDC semnat ca `ourdays-ai`;
+- `ourdays-ai` are Run Invoker și Eventarc Event Receiver;
+- agentul Pub/Sub are pe proiect `iam.serviceAccountTokenCreator` și `pubsub.serviceAgent` (ambele cu
+  `getOpenIdToken`). Nicio politică pe cont nu face diferența: contul implicit, pe care merg celelalte
+  6 triggere, se bazează pe același grant de proiect.
+- Concluzia: lanțul e configurat identic cu cel care merge deja. Proba finală rămâne un eveniment
+  salvat cu „AI Assistant” (`OWNER_VERIFY`, pasul 4).
+
+**Jurnalele după deploy** (Cloud Run, WARNING și peste, de la 08:30 UTC):
+- 0 erori;
+- 5 avertismente, toate între 08:49 și 08:50: exact cele 5 cereri de probă ale mele fără autentificare
+  (400/401). N-a căzut nimic.
+
+**`FUNCTION_SIGNATURE_TYPE` lipsă pe `createGroupInviteLink`:**
+- lipsește chiar din revizia activă Cloud Run (`00016`), nu doar din raportarea API-ului;
+- e o variabilă pe care o pune platforma, nu `.env`-ul;
+- fără ea, funcția primește implicitul `http`, adică exact ce e un callable, iar funcția răspunde la
+  fel ca `notifyUsers`;
+- toate cele 7 funcții `cloudevent` o au. Inofensivă.
+
+**Joburile programate** (Cloud Scheduler, plus cererile din jurnal după deploy):
+- `sendDueReminders` (la 5 minute): 21 de rulări, toate 200;
+- `expireIdleGames` (la oră): o rulare, 200;
+- `logErrorDigest` (la 6 ore): n-a mai rulat de la 03:48. „Every 6 hours” se numără de la ultima
+  actualizare a jobului, iar deploy-ul l-a actualizat la 08:45, deci următoarea rulare e la 14:45: 11 ore
+  fără rezumat. Trecut în BACKLOG, cu remediul (orar fix).
+
+**BACKLOG, re-măsurat:**
+- **Scos:** cheia Gemini. Condiția ei (variabila pe 0 funcții, nicio legătură la secret) e îndeplinită
+  din 27.09, iar ștergerea e a lui Andrei, în `OWNER_VERIFY`, pasul 6.
+- **Rescris:** organizația Anthropic comună. Workspace-ul separat există; au rămas limita de cheltuială
+  și limitele de rată pe organizație.
+- **Scoase două puncte ale repetării cu filtru:**
+  - **Garda pe server pentru o ocurență pe o zi sărită.** Ar apăra doar taburile deschise înainte de
+    hosting-ul de azi, care dispar la reîncărcare. Ca securitate nu adaugă nimic: cine poate edita
+    seria poate crea oricum un eveniment în acel grup.
+  - **Seria stocată la 22:00–23:59 UTC**, pe care formularul o citea cu o zi mai devreme. **Măsurat pe
+    live:** 27 de evenimente, o singură serie (anuală), 0 cu start târziu. Singurul cod care scria
+    astfel de starturi (mutarea pe ceasul local) e înlocuit din 26.09 de `shiftedSeriesStart`, care
+    scrie miezul nopții UTC. Nu mai are pe cine atinge.
+- **Adăugat:** rezumatul de erori, al cărui ceas se repornește la fiecare deploy.
