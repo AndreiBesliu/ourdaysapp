@@ -10091,3 +10091,70 @@ comună cu Presto.
 
 **NU s-a publicat nimic.** Pașii lui Andrei (contul Google, regula Anthropic, confirmarea) stau în
 `OWNER_VERIFY.md`, cu link-uri.
+
+## 2026-09-27 · Publicarea: AI-ul pe Claude + repetarea lucrătoare/weekend (Task Started)
+
+**Prompt (Andrei):** „publica” (după pașii din consola Anthropic, cu workspace-ul `ourdays` pe regulă).
+**Model:** Claude Opus 5.5.
+**Plan:**
+- ID-urile de federare în `functions/.env`, copia în `~/.ourdays`;
+- verificarea contului Google;
+- un deploy de probă (`--dry-run`), apoi funcțiile și hosting-ul;
+- verificarea pe live și primul apel real.
+
+## 2026-09-27 · Publicarea: AI-ul pe Claude + repetarea lucrătoare/weekend (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Configurare:**
+- `functions/.env` (în afara Git) are regula, organizația și contul Anthropic, plus `AI_SERVICE_ACCOUNT`.
+  Copia din `~/.ourdays` e identică.
+- `ANTHROPIC_WORKSPACE_ID` lipsește **intenționat**:
+  - ID-ul scris de Andrei și cel din codul asistentului Anthropic erau două workspace-uri diferite;
+  - fără el, schimbul folosește singurul workspace al regulii (`ourdays`);
+  - workspace-ul se schimbă din consolă, fără deploy.
+- **Contul Google, verificat doar prin citire** (tokenul CLI-ului Firebase; `gcloud` nu e logat pe mașina asta):
+  - există și e activ;
+  - `uniqueId` se potrivește cu regula;
+  - are cele trei roluri.
+- Cele cinci funcții AI nu folosesc decât Firestore, deci nu le trebuie alte roluri.
+
+**Deploy** (la „publica”, în ordinea funcții → reguli → hosting):
+- **Deploy-ul de probă** (`--dry-run`) a trecut: tree-clean, garda, build-ul și param-ul rezolvat din `.env`.
+- **Funcțiile:** 51 actualizate, niciuna ștearsă.
+- **Regulile și indecșii:** identici pe live, deci nepublicați.
+- **Hosting-ul:** bundle-ul `index-BcYhJVH3`. Pagina live îl servește și conține codul „ocupat”.
+
+**Pe live, după deploy** (`live-diff`):
+- `GEMINI_API_KEY_LOCAL` pe 0 funcții (erau 7);
+- legături la secrete: niciuna (era `GEMINI_API_KEY@1`);
+- contul `ourdays-ai` pe exact cele 5 funcții AI;
+- `BOOTSTRAP_ADMIN_EMAILS` pe toate cele 51, deci owner-ul e restabilit;
+- federarea pe toate 51 (ID-uri, nu secrete).
+
+**O observație:** `createGroupInviteLink` n-are variabila de platformă `FUNCTION_SIGNATURE_TYPE`.
+- Toate celelalte o au, iar înainte de deploy o avea și ea.
+- Răspunde identic cu `notifyUsers` (401 „You must be signed in.”). Implicitul platformei e `http`, deci
+  e inofensivă.
+- De urmărit dacă persistă la următorul deploy.
+
+**Primul apel real** (Andrei, 27.09, 08:56 UTC, formularul de eveniment):
+
+| funcție | tokeni (intrare/ieșire) | cost |
+|---|---|---|
+| `category` | 313/15 | $0.001552 |
+| `asset-suggest` | 810/12 | $0.00348 |
+| `checklist` | 336/86 | $0.003064 |
+
+- Toate trei `ok`, fără `servedModel` (fără fallback).
+- Costurile, recalculate pe tarif ($4/$20), se potrivesc la ultima cifră.
+- Rollup-ul pe model: `claude-opus-5-5`, 3 apeluri, 0 eșecuri.
+- Jurnalul de erori: nimic nou.
+- Funcțiile AI cer autentificarea înainte de orice apel plătit: o cerere fără cont primește 401.
+
+**Neprobat încă:**
+- `autoSuggestChecklist`, singura pornită de Eventarc: un eveniment salvat cu „Asistent AI”;
+- rezumatul de grup.
+
+Amândouă sunt în `OWNER_VERIFY.md`, pasul 4. Tot acolo, pasul 6: ștergerea cheii și a secretului
+Gemini, acum sigure.

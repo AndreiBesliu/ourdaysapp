@@ -15,7 +15,7 @@
 
 ---
 
-## 🆕 AI-ul trece pe Claude Opus 5.5 (26.09) — gata în cod, NEPUBLICAT. Pașii tăi
+## 🆕 AI-ul trece pe Claude Opus 5.5 (26.09) — PUBLICAT pe 27.09 și probat. Ce a rămas: pașii 4, 5, 6
 
 **Fapte:**
 - Cele cinci funcții AI (checklist, checklist automat, categorie, card din portofel, rezumatul
@@ -23,13 +23,17 @@
 - **Nu există nicio cheie.** Funcțiile dovedesc cine sunt cu un token Google, pe care Anthropic îl
   acceptă printr-o regulă setată de tine o dată.
 - **Cost:** în jur de $0.005 pentru un checklist, o categorie sau un card, și $0.01–0.02 pentru un rezumat.
-- Am probat totul fără rețea: tokenul Google, schimbul la Anthropic, cererea, prețul fiecărei
-  încercări și bugetele. Nu am putut proba un apel real: pentru asta e nevoie de pașii de mai jos.
-- **Până faci pașii 1–2**, un deploy de funcții lasă AI-ul oprit („AI is not configured”, fără cost).
-  Asta din cauza cheii Gemini vechi: deploy-ul o scoate de pe funcții. De aceea, **întâi pașii 1–2,
-  apoi deploy-ul.**
+- **Primul apel real (27.09, 08:56 UTC) a mers.** Trei apeluri din formularul de eveniment: categoria,
+  cardul și lista. Toate trei au răspuns cu `claude-opus-5-5`, fără fallback și fără eroare. Costul a fost
+  $0.0016, $0.0035 și $0.0031, verificat pe tarif ($4 intrare / $20 ieșire la milion). În jurnalul de
+  erori n-a apărut nimic nou.
+- **Pe live, după deploy** (`live-diff`, doar citire):
+  - cheia Gemini veche nu mai e pe nicio funcție și nu mai există nicio legătură la secret;
+  - contul `ourdays-ai` rulează exact cele cinci funcții AI;
+  - adresa ta de owner e pe toate cele 51 de funcții, deci ești din nou „owner”.
 
-- [ ] **Pasul 1 — Google Cloud: contul cu care rulează funcțiile AI** (5 minute)
+- [x] **Pasul 1 — Google Cloud: contul cu care rulează funcțiile AI** (5 minute) — *făcut 27.09; eu am
+      verificat că există, că Unique ID-ul se potrivește cu regula și că are cele trei roluri.*
       1. Mergi la https://console.cloud.google.com/iam-admin/serviceaccounts/create?project=our-days-2a939
       2. **Service account name:** `ourdays-ai`. Apasă **Create and continue**.
       3. La **Grant this service account access to project**, adaugă trei roluri cu **+ Add another role**:
@@ -44,7 +48,8 @@
       - **Ce se strică fără cele trei roluri:** checklist-ul automat nu primește evenimentele și nu lasă
         nicio urmă, iar funcțiile nu pot citi Firestore.
 
-- [ ] **Pasul 2 — Anthropic: regula care acceptă doar contul de mai sus** (5 minute)
+- [x] **Pasul 2 — Anthropic: regula care acceptă doar contul de mai sus** (5 minute) — *făcut 27.09:
+      regula `ourdaysapp`, workspace-ul `ourdays`, scope `workspace:developer`.*
       1. Mergi la https://platform.claude.com/settings/workload-identity-federation și apasă
          **Connect workload**.
       2. Alege **Google Cloud**. La potrivire completezi:
@@ -62,7 +67,8 @@
       - **Cum arată bine:** regula apare în listă. Testul de conexiune se poate rula după deploy,
         de pe pagina regulii.
 
-- [ ] **Pasul 3 — confirmă-mi deploy-ul** (funcțiile, apoi aplicația web). Eu:
+- [x] **Pasul 3 — confirmă-mi deploy-ul** — *„publică”, 27.09: funcțiile (51 actualizate), apoi hosting-ul.
+      La reguli nu era nimic de publicat.* Eu:
       - pun ID-urile în `functions/.env`;
       - fac deploy-ul;
       - verific cu `live-diff`: contul `ourdays-ai` pe exact cele cinci funcții AI, cheia Gemini pe zero
@@ -70,8 +76,10 @@
 
 - [ ] **Pasul 4 — încearcă, 5 minute**, pe https://our-days-2a939.web.app :
       1. un rezumat AI în chatul unui grup;
-      2. un eveniment nou cu „Asistent AI” la membri: checklist-ul trebuie să apară;
-      3. o categorie sugerată.
+      2. un eveniment nou cu „Asistent AI” la membri (**salvat**): checklist-ul trebuie să apară în
+         câteva secunde. E singura funcție AI pornită de o scriere în baza de date, nu de un buton, deci
+         singura care depinde de rolurile Eventarc și Run Invoker;
+      3. ~~o categorie sugerată~~ — *probat 27.09, împreună cu lista din buton și cardul.*
       - **Cum arată bine:** toate trei răspund. În Admin → AI Center apar rânduri cu
         `claude-opus-5-5` și un cost mai mare decât zero.
 
@@ -82,15 +90,17 @@
       - **Recomandarea mea: $1 pe zi de persoană.** Se schimbă din Admin → AI Center → Budget, după
         deploy (atunci ești iar „owner”).
 
-- [ ] **Pasul 6 — după ce îți confirm că merge:**
-      1. Ștergi cheia Gemini veche din https://aistudio.google.com/apikey. Înainte de confirmare, AI-ul
-         de pe live încă o folosește.
-      2. Secretul vechi `GEMINI_API_KEY` din Secret Manager se poate șterge și el. Deploy-ul îl scoate
-         de pe ultima funcție; eu verific asta înainte să-ți spun.
+- [ ] **Pasul 6 — acum se poate (confirmat 27.09):** nicio funcție nu mai folosește Gemini.
+      1. Ștergi cheia Gemini veche din https://aistudio.google.com/apikey.
+      2. Ștergi secretul vechi `GEMINI_API_KEY` din
+         https://console.cloud.google.com/security/secret-manager?project=our-days-2a939 : bifezi rândul
+         `GEMINI_API_KEY`, apoi **Delete**. Nu mai e legat de nicio funcție; am verificat pe live.
+      - Amândouă sunt ireversibile, deci le faci tu. Dacă le lași, nu se strică nimic, dar cheia rămâne
+        valabilă pentru oricine a văzut-o. A stat luni de zile în clar pe șapte funcții.
 
 ---
 
-## 🆕 Repetare zilnică „doar lucrătoare” / „doar weekend” (26.09) — gata în cod, NEPUBLICAT
+## 🆕 Repetare zilnică „doar lucrătoare” / „doar weekend” (26.09) — PUBLICAT pe 27.09 (funcțiile, apoi hosting-ul)
 
 **Fapt:** în lista „Repetare” apar, după „Zilnic”, două opțiuni noi: **„Zile lucrătoare (lun–vin)”** și
 **„Weekend (sâm–dum)”**. Calendarul, panoul „Recurente” și ecranul evenimentului le arată corect. Am probat
