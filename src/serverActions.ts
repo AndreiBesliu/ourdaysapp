@@ -248,6 +248,20 @@ export interface AiSpend {
   totals: { today: number; week: number; month: number };
   byFeature: { feature: string; calls: number; failures: number; usd: number }[];
   topUsers: { uid: string; calls: number; failures: number; usd: number }[];
+  /**
+   * Per model over the window (functions/src/aiSpendMerge.ts). `calls` are the calls a model
+   * ANSWERED; `usd` is everything charged to it, fallback attempts included. Absent from a server
+   * deployed before 27.09.2026.
+   */
+  byModel?: {
+    model: string; calls: number; failures: number; promptTokens: number; completionTokens: number; usd: number;
+    /** USD per million tokens; null when the model is not in the table (charged at the dearest rate). */
+    pricing: { inPerM: number; outPerM: number } | null;
+    /** The model the app asks for today. */
+    current: boolean;
+  }[];
+  /** What the model rows do not cover: calls from before the per-model record began. */
+  modelUnsplit?: { calls: number; usd: number; days: number };
   /** What the budget actually resolved to, and where it came from — see functions/src/aiLimits.ts. */
   limits: {
     globalDailyUsd: number; userDailyUsd: number; killSwitch: boolean;

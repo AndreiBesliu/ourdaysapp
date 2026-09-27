@@ -246,20 +246,8 @@ describe('the admin screen', () => {
     expect(s.kind === 'lines' && s.lines).toEqual([line]);
   });
 
-  it('the job list is part of the admin console only — its English-only exemption depends on it', () => {
-    // src/utils/i18nCoverage.test.ts skips JobHealthList.tsx because only Admin.tsx renders it.
-    const importers: string[] = [];
-    const walk = (dir: string) => {
-      for (const f of readdirSync(dir, { withFileTypes: true })) {
-        const p = resolve(dir, f.name);
-        if (f.isDirectory()) { if (f.name !== 'node_modules' && f.name !== 'warlord') walk(p); continue; }
-        if (!/\.(ts|tsx)$/.test(f.name) || f.name === 'jobHealth.test.ts') continue;
-        if (/from\s+['"][^'"]*JobHealthList['"]/.test(readFileSync(p, 'utf8'))) importers.push(p.replace(/\\/g, '/').replace(/^.*\/src\//, 'src/'));
-      }
-    };
-    walk(resolve(process.cwd(), 'src'));
-    expect(importers).toEqual(['src/screens/Admin.tsx']);
-  });
+  // That JobHealthList is imported by Admin.tsx alone — its English-only exemption depends on it —
+  // is held in src/utils/i18nCoverage.test.ts, beside the exemption itself.
 
   it('counts warn and fail for the tab badge, and nothing it cannot read', () => {
     expect(jobsNeedingAttention([line, { ...line, name: 'a', status: 'warn' }, { ...line, name: 'b', status: 'fail' }, { ...line, name: 'c', status: 'info' }])).toBe(2);

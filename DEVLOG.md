@@ -10517,3 +10517,61 @@ birthday!” deasupra calendarului).
   split, bundle.
 
 **Publicarea** (hosting singur, împreună cu `214db53` și `0ca1e3f`) așteaptă cuvintele lui Andrei.
+
+## 2026-09-27 · AI Center: costul pe model, cu partea neîmpărțită spusă alături (Task Started)
+
+**Prompt (Andrei):** „ok asa facem” (la recomandarea mea: panoul cu costul AI pe model), apoi, după
+reparația bannerului, „continua”.
+**Model:** Claude Opus 5.5.
+**Plan:**
+- rollup-ul `aiSpendDaily/{zi}/models/{model}` (scris din 27.09) în `adminGetAiSpend`, cu partea din
+  fereastră pe care nu o acoperă;
+- o componentă în AI Center;
+- probe pe emulator.
+
+## 2026-09-27 · AI Center: costul pe model, cu partea neîmpărțită spusă alături (Task Completed)
+
+**Model:** Claude Opus 5.5. **NU s-a publicat:** cere funcții, apoi hosting, la confirmarea lui Andrei.
+
+**Ce s-a schimbat:**
+- **`mergeModelDays`** (în `aiSpendMerge.ts`, pur):
+  - adună rândurile pe model pe toată fereastra: apelurile la care a răspuns modelul, eșecurile, tokenii
+    și costul (inclusiv încercările refuzate de alt model);
+  - spune separat ce NU acoperă: apelurile dintr-o zi peste suma rândurilor ei pe model. O zi numără ca
+    „neîmpărțită” după APELURI, nu după dolari: rândurile se scriu în același batch cu totalul, iar o
+    diferență de dolari într-o zi complet împărțită e rotunjire;
+  - o zi care nu se poate citi face răspunsul incomplet și nu intră la „neîmpărțit”.
+- **`adminGetAiSpend`** citește și `models/` pentru fiecare zi și întoarce:
+  - `byModel`, cu tariful din `MODEL_PRICING` (null dacă modelul lipsește din tabel) și cu modelul în
+    uz marcat;
+  - `modelUnsplit`;
+  - `complete`, care ține cont și de citirile pe model.
+- **`ModelSpendList`** (componenta consolei admin):
+  - rândurile, tariful, marcajul „in use”, rândul „Not split by model”;
+  - „server vechi” și „nimic în fereastră” sunt stări diferite.
+- **Scutirea de i18n pentru componentele consolei:**
+  - e acum o listă (`ADMIN_ONLY_COMPONENTS`);
+  - un singur test ține fiecare componentă la un singur importator, `Admin.tsx`;
+  - testul separat pentru `JobHealthList` s-a mutat acolo, lângă scutire.
+
+**Probe:**
+- **Teste unitare noi, 15:** 8 pentru `mergeModelDays`, 6 pentru stările ecranului și formatare, plus
+  paza pe importatori.
+- **Pe emulator, 4, prin `adminGetAiSpend` real:**
+  - o zi Claude împărțită, o zi Gemini neîmpărțită, iar împărțit + neîmpărțit = totalul săptămânii;
+  - un model lipsă din tabel;
+  - o fereastră goală;
+  - doar pentru admin.
+- **Mutații, 8, toate roșii:** rotunjirea numărată ca neîmpărțită, ziua necitibilă neraportată, tokenii
+  neadunați, tariful pierdut, „in use” pe orice model, serverul vechi citit ca gol, fereastra doar cu
+  neîmpărțite citită ca goală, un ecran de utilizator care importă componenta.
+- **Banc temporar** pe componenta reală, alimentată de calculul real, apoi șters:
+  - cinci stări, luminos și întunecat, la 1280 și 375 px;
+  - 0 erori, 0 depășiri pe orizontală.
+- **Porți:**
+  - `tsc` și `lint-gate`;
+  - **2028** de teste unitare;
+  - **471** pe emulator;
+  - build (Admin +2,9 kB), split, bundle.
+
+**BACKLOG:** punctul „Panoul Admin nu arată încă rollup-ul pe model” e închis de acest commit.

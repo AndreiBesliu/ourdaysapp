@@ -19,11 +19,11 @@ import { fetchAssets, fetchChat, fetchEvents, fetchExpenses } from "./aiSources"
 import { dayRangePeriod, monthPeriod, periodDays, isRealDay } from "./period";
 import {
   charsPerToken, estimateUsdFor, usageOf, withLedger, textOf, jsonOf, unfinishedReason,
-  effectiveLimits, AI_CONFIG_PATH, AI_LIMITS, LIMITS_SOURCE, AI_MODEL,
+  effectiveLimits, AI_CONFIG_PATH, AI_LIMITS, LIMITS_SOURCE, AI_MODEL, MODEL_PRICING,
 } from "./aiLedger";
 import { clampAiLimits, configChangeAllowed, type AiConfigFields } from "./aiLimits";
 import { changedOutsideAdmin } from "./aiConfigProvenance";
-import { mergeRollups } from "./aiSpendMerge";
+import { mergeRollups, mergeModelDays } from "./aiSpendMerge";
 import { readFriendship, authIdentityOf } from "./friendship";
 import { senderStamp, stampedGroupName, trustedEmail } from "./senderIdentity";
 import { overrideRsvps } from "./overrideRsvps";
@@ -3284,11 +3284,20 @@ export const adminGetAiSpend = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, as
     .then((s) => s.docs.map((x) => ({ id: x.id, ...(x.data() as Record<string, unknown>) })))
     .catch((err) => { console.error("aiSpend day read failed", path, err?.message || err); return null; });
 
-  const [featureDays, userDays] = await Promise.all([
+  const [featureDays, userDays, modelDays] = await Promise.all([
     Promise.all(days.map((d) => readDay(`aiSpendDaily/${d}/features`))),
     Promise.all(days.map((d) => readDay(`aiSpendDaily/${d}/users`))),
+    Promise.all(days.map((d) => readDay(`aiSpendDaily/${d}/models`))),
   ]);
-  const complete = !featureDays.includes(null) && !userDays.includes(null);
+  const complete = !featureDays.includes(null) && !userDays.includes(null) && !modelDays.includes(null);
+
+  // Per model, with what the model rows do NOT cover said beside them (see mergeModelDays): the
+  // model rollup starts with the Claude switch, and a window reaching back before it must not read
+  // as if every dollar in it had been Claude's.
+  const split = mergeModelDays(snaps.map((s, i) => ({
+    total: s.exists ? (s.data() as { calls?: unknown; microUsd?: unknown }) : null,
+    models: modelDays[i],
+  })));
 
   // Today against the limit, read from the document the limit is actually enforced against —
   // NOT from the daily rollup. The two differ by whatever is in flight: `holdBudget` pre-charges
@@ -3309,6 +3318,10 @@ export const adminGetAiSpend = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, as
     topUsers: mergeRollups(userDays).slice(0, 20).map((r) => ({
       uid: r.id, calls: r.calls, failures: r.failures, usd: r.usd,
     })),
+    // The rate each row was priced at (null: not in the table, priced at the dearest), and which
+    // model the app asks for today — so a fallback model's row explains itself.
+    byModel: split.rows.map((r) => ({ ...r, pricing: MODEL_PRICING[r.model] ?? null, current: r.model === AI_MODEL })),
+    modelUnsplit: split.unsplit,
     // What is ACTUALLY enforced right now, read the same way `holdBudget` reads it. Reporting
     // the module constants would have shown the environment's values while a saved `aiConfig/live`
     // quietly overrode them — a screen and a bill telling two stories.

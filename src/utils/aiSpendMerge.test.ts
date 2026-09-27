@@ -6,7 +6,7 @@
 // broken.
 
 import { describe, it, expect } from 'vitest';
-import { mergeRollups, type RollupRow } from '../../functions/src/aiSpendMerge';
+import { mergeRollups, mergeModelDays, type RollupRow } from '../../functions/src/aiSpendMerge';
 
 const day = (...rows: Array<[string, number, number?, number?]>): RollupRow[] =>
   rows.map(([id, microUsd, calls, failures]) => ({ id, microUsd, calls: calls ?? 1, failures: failures ?? 0 }));
@@ -109,5 +109,85 @@ describe('the order is total, not incidental', () => {
     const two = mergeRollups([day(['alpha', 100], ['zebra', 100])]);
     expect(one.map((r) => r.id)).toEqual(['alpha', 'zebra']);
     expect(two.map((r) => r.id)).toEqual(one.map((r) => r.id));
+  });
+});
+
+// ── Per model (27.09.2026) ─────────────────────────────────────────────────────────────────
+//
+// The window can reach back before the per-model record began. What the model rows do not cover
+// must be reported beside them, or a month that was mostly Gemini reads as all Claude.
+
+const m = (id: string, microUsd: number, calls: number, promptTokens = 0, completionTokens = 0, failures = 0) =>
+  ({ id, microUsd, calls, failures, promptTokens, completionTokens });
+
+describe('mergeModelDays', () => {
+  it('sums each model across the window, tokens included, dearest first', () => {
+    const out = mergeModelDays([
+      { total: { calls: 2, microUsd: 5_000 }, models: [m('claude-opus-5-5', 5_000, 2, 600, 80)] },
+      { total: { calls: 1, microUsd: 3_000 }, models: [m('claude-opus-5-5', 3_000, 1, 300, 20)] },
+    ]);
+    expect(out.rows).toEqual([
+      { model: 'claude-opus-5-5', calls: 3, failures: 0, promptTokens: 900, completionTokens: 100, usd: 0.008 },
+    ]);
+    expect(out.unsplit).toEqual({ calls: 0, usd: 0, days: 0 });
+    expect(out.complete).toBe(true);
+  });
+
+  it('a day from before the split: its whole total is reported as unsplit', () => {
+    const out = mergeModelDays([
+      { total: { calls: 3, microUsd: 2_000 }, models: [m('claude-opus-5-5', 3_000, 1)] },
+      { total: { calls: 5, microUsd: 7_000 }, models: [] },
+    ]);
+    expect(out.unsplit).toEqual({ calls: 5 + 2, usd: 0.007, days: 2 });
+  });
+
+  it('a transition day (some calls split, some not) reports only the difference', () => {
+    const out = mergeModelDays([
+      { total: { calls: 4, microUsd: 10_000 }, models: [m('claude-opus-5-5', 6_000, 3)] },
+    ]);
+    expect(out.unsplit).toEqual({ calls: 1, usd: 0.004, days: 1 });
+  });
+
+  it('a fully split day with a rounding difference in dollars is NOT unsplit', () => {
+    // Each model row is rounded to micro-dollars on its own; the day total once. Calls decide.
+    const out = mergeModelDays([
+      { total: { calls: 2, microUsd: 3_001 }, models: [m('a', 1_500, 1), m('b', 1_500, 1)] },
+    ]);
+    expect(out.unsplit).toEqual({ calls: 0, usd: 0, days: 0 });
+  });
+
+  it('a declined attempt keeps its cost under the model that ran it, with no call counted', () => {
+    // A server-side fallback: Opus 5.5 declined (billed), another model answered (billed, 1 call).
+    const out = mergeModelDays([
+      { total: { calls: 1, microUsd: 9_000 }, models: [m('claude-opus-5-5', 4_000, 0, 500, 0), m('claude-sonnet-5', 5_000, 1, 500, 300)] },
+    ]);
+    expect(out.rows.map((r) => [r.model, r.calls, r.usd])).toEqual([
+      ['claude-sonnet-5', 1, 0.005],
+      ['claude-opus-5-5', 0, 0.004],
+    ]);
+    expect(out.unsplit.calls).toBe(0);
+  });
+
+  it('an unreadable day makes the answer incomplete — and is not counted as unsplit', () => {
+    const out = mergeModelDays([
+      { total: { calls: 5, microUsd: 7_000 }, models: null },
+      { total: { calls: 1, microUsd: 1_000 }, models: [m('claude-opus-5-5', 1_000, 1)] },
+    ]);
+    expect(out.complete).toBe(false);
+    expect(out.unsplit).toEqual({ calls: 0, usd: 0, days: 0 });
+  });
+
+  it('a day with no total and no rows is nothing; garbage rows are skipped', () => {
+    const out = mergeModelDays([
+      { total: null, models: [] },
+      { total: { calls: 'x', microUsd: -5 }, models: [{ id: '', microUsd: 9 }, m('ok', 1_000, 1, NaN, -1)] as never },
+    ]);
+    expect(out.rows).toEqual([{ model: 'ok', calls: 1, failures: 0, promptTokens: 0, completionTokens: 0, usd: 0.001 }]);
+    expect(out.unsplit).toEqual({ calls: 0, usd: 0, days: 0 });
+  });
+
+  it('breaks a tie by model id', () => {
+    const out = mergeModelDays([{ total: { calls: 2, microUsd: 2 }, models: [m('zeta', 1, 1), m('alpha', 1, 1)] }]);
+    expect(out.rows.map((r) => r.model)).toEqual(['alpha', 'zeta']);
   });
 });

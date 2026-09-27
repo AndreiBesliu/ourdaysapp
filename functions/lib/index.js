@@ -3168,11 +3168,19 @@ exports.adminGetAiSpend = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHE
     const readDay = (path) => db.collection(path).get()
         .then((s) => s.docs.map((x) => (Object.assign({ id: x.id }, x.data()))))
         .catch((err) => { console.error("aiSpend day read failed", path, (err === null || err === void 0 ? void 0 : err.message) || err); return null; });
-    const [featureDays, userDays] = await Promise.all([
+    const [featureDays, userDays, modelDays] = await Promise.all([
         Promise.all(days.map((d) => readDay(`aiSpendDaily/${d}/features`))),
         Promise.all(days.map((d) => readDay(`aiSpendDaily/${d}/users`))),
+        Promise.all(days.map((d) => readDay(`aiSpendDaily/${d}/models`))),
     ]);
-    const complete = !featureDays.includes(null) && !userDays.includes(null);
+    const complete = !featureDays.includes(null) && !userDays.includes(null) && !modelDays.includes(null);
+    // Per model, with what the model rows do NOT cover said beside them (see mergeModelDays): the
+    // model rollup starts with the Claude switch, and a window reaching back before it must not read
+    // as if every dollar in it had been Claude's.
+    const split = (0, aiSpendMerge_1.mergeModelDays)(snaps.map((s, i) => ({
+        total: s.exists ? s.data() : null,
+        models: modelDays[i],
+    })));
     // Today against the limit, read from the document the limit is actually enforced against —
     // NOT from the daily rollup. The two differ by whatever is in flight: `holdBudget` pre-charges
     // a ceiling before the call and reconciles downward after it, so this one is the number that
@@ -3191,6 +3199,10 @@ exports.adminGetAiSpend = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHE
         topUsers: (0, aiSpendMerge_1.mergeRollups)(userDays).slice(0, 20).map((r) => ({
             uid: r.id, calls: r.calls, failures: r.failures, usd: r.usd,
         })),
+        // The rate each row was priced at (null: not in the table, priced at the dearest), and which
+        // model the app asks for today — so a fallback model's row explains itself.
+        byModel: split.rows.map((r) => { var _a; return (Object.assign(Object.assign({}, r), { pricing: (_a = aiLedger_1.MODEL_PRICING[r.model]) !== null && _a !== void 0 ? _a : null, current: r.model === aiLedger_1.AI_MODEL })); }),
+        modelUnsplit: split.unsplit,
         // What is ACTUALLY enforced right now, read the same way `holdBudget` reads it. Reporting
         // the module constants would have shown the environment's values while a saved `aiConfig/live`
         // quietly overrode them — a screen and a bill telling two stories.

@@ -101,8 +101,6 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     alt model plătește ambele încercări. Decontarea le încasează pe amândouă (`costOf`), dar rezervarea
     acoperă una singură. Sub concurență, bugetul poate fi depășit cu cel mult o încercare. Se lasă
     așa: fallback-urile ar trebui să fie rare. De reluat dacă ledger-ul arată altceva.
-  - **Panoul Admin nu arată încă rollup-ul pe model** (`aiSpendDaily/{zi}/models/{model}`). Datele se
-    scriu de la prima zi, ca istoria să poată fi separată; ecranul e un pas separat.
   - **Confidențialitatea:** rezumatul grupului trimite până la 50 de mesaje din chat, iar sugestia de
     card trimite numele cardurilor din portofel. Până pe 26.09 mergeau la Google, acum merg la
     Anthropic. Aplicația n-are o pagină de confidențialitate care să spună asta. Decizia e a lui Andrei.

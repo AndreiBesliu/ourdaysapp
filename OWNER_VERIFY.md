@@ -100,6 +100,22 @@
 
 ---
 
+## 🆕 AI Center → „By model” (27.09) — gata în cod, NEPUBLICAT
+
+**Fapt:**
+- Secțiunea arată ce model a răspuns, câte apeluri, câți tokeni și cât a costat. Azi e Claude Opus 5.5;
+  dacă vreodată un apel refuzat e servit de alt model, acela apare separat.
+- Împărțirea pe model există abia de pe 27.09. Tot ce e mai vechi în fereastră (Gemini) apare pe un rând
+  separat, „Not split by model”, ca suma să se potrivească cu totalurile de deasupra.
+
+- [ ] **După publicare: Admin → AI Center → „By model”** (1 minut)
+      - **Cum arată bine:** un rând `claude-opus-5-5`, marcat „in use”, cu tariful „$4 / $20 per million
+        tokens”, plus rândul „Not split by model” pentru zilele cu Gemini.
+      - **Ce e greșit:** textul „The per-model split appears after the next functions deploy” înseamnă că
+        funcțiile n-au plecat.
+
+---
+
 ## 🆕 Bannerul „Add your birthday!” (27.09) — reparat în cod, NEPUBLICAT
 
 **Fapt:** pe server, documentul tău are ziua de naștere ȘI bannerul închis (`hideBirthdayPrompt: true`).

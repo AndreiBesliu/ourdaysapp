@@ -12,6 +12,7 @@ import { useDialog } from '../hooks/useDialog';
 import { errorStatusOf, inErrorState, landingErrorFilter, type ErrorFilter } from '../utils/errorFilterState';
 import { jobsNeedingAttention } from '../utils/jobHealthView';
 import JobHealthList from '../components/JobHealthList';
+import ModelSpendList from '../components/ModelSpendList';
 import {
   adminCheck, adminGetStats, adminListProfiles, adminListAdmins, adminSetAdmin,
   adminGetHealth, adminSetErrorStatus, adminGetAiLedger, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
@@ -1192,6 +1193,16 @@ export default function Admin() {
                 format={usd}
               />
             ) : null}
+
+            {/* ── By model ─────────────────────────────────────────────────────────────────
+                Which model answered, with what tokens, for how much — Claude since 27.09.2026,
+                Gemini before it, and a fallback model if one ever served a declined call. The
+                part of the window the per-model record does not cover is shown beside it. */}
+            {aiSpend && (
+              <Section icon={<TrendingUp className="w-4 h-4 text-primary" />} title={`By model · ${aiSpend.days ?? aiDays} days`}>
+                <ModelSpendList spend={aiSpend} format={usd} />
+              </Section>
+            )}
 
             {/* ── By person ────────────────────────────────────────────────────────────────
                 Summed across every day in the window, from every row — not from thirty truncated

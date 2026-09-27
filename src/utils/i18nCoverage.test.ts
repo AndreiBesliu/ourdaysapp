@@ -65,10 +65,14 @@ const SRC = join(__dirname, '..');
 
 /** The game is a submodule with its own English-only decision; admin is Andrei's own console. */
 const SKIP_DIRS = new Set(['warlord', 'warlordPvp', 'warlordAdmin', 'node_modules']);
-// `JobHealthList.tsx` is a piece of the admin console (its Health tab) kept in its own file so it
-// could be rendered outside the login. src/utils/jobHealth.test.ts holds it to one importer,
-// Admin.tsx, so this exemption cannot quietly spread to a screen users see.
-const SKIP_FILES = new Set(['Admin.tsx', 'Warlord.tsx', 'JobHealthList.tsx']);
+/**
+ * Pieces of the admin console kept in files of their own so they can be rendered outside the login
+ * (27.09.2026). They share Admin.tsx's exemption only while Admin.tsx is the one thing that imports
+ * them — held by the test at the end of this file, so the exemption cannot quietly spread to a
+ * screen users see.
+ */
+const ADMIN_ONLY_COMPONENTS = ['JobHealthList.tsx', 'ModelSpendList.tsx'];
+const SKIP_FILES = new Set(['Admin.tsx', 'Warlord.tsx', ...ADMIN_ONLY_COMPONENTS]);
 
 /**
  * Text that is meant to stay exactly as written.
@@ -303,4 +307,29 @@ describe('no user-facing screen ships a hardcoded string', () => {
     }
     expect(offenders, `hardcoded strings:\n${offenders.join('\n')}`).toEqual([]);
   });
+});
+
+describe('the admin-only components keep the exemption honest', () => {
+  // Each shares Admin.tsx's English-only exemption because only the admin console renders it. The
+  // day another screen imports one, its English reaches people, and this goes red.
+  function allSources(dir: string, out: string[] = []): string[] {
+    for (const name of readdirSync(dir)) {
+      if (name === 'node_modules' || name === 'warlord') continue;
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) allSources(p, out);
+      else if (/\.(ts|tsx)$/.test(name) && !/\.test\.tsx?$/.test(name)) out.push(p);
+    }
+    return out;
+  }
+  const files = allSources(SRC);
+
+  for (const component of ADMIN_ONLY_COMPONENTS) {
+    it(`${component} is imported by Admin.tsx alone`, () => {
+      const base = component.replace(/\.tsx$/, '');
+      const importers = files
+        .filter((f) => new RegExp(`from\\s+['"][^'"]*/${base}['"]`).test(readFileSync(f, 'utf8')))
+        .map((f) => f.slice(SRC.length + 1).split(sep).join('/'));
+      expect(importers).toEqual(['screens/Admin.tsx']);
+    });
+  }
 });
