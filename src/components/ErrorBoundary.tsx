@@ -3,6 +3,7 @@ import { reportError } from '../reportError';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { isStaleChunkError } from '../utils/appVersion';
+import { describeThrown } from '../utils/describeThrown';
 
 interface State { hasError: boolean; reloadFailed: boolean; staleChunk: boolean }
 
@@ -14,9 +15,9 @@ const TRIED_KEY = 'app_boundary_reloaded';
 export default class ErrorBoundary extends React.Component<{ children: React.ReactNode }, State> {
   state: State = { hasError: false, reloadFailed: false, staleChunk: false };
 
-  static getDerivedStateFromError(error: Error): Partial<State> {
+  static getDerivedStateFromError(error: unknown): Partial<State> {
     // The error used to be dropped on the floor here, which is why every crash looked alike.
-    return { hasError: true, staleChunk: isStaleChunkError(error?.message) };
+    return { hasError: true, staleChunk: isStaleChunkError(describeThrown(error).message) };
   }
 
   componentDidMount() { this.clearMarkIfHealthy(); }
@@ -37,11 +38,15 @@ export default class ErrorBoundary extends React.Component<{ children: React.Rea
     window.location.reload();
   };
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
+  componentDidCatch(error: unknown, info: React.ErrorInfo) {
     try { this.setState({ reloadFailed: sessionStorage.getItem(TRIED_KEY) === '1' }); } catch { /* private mode */ }
-    reportError(error?.message || 'Render error', {
-      stack: `${error?.stack || ''}\n${info?.componentStack || ''}`.slice(0, 4000),
-      context: isStaleChunkError(error?.message) ? 'StaleChunk' : 'ErrorBoundary',
+    // Whatever was thrown, described — not `error.message || 'Render error'`, which logged three
+    // crashes on 20.09.2026 as "Render error" with nothing but the component stack. See
+    // utils/describeThrown.ts; an Error with a message is reported exactly as before.
+    const thrown = describeThrown(error);
+    reportError(thrown.message, {
+      stack: `${thrown.stack || ''}\n${info?.componentStack || ''}`.slice(0, 4000),
+      context: isStaleChunkError(thrown.message) ? 'StaleChunk' : 'ErrorBoundary',
     });
   }
 

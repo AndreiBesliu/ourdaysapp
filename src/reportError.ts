@@ -1,5 +1,6 @@
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app, auth } from './firebase';
+import { describeThrown } from './utils/describeThrown';
 
 const seen = new Map<string, number>();
 let windowStart = 0;
@@ -30,14 +31,19 @@ export function reportError(message: string, opts?: { stack?: string; context?: 
   } catch { /* the reporter must never break the app */ }
 }
 
-// Global capture for uncaught errors + unhandled promise rejections.
+// Global capture for uncaught errors + unhandled promise rejections. What was thrown is described
+// by utils/describeThrown.ts: `String(reason)` turned every object into "[object Object]", and a
+// window error with no message was logged as the word "window.onerror".
 export function installGlobalErrorHandlers() {
   if (typeof window === 'undefined') return;
   window.addEventListener('error', (e) => {
-    reportError(e.message || 'window.onerror', { stack: (e.error as any)?.stack, context: 'window.onerror' });
+    const thrown = describeThrown(e.error);
+    // The browser's own message first ("Uncaught TypeError: …"): the groups already logged are
+    // keyed on it. The thrown value speaks only where the browser said nothing.
+    reportError(e.message || thrown.message, { stack: thrown.stack || undefined, context: 'window.onerror' });
   });
   window.addEventListener('unhandledrejection', (e) => {
-    const r: any = e.reason;
-    reportError(r?.message || String(r) || 'unhandledrejection', { stack: r?.stack, context: 'unhandledrejection' });
+    const thrown = describeThrown(e.reason);
+    reportError(thrown.message, { stack: thrown.stack || undefined, context: 'unhandledrejection' });
   });
 }

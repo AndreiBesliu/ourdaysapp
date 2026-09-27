@@ -114,7 +114,8 @@ pe ecran.
 - rezumatul de erori rulează prima dată la 21:00, ora României (18:00 UTC);
 - în jurnale, 0 erori de la deploy.
 
-- [ ] **După deploy: Admin → Health → „Scheduled jobs”** (1 minut)
+- [x] **După deploy: Admin → Health → „Scheduled jobs”** (1 minut) — *verificat de tine pe 27.09,
+      cu o captură: memento-urile și jocurile verzi, rezumatul gri până la prima lui oră.*
       - **Cum arată bine:** trei rânduri. „Event reminders” și „Idle arcade sessions” sunt verzi, cu
         „Ran … ago” și ce au făcut. „Error digest” poate fi gri („Has not run yet”) până la următoarea
         oră fixă: 03:00, 09:00, 15:00 sau 21:00, ora României (după 25 octombrie, cu o oră mai devreme).

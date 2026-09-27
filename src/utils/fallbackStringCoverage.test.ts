@@ -51,8 +51,12 @@ const STORED_NOT_SHOWN = new Set([
   'components/AddEventModal.tsx::Checklist Item',
   // A symbology name compared against by code (EAN_13, UPC_A …), never shown.
   'components/BarcodeScanner.tsx::UNKNOWN',
-  // The message that goes to the error log, which I read in English.
-  'components/ErrorBoundary.tsx::Render error',
+  // What the error log says about a thrown value, which I read in English. (ErrorBoundary's
+  // "Render error" was exempted here until 27.09, when the boundary started describing what was
+  // actually thrown instead — utils/describeThrown.ts.)
+  'utils/describeThrown.ts::Error',
+  'utils/describeThrown.ts::Thrown an empty string',
+  'utils/describeThrown.ts::Promise',
   // Written as `fromName` on a friend request and read by the RECIPIENT.
   'components/GroupSettingsModal.tsx::Friend',
   // The three in plain `.ts` modules, brought into scope on 19.09. All three go to a log or to

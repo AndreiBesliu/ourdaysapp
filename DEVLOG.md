@@ -10362,3 +10362,63 @@ Ultima rulare a rezumatului sub vechiul „every 6 hours” a fost la 14:45, adi
 internă a API-ului de loguri, deci nu contează ca probă. Proba sunt marcajele.
 
 **Rămâne la Andrei:** o privire în Admin → Health → „Scheduled jobs” (`OWNER_VERIFY.md`).
+
+## 2026-09-27 · Erorile de randare spun ce s-a aruncat, nu „Render error” (Task Started)
+
+**Prompt (Andrei):** o captură a Admin → Health, fără text: „Scheduled jobs” corect și, dedesubt, grupul
+„Render error” pe /wallet, cu statusul „Seen”.
+**Model:** Claude Opus 5.5.
+**Plan:** să citesc cele două grupuri deschise din panou și să repar ce le face imposibil de diagnosticat.
+
+## 2026-09-27 · Erorile de randare spun ce s-a aruncat, nu „Render error” (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Ce era, citit din `errorLogs` (fără uid sau email):**
+- **„Render error” pe /wallet, 20.09, 07:31–07:32 UTC:**
+  - 3 rânduri, o persoană;
+  - mesajul e literal „Render error”, iar stiva e doar stiva de componente (`at nF`, din bundle-ul
+    `index-BqIEpETR` de atunci).
+  - Cauza pierderii: `ErrorBoundary` raporta `error.message || 'Render error'`, iar ce s-a aruncat nu
+    era un `Error`. Astfel se pierdea tocmai faptul care ar fi numit bug-ul. În plus, orice astfel de
+    crash ar fi ajuns în ACELAȘI grup, unde bug-uri diferite se contopesc.
+  - Nu s-a mai repetat de o săptămână, iar Wallet-ul s-a schimbat de atunci. Reconstruirea build-ului
+    din 20.09, ca să aflu ce e `nF`, nu merită pentru o eroare singulară.
+- **„Missing or insufficient permissions” la cardurile din checklist, 18.09:** 2 rânduri, o persoană.
+  E limitarea cunoscută și scrisă în cod: cardurile se citesc doar de proprietar, evenimentul de grup
+  de toți membrii. Lărgirea citirii e o decizie amânată a lui Andrei. Nu s-a mai repetat.
+
+**Reparat:**
+- **`src/utils/describeThrown.ts`** (pur) descrie orice valoare aruncată:
+  - un șir, ca atare;
+  - `null` / `undefined`, numite;
+  - un Promise, numit;
+  - un obiect de tip eroare (excepția unei biblioteci, alt realm), cu numele și mesajul lui;
+  - un obiect oarecare, cu un extras JSON, nu „[object Object]”;
+  - primitivele.
+  - **Un `Error` cu mesaj e descris exact ca înainte**, deci grupurile existente din panou își păstrează
+    amprenta.
+- **Unde se folosește:**
+  - `ErrorBoundary`, atât raportul, cât și detectarea chunk-urilor vechi;
+  - `unhandledrejection`;
+  - `window.onerror`, unde mesajul browserului rămâne primul.
+- **`fallbackStringCoverage.test.ts`:** scutirea pentru „Render error” a ieșit, fiindcă textul nu mai
+  există. Cele trei texte noi, doar pentru jurnal, sunt scutite cu motivul lor.
+
+**Probe:**
+- **Teste noi, 19:**
+  - `describeThrown.test.ts` (10);
+  - `ErrorBoundary.test.ts` (4), pe clasa reală, cu raportorul spionat;
+  - `reportError.test.ts` (5), pe handler-ele globale reale, cu un `window` și un callable simulate.
+- **Mutații, 6, toate roșii:** întoarcerea la „Render error”, prefixul pe șiruri, mesajul `Error`
+  rescris, `String(reason)`, cuvântul „window.onerror”, obiectele fără conținut.
+- **Porți:**
+  - `tsc` și `lint-gate`;
+  - **1993** de teste unitare (de la 1974);
+  - build, split, bundle.
+  - Nimic pe server, deci suita de emulator nu e atinsă.
+
+**OWNER_VERIFY:** verificarea „Scheduled jobs” e bifată, pe baza capturii lui Andrei.
+
+**NU s-a publicat:** e doar client, deci doar hosting. Pe server nu s-a schimbat nimic de la deploy-ul de
+azi. CLAUDE.md cere, pentru hosting singur, acordul explicit al lui Andrei.
