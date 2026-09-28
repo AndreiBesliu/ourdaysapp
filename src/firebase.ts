@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { getAuth } from "firebase/auth";
-import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getMessaging } from "firebase/messaging";
 
@@ -38,15 +38,23 @@ if (typeof window !== "undefined" && appCheckSiteKey) {
 }
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
 
-// Enable Offline Mode
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code == 'failed-precondition') {
-    console.warn('Multiple tabs open, offline mode disabled.');
-  } else if (err.code == 'unimplemented') {
-    console.warn('Current browser does not support offline mode.');
-  }
+// ── The local cache: persistent, and shared by every tab ─────────────────────────────────────
+//
+// It was `enableIndexedDbPersistence`, which gives the cache to ONE tab. Every other tab of the app
+// fell back to memory: no copy of anything at start, only the SDK's warning in the console
+// ("Failed to obtain exclusive access to the persistence layer"). Reproduced 28.09.2026 against
+// the emulator, two tabs, this very file: the second tab's first snapshot waited for the server.
+// The same day, Andrei's retraction reports showed, at every start, a local copy of his account
+// document without the birthday it has had on the server since the day before — consistent with a
+// tab that has no persistent cache, though that part is inferred, not measured.
+//
+// The multi-tab manager lets every tab share one IndexedDB cache; the network is held by one of
+// them and the others follow through it. Where IndexedDB is unavailable the SDK falls back to
+// memory by itself, as before. It also ends the deprecation warning `enableIndexedDbPersistence`
+// printed on every load.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });
 
 export const storage = getStorage(app);

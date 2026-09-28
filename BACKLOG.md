@@ -150,9 +150,6 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   `/vite.svg`, un fișier care nu există. Hosting-ul răspunde la el cu `index.html`, deci instalarea pe
   ecranul de start n-are iconiță. Găsit de verificarea de după deploy (25.09). Cere iconițe reale,
   deci o decizie vizuală.
-- **Consola arată la fiecare încărcare un avertisment de depreciere:** `enableIndexedDbPersistence`.
-  E inofensiv azi. Înlocuitorul (`persistentLocalCache`) schimbă felul în care se deschide Firestore,
-  deci merită o felie a lui, cu probă pe mai multe taburi.
 - **Refuzurile de reguli nu lasă urme pe server.** Proiectul n-are log-uri de acces la date, iar
   Hosting nu exportă log-uri de cereri, deci o regulă care refuză un utilizator logat sau un chunk
   care nu se încarcă se vede doar dacă clientul raportează în `errorLogs`. Log-urile de acces la date

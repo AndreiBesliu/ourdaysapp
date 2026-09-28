@@ -10921,3 +10921,42 @@ Firestore nou).
 - tsc, poarta de lint, `npm test` (2071) și build: toate verzi.
 
 **Nepublicat.** Doar hosting (nicio funcție, regulă sau index schimbat).
+
+## 2026-09-28 · Cache-ul Firestore comun tuturor taburilor (Task Started)
+
+**Prompt (Andrei):** „acum 1 si 2” (al doilea: cache-ul Firestore nou).
+**Model:** Claude Opus 5.5.
+**Plan:** `enableIndexedDbPersistence` → `persistentLocalCache` cu `persistentMultipleTabManager`. Proba
+se face cu două taburi reale, cu `src/firebase.ts` real, pe emulator, cu martor pe codul vechi.
+
+## 2026-09-28 · Cache-ul Firestore comun tuturor taburilor (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Ce s-a schimbat:** `src/firebase.ts` deschide Firestore cu
+`initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) })`.
+Dispar `getFirestore` și `enableIndexedDbPersistence`.
+
+**Proba** (emulator Firestore pe portul lui, 8391, proiect demo, TEMP propriu; pagina importă
+`src/firebase.ts` real, cu o singură linie adăugată de banc după `db`: `connectFirestoreEmulator`):
+- Tabul A scrie `probe/<id>` și `probe/<id>-solo`. Tabul B, deschis cât timp A e deschis, ascultă
+  `probe/<id>` și cere `probe/<id>-solo`, pe care nu l-a atins niciodată, **doar din cache**.
+
+| | tabul A | tabul B: avertismente | B: `-solo` din cache |
+|---|---|---|---|
+| **vechi** (`HEAD`, martor) | avertisment de depreciere | depreciere + „Falling back to memory cache: failed-precondition” | **`unavailable`** |
+| **nou** | niciunul | niciunul | **găsit** |
+
+- **Nou:** primul snapshot al lui B vine la 12 ms, din cache-ul comun. Pe vechi venea la 31–32 ms, de la
+  server.
+- **Legătura cu ziua de naștere, dedusă, nemăsurată:** rapoartele lui Andrei arătau la fiecare pornire o
+  copie locală fără ziua de naștere. Asta se potrivește cu un tab fără cache persistent.
+- **`firestoreCache.test.ts`** (3 teste) fixează configurația și verifică că nicio altă parte din `src/`
+  nu deschide Firestore. Trei mutații, toate prinse.
+- **DriveFS a rescris `firebase.ts` cu versiunea MUTATĂ** (F2, `memoryLocalCache`) la un minut după o
+  restaurare verificată prin sha. L-a prins `tsc -b` din porțile de după mutații. Fișierul a fost pus
+  înapoi din copia salvată (sha `8f437ad4…`), iar porțile complete au trecut din nou. A doua apariție,
+  după 27.09 pe Kinstead (memoria despre Drive e actualizată).
+- tsc, poarta de lint, `npm test` (2074), build, `check-bundle` și `check-split`: toate verzi.
+
+**Nepublicat.** Doar hosting.
