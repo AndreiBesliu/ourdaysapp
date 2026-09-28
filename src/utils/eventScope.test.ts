@@ -7,7 +7,7 @@
 // neither of the two people who had joined B&D since.
 
 import { describe, it, expect } from 'vitest';
-import { homeTabFor, maySee, showsOnTab, eventsForTab, pendingInvitesFor, PERSONAL } from './eventScope';
+import { homeTabFor, maySee, showsOnTab, eventsForTab, PERSONAL } from './eventScope';
 
 const ME = 'andrei', EMILIA = 'emilia', COACH = 'coach', MARIA = 'maria';
 const GYM = 'g_gym', FAMILY = 'g_family', BD = 'g_bd';
@@ -134,17 +134,12 @@ describe('invitations', () => {
   const pending = { ownerId: EMILIA, inviteeId: ME, inviteStatus: 'pending' };
   const accepted = { ownerId: EMILIA, inviteeId: ME, inviteStatus: 'accepted' };
 
-  it('a pending invitation belongs in the strip, not on the grid', () => {
+  it('a pending invitation is not on the grid', () => {
     expect(showsOnTab(pending, viewing(PERSONAL))).toBe(false);
-    expect(pendingInvitesFor([pending, accepted, personalTask], ME)).toEqual([pending]);
   });
 
   it('an accepted one appears on the calendar', () => {
     expect(showsOnTab(accepted, viewing(PERSONAL))).toBe(true);
-  });
-
-  it('somebody else’s pending invitation is not mine to list', () => {
-    expect(pendingInvitesFor([{ ownerId: ME, inviteeId: EMILIA, inviteStatus: 'pending' }], ME)).toEqual([]);
   });
 });
 

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { X, Settings2, Edit2, Check, Trash2, LogOut, UserMinus, UserPlus, AlertTriangle } from 'lucide-react';
 import { db, auth } from '../firebase';
 import { doc, updateDoc, arrayRemove, collection, addDoc } from 'firebase/firestore';
-import { deleteGroupCascade } from '../serverActions';
 import { reportError } from '../reportError';
 import { liveDoc } from '../utils/liveQuery';
 import { useDialog } from '../hooks/useDialog';
@@ -18,18 +17,22 @@ interface GroupSettingsModalProps {
   isOwner: boolean;
   userMap: Record<string, any>;
   members: string[];
-  onSuccess: () => void;
+  /**
+   * Leave the group, or delete it for its owner — in LeaveGroupModal, which asks which of your
+   * events to keep. This modal used to do both itself, with a confirm and no keep-list, while
+   * LeaveGroupModal was mounted and opened by nothing (28.09.2026, "UI fals" in the backlog).
+   */
+  onLeaveOrDelete: () => void;
 }
 
 export default function GroupSettingsModal({
-  isOpen, onClose, groupId, groupName, isOwner, userMap, members, onSuccess
+  isOpen, onClose, groupId, groupName, isOwner, userMap, members, onLeaveOrDelete
 }: GroupSettingsModalProps) {
   const { language } = useThemeStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [editedName, setEditedName] = useState(groupName);
   const [isEditingName, setIsEditingName] = useState(false);
-  const [confirmDanger, setConfirmDanger] = useState(false);
   const [friendUids, setFriendUids] = useState<Set<string>>(new Set());
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
 
@@ -42,7 +45,6 @@ export default function GroupSettingsModal({
       setEditedName(groupName);
       setIsEditingName(false);
       setError('');
-      setConfirmDanger(false);
       setSentTo(new Set());
     }
   }, [isOpen, groupName]);
@@ -106,35 +108,6 @@ export default function GroupSettingsModal({
       await updateDoc(doc(db, 'groups', groupId), {
         members: arrayRemove(memberId)
       });
-    } catch (err) {
-      setError(t('actionFailed', language));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteOrLeave = async () => {
-    if (!auth.currentUser) return;
-    setLoading(true);
-    setError('');
-    try {
-      if (isOwner) {
-        // One server call, for the same reason LeaveGroupModal now uses it: `allow delete` on
-        // events is owner-only, so a client loop over every event in the group threw on the first
-        // one belonging to another member — after destroying some of the owner's own.
-        //
-        // This entry point never offered a keep-list at all, so it passes none: the caller's own
-        // group events go, and every other member's is re-parented to personal rather than
-        // deleted. Deleting your group was never a licence to delete their calendar.
-        await deleteGroupCascade({ groupId });
-      } else {
-        // Leave group
-        await updateDoc(doc(db, 'groups', groupId), {
-          members: arrayRemove(auth.currentUser.uid)
-        });
-      }
-      onSuccess();
-      onClose();
     } catch (err) {
       setError(t('actionFailed', language));
     } finally {
@@ -251,44 +224,19 @@ export default function GroupSettingsModal({
           <section>
             <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">{t('dangerZone', language)}</p>
             <div className="rounded-xl border border-red-200 dark:border-red-500/20 overflow-hidden">
-              {!confirmDanger ? (
-                <button
-                  onClick={() => setConfirmDanger(true)}
-                  className="w-full p-4 flex items-center gap-3 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left"
-                >
-                  {isOwner ? <Trash2 className="w-5 h-5 shrink-0" /> : <LogOut className="w-5 h-5 shrink-0" />}
-                  <div>
-                    <p className="font-semibold text-sm">{isOwner ? t('deleteGroup', language) : t('leaveGroup', language)}</p>
-                    <p className="text-xs text-red-400/80 mt-0.5">
-                      {isOwner ? t('deleteGroupDesc', language) : t('leaveGroupDesc', language)}
-                    </p>
-                  </div>
-                </button>
-              ) : (
-                <div className="p-4 bg-red-50 dark:bg-red-500/10">
-                  <div className="flex items-start gap-2 mb-3">
-                    <AlertTriangle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
-                    <p className="text-sm text-red-600 dark:text-red-400 font-medium">
-                      {t('confirmCannotUndo', language)}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => setConfirmDanger(false)} className="flex-1 py-2 text-sm font-medium bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-600 transition-colors">
-                      {t('cancel', language)}
-                    </button>
-                    <button
-                      onClick={handleDeleteOrLeave}
-                      disabled={loading}
-                      className="flex-1 py-2 text-sm font-medium bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {loading
-                        ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        : isOwner ? t('deleteGroup', language) : t('leaveGroup', language)
-                      }
-                    </button>
-                  </div>
+              {/* The confirmation is LeaveGroupModal itself: it lists your events and asks which to keep. */}
+              <button
+                onClick={onLeaveOrDelete}
+                className="w-full p-4 flex items-center gap-3 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left"
+              >
+                {isOwner ? <Trash2 className="w-5 h-5 shrink-0" /> : <LogOut className="w-5 h-5 shrink-0" />}
+                <div>
+                  <p className="font-semibold text-sm">{isOwner ? t('deleteGroup', language) : t('leaveGroup', language)}</p>
+                  <p className="text-xs text-red-400/80 mt-0.5">
+                    {isOwner ? t('deleteGroupDesc', language) : t('leaveGroupDesc', language)}
+                  </p>
                 </div>
-              )}
+              </button>
             </div>
           </section>
 

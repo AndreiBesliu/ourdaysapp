@@ -10984,3 +10984,64 @@ regulile n-au nicio schimbare de la ultima publicare completă.
 - Chunk-ul comun `jsx-runtime-BI4sJEyo` (unde stă SDK-ul Firestore) conține codul pentru mai multe
   taburi (`firestore_clients`).
 - Chunk-ul comun NU mai conține textul de depreciere, care trăia doar în `enableIndexedDbPersistence`.
+
+## 2026-09-28 · UI fals: categorii, plecarea din grup, pull-to-refresh, invitații la evenimente (Task Started)
+
+**Prompt (Andrei):** la întrebarea ce iau din BACKLOG: „Curățenie UI fals (Recomandat)”.
+**Model:** Claude Opus 5.5.
+**Plan:** cele patru puncte din „UI mort sau fals”, fiecare măsurat sau probat, doar în client.
+
+## 2026-09-28 · UI fals: categorii, plecarea din grup, pull-to-refresh, invitații la evenimente (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**1. Categoriile.**
+- **Grila, lista zilei și „Today's Overview”** aveau fiecare un `switch` peste `family`, `appointments` și
+  `important`. Formularul și clasificatorul AI de pe server salvează însă `work`, `family_time`, `chores`,
+  `health`, `other`.
+- **Măsurat pe live:** 27 de evenimente, repartizate `chores` 7, `other` 8, `work` 5, `health` 5,
+  `family_time` 2. Niciunul n-are `family` sau `appointments`, deci 7 evenimente apăreau ca cercuri gri.
+- **Acum `src/utils/eventCategories.ts` e sursa unică** (`categoryIcon`, `eventTint`).
+  - Culorile vin din cele zece culori literale existente, deci Tailwind le vede.
+  - „Group Time” e verde smarald, cu `Users`; „Health” e roz, cu `HeartPulse`.
+  - Zilele de naștere păstrează steaua violet (`BIRTHDAY_CATEGORY_ID`).
+- **Un test ține paritatea în trei locuri:** lista de id-uri = `CATEGORIES` din formular = `validCategories`
+  de pe server.
+
+**2. Plecarea din grup.**
+- `LeaveGroupModal` (listează evenimentele tale și te întreabă pe care le păstrezi) era montat, dar nu-l
+  deschidea nimic.
+- Singurul drum vizibil era butonul din setările grupului, care pleca sau ștergea fără nicio alegere.
+  `eventScope.ts` pornea de la ideea că plecarea trece prin `LeaveGroupModal`.
+- Acum butonul din setări deschide `LeaveGroupModal`, iar setările nu mai pleacă și nu mai șterg singure.
+- **Pe banc, fereastra reală, în română:**
+  - listează doar cele 2 evenimente care te privesc (din 3), sortate;
+  - plecare cu un eveniment debifat: se copiază doar cel bifat (`groupId: null`, tu proprietar și singurul
+    asignat), apoi `members: arrayRemove(tu)`;
+  - proprietar: un singur apel `deleteGroupCascade({ groupId, keepEventIds })`, fără scrieri din client.
+- Copia trece regulile: un test de emulator există deja (`rules-tests/events.test.ts:359`), iar serverul
+  citește `keepEventIds`.
+
+**3. Pull-to-refresh, scos.**
+- Se rotea o secundă (un `setTimeout`) și nu reîmprospăta nimic, deși tot ecranul e oricum pe ascultători
+  live.
+- Ținea și un `transform` permanent pe `<main>`, care devenea astfel containerul oricărui element `fixed`
+  din el.
+
+**4. Invitațiile la evenimente, partea de client, scoase.**
+- `where('inviteeId', '==', uid)` asculta mereu un rezultat gol: nimic nu scrie `inviteeId`, iar regulile
+  le numesc funcție rămasă de izbeliște.
+- S-au scos cardul „pending event invites”, răspunsul accept/refuz, `pendingInvitesFor` și cheile
+  `pendingInvite` / `pendingInvitePlural` (6 limbi).
+- Un listener Firestore mai puțin la fiecare schimbare de tab.
+
+**Probe:**
+- `eventCategories.test.ts` (9) și `falseUi.test.ts` (6). Nouă mutații reale, toate prinse.
+  - E6 a supraviețuit întâi: regexul `<main…>` găsea `<main>` dintr-un comentariu. Testul a fost strâns
+    pe `<main className=` și a prins-o apoi.
+  - E5 a fost nulă la prima rulare (subșir de două ori) și a fost reluată corect.
+- Fișierele au fost verificate prin sha față de instantaneele de dinainte de mutații, atât înainte, cât
+  și după porțile complete (DriveFS).
+- tsc, poarta de lint, `npm test` (2088), build, `check-bundle` și `check-split`: toate verzi.
+
+**Nepublicat.** Doar hosting (nicio funcție și nicio regulă schimbată).

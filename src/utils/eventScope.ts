@@ -130,7 +130,8 @@ export function maySee(ev: ScopedEvent, uid: string): boolean {
 
 /** Whether the event should appear on the tab the viewer is looking at. */
 export function showsOnTab(ev: ScopedEvent, viewer: Viewer): boolean {
-  // A pending invitation belongs in the invitations strip, not on the grid.
+  // A pending event invitation is not on the grid. (Event invites are vestigial: nothing writes
+  // `inviteeId`, and the strip that listed them was removed on 28.09.2026.)
   if (ev.inviteeId === viewer.uid && ev.inviteStatus === 'pending') return false;
   if (!maySee(ev, viewer.uid)) return false;
   return homeTabFor(ev) === viewer.tab;
@@ -139,11 +140,6 @@ export function showsOnTab(ev: ScopedEvent, viewer: Viewer): boolean {
 /** The same decision over a whole list. */
 export function eventsForTab<T extends ScopedEvent>(events: readonly T[], viewer: Viewer): T[] {
   return events.filter((ev) => showsOnTab(ev, viewer));
-}
-
-/** The pending invitations strip: those, and only those, regardless of which tab is open. */
-export function pendingInvitesFor<T extends ScopedEvent>(events: readonly T[], uid: string): T[] {
-  return events.filter((ev) => ev.inviteeId === uid && ev.inviteStatus === 'pending');
 }
 
 // ── The version that re-homed events, and why it is not here ─────────────────────────

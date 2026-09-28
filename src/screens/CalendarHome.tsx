@@ -5,11 +5,10 @@ import { getToken, onMessage } from 'firebase/messaging';
 import { collection, query, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
 import { liveQuery, liveDoc } from '../utils/liveQuery';
 import { withOwnEntry, sameDoc, asksForBirthday, serverConfirmed, birthdayClaimRetracted, type OwnDocStep } from '../utils/ownUserDoc';
-import { eventsForTab, pendingInvitesFor } from '../utils/eventScope';
+import { eventsForTab } from '../utils/eventScope';
 import { reportError } from '../reportError';
 import { vapidKeyProblem } from '../utils/webPush';
-import { Calendar as CalendarIcon, Users, User, Settings, Plus, Bell, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Circle, Briefcase, Heart, Wrench, Star, Gamepad2, ShoppingCart, RefreshCw, Repeat, Menu, ShieldCheck, Swords, ClipboardList, MessageCircle } from 'lucide-react';
-import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { Calendar as CalendarIcon, Users, User, Settings, Plus, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Wrench, Gamepad2, ShoppingCart, Repeat, Menu, ShieldCheck, Swords, ClipboardList, MessageCircle } from 'lucide-react';
 import CalendarGrid from '../components/CalendarGrid';
 import DayTimeline from '../components/DayTimeline';
 import AddEventModal from '../components/AddEventModal';
@@ -34,7 +33,7 @@ import { t, getDateLocale } from '../utils/i18n';
 import { expandRecurringEvents } from '../utils/recurrence';
 import { acceptGroupInvite } from '../serverActions';
 import { displayTime, localZone, occursOn, localDayKey } from '../utils/eventTime';
-import { eventColorClass } from '../utils/eventColors';
+import { categoryIcon, eventTint, BIRTHDAY_CATEGORY_ID } from '../utils/eventCategories';
 import { useDialog } from '../hooks/useDialog';
 import { useMenu } from '../hooks/useMenu';
 
@@ -58,7 +57,6 @@ export default function CalendarHome() {
   const [allEvents, setAllEvents] = useState<any[]>([]);
   // A calendar that could not be READ must not look like a calendar with nothing in it.
   const [eventsLoadError, setEventsLoadError] = useState(false);
-  const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [pendingFamilyInvites, setPendingFamilyInvites] = useState<any[]>([]);
   // The address the RULES will accept for an email-addressed invitation, which is the token
   // claim and not the user record. Null while it is unknown or unproved.
@@ -126,43 +124,11 @@ export default function CalendarHome() {
     return () => { live = false; };
   }, []);
 
-  // Pull to refresh states
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [pullDistance, setPullDistance] = useState(0);
-  const startY = useRef(0);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (window.scrollY === 0) {
-      startY.current = e.touches[0].clientY;
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (startY.current > 0) {
-      const y = e.touches[0].clientY;
-      const dist = y - startY.current;
-      if (dist > 0 && dist < 150) {
-        setPullDistance(dist);
-      }
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (pullDistance > 60) {
-      setIsRefreshing(true);
-      Haptics.impact({ style: ImpactStyle.Medium }).catch(() => {});
-      
-      // Simulate refresh of data
-      setTimeout(() => {
-        setIsRefreshing(false);
-        setPullDistance(0);
-        Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
-      }, 1000);
-    } else {
-      setPullDistance(0);
-    }
-    startY.current = 0;
-  };
+  // No pull-to-refresh (removed 28.09.2026, "UI fals" in the backlog). It spun for a second and
+  // refreshed nothing — a `setTimeout` — while everything on this screen is a live listener that is
+  // already current. A pretend refresh reassures exactly when it should not. It also kept a
+  // `transform` on <main> at all times, which made <main> the containing block of every `fixed`
+  // element inside it.
 
   // A listener that never reaches the server does not fail. Firestore calls itself offline and keeps
   // answering from the local cache — old data, and no error anywhere, while writes may still go
@@ -429,10 +395,10 @@ export default function CalendarHome() {
     const unsubs: (() => void)[] = [];
 
     // Accumulator: merge results from multiple queries, deduplicating by id
-    const eventBuckets: Record<string, Record<string, any>> = { main: {}, assigned: {}, invited: {} };
+    const eventBuckets: Record<string, Record<string, any>> = { main: {}, assigned: {} };
     // Each listener speaks for itself: one loading fine must not clear another's failure. See
     // utils/calendarSources.ts.
-    const loadFlags = sourceFlags(['main', 'assigned', 'invited'] as const);
+    const loadFlags = sourceFlags(['main', 'assigned'] as const);
 
     const mergeAndSet = () => {
       const merged = new Map<string, any>();
@@ -445,7 +411,6 @@ export default function CalendarHome() {
       // rule written inside a listener is a rule the other two listeners can forget — which is
       // exactly how this screen came to show one group's events under another group's name.
       setAllEvents(rows);
-      setPendingInvites(pendingInvitesFor(rows, uid));
 
       setSelectedEvent((prev: any) => {
         if (!prev) return null;
@@ -460,7 +425,7 @@ export default function CalendarHome() {
     } else {
       mainQuery = query(collection(db, 'events'), where('groupId', '==', activeGroupId));
     }
-    // All three listeners report. A denied read here used to render as a calendar with no events
+    // Both listeners report. A denied read here used to render as a calendar with no events
     // — the same shape as a calendar that genuinely has none — and nothing reached errorLogs,
     // because the SDK neither throws nor rejects when no error handler is given.
     unsubs.push(liveQuery<any>(mainQuery, 'CalendarHome.events.main', (docs) => {
@@ -481,14 +446,11 @@ export default function CalendarHome() {
       mergeAndSet();
     }, () => setEventsLoadError(loadFlags.fail('assigned'))));
 
-    // ── Query 3: Events where I'm invited ──
-    const invitedQuery = query(collection(db, 'events'), where('inviteeId', '==', uid));
-    unsubs.push(liveQuery<any>(invitedQuery, 'CalendarHome.events.invited', (docs) => {
-      setEventsLoadError(loadFlags.ok('invited'));
-      eventBuckets.invited = {};
-      docs.forEach(ev => { eventBuckets.invited[ev.id] = ev; });
-      mergeAndSet();
-    }, () => setEventsLoadError(loadFlags.fail('invited'))));
+    // There was a third, `where('inviteeId', '==', uid)`, feeding a "pending event invites" card.
+    // Nothing has ever written `inviteeId` (firestore.rules calls event invites vestigial: real
+    // invitations go through `group_invites`), so it listened for ever to an empty result and the
+    // card could never appear. Removed 28.09.2026 ("UI fals" in the backlog). The rules and the
+    // server's visibility logic still treat an invitee as a reader, which is harmless.
 
     return () => unsubs.forEach(u => u());
   }, [activeGroupId]);
@@ -509,20 +471,6 @@ export default function CalendarHome() {
   // implementation uses `setTimeout`, so a reminder only fired if this tab was still open at the
   // moment. Removed rather than left dormant — the day the plugin does reach an Android build,
   // every reminder would have arrived twice.
-
-  // Bare awaits before: a rejection became an unhandled rejection with nothing on screen, and
-  // the row you just answered simply sat there as though you had not.
-  const respondToEventInvite = async (eventId: string, inviteStatus: 'accepted' | 'declined') => {
-    try {
-      await updateDoc(doc(db, 'events', eventId), { inviteStatus });
-    } catch (err) {
-      reportError(err instanceof Error ? err.message : String(err), { context: 'CalendarHome.eventInvite' });
-      setInviteError(t('inviteResponseFailed', language));
-    }
-  };
-
-  const handleAcceptInvite = (eventId: string) => respondToEventInvite(eventId, 'accepted');
-  const handleDeclineInvite = (eventId: string) => respondToEventInvite(eventId, 'declined');
 
   const handleAcceptFamilyInvite = async (invite: any) => {
     if (!auth.currentUser) return;
@@ -579,7 +527,7 @@ export default function CalendarHome() {
           id: `virtual-birthday-${u.id}-${date.slice(0, 4)}`,
           title: `${u.name || u.email?.split('@')[0] || t('personFallback', language)} — ${t('birthday', language)} 🎂`,
           date,
-          categoryId: 'important',
+          categoryId: BIRTHDAY_CATEGORY_ID,
           color: 'rose',
           isTask: false,
           readOnly: true,
@@ -776,22 +724,7 @@ export default function CalendarHome() {
       </header>
 
       {/* Main Content */}
-      <main 
-        className="flex-1 max-w-5xl w-full mx-auto p-4 flex flex-col gap-6 pb-24 transition-all relative"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        style={{ transform: `translateY(${pullDistance * 0.4}px)` }}
-      >
-        {/* Pull to refresh indicator */}
-        {(pullDistance > 0 || isRefreshing) && (
-          <div className="absolute top-[-20px] left-0 w-full flex justify-center z-10">
-             <div className="w-8 h-8 rounded-full bg-white dark:bg-zinc-800 shadow-md flex items-center justify-center border border-zinc-200 dark:border-zinc-700">
-                <RefreshCw className={`w-4 h-4 text-primary ${isRefreshing ? 'animate-spin' : ''}`} style={{ transform: `rotate(${pullDistance * 2}deg)` }} />
-             </div>
-          </div>
-        )}
-        
+      <main className="flex-1 max-w-5xl w-full mx-auto p-4 flex flex-col gap-6 pb-24 relative">
         {/* Email verification prompt (email/password users only) */}
         <VerifyEmailBanner />
 
@@ -873,38 +806,6 @@ export default function CalendarHome() {
                   </button>
                   <button 
                     onClick={() => handleDeclineFamilyInvite(invite.id)}
-                    className="flex-1 sm:flex-none px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-300 rounded-md text-sm font-medium flex items-center justify-center gap-1"
-                  >
-                    <X className="w-4 h-4" /> {t('decline', language)}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Pending Event Invites */}
-        {pendingInvites.length > 0 && (
-          <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 flex flex-col gap-3">
-            <div className="flex items-center gap-2 text-primary dark:text-primary font-semibold">
-              <Bell className="w-5 h-5" />
-              {t('youHave', language)} {pendingInvites.length} {pendingInvites.length > 1 ? t('pendingInvitePlural', language) : t('pendingInvite', language)}
-            </div>
-            {pendingInvites.map(invite => (
-              <div key={invite.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-zinc-800 p-3 rounded-lg border border-zinc-200 dark:border-zinc-700">
-                <div>
-                  <p className="font-medium text-zinc-900 dark:text-zinc-100">{invite.title}</p>
-                  {invite.description && <p className="text-sm text-zinc-500 line-clamp-1">{invite.description}</p>}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => handleAcceptInvite(invite.id)}
-                    className="flex-1 sm:flex-none px-3 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-md text-sm font-medium flex items-center justify-center gap-1"
-                  >
-                    <Check className="w-4 h-4" /> {t('accept', language)}
-                  </button>
-                  <button 
-                    onClick={() => handleDeclineInvite(invite.id)}
                     className="flex-1 sm:flex-none px-3 py-1.5 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-300 rounded-md text-sm font-medium flex items-center justify-center gap-1"
                   >
                     <X className="w-4 h-4" /> {t('decline', language)}
@@ -1208,20 +1109,9 @@ export default function CalendarHome() {
                 }
 
                 return filtered.map((ev: any) => {
-                  let Icon = Circle;
-                  let colorClass = 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800';
-
-                  if (ev.color) {
-                    colorClass = eventColorClass(ev.color, colorClass);
-                  } else {
-                    switch (ev.categoryId) {
-                      case 'work': Icon = Briefcase; colorClass = 'text-blue-500 bg-blue-50 dark:bg-blue-500/10'; break;
-                      case 'family': Icon = Heart; colorClass = 'text-rose-500 bg-rose-50 dark:bg-rose-500/10'; break;
-                      case 'chores': Icon = Wrench; colorClass = 'text-amber-500 bg-amber-50 dark:bg-amber-500/10'; break;
-                      case 'appointments': Icon = CalendarIcon; colorClass = 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10'; break;
-                      case 'important': Icon = Star; colorClass = 'text-violet-500 bg-violet-50 dark:bg-violet-500/10'; break;
-                    }
-                  }
+                  // The category's look, from the one list (utils/eventCategories.ts).
+                  const Icon = categoryIcon(ev.categoryId);
+                  const colorClass = eventTint(ev);
 
                   return (
                     <div
@@ -1327,7 +1217,8 @@ export default function CalendarHome() {
         isOwner={groups.find(g => g.id === activeGroupId)?.ownerId === auth.currentUser?.uid}
         userMap={userMap}
         members={groups.find(g => g.id === activeGroupId)?.members || []}
-        onSuccess={() => setActiveGroupId('personal')}
+        // Leaving and deleting happen in LeaveGroupModal, which asks which events to keep.
+        onLeaveOrDelete={() => { setIsGroupSettingsOpen(false); setIsLeaveGroupModalOpen(true); }}
       />
 
       <GamesHubModal

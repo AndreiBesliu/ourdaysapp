@@ -1,5 +1,5 @@
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, addDays } from 'date-fns';
-import { ChevronLeft, ChevronRight, Briefcase, Heart, Wrench, Calendar as CalendarIcon, Star, Circle, CheckCircle2, X, Plus, Clock, ChevronUp, ChevronDown, ThumbsUp, HelpCircle, ThumbsDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CheckCircle2, X, Plus, Clock, ChevronUp, ChevronDown, ThumbsUp, HelpCircle, ThumbsDown } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { auth } from '../firebase';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,7 +8,7 @@ import { modalDepth } from '../utils/dialogStack';
 import { useThemeStore } from '../store';
 import { getDateLocale, t } from '../utils/i18n';
 import { localZone, occursOn, localDayKey } from '../utils/eventTime';
-import { eventColorClass } from '../utils/eventColors';
+import { categoryIcon, eventTint } from '../utils/eventCategories';
 import { spanClockLabel } from '../utils/spanLabel';
 
 interface CalendarGridProps {
@@ -249,27 +249,9 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
             <div className="flex-1 relative">
               <div className="flex flex-wrap gap-1.5 mt-2 justify-center pt-2">
               {dayEvents.slice(0, 4).map((ev: any, idx: number) => {
-                let Icon = Circle;
-                switch (ev.categoryId) {
-                  case 'work': Icon = Briefcase; break;
-                  case 'family': Icon = Heart; break;
-                  case 'chores': Icon = Wrench; break;
-                  case 'appointments': Icon = CalendarIcon; break;
-                  case 'important': Icon = Star; break;
-                }
-
-                let colorClass = 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800';
-                if (ev.color) {
-                  colorClass = eventColorClass(ev.color, colorClass);
-                } else {
-                  switch (ev.categoryId) {
-                    case 'work': colorClass = 'text-blue-500 bg-blue-50 dark:bg-blue-500/10'; break;
-                    case 'family': colorClass = 'text-rose-500 bg-rose-50 dark:bg-rose-500/10'; break;
-                    case 'chores': colorClass = 'text-amber-500 bg-amber-50 dark:bg-amber-500/10'; break;
-                    case 'appointments': colorClass = 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10'; break;
-                    case 'important': colorClass = 'text-violet-500 bg-violet-50 dark:bg-violet-500/10'; break;
-                  }
-                }
+                // The category's look, from the one list (utils/eventCategories.ts).
+                const Icon = categoryIcon(ev.categoryId);
+                const colorClass = eventTint(ev);
 
                 return (
                   <button 
@@ -399,27 +381,9 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
               ) : (
                 <>
                   {events.filter(ev => occursOn(ev, localDayKey(modalDay))).map((ev: any, idx: number) => {
-                    let Icon = Circle;
-                    switch (ev.categoryId) {
-                      case 'work': Icon = Briefcase; break;
-                      case 'family': Icon = Heart; break;
-                      case 'chores': Icon = Wrench; break;
-                      case 'appointments': Icon = CalendarIcon; break;
-                      case 'important': Icon = Star; break;
-                    }
-
-                    let colorClass = 'text-zinc-500 bg-zinc-100 dark:bg-zinc-800';
-                    if (ev.color) {
-                      colorClass = eventColorClass(ev.color, colorClass);
-                    } else {
-                      switch (ev.categoryId) {
-                        case 'work': colorClass = 'text-blue-500 bg-blue-50 dark:bg-blue-500/10'; break;
-                        case 'family': colorClass = 'text-rose-500 bg-rose-50 dark:bg-rose-500/10'; break;
-                        case 'chores': colorClass = 'text-amber-500 bg-amber-50 dark:bg-amber-500/10'; break;
-                        case 'appointments': colorClass = 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10'; break;
-                        case 'important': colorClass = 'text-violet-500 bg-violet-50 dark:bg-violet-500/10'; break;
-                      }
-                    }
+                    // The category's look, from the one list (utils/eventCategories.ts).
+                    const Icon = categoryIcon(ev.categoryId);
+                    const colorClass = eventTint(ev);
 
                     return (
                       <div 

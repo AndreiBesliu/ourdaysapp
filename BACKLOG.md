@@ -166,11 +166,11 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Cont:** lipsesc ștergerea contului și schimbarea emailului sau a parolei din aplicație (resetarea
   prin email există din 28.09). Niciun apel la `deleteUser`. Ștergerea contului e obligatorie pentru
   GDPR, și pentru Google Play dacă aplicația ajunge acolo.
-- **UI mort sau fals:**
-  - `LeaveGroupModal` e montat, dar nu-l deschide nimic;
-  - „invitațiile la evenimente în așteptare” citesc `inviteeId`, pe care nu-l scrie nimeni;
-  - pull-to-refresh e doar un `setTimeout`;
-  - comutatorul din overview are categorii inexistente.
+- **Invitațiile la evenimente (`inviteeId`), partea de server:** clientul nu le mai ascultă și nu le mai
+  afișează (28.09). Regulile (`events` read/create/update) și logica de vizibilitate AI de pe server încă
+  tratează un invitat drept cititor, inofensiv cât timp nimic nu scrie câmpul. Un test (`falseUi.test.ts`)
+  pică dacă ceva începe să-l scrie. Comentariul din `firestore.rules` care spune că CalendarHome îl
+  interoghează e acum vechi: de corectat la următoarea schimbare de reguli.
 - **PWA:** `public/manifest.json` trimite ambele iconuri la `/vite.svg`, care nu există.
 - **Android:** fără bloc `server`, `versionCode 1`, doar permisiunea INTERNET. Push-urile din
   prim-plan sunt doar logate, iar tap-ul pe push nu deschide ecranul potrivit. Ține de reconstruire.
