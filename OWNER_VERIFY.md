@@ -118,25 +118,23 @@
 
 ---
 
-## 🆕 Bannerul „Add your birthday!” (27.09) — PUBLICAT pe 28.09
+## 🆕 Ziua de naștere se cere acum în Settings (28.09) — gata în cod, NEPUBLICAT
 
-**Fapt:** pe server, documentul tău are ziua de naștere ȘI bannerul închis (`hideBirthdayPrompt: true`).
-Bannerul apărea totuși din două motive:
-- **ecranul se baza pe o citire unică, pe care nimic n-o reîmprospăta**, deci X-ul scria pe server, dar
-  bannerul rămânea;
-- **o citire eșuată sau venită dintr-un cache vechi** era luată drept „n-are zi de naștere”.
+**Fapt:** la cererea ta, bannerul a dispărut din calendar.
+- Dacă ziua de naștere lipsește, rândul „Birthday” din Settings devine roz și scrie „Add your birthday!”.
+- Nu are X: câmpul însuși e răspunsul.
+- Rândul întreabă doar după ce serverul a răspuns. Cât timp formularul se încarcă, câmpul e gol,
+  iar un câmp gol nu înseamnă încă o zi de naștere lipsă.
+- Probat pe ecranul real, cu Firebase simulat:
+  - cu condiția scoasă, întrebarea apărea la 64 ms și dispărea la 1,6 s, adică exact clipirea pe care
+    ai văzut-o;
+  - cu condiția pusă, nu apare niciodată.
 
-Acum ecranul ascultă documentul tău live, iar bannerul apare doar pe baza răspunsului confirmat de server.
-
-- [ ] **După publicare: reîncarcă pagina calendarului** (10 secunde)
-      - **Cum arată bine:** bannerul nu mai apare.
-      - **Ce e greșit:** dacă totuși apare, spune-mi. Pe server datele tale sunt corecte, deci ar
-        însemna că ecranul primește altceva decât ce e pe server, iar asta vreau să văd.
-      - **De știut:** cel mai probabil, browserul tău trimite scrieri, dar nu primește date live. De obicei
-        vinovat e un ad blocker (uBlock, AdGuard, scuturile din Brave) care blochează canalul `Listen` al
-        Firestore. Atunci aplicația arată date vechi din cache, fără nicio eroare. De la publicare,
-        aplicația raportează singură, o dată pe încărcare, dacă datele tale nu sunt confirmate de server
-        în 30 de secunde. Eu văd raportul, deci n-ai nimic de verificat.
+- [ ] **După publicare: deschide calendarul, apoi Settings** (20 de secunde)
+      - **Cum arată bine:** în calendar nu mai e niciun banner. În Settings, rândul „Birthday” arată
+        normal, cu data ta.
+      - **Ce e greșit:** dacă rândul se face roz, chiar și pentru o clipă, spune-mi. Datele tale de pe
+        server sunt corecte, deci ar însemna că ecranul întreabă înainte să aibă răspunsul.
 
 ---
 

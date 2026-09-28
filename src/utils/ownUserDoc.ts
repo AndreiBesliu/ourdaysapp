@@ -1,6 +1,7 @@
 // src/utils/ownUserDoc.ts
 //
-// The signed-in person's OWN document on the calendar screen, and what may be claimed from it. Pure.
+// The signed-in person's OWN document on the calendar and Settings screens, and what may be claimed
+// from it. Pure.
 //
 // ── What this replaces (27.09.2026) ──────────────────────────────────────────────────────────
 //
@@ -12,17 +13,25 @@
 //     (id, email, name), which the banner read as "no birthday". Andrei, 27.09: "tot imi apare
 //     chestia cu birthday, dar eu o am setata" — on the server his document had the birthday AND
 //     the flag, so either one alone should have hidden it.
-// Now the screen keeps a live listener on that document, and the banner asks only on the SERVER's
-// word: a claim about somebody's account is not made from a cache.
+// Now the screen keeps a live listener on that document, and a claim about somebody's account is
+// made only on the SERVER's word, never from a cache.
+//
+// ── Where the birthday is asked for (28.09.2026) ─────────────────────────────────────────────
+//
+// Not on the calendar any more. Andrei, 28.09, after the fix above went live: "banner-ul a aparut
+// pentru o secunda dar dupa a disparut, si parca l-as muta in tabul de settings". So the question is
+// asked beside the field it is about, in Settings, and nowhere else. No X there: it is the field
+// itself, and the old `hideBirthdayPrompt` flag had one job, closing a banner that no longer exists.
 
-/** Whether to ask this person for their birthday. */
-export function wantsBirthdayPrompt(
-  own: Record<string, unknown> | null | undefined,
-  fromServer: boolean,
-): boolean {
-  if (!fromServer || !own || typeof own !== 'object') return false;
+/**
+ * Whether Settings points this person at their empty birthday field. `birthday` is the field's own
+ * value, so what the person just typed counts at once; `fromServer` says the server has answered for
+ * the document. Until it has, the field is empty because the form is still loading, and an empty
+ * field is not yet a missing birthday.
+ */
+export function asksForBirthday(birthday: unknown, fromServer: boolean): boolean {
   // Truthiness, as the banner always used: any stored birthday counts, and an empty one does not.
-  return !own.birthday && !own.hideBirthdayPrompt;
+  return fromServer && !birthday;
 }
 
 /**

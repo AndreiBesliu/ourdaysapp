@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { reportError } from '../reportError';
 import { Moon, Sun, Palette, LogOut, Settings as SettingsIcon, Camera, Home, Image as ImageIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -14,6 +14,7 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import { releasePushThenSignOut, rememberedPushToken } from '../utils/pushRelease';
 import { publicBirthday } from '../utils/publicProfile';
 import { liveDoc } from '../utils/liveQuery';
+import { asksForBirthday, sameDoc } from '../utils/ownUserDoc';
 import { uploadFile, UploadRefused } from '../utils/uploadFile';
 import { refusalKey, refusalDetail } from '../utils/uploadLimits';
 import { localZone, zoneChoices, zoneLabel } from '../utils/eventTime';
@@ -74,6 +75,14 @@ export default function Settings() {
   })();
   const [photoURL, setPhotoURL] = useState<string | null>(null);
   const [birthday, setBirthday] = useState<string>('');
+  // Whether the server has answered for the document. Until then the birthday field is empty only
+  // because the form is loading, so it is not asked for (utils/ownUserDoc.ts). Without this, an old
+  // cached copy asks for a second and then takes it back (reproduced on a bench, 28.09).
+  const [fromServer, setFromServer] = useState(false);
+  // The document last copied into the fields. A metadata-only event hands the same one over again,
+  // and copying it back would overwrite a name somebody is halfway through typing.
+  const appliedDoc = useRef<Record<string, unknown> | null>(null);
+  const askBirthday = asksForBirthday(birthday, fromServer);
   const [name, setName] = useState<string>(auth.currentUser?.displayName || '');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingBg, setUploadingBg] = useState(false);
@@ -81,15 +90,20 @@ export default function Settings() {
     if (!auth.currentUser) return;
 
     const unsub = liveDoc<any>(doc(db, 'users', auth.currentUser.uid), 'Settings.userDoc',
-      (data) => {
-        if (!data) return;
+      (data, meta) => {
+        // Before the `!data` return: the server saying there is no document is an answer too.
+        if (!meta.fromCache) setFromServer(true);
+        if (!data || sameDoc(appliedDoc.current, data)) return;
+        appliedDoc.current = data;
         setPhotoURL(data.photoURL || null);
         setBirthday(data.birthday || '');
         setName(data.name || auth.currentUser?.displayName || '');
       },
       // Leaves the fields as they are rather than blanking them: an empty name box invites you to
       // "fix" it by saving, and saving over a profile you could not read is how data is lost.
-      () => {});
+      () => {},
+      // Told when the cached copy is confirmed by the server, which otherwise raises nothing.
+      { includeMetadataChanges: true });
 
     return () => unsub();
   }, []);
@@ -305,16 +319,22 @@ export default function Settings() {
               />
             </div>
 
-            <div className="p-4 flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800">
-              <div>
-                <p className="font-medium text-zinc-900 dark:text-zinc-100">{t('birthday', language)}</p>
-                <p className="text-sm text-zinc-500">{t('birthdayDesc', language)}</p>
+            {/* The birthday is asked for here, on its own field, and nowhere else (it was a banner on
+                the calendar until 28.09). No X: the field itself is the answer. */}
+            <div className={`p-4 flex items-center justify-between gap-3 border-b border-zinc-200 dark:border-zinc-800 ${askBirthday ? 'bg-gradient-to-r from-pink-500/10 to-rose-500/10' : ''}`}>
+              <div className="flex items-center gap-3 min-w-0">
+                {askBirthday && <span className="text-xl shrink-0" aria-hidden="true">🎂</span>}
+                <div className="min-w-0">
+                  <p className="font-medium text-zinc-900 dark:text-zinc-100">{askBirthday ? t('addYourBirthday', language) : t('birthday', language)}</p>
+                  <p className="text-sm text-zinc-500">{askBirthday ? t('addBirthdayPromptDesc', language) : t('birthdayDesc', language)}</p>
+                </div>
               </div>
               <input
                 type="date"
                 value={birthday}
                 onChange={handleBirthdayChange}
-                className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2 outline-none"
+                aria-label={t('birthday', language)}
+                className="shrink-0 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2 outline-none"
               />
             </div>
 

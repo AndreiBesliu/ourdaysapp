@@ -10625,3 +10625,57 @@ reparația bannerului, „continua”.
 
 Dacă browserul lui nu primește date live, un rând `CalendarHome.listenStale` va apărea în jurnalul de
 erori după prima încărcare.
+
+## 2026-09-28 · Ziua de naștere se cere în Settings, nu în calendar (Task Started)
+
+**Prompt (Andrei):** „banner-ul a aparut pentru o secunda dar dupa a disparut, si parca l-as muta in tabul de settings”
+**Model:** Claude Opus 5.5.
+**Plan:**
+- scot bannerul din calendar;
+- întrebarea se mută pe rândul „Birthday” din Settings și apare doar după răspunsul serverului;
+- probă pe ecranul real, inclusiv o probă de control care trebuie să reproducă clipirea.
+
+## 2026-09-28 · Ziua de naștere se cere în Settings, nu în calendar (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Ce s-a schimbat:**
+- **Calendarul** nu mai are bannerul și nici butonul X care scria `hideBirthdayPrompt`. Ascultătorul
+  live al documentului propriu rămâne, pentru intrarea proprie din `userMap` și pentru raportul
+  `CalendarHome.listenStale`.
+- **Settings:** rândul „Birthday” devine roz și întreabă „Add your birthday!” când câmpul e gol, dar
+  numai după ce serverul a răspuns pentru document (`asksForBirthday(birthday, fromServer)` în
+  `utils/ownUserDoc.ts`).
+  - Ascultătorul din Settings primește acum și schimbările de metadate, ca să afle confirmarea.
+  - Un eveniment doar de metadate nu mai copiază documentul peste câmpuri (`sameDoc`), deci nu șterge
+    un nume pe jumătate scris.
+- `wantsBirthdayPrompt` a fost înlocuit de `asksForBirthday`. Cheia `setBirthday`, folosită doar de
+  butonul bannerului, a fost scoasă din toate cele 6 limbi.
+
+**Probe:**
+- `ownUserDoc.test.ts`: 17 teste. Opt mutații, toate prinse, fișierele restaurate identic (sha256).
+- Bancul pe `Settings.tsx` real (Firebase simulat; cache întâi, serverul la 1,5 s), cu un observator
+  pus înainte de montare, ca să prindă și un singur cadru:
+
+  | caz | întrebarea |
+  |---|---|
+  | cache vechi fără zi, serverul o are (cazul lui Andrei) | niciodată |
+  | serverul confirmă că lipsește | apare la ~1,6 s, după server |
+  | ziua e setată | niciodată |
+  | serverul nu răspunde | niciodată |
+  | documentul nu există | apare după server |
+  | **control:** condiția pe server scoasă, cazul lui Andrei | **apare la 64 ms, dispare la 1,58 s** |
+
+  Controlul reproduce exact clipirea descrisă de Andrei, deci bancul o vede.
+- Alegerea unei date ascunde întrebarea pe loc. Scrie aceleași două documente ca înainte: data completă
+  în `users`, `0000-MM-DD` în `profiles`.
+- La 375 px nu apare scroll orizontal. Tema deschisă și cea închisă sunt citibile.
+- tsc, poarta de lint, `npm test` (2029) și build: toate verzi.
+
+**Despre clipirea din calendar:**
+- În jurnalul de erori de pe live nu există niciun `CalendarHome.listenStale`. Browserul lui Andrei
+  primește deci date live, iar ipoteza unui canal `Listen` blocat nu se confirmă.
+- Cauza exactă a clipirii din calendar nu am găsit-o. Bannerul de acolo era deja condiționat de server.
+  Întrebarea nu mai există acolo.
+
+**Nepublicat.** Ordinea: doar hosting (nicio funcție și nicio regulă schimbată), cu acordul lui Andrei.

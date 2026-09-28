@@ -4,7 +4,7 @@ import { auth, db, messaging } from '../firebase';
 import { getToken, onMessage } from 'firebase/messaging';
 import { collection, query, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
 import { liveQuery, liveDoc } from '../utils/liveQuery';
-import { wantsBirthdayPrompt, withOwnEntry, sameDoc } from '../utils/ownUserDoc';
+import { withOwnEntry, sameDoc } from '../utils/ownUserDoc';
 import { eventsForTab, pendingInvitesFor } from '../utils/eventScope';
 import { reportError } from '../reportError';
 import { vapidKeyProblem } from '../utils/webPush';
@@ -68,15 +68,15 @@ export default function CalendarHome() {
   const [isGroupSettingsOpen, setIsGroupSettingsOpen] = useState(false);
   const [isGamesHubOpen, setIsGamesHubOpen] = useState(false);
   const [loadedUserMap, setUserMap] = useState<Record<string, any>>({});
-  // The signed-in person's own document, LIVE, and whether the server has confirmed it — see
-  // utils/ownUserDoc.ts. `undefined` until the listener first answers.
+  // The signed-in person's own document, LIVE — see utils/ownUserDoc.ts. `undefined` until the
+  // listener first answers.
   const [ownData, setOwnData] = useState<Record<string, any> | null | undefined>(undefined);
-  const [ownFromServer, setOwnFromServer] = useState(false);
-  // The same fact for a timer, which would otherwise read the value it was created with.
+  // Whether the server has confirmed it, for the stale-listener report below. A ref: that report is
+  // a timer, which would otherwise read the value it was created with.
   const ownConfirmed = useRef(false);
-  // The member map with the person's own entry taken from that live document, so a dismissed
-  // banner, a birthday set in Settings or a read that failed inside the groups loop cannot leave
-  // it stale. Same map object while neither input changes (AddEventModal resets its form on a new one).
+  // The member map with the person's own entry taken from that live document, so a birthday set in
+  // Settings or a read that failed inside the groups loop cannot leave it stale. Same map object
+  // while neither input changes (AddEventModal resets its form on a new one).
   const userMap = useMemo(
     () => withOwnEntry(loadedUserMap, auth.currentUser?.uid, ownData),
     [loadedUserMap, ownData],
@@ -187,12 +187,10 @@ export default function CalendarHome() {
         // Same content keeps the same object: a metadata-only event (cache → server) must not
         // hand the form below a new `userMap` while somebody is typing.
         setOwnData((prev) => (sameDoc(prev, data) ? prev : data));
-        setOwnFromServer(!meta.fromCache);
         if (!meta.fromCache) ownConfirmed.current = true;
       },
-      // Losing it hides the birthday banner and falls back to the one-off read below for the own
-      // entry. Reported anyway, because a failing read of your OWN document usually means
-      // something bigger is wrong.
+      // Losing it falls back to the one-off read below for the own entry. Reported anyway, because
+      // a failing read of your OWN document usually means something bigger is wrong.
       () => {},
       // Told when a cached snapshot is confirmed, which otherwise raises nothing.
       { includeMetadataChanges: true });
@@ -224,7 +222,7 @@ export default function CalendarHome() {
           try {
             if (id === auth.currentUser!.uid) {
               // Own doc: read the full (owner-only) user doc — needed for birthday,
-              // photoURL, hideBirthdayPrompt, etc.
+              // photoURL, etc.
               const userDoc = await getDoc(doc(db, 'users', id));
               if (userDoc.exists()) map[id] = { id, ...userDoc.data() };
             } else {
@@ -529,16 +527,6 @@ export default function CalendarHome() {
     }
   };
 
-  const handleDismissBirthdayPrompt = async () => {
-    if (!auth.currentUser) return;
-    try {
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), { hideBirthdayPrompt: true });
-    } catch (err) {
-      reportError(err instanceof Error ? err.message : String(err), { context: 'CalendarHome.handleDismissBirthdayPrompt' });
-      console.error(err);
-    }
-  };
-
   const birthdayEvents = useMemo(() => {
     // The years around the month on screen, not just this one: browsing into next January
     // used to show no birthdays at all. Three years cover any window the calendar expands.
@@ -773,38 +761,6 @@ export default function CalendarHome() {
         {/* Email verification prompt (email/password users only) */}
         <VerifyEmailBanner />
 
-        {/* Birthday Prompt — only on the server's word about the person's own document, read live:
-            it used to trust a one-off read that nothing refreshed, so X did not close it and a
-            failed read asked people who had set their birthday (utils/ownUserDoc.ts). */}
-        {wantsBirthdayPrompt(ownData, ownFromServer) && (
-          <div className="bg-gradient-to-r from-pink-500/10 to-rose-500/10 border border-pink-500/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in slide-in-from-top-4 fade-in mb-2">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-pink-500/20 text-pink-600 dark:text-pink-400 rounded-lg shrink-0">
-                <span className="text-xl">🎂</span>
-              </div>
-              <div>
-                <p className="font-semibold text-zinc-900 dark:text-zinc-100">{t('addYourBirthday', language)}</p>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">{t('addBirthdayPromptDesc', language)}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => navigate('/settings')}
-                className="flex-1 sm:flex-none px-4 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                {t('setBirthday', language)}
-              </button>
-              <button 
-                onClick={handleDismissBirthdayPrompt}
-                aria-label={t('dismissAction', language)}
-                className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-white dark:hover:bg-zinc-800 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        )}
-        
         {/* Today's Overview Dashboard */}
         <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
