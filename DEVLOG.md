@@ -11045,3 +11045,23 @@ regulile n-au nicio schimbare de la ultima publicare completă.
 - tsc, poarta de lint, `npm test` (2088), build, `check-bundle` și `check-split`: toate verzi.
 
 **Nepublicat.** Doar hosting (nicio funcție și nicio regulă schimbată).
+
+## 2026-09-28 · Publicarea: curățenia UI-ului fals (Task Started)
+
+**Prompt (Andrei):** „publică doar hosting”
+**Model:** Claude Opus 5.5.
+**Plan:** doar hosting-ul, după CI verde pe `7c6d2c1` și după ce verific că funcțiile și regulile n-au
+nicio schimbare de la ultima publicare completă.
+
+## 2026-09-28 · Publicarea: curățenia UI-ului fals (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Înainte:**
+- CI verde pe `7c6d2c1`;
+- `HEAD` = `origin/main`, iar arborele e identic cu `HEAD`, înainte și după build;
+- `git diff 50c8e84..HEAD` gol pe `functions/`, reguli, indecși, `storage.rules` și `firebase.json`.
+
+**Publicat:** hosting-ul. Intrarea de pe live e `index-slth3LUR`, aceeași cu build-ul. Ea:
+- nu mai conține `CalendarHome.events.invited`, `pendingInvitePlural` și „Simulate refresh”;
+- conține `family_time`, `chatLoadOlder` și `resetLinkSent`.
