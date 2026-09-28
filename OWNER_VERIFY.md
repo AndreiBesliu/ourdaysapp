@@ -147,7 +147,16 @@ Firebase, în limba aplicației.
   serverului.
 - **Dacă punctul apare și dispare în câteva secunde**, aplicația îmi trimite singură un raport
   (`CalendarHome.birthdayRetracted`), o dată pe încărcare, cu ordinea răspunsurilor primite. Fără nume
-  și fără date. Așa aflu ce a produs clipirea din calendar, pe care n-am putut-o explica.
+  și fără date.
+- **Cauza clipirii, găsită din primele două rapoarte (28.09) — reparată în cod, NEPUBLICAT:**
+  - Firebase trimite o versiune marcată „nu e din cache” care încă include scrierea făcută de aplicație
+    la fiecare pornire (`lastLogin`). Versiunea asta nu avea ziua ta de naștere.
+  - Documentul complet sosește cu ~0,9 s mai târziu.
+  - Acum o afirmație despre cont cere ca versiunea să nu vină din cache ȘI să nu aibă scrieri proprii
+    neconfirmate.
+  - Pe ecranele reale, urma de pe live nu mai produce nicio întrebare. Cu regula veche pusă înapoi,
+    clipirea reapare exact: la 0,33 s apare, la 1,19 s dispare.
+  - Până la publicare, punctul și rândul din Settings pot clipi.
 - Rândul întreabă doar după ce serverul a răspuns. Cât timp formularul se încarcă, câmpul e gol,
   iar un câmp gol nu înseamnă încă o zi de naștere lipsă.
 - Probat pe ecranul real, cu Firebase simulat:

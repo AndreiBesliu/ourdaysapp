@@ -4,7 +4,7 @@ import { auth, db, messaging } from '../firebase';
 import { getToken, onMessage } from 'firebase/messaging';
 import { collection, query, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
 import { liveQuery, liveDoc } from '../utils/liveQuery';
-import { withOwnEntry, sameDoc, asksForBirthday, birthdayClaimRetracted, type OwnDocStep } from '../utils/ownUserDoc';
+import { withOwnEntry, sameDoc, asksForBirthday, serverConfirmed, birthdayClaimRetracted, type OwnDocStep } from '../utils/ownUserDoc';
 import { eventsForTab, pendingInvitesFor } from '../utils/eventScope';
 import { reportError } from '../reportError';
 import { vapidKeyProblem } from '../utils/webPush';
@@ -195,8 +195,10 @@ export default function CalendarHome() {
         // Same content keeps the same object: a metadata-only event (cache → server) must not
         // hand the form below a new `userMap` while somebody is typing.
         setOwnData((prev) => (sameDoc(prev, data) ? prev : data));
+        // Reaching the server is enough for the stale-listener report; a claim about the account
+        // also needs the device's own pending writes accepted (utils/ownUserDoc.ts, serverConfirmed).
         if (!meta.fromCache) ownConfirmed.current = true;
-        if (!meta.fromCache) setOwnFromServer(true);
+        if (serverConfirmed(meta)) setOwnFromServer(true);
         // The banner this dot replaces showed for a second on Andrei's screen although it too asked
         // only on the server's word, and nothing on live explained it. If the dot does the same, the
         // trail of the first minute's snapshots says which one made the claim. Said once per load.

@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { asksForBirthday, birthdayClaimRetracted, withOwnEntry, sameDoc, type OwnDocStep } from './ownUserDoc';
+import { asksForBirthday, serverConfirmed, birthdayClaimRetracted, withOwnEntry, sameDoc, type OwnDocStep } from './ownUserDoc';
 
 describe('asksForBirthday', () => {
   it('asks once the server has answered and the field is empty', () => {
@@ -25,6 +25,56 @@ describe('asksForBirthday', () => {
   it('never before the server has answered — an empty field on a loading form is not a missing birthday', () => {
     expect(asksForBirthday('', false)).toBe(false);
     expect(asksForBirthday(undefined, false)).toBe(false);
+  });
+});
+
+describe('serverConfirmed', () => {
+  it('only a snapshot from the server with no pending write of this device', () => {
+    expect(serverConfirmed({ fromCache: false, hasPendingWrites: false })).toBe(true);
+    expect(serverConfirmed({ fromCache: true, hasPendingWrites: false })).toBe(false);
+    expect(serverConfirmed({ fromCache: true, hasPendingWrites: true })).toBe(false);
+  });
+
+  it('NOT "from the server" while a write of ours is still pending — the live case of 28.09', () => {
+    expect(serverConfirmed({ fromCache: false, hasPendingWrites: true })).toBe(false);
+  });
+});
+
+describe('the two retraction reports from live, 28.09.2026 (Andrei, desktop Chrome)', () => {
+  // Verbatim trails from errorLogs, context CalendarHome.birthdayRetracted. Both: the cached copy
+  // without the birthday and the sign-in write pending; then `fromCache: false` with the write STILL
+  // pending and still no birthday; then the complete document.
+  const LIVE: OwnDocStep[][] = [
+    [
+      { ms: 11, fromCache: true, pending: true, exists: true, birthday: false },
+      { ms: 14, fromCache: true, pending: true, exists: true, birthday: false },
+      { ms: 204, fromCache: false, pending: true, exists: true, birthday: false },
+      { ms: 1066, fromCache: false, pending: false, exists: true, birthday: true },
+    ],
+    [
+      { ms: 18, fromCache: true, pending: true, exists: true, birthday: false },
+      { ms: 26, fromCache: true, pending: true, exists: true, birthday: false },
+      { ms: 343, fromCache: false, pending: true, exists: true, birthday: false },
+      { ms: 1216, fromCache: false, pending: false, exists: true, birthday: true },
+    ],
+  ];
+
+  it('under the rule that shipped (fromCache alone) the third snapshot asked — the flash', () => {
+    for (const trail of LIVE) {
+      const third = trail[2];
+      expect(asksForBirthday(third.birthday, !third.fromCache)).toBe(true);
+    }
+  });
+
+  it('under serverConfirmed nothing is ever asked, so nothing is taken back', () => {
+    for (const trail of LIVE) {
+      let confirmed = false;
+      for (const step of trail) {
+        if (serverConfirmed({ fromCache: step.fromCache, hasPendingWrites: step.pending })) confirmed = true;
+        expect(asksForBirthday(step.birthday, confirmed), `step at ${step.ms} ms`).toBe(false);
+      }
+      expect(birthdayClaimRetracted(trail)).toBe(false);
+    }
   });
 });
 
@@ -116,7 +166,7 @@ describe('CalendarHome uses them', () => {
     expect(call, 'the own-document listener with includeMetadataChanges').toBeTruthy();
     expect(call![0]).toContain('setOwnData((prev) => (sameDoc(prev, data) ? prev : data));');
     expect(call![0]).toContain('if (!meta.fromCache) ownConfirmed.current = true;');
-    expect(call![0]).toContain('if (!meta.fromCache) setOwnFromServer(true);');
+    expect(call![0]).toContain('if (serverConfirmed(meta)) setOwnFromServer(true);');
     // Nothing else sets it: a cached snapshot must not confirm.
     expect(src.match(/setOwnFromServer\(/g)).toHaveLength(1);
   });
@@ -172,7 +222,7 @@ describe('Settings asks for the birthday, on its own field', () => {
     const call = /liveDoc<any>\(doc\(db, 'users', auth\.currentUser\.uid\), 'Settings\.userDoc',[\s\S]*?\{ includeMetadataChanges: true \}\);/.exec(src);
     expect(call, 'the Settings listener with includeMetadataChanges').toBeTruthy();
     const body = call![0];
-    const confirm = body.indexOf('if (!meta.fromCache) setFromServer(true);');
+    const confirm = body.indexOf('if (serverConfirmed(meta)) setFromServer(true);');
     const bail = body.indexOf('if (!data || sameDoc(appliedDoc.current, data)) return;');
     expect(confirm, 'the confirmation').toBeGreaterThan(-1);
     expect(bail, 'the same-document guard').toBeGreaterThan(-1);

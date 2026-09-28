@@ -10796,3 +10796,51 @@ parolei (Recomandat)”.
 - tsc, poarta de lint, `npm test` (2050) și build: toate verzi.
 
 **Nepublicat.** Doar hosting: funcțiile și regulile nu s-au schimbat.
+
+## 2026-09-28 · Cauza clipirii: o versiune „de la server” cu scrierea proprie neconfirmată (Task Started)
+
+**Prompt (Andrei):** „ok, continua” (continuare; la verificarea jurnalului am găsit două rapoarte
+`CalendarHome.birthdayRetracted` noi).
+**Model:** Claude Opus 5.5.
+**Plan:** să citesc urmele, să găsesc snapshot-ul care face afirmația și să repar regula pentru ambele
+ecrane.
+
+## 2026-09-28 · Cauza clipirii: o versiune „de la server” cu scrierea proprie neconfirmată (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Ce au arătat rapoartele** (două, aceeași persoană, Chrome pe Windows, formă identică):
+
+| ms | `fromCache` | `hasPendingWrites` | ziua de naștere |
+|---|---|---|---|
+| 11 / 18 | true | true | nu |
+| 14 / 26 | true | true | nu |
+| **204 / 343** | **false** | **true** | **nu** ← afirmația |
+| 1066 / 1216 | false | false | da ← retragerea |
+
+- Copia din cache nu avea ziua de naștere, iar scrierea de la pornire din `App.tsx` (`lastLogin`, cu
+  `merge`) era în așteptare.
+- Firebase a trimis apoi o versiune cu `fromCache: false` în care scrierea era încă neconfirmată și ziua
+  lipsea în continuare.
+- Regula livrată lua `!fromCache` drept „cuvântul serverului”, deci a întrebat. Reparația din dimineață
+  (bannerul) și cea din după-amiază (punctul și rândul din Settings) aveau aceeași gaură.
+
+**Reparația:**
+- `serverConfirmed(meta)` = `!fromCache && !hasPendingWrites` (`utils/ownUserDoc.ts`), folosită de
+  calendar și de Settings.
+- Detectorul de retragere urmează aceeași regulă.
+- Raportul de date vechi (`listenStale`) rămâne pe `!fromCache`: acolo întrebarea e doar dacă serverul a
+  fost atins.
+
+**Probe:**
+- Cele două urme sunt fixturi, copiate exact în `ownUserDoc.test.ts`:
+  - pe regula veche, al treilea pas întreabă;
+  - pe `serverConfirmed`, niciun pas nu întreabă.
+- 29 de teste. Patru mutații, toate prinse, fișierele restaurate identic.
+- **Bancul cu ecranele reale** reia urma de pe live, cu tot cu scrierea în așteptare:
+  - calendarul și Settings nu întreabă niciodată;
+  - **controlul**, cu regula veche pusă temporar înapoi în ambele ecrane: întrebarea apare la 0,33 s și
+    dispare la 1,19 s în amândouă, exact clipirea de pe live. Codul a fost restaurat identic după.
+- tsc, poarta de lint, `npm test` (2054) și build: toate verzi.
+
+**Nepublicat.** Doar hosting. Pleacă împreună cu „Ai uitat parola?” (`32aa8b2`).

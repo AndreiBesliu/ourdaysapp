@@ -35,6 +35,20 @@ export function asksForBirthday(birthday: unknown, fromServer: boolean): boolean
   return fromServer && !birthday;
 }
 
+/**
+ * Whether a snapshot is the SERVER's word about the document: not from the cache, AND carrying no
+ * write of this device's own that the server has not yet accepted.
+ *
+ * `fromCache: false` alone is not it. Measured on live, 28.09.2026, from both retraction reports
+ * below (Andrei, desktop Chrome): the cached copy had no birthday, App.tsx's sign-in bookkeeping write
+ * (`lastLogin`) was pending, and ~0.2–0.3 s in a snapshot arrived with `fromCache: false`,
+ * `hasPendingWrites: true` and STILL no birthday. The complete document came ~0.9 s later, with
+ * `hasPendingWrites: false`. The first one made the claim, and the second one took it back: the flash.
+ */
+export function serverConfirmed(meta: { fromCache: boolean; hasPendingWrites: boolean }): boolean {
+  return !meta.fromCache && !meta.hasPendingWrites;
+}
+
 /** One snapshot of the own document, as the retraction report describes it: no content, no ids. */
 export type OwnDocStep = { ms: number; fromCache: boolean; pending: boolean; exists: boolean; birthday: boolean };
 
@@ -44,15 +58,15 @@ export type OwnDocStep = { ms: number; fromCache: boolean; pending: boolean; exi
  * once the server has answered).
  *
  * Why it exists: on 28.09 Andrei saw the old banner show for a second and go, on a screen that
- * already asked only on the server's word, and nothing measured on live explained it. The calendar
- * cannot set a birthday (Settings is another route), so a retraction there is the flash itself, and
- * the trail says which snapshot made the claim.
+ * already asked only on (what it took for) the server's word. The calendar cannot set a birthday
+ * (Settings is another route), so a retraction there is the flash itself, and the trail says which
+ * snapshot made the claim. Its first two reports, the same day, are what `serverConfirmed` fixes.
  */
 export function birthdayClaimRetracted(trail: OwnDocStep[], windowMs = 10_000): boolean {
   let confirmed = false;
   let askedAt: number | null = null;
   for (const step of trail) {
-    if (!step.fromCache) confirmed = true;
+    if (serverConfirmed({ fromCache: step.fromCache, hasPendingWrites: step.pending })) confirmed = true;
     if (asksForBirthday(step.birthday, confirmed)) {
       if (askedAt === null) askedAt = step.ms;
     } else if (askedAt !== null && step.birthday) {

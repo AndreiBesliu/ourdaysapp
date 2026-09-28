@@ -14,7 +14,7 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import { releasePushThenSignOut, rememberedPushToken } from '../utils/pushRelease';
 import { publicBirthday } from '../utils/publicProfile';
 import { liveDoc } from '../utils/liveQuery';
-import { asksForBirthday, sameDoc } from '../utils/ownUserDoc';
+import { asksForBirthday, serverConfirmed, sameDoc } from '../utils/ownUserDoc';
 import { uploadFile, UploadRefused } from '../utils/uploadFile';
 import { refusalKey, refusalDetail } from '../utils/uploadLimits';
 import { localZone, zoneChoices, zoneLabel } from '../utils/eventTime';
@@ -91,8 +91,10 @@ export default function Settings() {
 
     const unsub = liveDoc<any>(doc(db, 'users', auth.currentUser.uid), 'Settings.userDoc',
       (data, meta) => {
-        // Before the `!data` return: the server saying there is no document is an answer too.
-        if (!meta.fromCache) setFromServer(true);
+        // Before the `!data` return: the server saying there is no document is an answer too. Not
+        // `!meta.fromCache` alone: a snapshot still carrying this device's pending write is not the
+        // server's word (utils/ownUserDoc.ts, serverConfirmed — measured on live, 28.09).
+        if (serverConfirmed(meta)) setFromServer(true);
         if (!data || sameDoc(appliedDoc.current, data)) return;
         appliedDoc.current = data;
         setPhotoURL(data.photoURL || null);
