@@ -10960,3 +10960,27 @@ Dispar `getFirestore` și `enableIndexedDbPersistence`.
 - tsc, poarta de lint, `npm test` (2074), build, `check-bundle` și `check-split`: toate verzi.
 
 **Nepublicat.** Doar hosting.
+
+## 2026-09-28 · Publicarea: chatul și cache-ul comun (Task Started)
+
+**Prompt (Andrei):** „ok, ce urmeaza?”, apoi, la întrebare: „Publică doar hosting” și, pentru pasul
+următor, „Curățenie UI fals (Recomandat)”.
+**Model:** Claude Opus 5.5.
+**Plan:** doar hosting-ul, după CI verde pe `31e4cc7` și `e8336c8` și după ce verific că funcțiile și
+regulile n-au nicio schimbare de la ultima publicare completă.
+
+## 2026-09-28 · Publicarea: chatul și cache-ul comun (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Înainte:**
+- CI verde;
+- `HEAD` = `origin/main`, arborele curat;
+- `git diff 50c8e84..HEAD` gol pe `functions/`, reguli, indecși, `storage.rules` și `firebase.json`;
+- `src/firebase.ts` cu sha-ul verificat după incidentul DriveFS (`8f437ad4…`).
+
+**Publicat:** hosting-ul. Intrarea de pe live e `index-sohCPYOY`.
+- Intrarea conține `chatLoadOlder` și `GroupChatWidget.pinned`.
+- Chunk-ul comun `jsx-runtime-BI4sJEyo` (unde stă SDK-ul Firestore) conține codul pentru mai multe
+  taburi (`firestore_clients`).
+- Chunk-ul comun NU mai conține textul de depreciere, care trăia doar în `enableIndexedDbPersistence`.
