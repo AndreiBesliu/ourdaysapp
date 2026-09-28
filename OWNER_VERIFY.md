@@ -100,7 +100,7 @@
 
 ---
 
-## 🆕 AI Center → „By model” (27.09) — gata în cod, NEPUBLICAT
+## 🆕 AI Center → „By model” (27.09) — PUBLICAT pe 28.09
 
 **Fapt:**
 - Secțiunea arată ce model a răspuns, câte apeluri, câți tokeni și cât a costat. Azi e Claude Opus 5.5;
@@ -109,14 +109,16 @@
   separat, „Not split by model”, ca suma să se potrivească cu totalurile de deasupra.
 
 - [ ] **După publicare: Admin → AI Center → „By model”** (1 minut)
-      - **Cum arată bine:** un rând `claude-opus-5-5`, marcat „in use”, cu tariful „$4 / $20 per million
-        tokens”, plus rândul „Not split by model” pentru zilele cu Gemini.
+      - **Cum arată bine** (calculat de mine pe datele reale, pe 30 de zile):
+        - `claude-opus-5-5`, „in use”, 3 apeluri, $0.0081;
+        - „Not split by model”: 24 de apeluri în 6 zile, $0.0702.
+        - Împreună fac exact totalul pe 30 de zile, $0.0783.
       - **Ce e greșit:** textul „The per-model split appears after the next functions deploy” înseamnă că
         funcțiile n-au plecat.
 
 ---
 
-## 🆕 Bannerul „Add your birthday!” (27.09) — reparat în cod, NEPUBLICAT
+## 🆕 Bannerul „Add your birthday!” (27.09) — PUBLICAT pe 28.09
 
 **Fapt:** pe server, documentul tău are ziua de naștere ȘI bannerul închis (`hideBirthdayPrompt: true`).
 Bannerul apărea totuși din două motive:

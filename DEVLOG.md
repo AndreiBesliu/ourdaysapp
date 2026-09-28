@@ -10575,3 +10575,53 @@ reparația bannerului, „continua”.
   - build (Admin +2,9 kB), split, bundle.
 
 **BACKLOG:** punctul „Panoul Admin nu arată încă rollup-ul pe model” e închis de acest commit.
+
+## 2026-09-28 · Publicarea: bannerul, raportarea crash-urilor, costul pe model (Task Started)
+
+**Prompt (Andrei):** „publică”
+**Model:** Claude Opus 5.5.
+**Plan:**
+- funcțiile, apoi hosting-ul (regulile sunt identice);
+- verificarea bundle-ului de pe live, a panoului pe datele reale, a jurnalelor și a joburilor.
+
+## 2026-09-28 · Publicarea: bannerul, raportarea crash-urilor, costul pe model (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Înainte:** CI verde pe `44e0fff`; deploy-ul de probă a trecut; `live-diff` curat.
+
+**Publicat:**
+- **Funcțiile:** 51 actualizate.
+- **Hosting-ul:** bundle-ul `index-BsbAM0vb` și chunk-ul `Admin-CmHXPhlL`. Live-ul le servește.
+- Bundle-ul de pe live conține:
+  - `CalendarHome.listenStale`;
+  - ascultătorul cu `includeMetadataChanges`;
+  - `describeThrown`;
+  - „Not split by model”.
+
+**„By model” pe datele reale** (același `mergeModelDays` compilat, aceeași fereastră de 30 de zile):
+
+| rând | apeluri | cost |
+|---|---|---|
+| `claude-opus-5-5` | 3 (1459 tokeni intrare / 113 ieșire) | $0.008096 |
+| „Not split by model” | 24, în 6 zile | $0.070232 |
+| **total** | | **$0.078328**, exact totalul ferestrei |
+
+`complete: true`.
+
+**Pe live, după deploy:**
+- **`live-diff`:**
+  - owner pe 51 de funcții;
+  - contul AI pe 5;
+  - nicio legătură la secrete;
+  - regulile identice.
+- **Joburile** sunt toate `ok`. `logErrorDigest` a rulat la 00:00 UTC, adică pe orarul fix, deci repararea
+  orarului e confirmată pe live.
+- **Jurnalele:** 0 intrări WARNING+ de la 00:00 UTC.
+
+**Rămâne la Andrei (`OWNER_VERIFY.md`):**
+- o reîncărcare a calendarului: bannerul nu mai trebuie să apară;
+- o privire în AI Center → „By model”.
+
+Dacă browserul lui nu primește date live, un rând `CalendarHome.listenStale` va apărea în jurnalul de
+erori după prima încărcare.
