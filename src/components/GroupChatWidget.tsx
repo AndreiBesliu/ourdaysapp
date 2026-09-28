@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck, Reply, Pencil, Trash2, Ban, Pin, Search, Mic, ChevronUp, ChevronDown, Play, Pause, Sparkles } from 'lucide-react';
 import { format, isSameDay, isToday, isYesterday } from 'date-fns';
-import { collection, query, orderBy, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limitToLast, where, getCountFromServer, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { liveQuery } from '../utils/liveQuery';
+import {
+  CHAT_PAGE, TYPING_FRESH_MS, mayHaveOlder, typingWriteDue, pinnedInOrder, windowToReach, anchorStep,
+  type ScrollAnchor,
+} from '../utils/chatWindow';
 import { reportError } from '../reportError';
 import { uploadFile, UploadRefused } from '../utils/uploadFile';
 import { checkChatImage, refusalKey, refusalDetail } from '../utils/uploadLimits';
@@ -129,8 +133,31 @@ export default function GroupChatWidget({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [lastRead, setLastRead] = useState<number>(Date.now());
+  // The listener below is created once per conversation (and per window size), not on every open
+  // and close of the pane, so it reads these two through refs — a closure would keep the values it
+  // was created with.
+  const openRef = useRef(open);
+  const lastReadRef = useRef(lastRead);
+  useEffect(() => { openRef.current = open; }, [open]);
+  useEffect(() => { lastReadRef.current = lastRead; }, [lastRead]);
+  // How many of the newest messages are live (utils/chatWindow.ts). Kept with the conversation it
+  // belongs to, so switching conversations starts again at one page without an effect.
+  const [win, setWin] = useState({ convId, size: CHAT_PAGE });
+  const windowSize = win.convId === convId ? win.size : CHAT_PAGE;
+  // Where to scroll once the list has changed, instead of the end: the old top message after "load
+  // older", or a pinned message outside the window once it has been loaded (utils/chatWindow.ts).
+  const anchorRef = useRef<ScrollAnchor | null>(null);
+  const loadOlder = () => {
+    const firstId = messages[0]?.id;
+    if (firstId) anchorRef.current = { convId, id: firstId, block: 'start', waitForGrowth: true, until: Date.now() + 10_000 };
+    setWin({ convId, size: windowSize + CHAT_PAGE });
+  };
+  // Pinned messages come from their own query, so a pin older than the window stays in the bar.
+  const [pinnedDocs, setPinnedDocs] = useState<any[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // When this person's typing mark was last written; null once it has been cleared.
+  const typingWrittenAtRef = useRef<number | null>(null);
   const [activeReactionMsg, setActiveReactionMsg] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<any | null>(null);
   const [editingMsg, setEditingMsg] = useState<any | null>(null);
@@ -218,9 +245,11 @@ export default function GroupChatWidget({
   useEffect(() => {
     if (!convId) return;
 
+    // The newest `windowSize` messages, still oldest first on screen (utils/chatWindow.ts).
     const q = query(
       collection(db, `${basePath}/messages`),
-      orderBy('createdAt', 'asc')
+      orderBy('createdAt', 'asc'),
+      limitToLast(windowSize),
     );
 
     // An unreadable conversation and an empty one look the same, and in a chat that is the
@@ -229,10 +258,10 @@ export default function GroupChatWidget({
       setChatLoadError(false);
       setMessages(fetchedMessages);
 
-      if (!open) {
+      if (!openRef.current) {
         const unread = fetchedMessages.filter(m =>
           m.createdAt &&
-          m.createdAt.toMillis() > lastRead &&
+          m.createdAt.toMillis() > lastReadRef.current &&
           m.senderId !== auth.currentUser?.uid
         );
         setUnreadCount(unread.length);
@@ -242,6 +271,11 @@ export default function GroupChatWidget({
       }
     }, () => setChatLoadError(true));
 
+    // Pinned ones on their own, whatever their age. Losing it only empties the bar.
+    const pinnedQuery = query(collection(db, `${basePath}/messages`), where('isPinned', '==', true));
+    const unsubPinned = liveQuery<any>(pinnedQuery, 'GroupChatWidget.pinned',
+      (docs) => setPinnedDocs(docs), () => setPinnedDocs([]));
+
     // Listen to typing status
     const typingQuery = query(collection(db, `${basePath}/typing`));
     // Typing dots are the one listener here with nothing to show on failure: an absent dot and a
@@ -250,21 +284,34 @@ export default function GroupChatWidget({
     const unsubTyping = liveQuery<any>(typingQuery, 'GroupChatWidget.typing', (docs) => {
       const now = Date.now();
       setTypingUsers(docs
-        .filter((d: any) => d.id !== auth.currentUser?.uid && d.updatedAt && (now - d.updatedAt.toMillis()) < 5000)
+        .filter((d: any) => d.id !== auth.currentUser?.uid && d.updatedAt && (now - d.updatedAt.toMillis()) < TYPING_FRESH_MS)
         .map((d: any) => d.id));
     }, () => setTypingUsers([]));
 
     return () => {
       unsubscribe();
+      unsubPinned();
       unsubTyping();
     };
-  }, [convId, open]);
+    // Not `open`: opening or closing the pane used to tear the listeners down and read the whole
+    // conversation again.
+  }, [convId, basePath, windowSize]);
 
   // Mark messages as seen when chat opens
   useEffect(() => {
     if (!open || !auth.currentUser || messages.length === 0) return;
 
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // The end, as always — unless an anchor is waiting (utils/chatWindow.ts, anchorStep): after
+    // "load older" the jump to the end would throw the reader away from what they asked to see.
+    const anchor = anchorRef.current;
+    const step = anchorStep(anchor, convId, messages[0]?.id, !!(anchor && messageRefs.current[anchor.id]), Date.now());
+    if (step === 'scroll') {
+      messageRefs.current[anchor!.id]?.scrollIntoView({ block: anchor!.block });
+      anchorRef.current = null;
+    } else if (step === 'none') {
+      anchorRef.current = null;
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
     setUnreadCount(0);
     setLastRead(Date.now());
 
@@ -357,15 +404,21 @@ export default function GroupChatWidget({
     setNewMessage(e.target.value);
     
     if (!auth.currentUser) return;
-    
-    // Set typing to true
-    setDoc(doc(db, `${basePath}/typing`, auth.currentUser.uid), {
-      updatedAt: serverTimestamp()
-    }).catch(console.error);
+
+    // Mark "typing", at most every TYPING_REFRESH_MS rather than on every keystroke: each write is
+    // also a snapshot pushed to everybody in the conversation (utils/chatWindow.ts).
+    const now = Date.now();
+    if (typingWriteDue(typingWrittenAtRef.current, now)) {
+      typingWrittenAtRef.current = now;
+      setDoc(doc(db, `${basePath}/typing`, auth.currentUser.uid), {
+        updatedAt: serverTimestamp()
+      }).catch(console.error);
+    }
 
     // Clear typing after 3 seconds of inactivity
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
+      typingWrittenAtRef.current = null;
       deleteDoc(doc(db, `${basePath}/typing`, auth.currentUser!.uid)).catch(console.error);
     }, 3000);
   };
@@ -443,6 +496,7 @@ export default function GroupChatWidget({
       
       // Stop typing indicator immediately when sending
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingWrittenAtRef.current = null;
       deleteDoc(doc(db, `${basePath}/typing`, auth.currentUser.uid)).catch(console.error);
       
     } catch (err) {
@@ -551,17 +605,32 @@ export default function GroupChatWidget({
     triggerHaptic('light');
   };
 
-  const pinnedMessages = messages.filter(m => m.isPinned && !m.isDeleted);
+  // From the pinned query, not the window: a pin older than the newest page stays in the bar.
+  const pinnedMessages = pinnedInOrder(pinnedDocs);
 
   // --- Search ---
   const searchResults = searchQuery.trim()
     ? messages.filter(m => m.text && !m.isDeleted && m.text.toLowerCase().includes(searchQuery.toLowerCase()))
     : [];
 
-  const scrollToMessage = (msgId: string) => {
+  const scrollToMessage = async (msgId: string) => {
     const el = messageRefs.current[msgId];
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    // A pinned message outside the window. Count what is at or after it, open the window that far,
+    // and scroll once it is rendered — one count query, rather than paging blindly.
+    const pin = pinnedDocs.find((p) => p.id === msgId);
+    if (!pin?.createdAt) return;
+    try {
+      const newer = await getCountFromServer(query(
+        collection(db, `${basePath}/messages`), where('createdAt', '>=', pin.createdAt),
+      ));
+      anchorRef.current = { convId, id: msgId, block: 'center', waitForGrowth: false, until: Date.now() + 10_000 };
+      setWin({ convId, size: windowToReach(newer.data().count, windowSize) });
+    } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'GroupChatWidget.reachPinned' });
     }
   };
 
@@ -968,6 +1037,16 @@ export default function GroupChatWidget({
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto overscroll-contain p-4 flex flex-col gap-3 bg-zinc-50/50 dark:bg-zinc-900/50">
+            {/* The window is full, so there may be more behind it (utils/chatWindow.ts). */}
+            {messages.length > 0 && mayHaveOlder(messages.length, windowSize) && (
+              <button
+                type="button"
+                onClick={loadOlder}
+                className="self-center shrink-0 px-3 py-1 rounded-full text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
+              >
+                {t('chatLoadOlder', language)}
+              </button>
+            )}
             {messages.length === 0 ? (
               <p className={`text-center text-xs mt-10 ${chatLoadError ? 'text-rose-500' : 'text-zinc-400'}`}>
                 {chatLoadError ? t('chatLoadFailed', language) : t('chatStart', language)}

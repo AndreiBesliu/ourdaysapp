@@ -185,10 +185,8 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   - căutare și vedere agendă;
   - export ICS;
   - onboarding pentru un utilizator fără grup.
-- **Chat:**
-  - interogarea mesajelor n-are `limit` și se re-abonează la fiecare deschidere;
-  - rândurile de notificare nu expiră niciodată;
-  - indicatorul de tastare scrie la fiecare tastă.
+- **Chat:** rândurile de notificare nu expiră niciodată. (Fereastra de mesaje și rărirea scrierilor
+  „scrie...” sunt făcute din 28.09.)
 - **Warlord, partea din repo-ul ăsta:**
   - sincronizarea pe două dispozitive (`src/warlordCloud.ts:~98-104`) dă câștig dispozitivului care
     a scris de mai multe ori, nu celui mai recent;

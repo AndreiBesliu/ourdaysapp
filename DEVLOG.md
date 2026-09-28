@@ -10869,3 +10869,55 @@ schimbare de la ultima publicare completă.
 **Testarea:** Andrei a lăsat-o deoparte („lasa testarea”). Pașii lui rămân în `OWNER_VERIFY.md`, pentru
 când vrea. Pentru ziua de naștere urmăresc eu jurnalul: un raport `birthdayRetracted` apărut după
 publicare ar însemna o altă cauză.
+
+## 2026-09-28 · Chatul: fereastră de mesaje, fără reabonare, „scrie...” mai rar (Task Started)
+
+**Prompt (Andrei):** la întrebarea ce iau din BACKLOG: „acum 1 si 2” (1 = chat mai ieftin, 2 = cache-ul
+Firestore nou).
+**Model:** Claude Opus 5.5.
+**Plan:** întâi chatul, măsurat înainte pe live, apoi cache-ul.
+
+## 2026-09-28 · Chatul: fereastră de mesaje, fără reabonare, „scrie...” mai rar (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Măsurat înainte, pe live** (doar numărători):
+- 47 de mesaje în total, 23 în cea mai mare conversație, niciun mesaj fixat, niciun marcaj „scrie...”.
+- Azi costul e neglijabil. Riscul e creșterea: widgetul e montat cât timp e ales un grup, deci fiecare
+  pornire citea tot istoricul, iar fiecare deschidere sau închidere a panoului îl citea din nou.
+- **Am corectat ce îi spusesem lui Andrei:** „chatul costă” e adevărat abia la creștere, nu azi.
+
+**Ce s-a schimbat:**
+- **`src/utils/chatWindow.ts`** (pur):
+  - `CHAT_PAGE = 100`, `mayHaveOlder`, `windowToReach`;
+  - `anchorStep` / `ScrollAnchor`;
+  - `pinnedInOrder`;
+  - `TYPING_FRESH_MS = 5000`, `TYPING_REFRESH_MS = 2500`, `typingWriteDue`.
+- **`GroupChatWidget.tsx`:**
+  - ascultă ultimele `windowSize` mesaje (`orderBy createdAt` + `limitToLast`);
+  - efectul depinde doar de conversație și fereastră, nu de `open`: `open` și `lastRead` se citesc prin
+    ref-uri;
+  - mesajele fixate vin dintr-o interogare separată (`isPinned == true`), deci unul vechi rămâne în bară;
+  - clicul pe un mesaj fixat din afara ferestrei face o numărare (`getCountFromServer`, `createdAt >=`),
+    lărgește fereastra exact până la el și derulează la el;
+  - „Load older messages” apare doar cu fereastra plină și păstrează în vedere mesajul care era sus;
+  - marcajul „scrie...” se salvează cel mult o dată la 2,5 s. Cititorii folosesc aceeași constantă de 5 s.
+- Cheia `chatLoadOlder` în 6 limbi. BACKLOG: rămân doar notificările care nu expiră.
+
+**Probe:**
+- `chatWindow.test.ts`: 17 teste. 12 mutații, toate prinse, fișierele restaurate identic.
+- **Pe live, doar citire:** cele trei forme de interogare (fereastra, fixatele, numărarea) rulează fără
+  index nou.
+- **Bancul pe widgetul real** (250 de mesaje simulate, unul fixat la #10; derulări făcute instantanee și
+  înregistrate, fiindcă panoul ascuns nu animă):
+  - **la deschidere:** 100 de mesaje (#150–#249), o singură derulare, la final;
+  - **„Load older”:** 200 de mesaje, o singură derulare, la #150, sus (17 px). **Controlul**, fără
+    ancoră, sare la final. Codul a fost restaurat identic;
+  - **clic pe fixatul #10:** o numărare, fereastra de 300, toate cele 250 de mesaje, #10 în centru
+    (−9 px), iar butonul dispare;
+  - **20 de taste în 1,8 s:** o singură scriere (înainte, 20). După 2,5 s încă una; după pauză se
+    șterge; prima tastă de după scrie imediat;
+  - **30 de mesaje:** fără buton și fără bară.
+- tsc, poarta de lint, `npm test` (2071) și build: toate verzi.
+
+**Nepublicat.** Doar hosting (nicio funcție, regulă sau index schimbat).
