@@ -155,6 +155,29 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   care nu se încarcă se vede doar dacă clientul raportează în `errorLogs`. Log-urile de acces la date
   costă și se pornesc din IAM, deci e decizia lui Andrei.
 
+- **Pornirea fără profil citit scrie peste profil** (găsit 28.09, la cardurile offline; existent de
+  dinainte). Când `getDoc(users/{uid})` e refuzat (`App.tsx`, `App.authBootstrap.userDoc`), `userDocSnap`
+  e `null`. Scrierile de la pornire tratează atunci contul ca nou, iar la revenirea rețelei:
+  - numele e rescris cu `displayName` și fusul orar cu cel al dispozitivului;
+  - `familyMembers` devine `[]`;
+  - oglinda `profiles` primește `photoURL: null` și `birthday: null`.
+  Cu cache-ul persistent, citirea offline răspunde din cache, deci cazul cere un dispozitiv fără cache
+  (primul login offline) sau o eroare reală. Reparația: fără profil citit, doar `lastLogin`. **De ce
+  așteaptă:** e în afara cererii; nu e făcut mai probabil de cardurile offline.
+- **Salvarea unui card în Wallet stă „în lucru” fără internet.** `Wallet.tsx` așteaptă scrierea, iar o
+  scriere Firestore offline nu se termină până la server. Cardul e totuși în coada locală și pleacă la
+  revenirea rețelei. Copia offline îl marchează „netrimis”. **De ce așteaptă:** editarea offline e în
+  afara cererii din 28.09 (pagina offline e doar citire).
+- **Cardurile offline, ce a rămas deliberat în afară (28.09):**
+  - **Semnal fără date la casă:** căderea automată pe pagina offline vine doar când rețeaua REFUZĂ,
+    fără timeout, ca o conexiune lentă să primească aplicația reală. Scurtătura „Cards” (apăsare lungă
+    pe iconiță) și modul avion o deschid imediat. Un timeout se reia doar dacă îl cere o măsurătoare.
+  - **Pozele cardurilor** nu sunt offline (decizia lui Andrei, implicit nu: câțiva MB per card).
+- **Comentariul din `firestore.rules` despre `inviteeId`** (în jur de liniile 546–548) spune că
+  `CalendarHome` interoghează `where('inviteeId','==',uid)`. Interogarea a fost scoasă pe 28.09 („UI
+  fals”). Regula rămâne corectă; doar comentariul e vechi. Se corectează la următoarea atingere a
+  regulilor, ca să nu ceară o publicare de reguli doar pentru un comentariu.
+
 - **Repetarea zilnică cu filtru (26.09) — ce a rămas deliberat în afară:**
   - **Tipul de repetare nu se poate schimba după creare.** Asta nu e nou: nici frecvența nu se putea
     schimba.

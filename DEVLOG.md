@@ -11065,3 +11065,122 @@ nicio schimbare de la ultima publicare completă.
 **Publicat:** hosting-ul. Intrarea de pe live e `index-slth3LUR`, aceeași cu build-ul. Ea:
 - nu mai conține `CalendarHome.events.invited`, `pendingInvitePlural` și „Simulate refresh”;
 - conține `family_time`, `chatLoadOlder` și `resetLinkSent`.
+
+## 2026-09-28 · Cardurile din Wallet offline, cu sincronizare (Task Started)
+
+**Prompt (Andrei):** „codurile de bare și QR vreau sa fie disponibile offline, dar sa se faca sync la modificari”
+**Model:** Claude Opus 5.5.
+**Plan:** o pagină offline separată, fără Firebase, servită de service worker doar când rețeaua refuză
+o navigare. Ea citește o copie a cardurilor ținută la zi de un ascultător Firestore pe toată aplicația.
+Designul a fost ales printr-un workflow cu variante judecate; plan în scratchpad (`offline_plan.md`).
+
+## 2026-09-28 · Cardurile din Wallet offline, cu sincronizare (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Ce face:**
+- **Pagina `/offline/cards.html`** (`src/offline/`, `vite.offline.config.ts`) e un singur fișier:
+  scriptul și stilul inline, fără Firebase, fără store, fără nicio subresursă.
+  - Arată cardurile din copie, sortate. Codul se desenează cu ACELAȘI `AssetBarcode` ca în Wallet.
+  - Spune cât de proaspătă e copia: verificată, veche de peste 7 zile, neconfirmată, sau cu o modificare
+    netrimisă.
+  - Un card deschis e un dialog prin `useDialog`, ca oricare altul din aplicație: Back și Escape îl
+    închid fără să iasă din pagină, iar focusul revine pe card.
+  - Pagina își declară limba și un titlu tradus.
+- **Copia** (`src/utils/offlineWallet.ts`) stă în `localStorage` (`ourdays.offlineWallet`), pe listă
+  albă: id, nume, cod, format, partajat. Fără poze și fără alte câmpuri.
+  - Se scrie doar pe răspunsuri complete, niciodată pe o listă eșuată.
+  - Un răspuns gol din cache nu șterge o copie bună.
+  - `confirmedAt` se pune doar pe `!fromCache && !pending` pentru TOATE listele.
+- **Sincronizarea** (`src/utils/offlineWalletSync.ts`) folosește cele trei interogări ale Wallet-ului,
+  cu `includeMetadataChanges`, pornite din `App.tsx` la inactivitate.
+  - Un ascultător eșuat e redeschis de 3 ori (5 s, 30 s, 2 min).
+  - Un grup părăsit își închide ascultătorul.
+  - Un card șters offline e marcat „netrimis”: SDK-ul nu-l numără în `hasPendingWrites`.
+  - Nu scrie pentru alt cont decât cel logat.
+  - După 10 minute online, raportează o singură dată o copie blocată sau o pagină nestocată.
+- **Delogarea** oprește sincronizarea și șterge copia, înainte de orice poate atârna offline. La login,
+  copia altui cont e ștearsă imediat.
+- **Service worker-ul** (`public/sw.js`) stochează doar pagina, întreagă și numai dacă poartă revizia cu
+  care a fost ștampilat worker-ul (`scripts/stamp-offline.mjs`).
+  - Documentul aplicației și `/assets/*` rămân ale browserului (lecția din 19.09).
+  - Pagina e servită doar când rețeaua REFUZĂ o navigare. Nu există timeout.
+  - Fără pagină stocată: „Fără conexiune”, în limba browserului, cu buton de reîncercare.
+  - `CACHE_NAME` rămâne `ourdays-cache-v2`, deci worker-ul de acum e un rollback care se curăță singur.
+- **Oprirea de urgență:** `VITE_OFFLINE_CARDS=0` ștampilează worker-ul `off`, care șterge pagina, iar
+  aplicația șterge copia.
+- **Porțile:**
+  - `check-offline.mjs` rulează în predeploy și în CI. Verifică:
+    - aceeași revizie în pagină și în worker;
+    - hash-ul paginii;
+    - `dist/sw.js` = `public/sw.js` în afara liniei ștampilate (CRLF ignorat);
+    - comutatorul în ambele sensuri;
+    - fără CSP care ar bloca scriptul inline.
+  - `offlineInline.mjs` refuză `<!--` în script și escapează `</script`.
+- **Wallet-ul** afișează o linie:
+  - verde „Disponibil offline · verificat …”, cu link spre pagină;
+  - galben „încă neverificat cu serverul” pentru o copie neconfirmată;
+  - „Pregătesc…” / „Deschide o dată cu internet”.
+- **În detaliile unui eveniment**, cardul legat, dacă nu e în cache și nu există conexiune, spune asta în
+  loc să rămână gol.
+- **Manifestul** are scurtătura „Cards” spre pagină.
+
+**Găsite pe drum:**
+- **React #130 la cardurile QR** (`react-qr-code` sub Vite 8/rolldown, importul implicit dădea
+  obiectul `exports`). Afecta și aplicația live, latent: 0 carduri QR pe live. Acum importul e numit,
+  ținut de `qrInterop.test.ts`.
+- **Un „heartbeat” care re-ștampila prospețimea** a declarat copia proaspătă la 80 s după oprirea
+  serverului: SDK-ul real nu dă niciun eveniment atât timp. Scos. Proba reluată nu mai ștampilează.
+- `enableIndexedDbPersistence` (un singur tab) fusese deja înlocuit în aceeași zi cu cache-ul comun.
+
+**Recenzia adversarială** (workflow pe mai multe unghiuri) a confirmat 19 constatări, 16 după dedublare.
+Toate sunt tratate. Ce e comportament are un test:
+- `caches.open` creează un cache gol luat drept pagină;
+- se servea cea mai veche revizie;
+- `Response.error()` când lipsea pagina;
+- un ascultător eșuat rămânea înghețat;
+- cursa la delogare;
+- copia altui cont;
+- ștergerea offline;
+- lista de grupuri numărată ca „netrimis”;
+- comutatorul citit greșit din `.env`;
+- verificarea într-un singur sens;
+- CRLF;
+- dialogul fără Back/Escape/focus;
+- limba paginii;
+- „verificat” pe o copie neconfirmată;
+- „pe acest dispozitiv” în loc de „aici”;
+- scurtătura din manifest.
+
+Două constatări infirmate au fost totuși întărite: inlinerul refuză `<!--` și verifică fișierele rămase
+înainte să șteargă dosarul. Reziduul de după un rollback (copia din `localStorage`) e documentat în
+OWNER_VERIFY, nereparat: pagina n-are Firebase ca să verifice contul.
+
+**Probe:**
+- **A** (dist real, emulatorul de hosting, worker real): cu serverul oprit, `/wallet` deschide pagina
+  offline. Un upgrade înlocuiește revizia veche. Verificarea de versiune eșuează onest offline (fără
+  regresia din 19.09). Rollback-ul la worker-ul de pe live ajunge la pagina de eroare a browserului și
+  șterge cache-ul offline.
+- **B** (SDK real + emulator Firestore): copia scrisă e pe lista albă. Editarea, ștergerea și plecarea
+  din grup ajung în copie în ~0,1 s.
+- **Pagina construită, în browser:** limba `ro` și titlul tradus. Un card deschis e dialog (focus
+  înăuntru, QR cu path-uri, EAN cu 31 de bare). Escape și Back îl închid, rămân pe pagină, focusul
+  revine pe card și intrarea din istoric e scoasă.
+- **Mutații:** 42 de mutanți reali pe worker, copie, sincronizare, legături, pagină și porțile de build.
+  Controlul negativ a trecut întâi.
+  - Prima rulare: 38 prinși și 4 supraviețuitori. Fiecare a fost analizat:
+    - **W14** (pagina servită întâi din rețea) trecea fiindcă fetch-ul fals respingea. Testul cere acum
+      ca rețeaua să nu fie întrebată: pe semnal fără date un fetch atârnă, nu respinge.
+    - **S5** (o listă căzută după ce a răspuns nu era ținută minte): celelalte liste ar fi ștampilat
+      „verificat” peste răspunsul ei vechi. Test nou.
+    - **S6** (un timer de reîncercare rămas după oprire): test nou, `getTimerCount() === 0`.
+    - **S7** (intrarea unui grup părăsit rămasă în hartă) e **echivalent**: copia și raportul citesc
+      doar prin `groupIds`.
+  - Reluarea (W14, S5, S6, S7, plus P1 și P2 pe pagina modificată): toți prinși, în afară de S7.
+  - Fișierele au fost verificate prin sha față de instantanee, după fiecare mutant și după porțile
+    complete (DriveFS).
+- tsc, poarta de lint, `npm test` (2190), `test:tz` (46), build, `check-offline` (rev
+  `83afc4b2e378a26f`), `check-split` și `check-bundle`: toate verzi. Pagina finală a fost reverificată
+  în browser: banner vechi + „netrimis” în română, QR, Back, Escape și focusul.
+
+**Nepublicat.** Doar hosting (nicio funcție și nicio regulă schimbată).

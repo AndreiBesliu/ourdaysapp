@@ -19,7 +19,9 @@ const SRC = join(__dirname, '..');
 // `liveQuery.ts` is where the wrapper itself calls onSnapshot — that is the whole point of it.
 // `ExpensesTab.tsx` predates the wrapper and passes its own handlers to both listeners; it is the
 // screen the rule was learned on, and rewriting a correct file just to satisfy a grep is churn.
-const ALLOWED = ['utils/liveQuery.ts', 'components/ExpensesTab.tsx'];
+// `liveQuery.test.ts` (28.09.2026) is the wrapper's own test: it mocks onSnapshot to watch what the
+// wrapper passes it, which is the one place a raw call is the subject rather than a shortcut.
+const ALLOWED = ['utils/liveQuery.ts', 'components/ExpensesTab.tsx', 'utils/liveQuery.test.ts'];
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -56,8 +58,8 @@ describe('no listener may fail in silence', () => {
     expect(offenders, `raw onSnapshot found:\n${offenders.join('\n')}`).toEqual([]);
   });
 
-  it('the two allowed files still exist, so the allowlist cannot rot into a blanket pass', () => {
-    for (const a of ['utils/liveQuery.ts', 'components/ExpensesTab.tsx']) {
+  it('the allowed files still exist, so the allowlist cannot rot into a blanket pass', () => {
+    for (const a of ALLOWED) {
       expect(() => statSync(join(SRC, a))).not.toThrow();
     }
   });

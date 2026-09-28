@@ -1,27 +1,12 @@
 import { create } from 'zustand';
 import { localZone } from './utils/eventTime';
+// The remembered language (and why it is remembered at all): utils/languagePref.ts, shared with the
+// offline Cards page.
+import { LANG_KEY, rememberedLanguage } from './utils/languagePref';
 
-// The chosen language lives in the user's Firestore document, which is only read AFTER sign-in.
-// That left two windows in permanent English for everyone else: the whole login screen, and the
-// moment between boot and the profile arriving on every reload. Neither is a translation gap —
-// the strings exist — so the fix belongs here, not in the dictionary.
-//
-// It is a UI preference and nothing else: no identifier, no personal data. Firestore stays the
-// source of truth; this is only what to render before it answers, and it is corrected the moment
-// it does.
-const LANG_KEY = 'ourdays.language';
 // Remembered locally for the same reason the language is: it is needed to render times on
 // the very first paint, before the user document has been read.
 const TZ_KEY = 'ourdays.timezone';
-
-function rememberedLanguage(): string {
-  try {
-    return localStorage.getItem(LANG_KEY) || 'en-US';
-  } catch {
-    // Private mode, disabled storage, an embedded webview: none of them are worth a crash at boot.
-    return 'en-US';
-  }
-}
 
 function rememberedZone(): string {
   try {

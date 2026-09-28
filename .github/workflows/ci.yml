@@ -76,6 +76,12 @@ jobs:
       - name: Split guard
         run: node scripts/check-split.mjs
 
+      # The offline Cards page and the service worker must carry the same revision, and the page must
+      # load nothing from elsewhere: the worker serves that one file with no network. See
+      # scripts/offlineStamp.mjs and public/sw.js.
+      - name: Offline page guard
+        run: node scripts/check-offline.mjs
+
       # The Firestore rules are the only thing standing between a browser and the data, and until
       # 2026-09-20 nothing in CI ran a single one of the 207 tests that probe them. They needed a
       # JDK and an emulator, so they stayed a local-only gate — which means they only ran when

@@ -11,6 +11,7 @@ import BarcodeScanner from '../components/BarcodeScanner';
 import { useDialog } from '../hooks/useDialog';
 import AssetBarcode from '../components/AssetBarcode';
 import ExpensesTab from '../components/ExpensesTab';
+import OfflineCardsStatus from '../components/OfflineCardsStatus';
 import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
 import { transferAssetCopy } from '../serverActions';
@@ -742,6 +743,9 @@ export default function Wallet() {
           <ExpensesTab sharedUsers={sharedUsers} myGroups={myGroups} />
         ) : (
           <>
+        {/* Whether these cards can be shown with no network (the offline Cards page, public/sw.js). */}
+        <OfflineCardsStatus language={language} />
+
         {/* Categories Panel */}
         <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">

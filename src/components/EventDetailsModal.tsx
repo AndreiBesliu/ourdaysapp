@@ -27,6 +27,11 @@ import { generateChecklistForTask } from '../ai';
 import { checklistReasonKey, checklistWorthRetrying } from '../utils/aiErrorKey';
 
 
+/** Firestore's answer for a read it cannot make: no connection, and the document not in the cache. */
+export function isOfflineError(e: unknown): boolean {
+  return (e as { code?: unknown } | null)?.code === 'unavailable';
+}
+
 interface EventDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -62,6 +67,10 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   // cannot tell apart.
   const [deniedChecklistAssets, setDeniedChecklistAssets] = useState<Set<string>>(new Set());
   const [mainAssetDenied, setMainAssetDenied] = useState(false);
+  // A different failure with a different sentence: no connection, and the card not in this device's
+  // cache (Firestore answers `unavailable`). "Not shared with the group" would be false then.
+  const [offlineChecklistAssets, setOfflineChecklistAssets] = useState<Set<string>>(new Set());
+  const [mainAssetOffline, setMainAssetOffline] = useState(false);
   // The other half of the same refusal. The person who can repair it is the one who cannot see
   // it: the owner reads their own card, so the barcode renders for them exactly as it should,
   // and it is everybody else who gets the apology above. So the owner is told, and asked.
@@ -72,6 +81,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
     if (event?.assetId) {
       const startedFor = event.id;
       setMainAssetDenied(false);
+      setMainAssetOffline(false);
       const fetchAsset = async () => {
         try {
           const docRef = doc(db, 'assets', event.assetId);
@@ -86,7 +96,10 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           // The same refusal the checklist rows get, and it used to leave the whole block
           // unrendered: no heading, no code, no reason. The biggest barcode on the screen
           // simply was not there.
-          if (startedFor === event?.id) setMainAssetDenied(true);
+          if (startedFor === event?.id) {
+            if (isOfflineError(e)) setMainAssetOffline(true);
+            else setMainAssetDenied(true);
+          }
           // Guaranteed, not hypothetical: assets are owner-only to read, while the EVENT carrying
           // the assetId is group-readable — so for every member but the linker this is denied
           // every time. Widening that read is a deferred decision; being quiet about it was not.
@@ -104,6 +117,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       const fetchChecklistAssets = async () => {
         const newMap: Record<string, any> = {};
         const refused = new Set<string>();
+        const offline = new Set<string>();
         for (const item of event.checklistItems) {
           if (item.assetId) {
             try {
@@ -112,7 +126,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                 newMap[item.assetId] = { id: docSnap.id, ...docSnap.data() };
               }
             } catch (e) {
-              refused.add(item.assetId);
+              (isOfflineError(e) ? offline : refused).add(item.assetId);
               reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.checklistAssets' });
             }
           }
@@ -122,6 +136,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
         if (startedFor !== event?.id) return;
         setLinkedChecklistAssets(newMap);
         setDeniedChecklistAssets(refused);
+        setOfflineChecklistAssets(offline);
       };
       fetchChecklistAssets();
     }
@@ -1094,9 +1109,11 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                                   <img src={item.assetUrl} alt={item.text} className="w-full h-auto" />
                                 </div>
                               )}
-                              {item.assetId && !item.isCompleted && deniedChecklistAssets.has(item.assetId) && (
+                              {item.assetId && !item.isCompleted && (deniedChecklistAssets.has(item.assetId) || offlineChecklistAssets.has(item.assetId)) && (
                                 <p className="ml-8 mt-2 text-xs text-amber-600 font-medium self-start max-w-[220px]">
-                                  {t(event.groupId ? 'cardNotSharedWithGroup' : 'cardUnavailable', language)}
+                                  {offlineChecklistAssets.has(item.assetId)
+                                    ? t('cardNotSavedOffline', language)
+                                    : t(event.groupId ? 'cardNotSharedWithGroup' : 'cardUnavailable', language)}
                                 </p>
                               )}
                               {/* The copy people actually hold up at the till: it sits next to
@@ -1197,13 +1214,15 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           {/* The card was attached but cannot be read. Saying so where it would have been, rather
               than rendering nothing: the person is standing at a till looking for it. The wording
               covers both causes because the rules cannot tell them apart — see the state above. */}
-          {event.assetId && mainAssetDenied && (
+          {event.assetId && (mainAssetDenied || mainAssetOffline) && (
             <div>
               <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-1.5">
                 <Wallet className="w-4 h-4" /> {t('linkedAssetCode', language)}
               </p>
               <p className="text-xs text-amber-600 font-medium">
-                {t(event.groupId ? 'cardNotSharedWithGroup' : 'cardUnavailable', language)}
+                {mainAssetOffline
+                  ? t('cardNotSavedOffline', language)
+                  : t(event.groupId ? 'cardNotSharedWithGroup' : 'cardUnavailable', language)}
               </p>
             </div>
           )}

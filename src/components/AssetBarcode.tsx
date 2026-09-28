@@ -18,7 +18,13 @@
 // from each other if there is only one, and `barcodeAdoption.test.ts` refuses a fourth.
 
 import Barcode from 'react-barcode';
-import QRCode from 'react-qr-code';
+// The NAMED export, never the default. react-qr-code is CommonJS with `__esModule` + `exports.default`,
+// and this package is "type": "module", so the bundler's Node-style interop hands a default import
+// the whole `exports` object: React then throws #130 ("element type is invalid: got object") the
+// moment a QR card is opened. Found 28.09.2026 by the offline Cards probe (a real build, a real
+// browser); on live no card was a QR yet, so it had never fired. react-barcode exports the component
+// as module.exports itself, which is why its default import works. See qrInterop.test.ts.
+import { QRCode } from 'react-qr-code';
 import { renderFor } from '../utils/barcodeFormat';
 import { t } from '../utils/i18n';
 

@@ -1,0 +1,4 @@
+/* The offline Cards page's own stylesheet: only the classes its files use (vite.offline.config.ts). */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

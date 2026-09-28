@@ -6,6 +6,13 @@
   "display": "standalone",
   "background_color": "#09090b",
   "theme_color": "#0ea5e9",
+  "shortcuts": [
+    {
+      "name": "Cards (offline)",
+      "short_name": "Cards",
+      "url": "/offline/cards.html"
+    }
+  ],
   "icons": [
     {
       "src": "/vite.svg",

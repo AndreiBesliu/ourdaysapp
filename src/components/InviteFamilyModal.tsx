@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, UserPlus, Mail, AlertCircle, CheckCircle2, Share2, Check, Users, Link2, Copy, QrCode, MessageCircle, Send, Smartphone, Trash2 } from 'lucide-react';
-import QRCode from 'react-qr-code';
+// Named, not default: the default import is the whole CommonJS `exports` object in this build and
+// React throws #130 on it (components/AssetBarcode.tsx explains; qrInterop.test.ts holds it).
+import { QRCode } from 'react-qr-code';
 import { db, auth } from '../firebase';
 import { collection, addDoc, doc } from 'firebase/firestore';
 import { reportError } from '../reportError';

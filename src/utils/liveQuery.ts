@@ -20,7 +20,8 @@
 // with a context string that says which screen and which collection it was.
 
 import {
-  onSnapshot, type Query, type DocumentReference, type DocumentData, type DocumentSnapshot, type Unsubscribe,
+  onSnapshot, type Query, type QuerySnapshot, type DocumentReference, type DocumentData, type DocumentSnapshot,
+  type Unsubscribe,
 } from 'firebase/firestore';
 import { reportError } from '../reportError';
 
@@ -42,22 +43,28 @@ export interface DocMeta {
 export function liveQuery<T = DocumentData>(
   q: Query<DocumentData>,
   context: string,
-  onNext: (docs: (T & { id: string })[]) => void,
+  onNext: (docs: (T & { id: string })[], meta: DocMeta) => void,
   onError: (err: unknown) => void,
+  // The same option `liveDoc` has: told when a cached answer is confirmed by the server, which
+  // otherwise raises nothing (the offline card copy stamps its freshness on that — offlineWalletSync).
+  options?: { includeMetadataChanges?: boolean },
 ): Unsubscribe {
-  return onSnapshot(
-    q,
-    (snap) => onNext(snap.docs.map((d) => ({ id: d.id, ...(d.data() as T) }))),
-    (err) => {
-      // A permission error and a missing index arrive the same way and matter the same amount:
-      // both mean the screen below is about to lie about being empty.
-      reportError(err?.message || 'snapshot failed', {
-        context,
-        stack: (err as { code?: string })?.code ? `code=${(err as { code?: string }).code}` : undefined,
-      });
-      onError(err);
-    },
+  const next = (snap: QuerySnapshot<DocumentData>) => onNext(
+    snap.docs.map((d) => ({ id: d.id, ...(d.data() as T) })),
+    { fromCache: snap.metadata.fromCache, hasPendingWrites: snap.metadata.hasPendingWrites },
   );
+  const error = (err: { message?: string; code?: string }) => {
+    // A permission error and a missing index arrive the same way and matter the same amount:
+    // both mean the screen below is about to lie about being empty.
+    reportError(err?.message || 'snapshot failed', {
+      context,
+      stack: err?.code ? `code=${err.code}` : undefined,
+    });
+    onError(err);
+  };
+  return options?.includeMetadataChanges
+    ? onSnapshot(q, { includeMetadataChanges: true }, next, error)
+    : onSnapshot(q, next, error);
 }
 
 /**

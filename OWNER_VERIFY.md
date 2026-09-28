@@ -118,6 +118,54 @@
 
 ---
 
+## 🆕 Cardurile din Wallet merg și fără internet (28.09) — NEPUBLICAT
+
+**Fapt:** codurile de bare și QR ale cardurilor tale (și ale celor partajate cu grupurile tale) se deschid
+și fără semnal, pe o pagină separată: „Carduri (offline)”.
+- **Cum ajungi la ea:**
+  - fără internet, orice pagină a aplicației o deschide singură: Calendar, Wallet sau iconița de pe ecranul
+    principal;
+  - cu internet, linkul verde de sub taburile din Wallet („Disponibil offline · verificat …”);
+  - apăsare lungă pe iconița aplicației instalate: scurtătura „Cards”.
+- **Sincronizarea:** cât aplicația e deschisă cu internet, copia se actualizează singură la fiecare
+  modificare: card nou, cod schimbat, card șters, grup părăsit. Pe emulator, în ~0,1 s.
+- **Pagina spune cât de proaspătă e copia:** „Verificat cu serverul la …”. Dacă au trecut peste 7 zile
+  sau copia n-a fost confirmată niciodată de server, textul e galben. O modificare făcută offline și
+  netrimisă încă e scrisă separat.
+- **Ce NU e offline:** pozele cardurilor. Un card fără cod (doar poză) apare în listă, gri, cu „Fără cod
+  salvat”.
+- **Oprirea de urgență:** un build cu `VITE_OFFLINE_CARDS=0` scoate pagina de pe telefoane la prima
+  deschidere cu internet și șterge copia. Restul aplicației rămâne neatins.
+- **Întoarcerea la versiunea de dinainte** (rollback de hosting) curăță singură pagina stocată. Rămâne
+  doar copia din `localStorage`: numele, codurile și formatul cardurilor, fără poze. Cât ține
+  rollback-ul, nu o afișează nimic.
+  - **Singurul caz rămas, îngust:** versiunea veche nu știe de copie, deci delogarea ei n-o șterge. Dacă
+    în timpul rollback-ului altcineva se loghează în ACELAȘI browser, iar apoi se republică versiunea
+    nouă, pagina offline ar putea arăta cardurile contului de dinainte. Asta ține până la prima
+    deschidere a aplicației cu internet, care șterge copia altui cont.
+  - Pagina nu poate verifica singură al cui e contul, fiindcă n-are Firebase. Cazul cere un rollback și un
+    telefon folosit de două conturi, așa că l-am lăsat notat aici, nu reparat.
+
+**Deciziile tale, cu implicitul pe care l-am pus** (spune-mi dacă vrei altfel):
+- **Pagina se deschide fără login.** La casă, fără semnal, login-ul n-ar avea cum să meargă. Copia
+  stă doar în browserul tău și se șterge la delogare. Cine are telefonul tău deblocat vede cardurile, la
+  fel ca în aplicație.
+- **Fără poze offline.** Ar însemna câțiva MB per card pe telefon. Codul e ce scanează casa.
+- **Doar citire.** Adăugarea și editarea rămân în aplicație, cu internet.
+
+- [ ] **După publicare: proba în modul avion** (2 minute, pe telefon)
+      1. Cu internet, deschide aplicația și intră în Wallet. Așteaptă să apară linkul verde „Disponibil
+         offline · verificat …” sub taburi (poate dura câteva secunde prima dată).
+      2. Pune telefonul în modul avion și deschide aplicația din nou: de pe iconiță, sau reîncarcă tabul.
+      3. **Cum arată bine:** apare „Carduri (offline)” cu lista cardurilor. Un card apăsat își arată codul
+         mare, iar butonul Back al telefonului îl închide fără să iasă din pagină.
+      4. Dacă ai un card de magazin, arată-l la casă sau scanează-l cu alt telefon.
+      - **Ce e greșit:** pagina browserului „Fără internet” (dinozaurul) sau „Fără conexiune” în loc de
+        carduri. Înseamnă că pagina n-a apucat să fie stocată. Aplicația îmi trimite singură un raport
+        după 10 minute online (`OfflineCards.notReady` / `OfflineWallet.copyStuck`), dar spune-mi.
+
+---
+
 ## 🆕 „Ai uitat parola?” pe ecranul de login (28.09) — PUBLICAT pe 28.09
 
 **Fapt:** cine avea cont cu email și parolă și își uita parola rămânea blocat afară: aplicația nu

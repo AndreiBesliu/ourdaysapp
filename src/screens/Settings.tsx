@@ -15,6 +15,8 @@ import { releasePushThenSignOut, rememberedPushToken } from '../utils/pushReleas
 import { publicBirthday } from '../utils/publicProfile';
 import { liveDoc } from '../utils/liveQuery';
 import { asksForBirthday, serverConfirmed, sameDoc } from '../utils/ownUserDoc';
+import { forgetOfflineWallet } from '../utils/offlineWallet';
+import { stopOfflineWalletSync } from '../utils/offlineWalletSync';
 import { uploadFile, UploadRefused } from '../utils/uploadFile';
 import { refusalKey, refusalDetail } from '../utils/uploadLimits';
 import { localZone, zoneChoices, zoneLabel } from '../utils/eventTime';
@@ -229,6 +231,11 @@ export default function Settings() {
   // Takes this device's push token with it — see utils/pushRelease.ts. A bare signOut left the
   // token on the account, so a shared phone kept delivering the leaver's chat and events.
   const handleSignOut = async () => {
+    // First, synchronously and locally: the offline card copy must not outlive the account on this
+    // device, even if what follows hangs with no network (utils/offlineWallet.ts). The sync is stopped
+    // before the forget, so nothing it receives meanwhile can write the copy back.
+    stopOfflineWalletSync();
+    forgetOfflineWallet();
     await releasePushThenSignOut({
       uid: auth.currentUser?.uid ?? null,
       remembered: rememberedPushToken(),

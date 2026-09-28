@@ -34,6 +34,9 @@ const Wallet = lazy(loadWallet);
 const Chat = lazy(loadChat);
 const Settings = lazy(loadSettings);
 import { warmRoutes } from './utils/routeWarmup';
+import { forgetOfflineWallet, readOfflineWallet } from './utils/offlineWallet';
+import { startOfflineWalletSync, stopOfflineWalletSync } from './utils/offlineWalletSync';
+import { offlineCardsEnabled } from './utils/offlineCardsFlag';
 
 /** What a lazy screen shows for the moment its chunk loads: the app's own spinner, no text. */
 function RouteFallback() {
@@ -329,6 +332,11 @@ function App() {
         // this the previous account's colours, background PHOTO, sound and haptics are still on
         // screen for whoever signs in next on this device.
         resetTheme();
+        // Nor may the previous account's cards stay readable on the offline page. The sync is stopped
+        // FIRST: at sign-out the SDK re-emits the old account's documents, and one of them landing
+        // after the forget used to write the copy back (review, 28.09.2026).
+        stopOfflineWalletSync();
+        forgetOfflineWallet();
         setUser(null);
       }
       setLoading(false);
@@ -350,6 +358,32 @@ function App() {
     }
     const id = window.setTimeout(warm, 2000);
     return () => window.clearTimeout(id);
+  }, [user]);
+
+  // Keep the offline card copy in step with the server while the app is open, on any screen
+  // (utils/offlineWalletSync.ts). Started when the browser is idle, like the warm-up above. A plain
+  // function, not a component: a fault in it cannot reach the ErrorBoundary below. The kill switch
+  // (VITE_OFFLINE_CARDS=0 at build) stops it and removes any copy already on the device.
+  useEffect(() => {
+    if (!offlineCardsEnabled()) { forgetOfflineWallet(); return; }
+    if (!user) return;
+    // Another account's copy on this device (an account switch, or a build that did not know the
+    // copy): gone at once, before the sync has had a chance to answer — the offline page reads it
+    // with no sign-in at all.
+    const held = readOfflineWallet();
+    if (held && held.uid !== user.uid) forgetOfflineWallet();
+    let stop: (() => void) | null = null;
+    const start = () => {
+      try { stop = startOfflineWalletSync(user.uid); } catch (err) {
+        reportError(err instanceof Error ? err.message : String(err), { context: 'OfflineWallet.start' });
+      }
+    };
+    const idle = typeof window.requestIdleCallback === 'function' && typeof window.cancelIdleCallback === 'function';
+    const id = idle ? window.requestIdleCallback(start, { timeout: 5000 }) : window.setTimeout(start, 2000);
+    return () => {
+      if (idle) window.cancelIdleCallback(id); else window.clearTimeout(id);
+      stop?.();
+    };
   }, [user]);
 
   if (loading) {

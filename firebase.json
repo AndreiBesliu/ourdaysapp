@@ -3,7 +3,8 @@
     "predeploy": [
       "node scripts/tree-clean.mjs",
       "node scripts/check-bundle.mjs",
-      "node scripts/check-split.mjs"
+      "node scripts/check-split.mjs",
+      "node scripts/check-offline.mjs"
     ],
     "public": "dist",
     "ignore": [

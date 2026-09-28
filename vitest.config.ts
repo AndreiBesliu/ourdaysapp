@@ -10,6 +10,9 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  // The app compiles JSX with the automatic runtime (tsconfig.app.json "react-jsx"); tests that render
+  // a component (src/offline/offlineView.test.tsx) must see the same, not esbuild's classic default.
+  esbuild: { jsx: 'automatic' },
   test: {
     include: ['**/*.{test,spec}.?(c|m)[jt]s?(x)'],
     // functions/test runs callables against the emulator, under `npm run test:rules` only.
