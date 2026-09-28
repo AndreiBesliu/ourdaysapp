@@ -10844,3 +10844,28 @@ ecrane.
 - tsc, poarta de lint, `npm test` (2054) și build: toate verzi.
 
 **Nepublicat.** Doar hosting. Pleacă împreună cu „Ai uitat parola?” (`32aa8b2`).
+
+## 2026-09-28 · Publicarea: resetarea parolei și regula `serverConfirmed` (Task Started)
+
+**Prompt (Andrei):** „publica si lasa testarea, continua”
+**Model:** Claude Opus 5.5.
+**Plan:** doar hosting-ul, după CI verde pe `c78190a` și după ce verific că funcțiile și regulile n-au nicio
+schimbare de la ultima publicare completă.
+
+## 2026-09-28 · Publicarea: resetarea parolei și regula `serverConfirmed` (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Înainte:**
+- CI verde pe `32aa8b2` și pe `c78190a`;
+- `HEAD` = `origin/main`, arborele curat;
+- `git diff 50c8e84..HEAD` gol pe `functions/`, reguli, indecși, `storage.rules` și `firebase.json`.
+
+**Publicat:** hosting-ul. Bundle-ul de intrare `index-hF4S8d1j` e cel servit de live. Conține:
+- regula `!e.fromCache&&!e.hasPendingWrites`;
+- `resetLinkSent` și „Ai uitat parola?”;
+- `CalendarHome.birthdayRetracted`.
+
+**Testarea:** Andrei a lăsat-o deoparte („lasa testarea”). Pașii lui rămân în `OWNER_VERIFY.md`, pentru
+când vrea. Pentru ziua de naștere urmăresc eu jurnalul: un raport `birthdayRetracted` apărut după
+publicare ar însemna o altă cauză.

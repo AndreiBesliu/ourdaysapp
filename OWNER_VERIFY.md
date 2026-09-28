@@ -118,7 +118,7 @@
 
 ---
 
-## 🆕 „Ai uitat parola?” pe ecranul de login (28.09) — gata în cod, NEPUBLICAT
+## 🆕 „Ai uitat parola?” pe ecranul de login (28.09) — PUBLICAT pe 28.09
 
 **Fapt:** cine avea cont cu email și parolă și își uita parola rămânea blocat afară: aplicația nu
 trimitea niciun link. Acum „Ai uitat parola?” stă lângă câmpul Parolă. Trimite linkul de resetare al
@@ -148,7 +148,7 @@ Firebase, în limba aplicației.
 - **Dacă punctul apare și dispare în câteva secunde**, aplicația îmi trimite singură un raport
   (`CalendarHome.birthdayRetracted`), o dată pe încărcare, cu ordinea răspunsurilor primite. Fără nume
   și fără date.
-- **Cauza clipirii, găsită din primele două rapoarte (28.09) — reparată în cod, NEPUBLICAT:**
+- **Cauza clipirii, găsită din primele două rapoarte (28.09) — reparată și PUBLICATĂ pe 28.09:**
   - Firebase trimite o versiune marcată „nu e din cache” care încă include scrierea făcută de aplicație
     la fiecare pornire (`lastLogin`). Versiunea asta nu avea ziua ta de naștere.
   - Documentul complet sosește cu ~0,9 s mai târziu.
@@ -156,7 +156,7 @@ Firebase, în limba aplicației.
     neconfirmate.
   - Pe ecranele reale, urma de pe live nu mai produce nicio întrebare. Cu regula veche pusă înapoi,
     clipirea reapare exact: la 0,33 s apare, la 1,19 s dispare.
-  - Până la publicare, punctul și rândul din Settings pot clipi.
+  - De la publicare, un nou raport `birthdayRetracted` ar însemna o altă cauză. Jurnalul îl citesc eu.
 - Rândul întreabă doar după ce serverul a răspuns. Cât timp formularul se încarcă, câmpul e gol,
   iar un câmp gol nu înseamnă încă o zi de naștere lipsă.
 - Probat pe ecranul real, cu Firebase simulat:
