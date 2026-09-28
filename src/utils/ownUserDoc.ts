@@ -20,18 +20,47 @@
 //
 // Not on the calendar any more. Andrei, 28.09, after the fix above went live: "banner-ul a aparut
 // pentru o secunda dar dupa a disparut, si parca l-as muta in tabul de settings". So the question is
-// asked beside the field it is about, in Settings, and nowhere else. No X there: it is the field
-// itself, and the old `hideBirthdayPrompt` flag had one job, closing a banner that no longer exists.
+// asked beside the field it is about, in Settings. No X there: it is the field itself, and the old
+// `hideBirthdayPrompt` flag had one job, closing a banner that no longer exists. The calendar keeps
+// only a pink dot on the way there (the Settings button, and the phone menu that holds it).
 
 /**
- * Whether Settings points this person at their empty birthday field. `birthday` is the field's own
- * value, so what the person just typed counts at once; `fromServer` says the server has answered for
- * the document. Until it has, the field is empty because the form is still loading, and an empty
- * field is not yet a missing birthday.
+ * Whether to point this person at their empty birthday field (the row in Settings, the dot on the
+ * way there). `birthday` is the value on screen, so what the person just typed counts at once;
+ * `fromServer` says the server has answered for the document. Until it has, the value is empty
+ * because the document is still loading, and that is not yet a missing birthday.
  */
 export function asksForBirthday(birthday: unknown, fromServer: boolean): boolean {
   // Truthiness, as the banner always used: any stored birthday counts, and an empty one does not.
   return fromServer && !birthday;
+}
+
+/** One snapshot of the own document, as the retraction report describes it: no content, no ids. */
+export type OwnDocStep = { ms: number; fromCache: boolean; pending: boolean; exists: boolean; birthday: boolean };
+
+/**
+ * Whether the calendar asked for the birthday and then took it back within `windowMs` — read off the
+ * trail of snapshots, with the same rule the screen renders by (`asksForBirthday`, confirmation kept
+ * once the server has answered).
+ *
+ * Why it exists: on 28.09 Andrei saw the old banner show for a second and go, on a screen that
+ * already asked only on the server's word, and nothing measured on live explained it. The calendar
+ * cannot set a birthday (Settings is another route), so a retraction there is the flash itself, and
+ * the trail says which snapshot made the claim.
+ */
+export function birthdayClaimRetracted(trail: OwnDocStep[], windowMs = 10_000): boolean {
+  let confirmed = false;
+  let askedAt: number | null = null;
+  for (const step of trail) {
+    if (!step.fromCache) confirmed = true;
+    if (asksForBirthday(step.birthday, confirmed)) {
+      if (askedAt === null) askedAt = step.ms;
+    } else if (askedAt !== null && step.birthday) {
+      if (step.ms - askedAt <= windowMs) return true;
+      askedAt = null;
+    }
+  }
+  return false;
 }
 
 /**

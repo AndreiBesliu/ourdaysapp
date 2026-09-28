@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { asksForBirthday, withOwnEntry, sameDoc } from './ownUserDoc';
+import { asksForBirthday, birthdayClaimRetracted, withOwnEntry, sameDoc, type OwnDocStep } from './ownUserDoc';
 
 describe('asksForBirthday', () => {
   it('asks once the server has answered and the field is empty', () => {
@@ -25,6 +25,34 @@ describe('asksForBirthday', () => {
   it('never before the server has answered — an empty field on a loading form is not a missing birthday', () => {
     expect(asksForBirthday('', false)).toBe(false);
     expect(asksForBirthday(undefined, false)).toBe(false);
+  });
+});
+
+describe('birthdayClaimRetracted', () => {
+  const step = (ms: number, fromCache: boolean, birthday: boolean): OwnDocStep =>
+    ({ ms, fromCache, pending: false, exists: true, birthday });
+
+  it("Andrei's stale cache, then the server with the birthday: never asked, so nothing taken back", () => {
+    expect(birthdayClaimRetracted([step(0, true, false), step(1500, false, true)])).toBe(false);
+  });
+
+  it('the server says none, then within 10 s a birthday: the flash', () => {
+    expect(birthdayClaimRetracted([step(0, true, false), step(800, false, false), step(1600, false, true)])).toBe(true);
+  });
+
+  it('confirmation is kept once given, as the screen keeps it: a later cached step still asks', () => {
+    expect(birthdayClaimRetracted([step(0, false, true), step(500, true, false), step(900, true, true)])).toBe(true);
+  });
+
+  it('asked and never taken back is no retraction; neither is one after the window', () => {
+    expect(birthdayClaimRetracted([step(0, false, false), step(3000, false, false)])).toBe(false);
+    expect(birthdayClaimRetracted([step(0, false, false), step(10_001, false, true)])).toBe(false);
+    expect(birthdayClaimRetracted([step(0, false, false), step(10_000, false, true)])).toBe(true);
+  });
+
+  it('a birthday that was there all along is not a retraction', () => {
+    expect(birthdayClaimRetracted([step(0, true, true), step(400, false, true)])).toBe(false);
+    expect(birthdayClaimRetracted([])).toBe(false);
   });
 });
 
@@ -77,8 +105,8 @@ describe('CalendarHome uses them', () => {
   // source — weaker than rendering it, and said so. The behaviour is the functions above.
   const src = readFileSync(resolve(process.cwd(), 'src/screens/CalendarHome.tsx'), 'utf8');
 
-  it('the calendar asks nothing about the birthday any more: no banner, no dismissal', () => {
-    expect(src).not.toContain("t('addYourBirthday'");
+  it('the calendar has no birthday banner any more: no text of it, no dismissal', () => {
+    expect(src).not.toContain('addBirthdayPromptDesc');
     expect(src).not.toContain('hideBirthdayPrompt');
     expect(src).not.toContain('BirthdayPrompt');
   });
@@ -88,6 +116,31 @@ describe('CalendarHome uses them', () => {
     expect(call, 'the own-document listener with includeMetadataChanges').toBeTruthy();
     expect(call![0]).toContain('setOwnData((prev) => (sameDoc(prev, data) ? prev : data));');
     expect(call![0]).toContain('if (!meta.fromCache) ownConfirmed.current = true;');
+    expect(call![0]).toContain('if (!meta.fromCache) setOwnFromServer(true);');
+    // Nothing else sets it: a cached snapshot must not confirm.
+    expect(src.match(/setOwnFromServer\(/g)).toHaveLength(1);
+  });
+
+  it('the dot asks through asksForBirthday, on the live document and the server confirmation', () => {
+    expect(src).toContain('const askBirthday = asksForBirthday(ownData?.birthday, ownFromServer);');
+    expect(src.match(/asksForBirthday\(/g)).toHaveLength(1);
+  });
+
+  it('the dot is on every way into Settings: the header button, the phone menu, and its Settings item', () => {
+    const header = /onClick=\{\(\) => navigate\('\/settings'\)\}[\s\S]*?<\/button>/.exec(src);
+    expect(header![0]).toContain('{askBirthday && <span className="absolute');
+    const hamburger = /onClick=\{\(\) => setIsMobileMenuOpen\(!isMobileMenuOpen\)\}[\s\S]*?<\/button>/.exec(src);
+    expect(hamburger![0]).toContain('{askBirthday && !isMobileMenuOpen && <span className="absolute');
+    const item = /onClick=\{\(\) => \{ navigate\('\/settings'\); setIsMobileMenuOpen\(false\); \}\}[\s\S]*?<\/button>/.exec(src);
+    expect(item![0]).toMatch(/\{askBirthday && \(\s*<>\s*<span className="ml-auto/);
+  });
+
+  it('a claim taken back within 10 s is reported once, with the snapshot trail and nothing personal', () => {
+    const call = /'CalendarHome\.userDoc',[\s\S]*?\{ includeMetadataChanges: true \}\);/.exec(src)![0];
+    expect(call).toContain('ownTrail.current.push({ ms, fromCache: meta.fromCache, pending: meta.hasPendingWrites, exists: !!data, birthday: !!data?.birthday });');
+    expect(call).toMatch(/if \(!retractionReported\.current && birthdayClaimRetracted\(ownTrail\.current\)\) \{\s*retractionReported\.current = true;\s*reportError\([\s\S]*?context: 'CalendarHome\.birthdayRetracted', stack: JSON\.stringify\(ownTrail\.current\)/);
+    // Only the first minute, and a bounded trail.
+    expect(call).toContain('if (ms < 60_000 && ownTrail.current.length < 20) {');
   });
 
   it('a listener stuck on the cache is reported once, 30 s in, through the reporter', () => {

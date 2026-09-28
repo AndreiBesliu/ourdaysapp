@@ -4,7 +4,7 @@ import { auth, db, messaging } from '../firebase';
 import { getToken, onMessage } from 'firebase/messaging';
 import { collection, query, doc, updateDoc, where, arrayUnion, getDoc } from 'firebase/firestore';
 import { liveQuery, liveDoc } from '../utils/liveQuery';
-import { withOwnEntry, sameDoc } from '../utils/ownUserDoc';
+import { withOwnEntry, sameDoc, asksForBirthday, birthdayClaimRetracted, type OwnDocStep } from '../utils/ownUserDoc';
 import { eventsForTab, pendingInvitesFor } from '../utils/eventScope';
 import { reportError } from '../reportError';
 import { vapidKeyProblem } from '../utils/webPush';
@@ -71,9 +71,16 @@ export default function CalendarHome() {
   // The signed-in person's own document, LIVE — see utils/ownUserDoc.ts. `undefined` until the
   // listener first answers.
   const [ownData, setOwnData] = useState<Record<string, any> | null | undefined>(undefined);
-  // Whether the server has confirmed it, for the stale-listener report below. A ref: that report is
-  // a timer, which would otherwise read the value it was created with.
+  // Whether the server has confirmed it: state for the birthday dot, and a ref for the stale-listener
+  // report below, which is a timer and would otherwise read the value it was created with.
+  const [ownFromServer, setOwnFromServer] = useState(false);
   const ownConfirmed = useRef(false);
+  // A pink dot on the way to Settings while the birthday is missing (Andrei, 28.09: the question
+  // itself moved to Settings). Same rule as the row there: only on the server's word.
+  const askBirthday = asksForBirthday(ownData?.birthday, ownFromServer);
+  // The own document's first snapshots (metadata only), for the retraction report in the listener.
+  const ownTrail = useRef<OwnDocStep[]>([]);
+  const retractionReported = useRef(false);
   // The member map with the person's own entry taken from that live document, so a birthday set in
   // Settings or a read that failed inside the groups loop cannot leave it stale. Same map object
   // while neither input changes (AddEventModal resets its form on a new one).
@@ -181,6 +188,7 @@ export default function CalendarHome() {
     
     // Legacy support for familyMembers just in case
     let legacyFamily: string[] = [];
+    const listenedAt = Date.now();
     const unsubUser = liveDoc<any>(doc(db, 'users', auth.currentUser.uid), 'CalendarHome.userDoc',
       (data, meta) => {
         if (data) legacyFamily = data.familyMembers || [];
@@ -188,6 +196,21 @@ export default function CalendarHome() {
         // hand the form below a new `userMap` while somebody is typing.
         setOwnData((prev) => (sameDoc(prev, data) ? prev : data));
         if (!meta.fromCache) ownConfirmed.current = true;
+        if (!meta.fromCache) setOwnFromServer(true);
+        // The banner this dot replaces showed for a second on Andrei's screen although it too asked
+        // only on the server's word, and nothing on live explained it. If the dot does the same, the
+        // trail of the first minute's snapshots says which one made the claim. Said once per load.
+        const ms = Date.now() - listenedAt;
+        if (ms < 60_000 && ownTrail.current.length < 20) {
+          ownTrail.current.push({ ms, fromCache: meta.fromCache, pending: meta.hasPendingWrites, exists: !!data, birthday: !!data?.birthday });
+          if (!retractionReported.current && birthdayClaimRetracted(ownTrail.current)) {
+            retractionReported.current = true;
+            reportError(
+              'The birthday was asked for on the server\'s word and taken back within 10 s',
+              { context: 'CalendarHome.birthdayRetracted', stack: JSON.stringify(ownTrail.current) },
+            );
+          }
+        }
       },
       // Losing it falls back to the one-off read below for the own entry. Reported anyway, because
       // a failing read of your OWN document usually means something bigger is wrong.
@@ -642,10 +665,11 @@ export default function CalendarHome() {
           </button>
           <button
             onClick={() => navigate('/settings')}
-            className="hidden sm:flex p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
-            aria-label={t('settings', language)}
+            className="hidden sm:flex relative p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+            aria-label={askBirthday ? `${t('settings', language)} · ${t('addYourBirthday', language)}` : t('settings', language)}
           >
             <Settings className="w-5 h-5" />
+            {askBirthday && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-pink-500 rounded-full" aria-hidden="true" />}
           </button>
           {isAdminEmail && (
             <button
@@ -671,11 +695,13 @@ export default function CalendarHome() {
             <button
               ref={mobileMenu.triggerRef}
               {...mobileMenu.triggerProps}
-              aria-label={t('menuLabel', language)}
+              aria-label={askBirthday ? `${t('menuLabel', language)} · ${t('addYourBirthday', language)}` : t('menuLabel', language)}
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
+              className="relative p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
             >
               {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {/* On a phone Settings lives in this menu, so the dot is on the way in too. */}
+              {askBirthday && !isMobileMenuOpen && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-pink-500 rounded-full" aria-hidden="true" />}
             </button>
 
             {isMobileMenuOpen && (
@@ -717,6 +743,12 @@ export default function CalendarHome() {
                   className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors w-full text-left"
                 >
                   <Settings className="w-4 h-4" /> {t('settings', language)}
+                  {askBirthday && (
+                    <>
+                      <span className="ml-auto w-2 h-2 bg-pink-500 rounded-full" aria-hidden="true" />
+                      <span className="sr-only">{t('addYourBirthday', language)}</span>
+                    </>
+                  )}
                 </button>
                 {isAdminEmail && (
                   <button

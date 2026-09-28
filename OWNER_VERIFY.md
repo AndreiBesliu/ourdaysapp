@@ -123,6 +123,12 @@
 **Fapt:** la cererea ta, bannerul a dispărut din calendar.
 - Dacă ziua de naștere lipsește, rândul „Birthday” din Settings devine roz și scrie „Add your birthday!”.
 - Nu are X: câmpul însuși e răspunsul.
+- **În calendar rămâne doar un punct roz** pe drumul spre Settings: pe rotița Settings (calculator) și, pe
+  telefon, pe butonul de meniu și lângă „Settings” din meniu. Același criteriu: doar după răspunsul
+  serverului.
+- **Dacă punctul apare și dispare în câteva secunde**, aplicația îmi trimite singură un raport
+  (`CalendarHome.birthdayRetracted`), o dată pe încărcare, cu ordinea răspunsurilor primite. Fără nume
+  și fără date. Așa aflu ce a produs clipirea din calendar, pe care n-am putut-o explica.
 - Rândul întreabă doar după ce serverul a răspuns. Cât timp formularul se încarcă, câmpul e gol,
   iar un câmp gol nu înseamnă încă o zi de naștere lipsă.
 - Probat pe ecranul real, cu Firebase simulat:
@@ -131,10 +137,11 @@
   - cu condiția pusă, nu apare niciodată.
 
 - [ ] **După publicare: deschide calendarul, apoi Settings** (20 de secunde)
-      - **Cum arată bine:** în calendar nu mai e niciun banner. În Settings, rândul „Birthday” arată
-        normal, cu data ta.
-      - **Ce e greșit:** dacă rândul se face roz, chiar și pentru o clipă, spune-mi. Datele tale de pe
-        server sunt corecte, deci ar însemna că ecranul întreabă înainte să aibă răspunsul.
+      - **Cum arată bine:** în calendar nu mai e niciun banner și niciun punct roz. În Settings, rândul
+        „Birthday” arată normal, cu data ta.
+      - **Ce e greșit:** un punct sau un rând roz, chiar și pentru o clipă. Datele tale de pe server sunt
+        corecte, deci ar însemna că ecranul întreabă înainte să aibă răspunsul. Spune-mi; raportul
+        automat îmi arată oricum ce s-a întâmplat.
 
 ---
 

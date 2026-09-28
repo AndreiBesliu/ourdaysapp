@@ -10679,3 +10679,52 @@ erori după prima încărcare.
   Întrebarea nu mai există acolo.
 
 **Nepublicat.** Ordinea: doar hosting (nicio funcție și nicio regulă schimbată), cu acordul lui Andrei.
+
+## 2026-09-28 · Un punct roz spre Settings cât timp lipsește ziua de naștere (Task Started)
+
+**Prompt (Andrei):** „ok, continua” (răspuns la propunerea unui punct pe butonul Settings; nu e acord de
+publicare, care cere „publică doar hosting”).
+**Model:** Claude Opus 5.5.
+**Plan:**
+- punctul pe drumul spre Settings, cu același criteriu ca rândul din Settings;
+- un raport automat dacă punctul apare și e retras în câteva secunde, pentru clipirea neexplicată.
+
+## 2026-09-28 · Un punct roz spre Settings cât timp lipsește ziua de naștere (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Ce s-a schimbat (`CalendarHome.tsx`):**
+- **Punctul roz** apare pe rotița Settings din antet, pe butonul de meniu de pe telefon (nu și cu meniul
+  deschis) și lângă „Settings” în meniu. Etichetele accesibile spun „Settings · Add your birthday!”.
+- **Criteriul:** `asksForBirthday(ownData?.birthday, ownFromServer)`. Confirmarea serverului se păstrează
+  odată primită, la fel ca în Settings.
+- **Raportul de retragere:** dacă punctul apare pe cuvântul serverului și e retras în 10 s, se trimite un
+  singur raport, `CalendarHome.birthdayRetracted`.
+  - Conținutul: urma primelor snapshot-uri ale documentului propriu, din primul minut, cel mult 20.
+    Pentru fiecare: ms, `fromCache`, `hasPendingWrites`, dacă documentul există, dacă are zi de naștere.
+    Nu conține nume, id-uri sau date.
+  - Regula e pură: `birthdayClaimRetracted` în `utils/ownUserDoc.ts`.
+  - Motivul: bannerul vechi era deja condiționat de server și totuși a clipit la Andrei, iar nimic
+    măsurat pe live nu explică de ce.
+
+**Probe:**
+- `ownUserDoc.test.ts`: 25 de teste. Zece mutații, toate prinse, fișierele restaurate identic (sha256).
+- Bancul pe `CalendarHome.tsx` real (Firebase simulat):
+
+  | caz | punctul | raport |
+  |---|---|---|
+  | cache vechi, serverul are ziua (cazul lui Andrei) | niciodată | – |
+  | serverul confirmă că lipsește | apare la ~1,6 s și rămâne | – |
+  | ziua e setată | niciodată | – |
+  | serverul nu răspunde | niciodată | – |
+  | documentul nu există | apare după server | – |
+  | serverul spune „nu”, apoi „da” | apare la 0,9 s, dispare la 1,6 s | **unul**, cu urma exactă |
+
+- **Vizual:**
+  - pe desktop, punctul are 8×8 px, în colțul rotiței de 36×36;
+  - la 375 px: punctul e pe butonul de meniu; cu meniul deschis, e lângă „Settings” și lipsește de pe
+    buton;
+  - fără scroll orizontal.
+- tsc, poarta de lint, `npm test` (2037) și build: toate verzi.
+
+**Nepublicat.** Tot doar hosting: funcțiile și regulile nu s-au schimbat.
