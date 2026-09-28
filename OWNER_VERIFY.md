@@ -118,7 +118,7 @@
 
 ---
 
-## 🆕 Ziua de naștere se cere acum în Settings (28.09) — gata în cod, NEPUBLICAT
+## 🆕 Ziua de naștere se cere acum în Settings (28.09) — PUBLICAT pe 28.09 (doar hosting, la „publică doar hosting”)
 
 **Fapt:** la cererea ta, bannerul a dispărut din calendar.
 - Dacă ziua de naștere lipsește, rândul „Birthday” din Settings devine roz și scrie „Add your birthday!”.

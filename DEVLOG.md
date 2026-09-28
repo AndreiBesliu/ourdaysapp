@@ -10728,3 +10728,30 @@ publicare, care cere „publică doar hosting”).
 - tsc, poarta de lint, `npm test` (2037) și build: toate verzi.
 
 **Nepublicat.** Tot doar hosting: funcțiile și regulile nu s-au schimbat.
+
+## 2026-09-28 · Publicarea: ziua de naștere în Settings și punctul roz (Task Started)
+
+**Prompt (Andrei):** „publică doar hosting”
+**Model:** Claude Opus 5.5.
+**Plan:** doar hosting-ul, după verificarea că funcțiile și regulile n-au nicio schimbare de la ultima
+publicare completă. Apoi verificarea bundle-ului de pe live.
+
+## 2026-09-28 · Publicarea: ziua de naștere în Settings și punctul roz (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Înainte:**
+- CI verde pe `7c9f5ba`, arborele curat, `HEAD` = `origin/main`.
+- `git diff 50c8e84..HEAD` e gol pe `functions/`, reguli, indecși, `storage.rules` și `firebase.json`.
+  Serverul de pe live e deci deja cel potrivit, iar hosting-ul singur nu încalcă ordinea
+  functions → hosting.
+
+**Publicat:** hosting-ul, `npm run build` din `HEAD`, apoi deploy.
+- Bundle-ul de intrare e `index-DWVVxuFJ`, chunk-ul `Settings-BefxDcEb`.
+- Live-ul servește exact aceste fișiere. `/` vine cu `no-cache`.
+- Intrarea de pe live conține `CalendarHome.birthdayRetracted` și `CalendarHome.listenStale`.
+- Chunk-ul Settings de pe live conține ascultătorul cu `includeMetadataChanges` și rândul roz.
+
+**Rămâne la Andrei (`OWNER_VERIFY.md`):** să deschidă calendarul, apoi Settings. Nu trebuie să vadă
+niciun banner și niciun punct roz, iar rândul „Birthday” trebuie să aibă data lui. Dacă punctul clipește,
+raportul `CalendarHome.birthdayRetracted` apare în `errorLogs`.
