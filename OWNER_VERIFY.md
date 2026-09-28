@@ -118,6 +118,25 @@
 
 ---
 
+## 🆕 „Ai uitat parola?” pe ecranul de login (28.09) — gata în cod, NEPUBLICAT
+
+**Fapt:** cine avea cont cu email și parolă și își uita parola rămânea blocat afară: aplicația nu
+trimitea niciun link. Acum „Ai uitat parola?” stă lângă câmpul Parolă. Trimite linkul de resetare al
+Firebase, în limba aplicației.
+- Ecranul nu spune niciodată dacă o adresă are cont: răspunsul e același, în aceeași căsuță verde.
+  Altfel oricine ar putea afla cine folosește aplicația.
+- Emailul vine de la Firebase (`noreply@our-days-2a939.firebaseapp.com`), cu șablonul din consolă.
+
+- [ ] **După publicare: trimite-ți un link** (2 minute)
+      - **Cum:** deschide aplicația într-o fereastră privată, apasă „Ai uitat parola?”, scrie adresa
+        ta, apoi „Trimite linkul”.
+      - **Cum arată bine:** căsuța verde, apoi emailul în inbox (sau în Spam), în română. **Nu e nevoie
+        să schimbi parola:** linkul expiră singur.
+      - **Ce e greșit:** căsuța verde apare, dar emailul nu vine nici în 10 minute. Atunci problema e în
+        consolă (șablonul sau domeniul de trimitere), nu în aplicație. Spune-mi.
+
+---
+
 ## 🆕 Ziua de naștere se cere acum în Settings (28.09) — PUBLICAT pe 28.09 (doar hosting, la „publică doar hosting”)
 
 **Fapt:** la cererea ta, bannerul a dispărut din calendar.

@@ -166,8 +166,8 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 
 ## 4. Produs (D) — doar înregistrat
 
-- **Cont:** lipsesc resetarea parolei, ștergerea contului și schimbarea emailului sau a parolei.
-  Niciun apel la `sendPasswordResetEmail` sau `deleteUser`. Ștergerea contului e obligatorie pentru
+- **Cont:** lipsesc ștergerea contului și schimbarea emailului sau a parolei din aplicație (resetarea
+  prin email există din 28.09). Niciun apel la `deleteUser`. Ștergerea contului e obligatorie pentru
   GDPR, și pentru Google Play dacă aplicația ajunge acolo.
 - **UI mort sau fals:**
   - `LeaveGroupModal` e montat, dar nu-l deschide nimic;

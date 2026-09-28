@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendEmailVerification, updateProfile } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendEmailVerification, sendPasswordResetEmail, updateProfile } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { CalendarDays, Mail, Lock, AlertCircle } from 'lucide-react';
+import { CalendarDays, Mail, Lock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { reportError } from '../reportError';
+import { resetOutcome, RESET_MESSAGE_KEY, emailLanguage } from '../utils/passwordReset';
 
 // Firebase's `auth/*` codes are stable and few; these four are the ones a person can act on.
 // Everything else falls back to one sentence keyed off which button they pressed, because
@@ -28,6 +29,41 @@ export default function Login() {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // "Forgot password?": the same form with only the email field (utils/passwordReset.ts).
+  const [resetting, setResetting] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
+  const showReset = (on: boolean) => {
+    setResetting(on);
+    setResetSent(false);
+    setError('');
+  };
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setResetSent(false);
+    setLoading(true);
+    try {
+      // The email arrives in the language the app is in.
+      auth.languageCode = emailLanguage(language);
+      await sendPasswordResetEmail(auth, email.trim());
+      setResetSent(true);
+    } catch (err: any) {
+      // Never says whether the account exists: an address with none reads exactly like success.
+      const outcome = resetOutcome(err?.code);
+      if (outcome === 'sent') setResetSent(true);
+      else setError(t(RESET_MESSAGE_KEY[outcome], language));
+      if (outcome === 'failed') {
+        reportError(err?.message || 'password reset failed', {
+          context: 'Login.passwordReset',
+          stack: err?.code ? `code=${err.code}` : undefined,
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,11 +165,25 @@ export default function Login() {
           <p className="text-primary/20 mt-2 text-white/90">{t('loginTagline', language)}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-6">
+        <form onSubmit={resetting ? handleReset : handleSubmit} className="p-8 space-y-6">
+          {resetting && (
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t('resetPasswordTitle', language)}</h2>
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">{t('resetPasswordDesc', language)}</p>
+            </div>
+          )}
+
           {error && (
-            <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 p-3 rounded-lg flex items-start gap-2 text-sm">
+            <div role="alert" className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 p-3 rounded-lg flex items-start gap-2 text-sm">
               <AlertCircle className="w-5 h-5 shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {resetting && resetSent && (
+            <div role="status" className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 p-3 rounded-lg flex items-start gap-2 text-sm">
+              <CheckCircle2 className="w-5 h-5 shrink-0" />
+              <span>{t(RESET_MESSAGE_KEY.sent, language)}</span>
             </div>
           )}
 
@@ -168,29 +218,57 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('passwordLabel', language)}</label>
-            <div className="relative">
-              <Lock className="w-5 h-5 absolute left-3 top-2.5 text-zinc-400" />
-              <input 
-                type="password" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none"
-                placeholder="••••••••"
-                required
-              />
+          {!resetting && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('passwordLabel', language)}</label>
+                {isLogin && (
+                  <button
+                    type="button"
+                    onClick={() => showReset(true)}
+                    className="text-sm text-primary hover:underline font-medium"
+                  >
+                    {t('forgotPassword', language)}
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <Lock className="w-5 h-5 absolute left-3 top-2.5 text-zinc-400" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
             </div>
-          </div>
+          )}
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={loading}
             className="w-full bg-primary hover:bg-primary/90 text-white font-medium py-2.5 rounded-lg transition-colors disabled:opacity-70"
           >
-            {loading ? t('processing', language) : (isLogin ? t('signIn', language) : t('createAccount', language))}
+            {loading ? t('processing', language)
+              : resetting ? t('sendResetLink', language)
+              : (isLogin ? t('signIn', language) : t('createAccount', language))}
           </button>
 
+          {resetting && (
+            <p className="text-center text-sm">
+              <button
+                type="button"
+                onClick={() => showReset(false)}
+                className="text-primary hover:underline font-medium"
+              >
+                {t('backToSignIn', language)}
+              </button>
+            </p>
+          )}
+
+          {!resetting && (<>
           <div className="relative my-4">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-zinc-200 dark:border-zinc-800"></span>
@@ -225,6 +303,7 @@ export default function Login() {
               {isLogin ? t('signUp', language) : t('signIn', language)}
             </button>
           </p>
+          </>)}
         </form>
       </div>
     </div>

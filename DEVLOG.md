@@ -10755,3 +10755,44 @@ publicare completă. Apoi verificarea bundle-ului de pe live.
 **Rămâne la Andrei (`OWNER_VERIFY.md`):** să deschidă calendarul, apoi Settings. Nu trebuie să vadă
 niciun banner și niciun punct roz, iar rândul „Birthday” trebuie să aibă data lui. Dacă punctul clipește,
 raportul `CalendarHome.birthdayRetracted` apare în `errorLogs`.
+
+## 2026-09-28 · „Ai uitat parola?” pe ecranul de login (Task Started)
+
+**Prompt (Andrei):** „ok, continua”, apoi, la întrebarea care punct din BACKLOG urmează: „Resetarea
+parolei (Recomandat)”.
+**Model:** Claude Opus 5.5.
+**Plan:**
+- „Ai uitat parola?” pe ecranul de login, cu `sendPasswordResetEmail`;
+- ecranul nu spune niciodată dacă o adresă are cont;
+- emailul vine în limba aplicației.
+
+## 2026-09-28 · „Ai uitat parola?” pe ecranul de login (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Ce s-a schimbat:**
+- **`src/utils/passwordReset.ts`** (pur):
+  - `resetOutcome` transformă codurile `auth/*` în patru rezultate. `auth/user-not-found` se citește
+    „trimis”, exact ca succesul.
+  - `RESET_MESSAGE_KEY` dă propoziția pentru fiecare rezultat.
+  - `emailLanguage` transformă `ro-RO` în `ro`, pentru `auth.languageCode`.
+- **`Login.tsx`:**
+  - „Ai uitat parola?” apare lângă Parolă, doar la autentificare, nu și la creare de cont;
+  - modul de resetare are doar câmpul de email, fără parolă, Google sau comutatorul de cont nou;
+  - căsuța verde (`role="status"`) spune „dacă există un cont”;
+  - erorile apar în căsuța roșie (`role="alert"`);
+  - „Înapoi la autentificare” păstrează emailul scris.
+- **Șapte chei noi** în toate cele 6 limbi. BACKLOG: resetarea iese din punctul „Cont”.
+
+**Probe:**
+- `passwordReset.test.ts`: 13 teste. Zece mutații, toate prinse, fișierele restaurate identic (sha256).
+  Printre ele: „cont inexistent” afișat în căsuța roșie. Propoziția ar fi fost identică, dar culoarea
+  ar fi răspuns la întrebare, iar pinul o prinde.
+- **Bancul pe `Login.tsx` real** (Firebase simulat, cinci răspunsuri):
+  - succes și `user-not-found` dau exact același DOM (clasă și text);
+  - `invalid-email`, `too-many-requests` și eroarea de rețea apar fiecare cu propoziția lor, în roșu;
+  - apelul primește adresa și `languageCode: "ro"`.
+- **Vizual:** la 375 px nu apare scroll orizontal. Tema deschisă și cea închisă sunt citibile.
+- tsc, poarta de lint, `npm test` (2050) și build: toate verzi.
+
+**Nepublicat.** Doar hosting: funcțiile și regulile nu s-au schimbat.
