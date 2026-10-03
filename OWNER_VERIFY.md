@@ -118,7 +118,7 @@
 
 ---
 
-## 🆕 Cardurile din Wallet merg și fără internet (28.09) — NEPUBLICAT
+## 🆕 Cardurile din Wallet merg și fără internet (28.09) — PUBLICAT pe 03.10 (doar hosting, la „Publică doar hosting”)
 
 **Fapt:** codurile de bare și QR ale cardurilor tale (și ale celor partajate cu grupurile tale) se deschid
 și fără semnal, pe o pagină separată: „Carduri (offline)”.

@@ -11184,3 +11184,36 @@ OWNER_VERIFY, nereparat: pagina n-are Firebase ca să verifice contul.
   în browser: banner vechi + „netrimis” în română, QR, Back, Escape și focusul.
 
 **Nepublicat.** Doar hosting (nicio funcție și nicio regulă schimbată).
+
+## 2026-10-03 · Publicarea: cardurile offline (Task Started)
+
+**Prompt (Andrei):** la întrebarea despre publicare: „Publică doar hosting”.
+**Model:** Claude Opus 5.5.
+**Plan:** doar hosting-ul, după CI verde pe `5dde3af` și după ce verific că funcțiile și regulile n-au
+nicio schimbare de la ultima publicare completă. După deploy, proba pe live: worker-ul instalat și
+pagina stocată.
+
+## 2026-10-03 · Publicarea: cardurile offline (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Înainte:**
+- CI verde pe `5dde3af`, inclusiv pasul nou „Offline page guard”;
+- `HEAD` = `origin/main`, iar arborele e identic cu `HEAD`, înainte și după build;
+- `git diff 50c8e84..HEAD` gol pe `functions/`, reguli, indecși și `storage.rules`. `firebase.json`
+  are doar pasul nou de predeploy al hosting-ului (`check-offline.mjs`).
+- Pe live nu apăruse nimic nou în jurnalul de erori din 28.09. „Render error” de pe /wallet (20.09) e
+  cel analizat pe 27.09: ce s-a aruncat nu era un `Error`, deci nu e bug-ul QR (#130).
+
+**Publicat:** hosting-ul. Predeploy-ul a rulat `check-offline` (rev `83afc4b2e378a26f`).
+
+**Verificat pe live:**
+- intrarea e `index-DBrh_BUp`, aceeași cu build-ul;
+- `/sw.js` și `/offline/cards.html` sunt identice byte cu byte cu `dist/`, cu aceeași revizie;
+- ambele primesc `no-cache`, iar CSP-ul n-are `script-src`, deci scriptul inline rulează;
+- manifestul are scurtătura „Cards”;
+- **într-un browser real** (panoul, nelogat), worker-ul nou e activ și controlează pagina. Cache-urile
+  sunt `ourdays-cache-v2` și `ourdays-offline-83afc4b2e378a26f`, iar pagina stocată poartă revizia
+  corectă. `/offline/cards.html` spune „No cards are saved here yet”, fără erori în consolă.
+- Calea fără rețea a fost probată înainte pe emulatorul de hosting, cu worker-ul real (proba A, DEVLOG
+  28.09). Pe telefon rămâne proba din OWNER_VERIFY.
