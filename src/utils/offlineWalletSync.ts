@@ -28,6 +28,11 @@
 // server", and the timer stamped the copy as checked 80 s AFTER the connection was lost (28.09.2026).
 // So the time is written only when a server-confirmed delivery actually arrives — at every online
 // start and every change. It may show an older time than the truth; never a newer one.
+//
+// It also judges the Wallet's unconfirmed card changes (utils/walletLedger.ts, 03.10.2026) on the same
+// server-confirmed, drained owned-cards answer — from any screen, so a change that landed after a
+// restart is cleared within seconds of reconnecting, not on some later visit to the Wallet when the
+// card may have changed again for other reasons.
 
 import { collection, query, where } from 'firebase/firestore';
 import { auth, db } from '../firebase';
@@ -37,6 +42,7 @@ import { shareListenerGroupIds, type GroupLike } from './assetSharing';
 import {
   nextSnapshot, readOfflineWallet, writeOfflineWallet, type Deliveries, type Delivery,
 } from './offlineWallet';
+import { reconcile, updateLedger } from './walletLedger';
 
 /** What a listener is for. */
 export type ListenSpec = { kind: 'owned' } | { kind: 'groups' } | { kind: 'shared'; groupId: string };
@@ -57,6 +63,8 @@ export interface SyncDeps {
   pageStored: () => Promise<boolean | null>;
   /** Whether `uid` is still the account signed in. Nothing is written for anyone else. */
   isCurrent: (uid: string) => boolean;
+  /** Judge the Wallet's unconfirmed changes against a server-confirmed, drained owned-cards answer. */
+  judge: (uid: string, docs: Array<Record<string, unknown> & { id: string }>) => void;
 }
 
 /** A copy that stays unwritable this long while online is reported, once. */
@@ -90,6 +98,7 @@ const defaultDeps = (uid: string): SyncDeps => ({
     }
   },
   isCurrent: (u) => auth.currentUser?.uid === u,
+  judge: (u, docs) => { updateLedger(u, (l) => reconcile(l, docs, Date.now())); },
 });
 
 // The one running sync, so sign-out can stop it synchronously BEFORE the copy is forgotten.
@@ -169,6 +178,11 @@ export function startOfflineWalletSync(uid: string, overrides: Partial<SyncDeps>
           }
           store(spec, value);
           settle();
+          if (spec.kind === 'owned' && !meta.fromCache && !meta.hasPendingWrites && deps.isCurrent(uid)) {
+            try { deps.judge(uid, docs); } catch (err) {
+              reportOnce('OfflineWallet.judge', err instanceof Error ? err.message : String(err));
+            }
+          }
         },
         () => {
           // Keep the failure (so no partial copy is written) and re-open later.

@@ -46,4 +46,25 @@ describe('liveQuery', () => {
     expect(reportError).toHaveBeenCalledWith('denied', { context: 'Wallet.assets', stack: 'code=permission-denied' });
     expect(onError).toHaveBeenCalledWith(err);
   });
+
+  it('pendingIds (03.10): which documents carry a local write — and the option never reaches the SDK', () => {
+    const onNext = vi.fn();
+    liveQuery({} as never, 'ctx', onNext, () => {}, { includeMetadataChanges: true, pendingIds: true });
+    expect(onSnapshot.mock.calls[0][1]).toEqual({ includeMetadataChanges: true });
+    onSnapshot.mock.calls[0][2]({
+      docs: [
+        { id: 'a', data: () => ({}), metadata: { hasPendingWrites: true } },
+        { id: 'b', data: () => ({}), metadata: { hasPendingWrites: false } },
+      ],
+      metadata: { fromCache: false, hasPendingWrites: true },
+    });
+    expect(onNext.mock.calls[0][1]).toEqual({ fromCache: false, hasPendingWrites: true, pendingIds: ['a'] });
+  });
+
+  it('without pendingIds the meta is exactly what it was', () => {
+    const onNext = vi.fn();
+    liveQuery({} as never, 'ctx', onNext, () => {}, { includeMetadataChanges: true });
+    onSnapshot.mock.calls[0][2](snap(false));
+    expect(Object.keys(onNext.mock.calls[0][1]).sort()).toEqual(['fromCache', 'hasPendingWrites']);
+  });
 });

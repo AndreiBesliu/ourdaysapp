@@ -11217,3 +11217,127 @@ pagina stocată.
   corectă. `/offline/cards.html` spune „No cards are saved here yet”, fără erori în consolă.
 - Calea fără rețea a fost probată înainte pe emulatorul de hosting, cu worker-ul real (proba A, DEVLOG
   28.09). Pe telefon rămâne proba din OWNER_VERIFY.
+
+## 2026-10-03 · Salvarea unui card în Wallet fără internet (Task Started)
+
+**Prompt (Andrei):** la întrebarea ce iau din BACKLOG: „Salvarea offline în Wallet”.
+**Model:** Claude Opus 5.5.
+**Plan:** găsesc fiecare scriere din Wallet care e așteptată până la server, măsor comportamentul real
+offline (SDK-ul real pe emulator), apoi repar astfel încât interfața să nu mai atârne și să spună
+adevărul despre ce e trimis și ce nu.
+
+## 2026-10-03 · Salvarea unui card în Wallet fără internet (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Măsurat întâi, cu SDK-ul real** (bancul `benchWrite`: `src/firebase.ts` real, emulatorul Firestore;
+Storage și Functions pe porturi închise):
+- **M1:** `addDoc` offline. Cardul e în listă după 46 ms, marcat pending, dar promisiunea rămâne în
+  așteptare până la reconectare. De aici venea butonul „în lucru” fără sfârșit.
+- **M2:** o scriere din coadă supraviețuiește unei reîncărcări, chiar imediate, și pleacă în ~70 ms la
+  pornirea cu rețea.
+- **M3:** o scriere refuzată la reconectare respinge cu `permission-denied`, iar cardul dispare din cache
+  în aceeași milisecundă. Fără cineva care să țină promisiunea, dispare pe tăcute.
+- **M4:** callable-ul fără server dă `functions/internal` după ~2 s.
+- **M5:** încărcarea pozei fără server dă `UploadStalled` la 20 s.
+
+**Designul:** un workflow cu 3 propuneri (minimal, din perspectiva omului, integritatea datelor) și 2
+judecători (corectitudine, UX + regulile casei). Ambii au ales „integrity-first”. Sinteza a tăiat ce
+judecătorii au arătat că e inutil:
+- fără watcher la nivel de aplicație și fără Web Locks: verdictul vine din răspunsul serverului fără
+  scrieri în așteptare, iar coada e comună taburilor;
+- fără „netrimis” derivat din documentul utilizatorului, pe care `lastLogin` îl ține pending.
+
+**Ce face:**
+- **`src/utils/pendingWrite.ts`** (pur):
+  - formularul așteaptă confirmarea cel mult 3 s, 10 s înaintea unui transfer;
+  - deloc când `navigator.onLine === false`, singurul semnal de încredere; `true` nu dovedește nimic;
+  - `settleWithin` nu lasă niciodată un refuz târziu nepreluat;
+  - `handOverFailure` deosebește refuzul de „necunoscut”.
+- **`src/utils/walletLedger.ts`** (pur + stocare), registrul schimbărilor neconfirmate, per cont:
+  - schimbarea e scrisă ÎNAINTE de a fi trimisă, iar cardul poartă id-ul ei (`lastWriteId`);
+  - se judecă pe promisiune cât trăiește pagina, apoi pe primul răspuns al serverului fără scrieri în
+    așteptare: în Wallet, și din sincronizarea copiei offline, de pe orice ecran;
+  - ce n-a ajuns devine notificare, cu „Edit again”;
+  - redenumirile și ștergerile de categorii intră și ele în registru, ca să fie terminate sau raportate
+    și după o repornire;
+  - nu ține niciodată linkul pozei, doar o amprentă.
+- **Wallet:**
+  - `saveCard` nu mai așteaptă nicio scriere;
+  - poza și transferul offline cer o alegere explicită;
+  - Cancel, Escape și Back înseamnă același lucru în orice fază, iar Cancel în timpul încărcării nu mai
+    scrie cardul;
+  - un al doilea transfer al aceluiași card e blocat cât primul e în curs;
+  - „Not sent yet” pe card și în rezumat, montat abia după 1,2 s (`useDelayedFlag`);
+  - `loading`, care ținea formularul, categoriile și lista de poze vechi împreună, e despărțit în trei.
+- **Categorii:**
+  - lista crește prin `arrayUnion`, cu valorile implicite când nu e stocată una (`unionFor`);
+  - scrierile pe `users/{uid}` sunt `setDoc` cu `merge`;
+  - o redenumire listează numele nou înaintea oricărui card;
+  - lista pierde numele vechi doar după ce toate cardurile au acceptat și niciun card nu-l mai poartă;
+  - la un refuz total, numele nou iese din listă, ca reîncercarea să meargă.
+- `uploadFile` acceptă un `AbortSignal`, iar `liveQuery` primește opțiunea `pendingIds` (nu ajunge la SDK).
+- 15 chei noi în cele 6 limbi.
+
+**Probat pe codul real** (`benchWallet`: ecranul Wallet real, emulatorii Auth + Firestore, cu
+`firestore.rules` al repo-ului):
+- **Adăugarea offline:** formularul se închide la 3,4 s, cardul arată „Not sent yet”, iar la reconectare
+  totul se curăță în 0,2 s.
+- **Refuzul real (partajare spre un grup părăsit),** cu pagina deschisă și după o reîncărcare offline:
+  apare notificarea. **Controlul negativ, cu verdictul scos, reproduce vechea dispariție pe tăcute.**
+  Cu codul real repus, intrarea rămasă e judecată la următoarea deschidere.
+- **„Edit again”:** formularul revine completat și arată grupul pierdut, nu „Private” pe tăcute.
+- **Poza:** alegerea offline apare, Cancel în timpul încărcării nu scrie nimic, iar blocajul de 20 s
+  oferă alegerea și păstrează numele tastat.
+- **Transferul:**
+  - offline, alegerea „Save changes only”, fără niciun apel al funcției;
+  - editare confirmată, apoi funcția fără răspuns: nota „could not be confirmed”;
+  - editare neconfirmată în 10 s: niciun apel, nici după reconectare.
+- **Categoriile offline** pe un cont fără documentul de utilizator, apoi ștergerea offline.
+- **Telefon** (375 px) **și tema întunecată:** fără derulare orizontală.
+
+**Recenzia adversarială** (workflow, 17 agenți: 4 lentile, apoi câte un sceptic pe constatare):
+13 constatări distincte, 12 confirmate, 1 infirmată. Toate cele 12 sunt reparate:
+- notificări false după schimbări pe care registrul nu le urmărea (amprenta `lastWriteId` + verdictul
+  din sincronizare);
+- categoriile terminate din referințe înghețate și pierdute la o repornire (operațiile de categorie în
+  registru);
+- refuzul și rezultatul transferului pierdute la ieșirea din ecran (sesiunea crescută la demontare,
+  `tellNote`);
+- Back mort în timpul transferului (Close în orice fază, plus blocarea dublului transfer);
+- rezumatul rămas după ce totul a plecat (rejudecarea după perioada de grație);
+- pagina care sărea (montarea întârziată);
+- redenumirea refuzată care bloca reîncercarea;
+- blocajul de încărcare care nu mai ajungea în jurnalul de erori.
+
+**Găsite pe banc, în afara recenziei:**
+- `updateDoc` pe un `users/{uid}` inexistent e refuzat, iar lista de categorii nu se schimba deloc
+  (acum `setDoc` cu `merge`);
+- pe drumul „la timp”, cardul refuzat părea încă purtător al numelui nou, înainte de re-randare;
+- butonul X din „Manage filters” lăsa rândul în editare (existent de dinainte).
+
+**Reverificat pe banc după reparații:**
+- **R1:** editare offline și redenumirea categoriei aceluiași card, apoi repornire: nicio notificare
+  falsă, iar redenumirea e terminată pe locul vechi.
+- **R2:** redenumirea refuzată pe toate cardurile: numele nou iese din listă, iar reîncercarea merge.
+- **R3:** Close în timpul transferului: formularul se închide, același card are Save blocat, iar nota
+  apare.
+- **R4:** rezumatul de după o reîncărcare rapidă se curăță singur la 5,09 s.
+- **R5:** o salvare și o ștergere online nu montează nimic, iar panoul nu se mișcă.
+- Refuzul real e în continuare raportat cu amprenta în loc.
+
+- **Mutații:** 47 de mutanți reali, fiecare cu TOATĂ suita, după un control negativ trecut. Acoperă
+  așteptarea, registrul, legăturile din Wallet, încărcarea, `liveQuery`, categoriile, traducerile,
+  sincronizarea și întârzierea marcajului.
+  - Prima rulare: 44 prinși și 3 supraviețuitori.
+    - **L3** (o confirmare golește tot registrul): testele aveau un singur card. Test nou, cu două.
+    - **W3/W13** (schimbarea nu ajunge în registru): plasa număra un apel `record(`, pe care mutantul îl
+      păstra într-o funcție nechemată. Plasa cere acum `updateLedger(uid, (l) => record(…))`.
+  - Reluarea celor trei: toți prinși.
+  - Fișierele au fost verificate prin sha față de instantanee, după fiecare mutant și după porțile complete.
+  - Rularea lungă e detașată de limita uneltei (memoria: „Mutații: disciplina”).
+- tsc, poarta de lint, `npm test` (2270), `test:tz` (46), build, `check-offline` (rev `546fb587020889e5`;
+  pagina offline conține textele noi), `check-split` și `check-bundle`: toate verzi. Constatările ESLint
+  neblocante din Wallet sunt aceleași ca în HEAD.
+
+**Nepublicat.** Doar hosting (nicio funcție și nicio regulă schimbată).

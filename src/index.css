@@ -95,3 +95,14 @@
 .bg-primary svg {
   color: hsl(var(--primary-foreground));
 }
+
+/* "Not sent yet" (Wallet, 03.10.2026) fades in. WHEN it appears is decided by useDelayedFlag, which
+   mounts it only once a write has stayed unconfirmed for a moment: a mark kept invisible by a CSS
+   delay still took its line (the page jumped on every online save) and was still read out. */
+@keyframes ourdays-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.ourdays-fade-in {
+  animation: ourdays-fade-in 200ms ease-out both;
+}

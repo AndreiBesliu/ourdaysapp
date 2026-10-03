@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   UNCATEGORIZED, categoriesOf, affectedByRemoval, afterRemoval, afterRename, listAfterRename,
-  orphanCategories,
+  orphanCategories, unionFor, DEFAULT_CATEGORIES,
 } from './walletCategories';
 
 const ME = 'u1', EMILIA = 'u5';
@@ -170,5 +170,22 @@ describe('renaming, including renaming something the list has lost', () => {
     expect(orphanCategories(assets, listed, ME)).toEqual(['Loyalty']);
     const renamed = assets.map((a) => ({ ...a, ...afterRename(a, 'Loyalty', 'Fidelitate') }));
     expect(orphanCategories(renamed, listAfterRename(listed, 'Loyalty', 'Fidelitate'), ME)).toEqual([]);
+  });
+});
+
+describe('adding to the stored list with a union (03.10)', () => {
+  it('a stored list: just the new names, deduplicated, blanks dropped', () => {
+    expect(unionFor(true, ['Loyalty', 'Loyalty', '  '])).toEqual(['Loyalty']);
+  });
+  it('no stored list yet: the defaults the person is looking at go in too, or the first add would drop them', () => {
+    expect(unionFor(false, ['Loyalty'])).toEqual([...DEFAULT_CATEGORIES, 'Loyalty']);
+    expect(unionFor(false, ['Vehicles'])).toEqual([...DEFAULT_CATEGORIES]);
+  });
+  it('renaming before any card is written: the NEW name is listed first, so no card can carry an unlisted one', () => {
+    // The rename issues unionFor(stored, [next]) before the card writes; listAfterRename later puts it
+    // where the old name was, without a duplicate.
+    const listed = [...DEFAULT_CATEGORIES, 'Groceries'];
+    expect(listAfterRename(listed, 'Groceries', 'Food')).toEqual([...DEFAULT_CATEGORIES, 'Food']);
+    expect(listAfterRename([...listed, 'Food'], 'Groceries', 'Food')).toEqual([...DEFAULT_CATEGORIES, 'Food']);
   });
 });

@@ -34,6 +34,18 @@ export class UploadStalled extends Error {
 }
 
 /**
+ * The person stopped the upload (Cancel, Escape, Back). The task is cancelled first, so no file is
+ * left behind — and the caller must write nothing that points at it (03.10.2026: Cancel used to close
+ * the form while the save carried on and wrote the card anyway).
+ */
+export class UploadAborted extends Error {
+  constructor() {
+    super('upload-aborted');
+    this.name = 'UploadAborted';
+  }
+}
+
+/**
  * The upload was not attempted, because Storage would have refused it.
  *
  * This is a DIFFERENT thing from a failure, and the difference is the whole point: a stall is
@@ -59,6 +71,8 @@ export interface UploadOptions {
   contentType?: string;
   /** Overridable so a test does not have to wait twenty seconds. */
   stallMs?: number;
+  /** Aborting it cancels the upload and rejects with `UploadAborted`. */
+  signal?: AbortSignal;
 }
 
 /** Byte length of whatever `uploadFile` accepts. */
@@ -82,7 +96,8 @@ export async function uploadFile(
   data: Blob | Uint8Array | ArrayBuffer,
   options: UploadOptions = {},
 ): Promise<string> {
-  const { onProgress, contentType, stallMs = STALL_MS } = options;
+  const { onProgress, contentType, stallMs = STALL_MS, signal } = options;
+  if (signal?.aborted) throw new UploadAborted();
 
   // Asked here rather than at the seven call sites, because a call site is a thing that can be
   // forgotten — and six of the seven had been.
@@ -110,6 +125,15 @@ export async function uploadFile(
       try { task.cancel(); } catch { /* already finished; nothing to cancel */ }
       reject(new UploadStalled());
     }, 1000);
+
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      clearInterval(tick);
+      try { task.cancel(); } catch { /* already finished; nothing to cancel */ }
+      reject(new UploadAborted());
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
 
     task.on(
       'state_changed',

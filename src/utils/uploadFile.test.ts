@@ -33,7 +33,7 @@ vi.mock('firebase/storage', () => ({
   getDownloadURL: async (r: { path: string }) => 'https://example.test/' + r.path,
 }));
 
-const { uploadFile, UploadStalled, UploadRefused } = await import('./uploadFile');
+const { uploadFile, UploadStalled, UploadRefused, UploadAborted } = await import('./uploadFile');
 
 beforeEach(() => {
   task.handlers = null;
@@ -152,5 +152,31 @@ describe('a file Storage would refuse', () => {
     expect(task.started).toBe(1);
     task.handlers!.complete();
     await expect(p).resolves.toContain('unknown-root');
+  });
+});
+
+describe('an upload the person stops (03.10)', () => {
+  it('is cancelled and rejects with UploadAborted, so the caller writes nothing that points at it', async () => {
+    const abort = new AbortController();
+    const p = uploadFile('assets/u1/x.png', new Blob(['x']), { signal: abort.signal });
+    abort.abort();
+    await expect(p).rejects.toBeInstanceOf(UploadAborted);
+    expect(task.cancelled).toBe(1);
+  });
+
+  it('already stopped: nothing is sent at all', async () => {
+    const abort = new AbortController();
+    abort.abort();
+    await expect(uploadFile('assets/u1/x.png', new Blob(['x']), { signal: abort.signal })).rejects.toBeInstanceOf(UploadAborted);
+    expect(task.started).toBe(0);
+  });
+
+  it('a stop after it finished changes nothing', async () => {
+    const abort = new AbortController();
+    const p = uploadFile('assets/u1/x.png', new Blob(['x']), { signal: abort.signal });
+    task.handlers!.complete();
+    await expect(p).resolves.toBe('https://example.test/assets/u1/x.png');
+    abort.abort();
+    expect(task.cancelled).toBe(0);
   });
 });

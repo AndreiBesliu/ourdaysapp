@@ -285,3 +285,40 @@ describe('review 28.09: a card deleted on this device while offline', () => {
     expect(h.stored!.pending).toBe(true);
   });
 });
+
+describe('review 03.10: it judges the Wallet’s unconfirmed changes from any screen', () => {
+  const withJudge = () => {
+    const h = harness();
+    const calls: Array<[string, number]> = [];
+    h.deps.judge = (u, docs) => { calls.push([u, docs.length]); };
+    return { h, calls };
+  };
+
+  it('on the owned cards, server-confirmed, with nothing pending — and only then', () => {
+    const { h, calls } = withJudge();
+    startOfflineWalletSync('me', h.deps);
+    h.owned().next([asset('a')] as never[], { fromCache: true, hasPendingWrites: false });
+    h.owned().next([asset('a')] as never[], { fromCache: false, hasPendingWrites: true });
+    h.groups().next([] as never[], server);
+    expect(calls).toEqual([]);
+    h.owned().next([asset('a')] as never[], server);
+    expect(calls).toEqual([['me', 1]]);
+  });
+
+  it('never for an account that is no longer signed in', () => {
+    const { h, calls } = withJudge();
+    startOfflineWalletSync('me', h.deps);
+    h.who.current = 'someoneElse';
+    h.owned().next([asset('a')] as never[], server);
+    expect(calls).toEqual([]);
+  });
+
+  it('a judge that throws is reported once and never thrown into the app', () => {
+    const h = harness();
+    h.deps.judge = () => { throw new Error('storage gone'); };
+    startOfflineWalletSync('me', h.deps);
+    expect(() => h.owned().next([asset('a')] as never[], server)).not.toThrow();
+    h.owned().next([asset('b')] as never[], server);
+    expect(h.reports.filter(([c]) => c === 'OfflineWallet.judge')).toHaveLength(1);
+  });
+});

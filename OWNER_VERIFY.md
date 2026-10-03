@@ -118,6 +118,46 @@
 
 ---
 
+## 🆕 Salvarea în Wallet fără internet (03.10) — NEPUBLICAT
+
+**Fapt:** fără internet, Save din Wallet rămânea „în lucru” pentru totdeauna, deși cardul era deja în
+coadă și pleca la revenirea rețelei. Acum:
+- **Formularul așteaptă serverul cel mult 3 secunde**, cu „Waiting for the server…” pe buton. Dacă
+  telefonul spune că e offline, nu așteaptă deloc. Apoi se închide.
+- **Cardul apare în listă cu „Not sent yet”** până îl confirmă serverul. Sus scrie „A change made here
+  is not sent yet.” La o salvare online obișnuită marcajul nu apare deloc.
+- **Dacă serverul refuză schimbarea mai târziu** (de exemplu, un card partajat cu un grup din care ai
+  ieșit), apare sus un mesaj roșu cu numele cardului și „Edit again”, chiar și după repornirea aplicației.
+  Înainte, cardul revenea pe tăcute la versiunea veche.
+- **Poza nouă și transferul** au nevoie de internet:
+  - Offline, formularul te întreabă: „Save without the new photo” sau „Save changes only”, ori „Keep
+    editing”.
+  - Cancel în timpul încărcării pozei oprește încărcarea și nu salvează nimic. Înainte, cardul se salva
+    oricum.
+- **Categoriile** (adăugare, redenumire, ștergere) merg și offline. Redenumirea păstrează locul
+  categoriei în listă.
+- Probat pe un banc cu ecranul Wallet real, SDK-ul real și regulile reale din `firestore.rules`, pe
+  emulatori: 15 scenarii, plus un control care reproduce vechea dispariție pe tăcute.
+
+**Deciziile tale, cu implicitul pe care l-am pus** (spune-mi dacă vrei altfel):
+- **3 secunde de așteptare** înainte ca formularul să se închidă singur, și 10 secunde înaintea unui
+  transfer. Mai puțin ar arăta „Not sent yet” și pe o rețea lentă, iar mai mult ar ține formularul.
+- **Registrul schimbărilor netrimise rămâne pe telefon și după delogare**, separat pe fiecare cont. Fără
+  el, un refuz venit la următoarea logare n-ar mai fi spus. Ține numele și codurile cardurilor, nu și
+  linkurile pozelor. Aceleași date stau oricum în cache-ul Firestore al telefonului după delogare, și
+  nu le vede niciun alt cont.
+
+- [ ] **După publicare: proba în modul avion** (2 minute, pe telefon)
+      1. Pune telefonul în modul avion și deschide Wallet. Adaugă un card fără poză.
+      2. **Cum arată bine:** formularul se închide imediat. Cardul apare în listă cu „Not sent yet”, iar
+         sus scrie „A change made here is not sent yet.”
+      3. Scoate modul avion.
+      4. **Cum arată bine:** în câteva secunde, „Not sent yet” dispare.
+      - **Ce e greșit:** butonul Save rămâne „Waiting for the server…” mai mult de 3 secunde, sau „Not
+        sent yet” rămâne după ce revine internetul. Spune-mi.
+
+---
+
 ## 🆕 Cardurile din Wallet merg și fără internet (28.09) — PUBLICAT pe 03.10 (doar hosting, la „Publică doar hosting”)
 
 **Fapt:** codurile de bare și QR ale cardurilor tale (și ale celor partajate cu grupurile tale) se deschid

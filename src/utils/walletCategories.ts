@@ -35,6 +35,9 @@
 /** What a card gets when nothing else is left. Never in anybody's category list, by design. */
 export const UNCATEGORIZED = 'Uncategorized';
 
+/** The list an account shows until it stores one of its own (`users/{uid}.walletCategories`). */
+export const DEFAULT_CATEGORIES: readonly string[] = ['Home & Living', 'Health & Medical', 'Vehicles', 'Financial'];
+
 export interface CategorisedAsset {
   id?: string;
   ownerId?: unknown;
@@ -146,5 +149,19 @@ export function listAfterRename(
     if (name(next) && !out.includes(next)) out.push(next);
   }
   if (name(newName) && !out.includes(newName)) out.push(newName);
+  return out;
+}
+
+/**
+ * The names an `arrayUnion` must carry to add `added` to the stored list (03.10.2026).
+ *
+ * A union, not a whole new array: a change queued offline is sent hours later, and writing the whole
+ * list then would erase whatever another device added meanwhile. But an account that has never
+ * STORED a list is showing the defaults without having them: a union of just the new name would store
+ * that one name and drop the four the person was looking at. So the defaults go in too, then.
+ */
+export function unionFor(listIsStored: boolean, added: readonly string[]): string[] {
+  const out: string[] = listIsStored ? [] : [...DEFAULT_CATEGORIES];
+  for (const n of added) if (name(n) && !out.includes(n)) out.push(n);
   return out;
 }

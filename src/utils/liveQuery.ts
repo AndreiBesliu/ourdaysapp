@@ -31,6 +31,8 @@ export interface DocMeta {
   fromCache: boolean;
   /** Includes a local write the server has not acknowledged yet. */
   hasPendingWrites: boolean;
+  /** With `pendingIds`: which documents carry such a write (the Wallet's "not sent yet" mark). */
+  pendingIds?: string[];
 }
 
 /**
@@ -47,11 +49,18 @@ export function liveQuery<T = DocumentData>(
   onError: (err: unknown) => void,
   // The same option `liveDoc` has: told when a cached answer is confirmed by the server, which
   // otherwise raises nothing (the offline card copy stamps its freshness on that — offlineWalletSync).
-  options?: { includeMetadataChanges?: boolean },
+  // `pendingIds` is ours, not the SDK's, and is never passed to onSnapshot.
+  options?: { includeMetadataChanges?: boolean; pendingIds?: boolean },
 ): Unsubscribe {
   const next = (snap: QuerySnapshot<DocumentData>) => onNext(
     snap.docs.map((d) => ({ id: d.id, ...(d.data() as T) })),
-    { fromCache: snap.metadata.fromCache, hasPendingWrites: snap.metadata.hasPendingWrites },
+    {
+      fromCache: snap.metadata.fromCache,
+      hasPendingWrites: snap.metadata.hasPendingWrites,
+      ...(options?.pendingIds
+        ? { pendingIds: snap.docs.filter((d) => d.metadata.hasPendingWrites).map((d) => d.id) }
+        : {}),
+    },
   );
   const error = (err: { message?: string; code?: string }) => {
     // A permission error and a missing index arrive the same way and matter the same amount:

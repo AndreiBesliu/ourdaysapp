@@ -164,10 +164,26 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   Cu cache-ul persistent, citirea offline răspunde din cache, deci cazul cere un dispozitiv fără cache
   (primul login offline) sau o eroare reală. Reparația: fără profil citit, doar `lastLogin`. **De ce
   așteaptă:** e în afara cererii; nu e făcut mai probabil de cardurile offline.
-- **Salvarea unui card în Wallet stă „în lucru” fără internet.** `Wallet.tsx` așteaptă scrierea, iar o
-  scriere Firestore offline nu se termină până la server. Cardul e totuși în coada locală și pleacă la
-  revenirea rețelei. Copia offline îl marchează „netrimis”. **De ce așteaptă:** editarea offline e în
-  afara cererii din 28.09 (pagina offline e doar citire).
+- **Același tipar, „buton în lucru fără sfârșit”, în afara Wallet-ului** (inventar 03.10, grep). În
+  aplicație mai sunt în jur de 55 de scrieri Firestore așteptate cu `await`, în aproape 20 de fișiere:
+  - `EventDetailsModal` 11, `Settings` 8, `AddEventModal` 7, chatul 6;
+  - restul, câte 1–3, în rest.
+  Offline, oricare dintre ele ține butonul „în lucru” până revine rețeaua, deși scrierea e deja în
+  coadă. Wallet-ul a primit reparația pe 03.10 (`pendingWrite.ts`, `walletLedger.ts`); restul nu. **De ce
+  așteaptă:** fiecare ecran are refuzurile lui, de gândit separat; nu e cerut.
+- **Wallet offline (03.10), ce a rămas deliberat în afară:**
+  - **Două dispozitive, aceeași fereastră:** o schimbare fără promisiune (după o repornire) e judecată
+    pe primul răspuns al serverului după reconectare, în câteva secunde. Dacă ALT dispozitiv editează
+    exact acel card în secundele acelea, schimbarea noastră e raportată „nu e pe server”. Pe server
+    chiar nu mai e, dar a fost acolo. Amprenta acoperă redenumirile de categorie și partajarea din
+    evenimente, nu și editarea din alt Wallet.
+  - **Transferul „necunoscut”:** dacă funcția nu răspunde, nota spune „nu s-a putut confirma” și cere o
+    verificare. O reîncercare a unui transfer cu „păstrează o copie” care totuși reușise face a doua
+    copie: serverul nu deduplică.
+  - **„Stop” exact când poza termină de urcat:** fișierul rămâne în Storage fără card. Se vede la „Pick
+    from past uploads”.
+  - **O redenumire de categorie întreruptă** (offline, apoi repornire) se termină la următoarea
+    deschidere a Wallet-ului, nu din alt ecran. Până atunci rândul spune „Not sent yet”.
 - **Cardurile offline, ce a rămas deliberat în afară (28.09):**
   - **Semnal fără date la casă:** căderea automată pe pagina offline vine doar când rețeaua REFUZĂ,
     fără timeout, ca o conexiune lentă să primească aplicația reală. Scurtătura „Cards” (apăsare lungă
