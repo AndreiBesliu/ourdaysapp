@@ -3,7 +3,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, setDoc, updateDoc, getDoc, arrayUnion } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { publicMirrorFor } from './utils/publicProfile';
+import { bootstrapPlan, profileReadOf, laterWrites } from './utils/bootstrapWrites';
+import type { MirrorFields } from './utils/publicProfile';
+import { liveDoc } from './utils/liveQuery';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { rememberPushToken } from './utils/pushRelease';
 import { registerNativePush } from './utils/nativePush';
@@ -155,7 +157,12 @@ function App() {
   }, [primaryColor, backgroundImage, backgroundColor, backgroundStyle, backgroundOverlay, overlayColor, isDarkMode, customThemeIsDark]);
 
   useEffect(() => {
+    // The listener that finishes a start which could not read the profile from the server (below).
+    let postponed: (() => void) | null = null;
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      // Whatever an earlier sign-in was still waiting for is not this account's business.
+      postponed?.();
+      postponed = null;
       if (currentUser) {
         try {
           const userDocRef = doc(db, 'users', currentUser.uid);
@@ -216,36 +223,22 @@ function App() {
             }
           }
 
-          // Save user to DB if not exists. Backfill `name` from the Firebase
-          // Auth displayName when the Firestore doc has none, so member lists
-          // and birthday titles show the real name instead of the email prefix.
-          const profileUpdate: {
-            email: string | null; lastLogin: string; name?: string; timezone?: string;
-          } = {
-            email: currentUser.email,
-            lastLogin: new Date().toISOString(),
-          };
-          if (!userDocSnap?.data()?.name && currentUser.displayName) {
-            profileUpdate.name = currentUser.displayName;
-          }
-          // Backfill the zone ONCE, when the account has none.
-          //
-          // The store has always had one — line ~184 falls back to the device's zone — but it never
-          // reached Firestore unless somebody opened Settings and changed the picker, and nobody
-          // had. That left `sendDueReminders` with a dead middle link in its chain: event zone →
-          // OWNER's zone → "UTC". So a reminder on any event without its own zone, including every
-          // all-day one, resolved at 09:00 UTC — three hours late in Bucharest, silently, on the
-          // reminder that fires before you leave the house.
-          //
-          // Only when absent: an explicit choice in Settings is a statement about where you are,
-          // and overwriting it from the browser on every login would make that picker decorative.
-          if (!userDocSnap?.data()?.timezone) {
-            // Validated with the SAME predicate the server uses — eventTime.ts is kept
-            // byte-identical on both sides, and a test refuses divergence — so a zone stored here
-            // cannot be one `sendDueReminders` will reject and quietly replace with UTC.
-            const detected = localZone();
-            if (isValidZone(detected)) profileUpdate.timezone = detected;
-          }
+          // What this start writes about the account: decided in utils/bootstrapWrites.ts. Only the
+          // SERVER's answer may say what the account lacks — a failed read, or a cache that may be
+          // older than a change made elsewhere, used to write the old Auth name, the device's zone, an
+          // empty familyMembers and a public profile with no photo or birthday over the real ones once
+          // the network came back (reproduced on the real App against the emulators, DEVLOG 04.10).
+          const detected = localZone();
+          const zone = isValidZone(detected) ? detected : null;
+          const profileRead = profileReadOf(userDocSnap);
+          const plan = bootstrapPlan(
+            profileRead,
+            { email: currentUser.email, displayName: currentUser.displayName },
+            new Date().toISOString(),
+            // Validated with the SAME predicate the server uses — eventTime.ts is kept byte-identical
+            // on both sides — so a stored zone is never one `sendDueReminders` rejects for UTC.
+            zone,
+          );
           // ── NOT awaited, and that is the fix ────────────────────────────────────────
           //
           // A Firestore write resolves on SERVER acknowledgement. With IndexedDB persistence on
@@ -258,36 +251,58 @@ function App() {
           // Nothing below reads what these writes produce: they are bookkeeping — a lastLogin
           // stamp, the public mirror, an empty array. So they are started and left to finish
           // whenever the network returns, which is exactly what the offline queue is for.
-          void setDoc(userDocRef, profileUpdate, { merge: true })
+          void setDoc(userDocRef, plan.userUpdate, { merge: true })
             .catch((e) => reportError(e instanceof Error ? e.message : String(e), { context: 'App.profileUpdate' }));
 
-          // Mirror non-sensitive fields to the public `profiles` collection so
-          // other group members can render this user's name/photo/birthday
-          // without reading the (owner-only) user doc. Self-populates on login.
-          const src: any = { ...(userDocSnap?.data() || {}), ...profileUpdate };
-          // The mirror does not INVENT a name.
-          //
-          // It used to fall back to the e-mail prefix, and on a brand-new account it always
-          // reached that fallback: this handler reads `users/{uid}` before Login has written
-          // it, and never re-reads. So everybody ELSE saw “jdoe” (the prefix) instead of the name
-          // typed on the form — the new account’s own screens read the user doc and looked
-          // right, which is why nobody reported it. Worse, the server reads
-          // `profiles.name || users.name`, so the invented one OUTRANKED the real one, and a
-          // friendship formed during that first session copied it into the other person’s list.
-          //
-          // Omitting the key on a merge leaves whatever is there, so the order of the two
-          // writes stops mattering. A profile with no name still renders: the readers fall
-          // back per viewer, which is transient, rather than persisting a guess.
-          void setDoc(
-            doc(db, 'profiles', currentUser.uid),
-            publicMirrorFor(src, currentUser.displayName),
-            { merge: true },
-          ).catch((e) => console.error('Failed to sync profile:', e));
-          
-          // If the document was just created, it won't have familyMembers, 
-          // but we can initialize it if it's completely missing
-          if (!userDocSnap?.exists() || !userDocSnap.data()?.familyMembers) {
-            void updateDoc(userDocRef, { familyMembers: [] }).catch(() => {});
+          // The public `profiles` mirror (name, photo, birthday for the other members), and an empty
+          // `familyMembers` for an account without the field — only from the server's document: from
+          // anything less the mirror would publish nulls or an older photo, and the list would be
+          // emptied over one the read could not see.
+          const writeDerived = (mirror: MirrorFields | null, initFamilyMembers: boolean) => {
+            if (mirror) {
+              void setDoc(doc(db, 'profiles', currentUser.uid), mirror, { merge: true })
+                .catch((e) => console.error('Failed to sync profile:', e));
+            }
+            if (initFamilyMembers) {
+              void updateDoc(userDocRef, { familyMembers: [] }).catch(() => {});
+            }
+          };
+          writeDerived(plan.mirror, plan.initFamilyMembers);
+
+          // Postponed, not dropped (review 04.10): without the server's answer now, what the account
+          // lacks is decided at the first answer the server confirms in this session — a brand-new
+          // account whose first read missed the server still gets its zone, name and mirror.
+          if (profileRead.kind !== 'server') {
+            let finished = false;
+            let stopLater: (() => void) | null = null;
+            const finish = () => {
+              finished = true;
+              stopLater?.();
+              stopLater = null;
+              if (postponed === finish) postponed = null;
+            };
+            stopLater = liveDoc<Record<string, unknown>>(userDocRef, 'App.authBootstrap.later',
+              (data, meta) => {
+                if (finished) return;
+                const later = profileReadOf({ exists: () => data !== null, data: () => data ?? undefined, metadata: meta });
+                if (later.kind !== 'server') return;
+                finish();
+                if (auth.currentUser?.uid !== currentUser.uid) return;
+                const rest = laterWrites(bootstrapPlan(
+                  later,
+                  { email: currentUser.email, displayName: currentUser.displayName },
+                  new Date().toISOString(),
+                  zone,
+                ));
+                if (Object.keys(rest.userFields).length) {
+                  void setDoc(userDocRef, rest.userFields, { merge: true })
+                    .catch((e) => reportError(e instanceof Error ? e.message : String(e), { context: 'App.profileUpdate' }));
+                }
+                writeDerived(rest.mirror, rest.initFamilyMembers);
+              },
+              () => finish(),
+              { includeMetadataChanges: true });
+            if (finished) { stopLater?.(); stopLater = null; } else postponed = finish;
           }
         } catch (error) {
           reportError(error instanceof Error ? error.message : String(error), { context: 'App.userDocSetup' });
@@ -341,7 +356,10 @@ function App() {
       }
       setLoading(false);
     });
-    return () => unsubscribe();
+    return () => {
+      postponed?.();
+      unsubscribe();
+    };
   }, []);
 
   // Fetch the lazy screens once somebody is signed in and the browser is idle. While online, so a

@@ -155,15 +155,6 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   care nu se încarcă se vede doar dacă clientul raportează în `errorLogs`. Log-urile de acces la date
   costă și se pornesc din IAM, deci e decizia lui Andrei.
 
-- **Pornirea fără profil citit scrie peste profil** (găsit 28.09, la cardurile offline; existent de
-  dinainte). Când `getDoc(users/{uid})` e refuzat (`App.tsx`, `App.authBootstrap.userDoc`), `userDocSnap`
-  e `null`. Scrierile de la pornire tratează atunci contul ca nou, iar la revenirea rețelei:
-  - numele e rescris cu `displayName` și fusul orar cu cel al dispozitivului;
-  - `familyMembers` devine `[]`;
-  - oglinda `profiles` primește `photoURL: null` și `birthday: null`.
-  Cu cache-ul persistent, citirea offline răspunde din cache, deci cazul cere un dispozitiv fără cache
-  (primul login offline) sau o eroare reală. Reparația: fără profil citit, doar `lastLogin`. **De ce
-  așteaptă:** e în afara cererii; nu e făcut mai probabil de cardurile offline.
 - **Același tipar, „buton în lucru fără sfârșit”, în afara Wallet-ului** (inventar 03.10, grep). În
   aplicație mai sunt în jur de 55 de scrieri Firestore așteptate cu `await`, în aproape 20 de fișiere:
   - `EventDetailsModal` 11, `Settings` 8, `AddEventModal` 7, chatul 6;

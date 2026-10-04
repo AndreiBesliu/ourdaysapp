@@ -11378,3 +11378,69 @@ arborele e identic cu HEAD.
   din 28.09.
 - Ecranul Wallet e în spatele login-ului. Comportamentul lui a fost probat pe banc (DEVLOG 03.10), iar
   proba pe telefon e în OWNER_VERIFY.
+
+## 2026-10-04 · Profilul suprascris la pornire (Task Started)
+
+**Prompt (Andrei):** la întrebarea ce iau din BACKLOG: „Profilul suprascris (Recomandat)”.
+**Model:** Claude Opus 5.5.
+**Plan:** reproduc întâi bug-ul pe un banc cu `App.tsx` real și emulatorii (citirea profilului eșuată la
+pornire, apoi rețeaua revine) și măsor ce se scrie peste profil. Apoi decid scrierile de la pornire
+într-o funcție pură, testată: fără un profil citit de la server, doar `lastLogin`. Probez aceeași
+pereche de rulări înainte și după reparație.
+
+## 2026-10-04 · Profilul suprascris la pornire (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Reprodus întâi, pe codul real** (`benchApp`: `App.tsx` real, SDK-ul real, emulatorii Auth + Firestore
+cu `firestore.rules` al repo-ului):
+- **Pregătirea:**
+  - pe server, profilul real: nume, fusul `America/New_York`, `familyMembers` și o poză, plus oglinda
+    publică;
+  - în Auth, un `displayName` vechi; fusul browserului e `Europe/Bucharest`;
+  - rețeaua e oprită înainte de montare, cu cache-ul gol, deci citirea profilului eșuează.
+- **HEAD, după revenirea rețelei:**
+  - numele devenea `displayName`, iar fusul devenea cel al dispozitivului;
+  - `familyMembers` devenea `[]`;
+  - oglinda publică primea `photoURL` și `birthday` nule și numele vechi.
+- **Varianta găsită pe drum, nemenționată în BACKLOG:** un profil citit dintr-un cache vechi. Cu HEAD,
+  oglinda publică a primit înapoi poza veche din cache, deși pe server exista una mai nouă.
+
+**Reparația:**
+- **`src/utils/bootstrapWrites.ts`** (pur) decide ce scrie fiecare pornire. Numai un răspuns confirmat de
+  server (`serverConfirmed`: nu din cache și fără scrieri proprii în așteptare) poate:
+  - completa numele sau fusul lipsă;
+  - rescrie oglinda publică;
+  - inițializa `familyMembers`.
+- Altfel se scriu doar `email` și `lastLogin`, iar restul se **amână** la primul răspuns confirmat de
+  server din aceeași sesiune (`laterWrites`). E un ascultător unic, oprit la orice schimbare de cont și
+  la demontare.
+- Un document lipsă, spus de server, rămâne un cont nou și primește tot ce primea înainte.
+
+**Probat pe banc, în perechi cu controlul:**
+- **Citirea eșuată:** HEAD suprascrie profilul, iar codul reparat îl lasă intact și actualizează doar
+  `lastLogin`.
+- **Cache-ul vechi:** HEAD readuce poza veche în oglindă, iar codul reparat nu.
+- **Pornirea online normală:** fusul lipsă e completat, iar oglinda e refăcută din documentul de pe
+  server.
+- **Contul nou-nouț cu prima citire eșuată:** în aceeași sesiune primește numele, fusul,
+  `familyMembers` și oglinda.
+
+**Recenzia adversarială** (workflow, 7 agenți: 3 lentile + verificatori): 3 constatări confirmate, toate
+de gravitate mică, și una infirmată. Toate trei sunt reparate:
+- un cont nou cu prima citire în afara serverului nu-și primea completările în acea sesiune (rezolvat
+  prin amânare);
+- „nu din cache” fără „fără scrieri în așteptare” nu e cuvântul serverului (`serverConfirmed`);
+- un comentariu din `publicProfile.ts` devenise fals.
+
+Comentariul din `functions/src/index.ts` („un profil se creează la fiecare login”) rămâne adevărat odată
+cu amânarea, deci `functions/` nu e atins.
+
+- **Mutații:** 19 mutanți reali, fiecare cu toată suita, după un control negativ trecut; toți prinși.
+  Acoperă regula serverului, completările, oglinda, `familyMembers`, amânarea și legăturile din
+  `App.tsx`. Fișierele au fost restaurate și verificate prin sha, după fiecare mutant și după porți.
+- tsc, poarta de lint, `npm test` (2290), `test:tz` (46), build, `check-offline` (aceeași revizie
+  `546fb587020889e5`, pagina offline neatinsă), `check-split` și `check-bundle`: toate verzi.
+  `App.tsx` are o constatare ESLint mai puțin decât HEAD (un `any` dispărut).
+
+**Nepublicat.** Doar hosting (nicio funcție și nicio regulă schimbată).

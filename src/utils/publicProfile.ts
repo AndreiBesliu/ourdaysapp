@@ -5,9 +5,10 @@
 // ── Why this is a function ────────────────────────────────────────────────────────────
 //
 // The mirror exists so group members can render a name, an avatar and a birthday without reading
-// the owner-only user document. It is written on every sign-in, from whatever the sign-in handler
-// happens to know at that moment — and on a brand-new account it knows almost nothing: the handler
-// reads `users/{uid}` before the signup path has written it, and never re-reads.
+// the owner-only user document. It is written at every start whose read of `users/{uid}` the server
+// confirmed — or at the first such answer in the session (utils/bootstrapWrites.ts, 04.10.2026) — and
+// at signup. On a brand-new account the start knows almost nothing: it reads `users/{uid}` before the
+// signup path has written it.
 //
 // It used to fill the gap with `currentUser.email?.split('@')[0]`. So somebody who typed
 // "Jane Doe" on the form was published to everybody else as "jdoe" for the whole first
