@@ -11444,3 +11444,29 @@ cu amânarea, deci `functions/` nu e atins.
   `App.tsx` are o constatare ESLint mai puțin decât HEAD (un `any` dispărut).
 
 **Nepublicat.** Doar hosting (nicio funcție și nicio regulă schimbată).
+
+## 2026-10-04 · Publicarea: profilul nu mai e suprascris la pornire (Task Started)
+
+**Prompt (Andrei):** „publică doar hosting”
+**Model:** Claude Opus 5.5.
+**Plan:** doar hosting-ul, din `b4f343a`, după CI verde și după ce verific că funcțiile și regulile n-au
+nicio schimbare de la ultima publicare completă.
+
+## 2026-10-04 · Publicarea: profilul nu mai e suprascris la pornire (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Înainte:**
+- CI verde pe `b4f343a`; `HEAD` = `origin/main`, iar arborele e curat înainte și după build;
+- `git diff 50c8e84..HEAD` gol pe `functions/`, reguli, indecși și `storage.rules`;
+- în jurnalul de erori de pe live nu era nimic nou.
+
+**Publicat:** hosting-ul. Intrarea e `index-Bfe58fvy`, iar revizia offline a rămas `546fb587020889e5`.
+
+**Verificat pe live:**
+- intrarea servită e identică byte cu byte cu `dist/` și conține drumul amânat
+  (`App.authBootstrap.later`);
+- `/sw.js` e identic cu `dist/`;
+- într-un browser real, pagina de login pornește pe intrarea nouă, fără nicio resursă eșuată.
+- Pornirea însăși rulează după login, deci comportamentul ei a fost probat pe banc (DEVLOG 04.10), cu
+  `App.tsx` real și emulatorii: citirea eșuată, cache-ul vechi, pornirea normală și contul nou.
