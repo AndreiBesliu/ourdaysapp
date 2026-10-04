@@ -193,9 +193,18 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 
 ## 4. Produs (D) — doar înregistrat
 
-- **Cont:** lipsesc ștergerea contului și schimbarea emailului sau a parolei din aplicație (resetarea
-  prin email există din 28.09). Niciun apel la `deleteUser`. Ștergerea contului e obligatorie pentru
-  GDPR, și pentru Google Play dacă aplicația ajunge acolo.
+- **Cont:** omul nu-și poate șterge singur contul și nu-și poate schimba din aplicație emailul sau
+  parola (resetarea prin email există din 28.09). Ștergerea propriului cont e obligatorie pentru GDPR,
+  și pentru Google Play dacă aplicația ajunge acolo.
+  - **Re-măsurat 04.10:** cascada de ștergere EXISTĂ deja pe server, dar doar pentru admini, în
+    `adminModerateUser` cu acțiunea `delete` (`functions/src/index.ts`). Ea:
+    - dezleagă prietenii și scoate contul din grupuri;
+    - șterge conținutul, cererile, cheltuielile, notificările, rândurile de eroare, fișierele din
+      Storage și datele Warlord;
+    - șterge apoi contul de Auth.
+  - Lipsesc deci doar un callable pentru propriul cont, care refolosește cascada și cere o
+    autentificare recentă, și un ecran de confirmare.
+  - (Rândul de dinainte spunea „niciun apel la `deleteUser`”, ceea ce era fals.)
 - **Invitațiile la evenimente (`inviteeId`), partea de server:** clientul nu le mai ascultă și nu le mai
   afișează (28.09). Regulile (`events` read/create/update) și logica de vizibilitate AI de pe server încă
   tratează un invitat drept cititor, inofensiv cât timp nimic nu scrie câmpul. Un test (`falseUi.test.ts`)
