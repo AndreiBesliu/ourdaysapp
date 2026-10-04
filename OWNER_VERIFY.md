@@ -118,7 +118,7 @@
 
 ---
 
-## 🆕 Salvarea în Wallet fără internet (03.10) — NEPUBLICAT
+## 🆕 Salvarea în Wallet fără internet (03.10) — PUBLICAT pe 04.10 (doar hosting, la „publică doar hosting”)
 
 **Fapt:** fără internet, Save din Wallet rămânea „în lucru” pentru totdeauna, deși cardul era deja în
 coadă și pleca la revenirea rețelei. Acum:

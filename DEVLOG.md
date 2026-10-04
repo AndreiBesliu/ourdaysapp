@@ -11341,3 +11341,40 @@ judecătorii au arătat că e inutil:
   neblocante din Wallet sunt aceleași ca în HEAD.
 
 **Nepublicat.** Doar hosting (nicio funcție și nicio regulă schimbată).
+
+## 2026-10-04 · Publicarea: salvarea în Wallet fără internet (Task Started)
+
+**Prompt (Andrei):** „publică doar hosting”, apoi, după o sesiune întreruptă în timpul deploy-ului:
+„continua”.
+**Model:** Claude Opus 5.5.
+**Plan:** doar hosting-ul, din `98f9174`. Întâi verific că deploy-ul întrerupt n-a ajuns pe live și că
+arborele e identic cu HEAD.
+
+## 2026-10-04 · Publicarea: salvarea în Wallet fără internet (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Înainte:**
+- **Deploy-ul întrerupt nu ajunsese pe live.** Live-ul servea tot `index-DBrh_BUp`, cu ultima lansare pe
+  03.10 la 14:53, iar jurnalul deploy-ului nici nu fusese creat.
+- **Arborele e identic cu HEAD**, verificat pe conținut (`git hash-object`), inclusiv pentru fișierele
+  semnalate ca schimbate pe disc. Nimic mutat nu s-a întors prin DriveFS.
+- CI verde pe `98f9174`; `HEAD` = `origin/main`.
+- `git diff 50c8e84..HEAD` gol pe `functions/`, reguli, indecși și `storage.rules`.
+- În jurnalul de erori de pe live nu apăruse nimic nou.
+- Build-ul refăcut din HEAD e identic cu cel verificat ieri: `index-H2v8t5aD`, `Wallet-4TkcieCI`,
+  revizia offline `546fb587020889e5`.
+
+**Publicat:** hosting-ul.
+
+**Verificat pe live:**
+- intrarea e `index-H2v8t5aD`, iar `Wallet-4TkcieCI.js` e identic byte cu byte cu `dist/` și conține
+  codul nou;
+- `/sw.js` și `/offline/cards.html` sunt identice cu `dist/`, cu revizia `546fb587020889e5`;
+- **într-un browser real** care avea worker-ul de ieri, trecerea s-a făcut singură: noua pagină
+  offline e stocată, revizia veche `83afc4b…` e ștearsă, iar worker-ul nou controlează pagina.
+- În consolă a apărut un 403 de la schimbul de token App Check (reCAPTCHA v3, în browserul automat al
+  panoului). Nu ține de această publicare: `firebase.ts`, `main.tsx` și `index.html` sunt neschimbate
+  din 28.09.
+- Ecranul Wallet e în spatele login-ului. Comportamentul lui a fost probat pe banc (DEVLOG 03.10), iar
+  proba pe telefon e în OWNER_VERIFY.
