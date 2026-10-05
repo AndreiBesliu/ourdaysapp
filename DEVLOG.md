@@ -11470,3 +11470,17 @@ nicio schimbare de la ultima publicare completă.
 - într-un browser real, pagina de login pornește pe intrarea nouă, fără nicio resursă eșuată.
 - Pornirea însăși rulează după login, deci comportamentul ei a fost probat pe banc (DEVLOG 04.10), cu
   `App.tsx` real și emulatorii: citirea eșuată, cache-ul vechi, pornirea normală și contul nou.
+
+## 2026-10-05 · Un test al paginii offline s-a înroșit singur (Task Started + Completed)
+
+**Prompt (Andrei):** găsit în timpul sarcinii „Remove leavers from event assignees”, la controlul
+negativ al mutațiilor: suita unitară pica pe un test pe care nu-l atinsese nimeni.
+**Model:** Claude Opus 5.5.
+
+- `src/offline/offlineView.test.tsx`, „the page … says when it was checked”, a picat azi fără nicio
+  schimbare de cod. Fixtura avea copia confirmată la un `NOW` fix (28.09), pagina citește `Date.now()`,
+  iar după o săptămână copia a devenit „veche” și pagina a scris „Last checked … on Sep 28” în loc de
+  „Checked with the server”. Testul pica deci și pe `main`, la orice rulare de CI de azi încolo.
+- **Reparat:** testul paginii dă o copie confirmată acum, după ceasul real. Celelalte fixturi cu `NOW`
+  fix trec timpul ca argument și nu sunt afectate.
+- Doar testul s-a schimbat; nimic de publicat.

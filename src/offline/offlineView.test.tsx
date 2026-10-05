@@ -49,7 +49,9 @@ describe('whenLabel', () => {
 
 describe('the page', () => {
   it('lists the cards from the copy, marks the one with no code, and says when it was checked', () => {
-    const html = renderToStaticMarkup(<OfflineCards initial={wallet()} />);
+    // Confirmed just now by the REAL clock: the page reads Date.now(), and a copy confirmed at the
+    // fixed NOW above turned stale a week later — this test went red on 05.10.2026 by itself.
+    const html = renderToStaticMarkup(<OfflineCards initial={wallet({ savedAt: Date.now(), confirmedAt: Date.now() - 1000 })} />);
     for (const name of ['Carrefour', 'Lidl Plus', 'ID card']) expect(html).toContain(name);
     expect(html).toContain('No code saved');
     expect(html).toContain('Checked with the server');
