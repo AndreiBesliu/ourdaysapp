@@ -8,14 +8,15 @@
 // `initializeApp()` in index.ts has always run by then.
 
 import * as admin from "firebase-admin";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { ERROR_LOG_TTL_FIELD, errorLogExpiryMs } from "./errorRetention";
 
 export async function addErrorLog(row: Record<string, unknown>, nowMs: number = Date.now()): Promise<void> {
   await admin.firestore().collection("errorLogs").add({
     ...row,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
     // A Timestamp, not a string or a number: the TTL policy silently ignores any other type.
-    [ERROR_LOG_TTL_FIELD]: admin.firestore.Timestamp.fromMillis(errorLogExpiryMs(nowMs)),
+    [ERROR_LOG_TTL_FIELD]: Timestamp.fromMillis(errorLogExpiryMs(nowMs)),
   });
 }
 

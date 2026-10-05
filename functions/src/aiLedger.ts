@@ -34,6 +34,7 @@
 // about — and it would sit in a collection whose whole point is that operators read it.
 
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { providerErrorCode } from "./aiProviderError";
 import { clampAiLimits, type AiLimits } from "./aiLimits";
 export { usageOf, textOf, jsonOf, stopReasonOf, unfinishedReason, type Usage } from "./aiResponse";
@@ -293,7 +294,7 @@ export async function openLedgerRow(entry: LedgerEntry): Promise<LedgerHandle> {
   await ref.set({
     ...entry,
     date: today(),
-    at: admin.firestore.FieldValue.serverTimestamp(),
+    at: FieldValue.serverTimestamp(),
     ok: null,
     promptTokens: 0,
     completionTokens: 0,
@@ -355,7 +356,7 @@ export async function closeLedgerRow(
     ...(model !== handle.entry.model ? { servedModel: model } : {}),
   }, { merge: true });
 
-  const inc = admin.firestore.FieldValue.increment;
+  const inc = FieldValue.increment;
   const roll = {
     calls: inc(1),
     failures: inc(outcome.ok ? 0 : 1),

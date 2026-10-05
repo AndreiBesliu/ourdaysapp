@@ -34,6 +34,7 @@
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as crypto from "crypto";
 import { readFriendship, authIdentityOf } from "./friendship";
 import { linkVerdict } from "./inviteLinkState";
@@ -98,7 +99,7 @@ export const createGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK
   }
 
   // Daily cap, counted on the documents themselves so it cannot drift from reality.
-  const since = admin.firestore.Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
+  const since = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
   const recent = await db.collection("invite_links")
     .where("createdBy", "==", uid)
     .where("createdAt", ">=", since)
@@ -116,8 +117,8 @@ export const createGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK
     groupName,
     createdBy: uid,
     createdByName: cap(profile.data()?.name || (request.auth?.token?.email || "").split("@")[0] || "A friend"),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + life * 24 * 60 * 60 * 1000),
+    createdAt: FieldValue.serverTimestamp(),
+    expiresAt: Timestamp.fromMillis(Date.now() + life * 24 * 60 * 60 * 1000),
     maxUses: LINK_USES,
     uses: 0,
     redeemedBy: [],
@@ -251,15 +252,15 @@ export const redeemGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK
 
     // ── WRITE PHASE ───────────────────────────────────────────────────────────
     if (joinsGroup && groupRef) {
-      tx.update(groupRef, { members: admin.firestore.FieldValue.arrayUnion(uid) });
+      tx.update(groupRef, { members: FieldValue.arrayUnion(uid) });
     }
     friendship.apply();
 
     // Reached only by somebody who has not used this link before (a second redemption by the same
     // person returned above, and spends nothing).
     tx.update(linkRef, {
-      uses: admin.firestore.FieldValue.increment(1),
-      redeemedBy: admin.firestore.FieldValue.arrayUnion(uid),
+      uses: FieldValue.increment(1),
+      redeemedBy: FieldValue.arrayUnion(uid),
     });
 
     return {

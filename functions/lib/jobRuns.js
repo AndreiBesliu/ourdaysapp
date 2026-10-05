@@ -17,12 +17,13 @@ exports.finishJob = finishJob;
 exports.failJob = failJob;
 exports.runJob = runJob;
 const admin = require("firebase-admin");
+const firestore_1 = require("firebase-admin/firestore");
 const errorLog_1 = require("./errorLog");
 const markerRef = (name) => admin.firestore().doc(`jobRuns/${name}`);
 /** The job's first write. MERGE: the last run that ended stays readable while this one runs. */
 async function markJobStart(name) {
     try {
-        await markerRef(name).set({ startedAt: Date.now(), startsSinceEnd: admin.firestore.FieldValue.increment(1) }, { merge: true });
+        await markerRef(name).set({ startedAt: Date.now(), startsSinceEnd: firestore_1.FieldValue.increment(1) }, { merge: true });
     }
     catch ( /* the job's work comes first */_a) { /* the job's work comes first */ }
 }

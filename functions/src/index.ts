@@ -6,6 +6,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineString } from "firebase-functions/params";
 import { bootstrapAdminEmails } from "./bootstrapAdmins";
 import * as admin from "firebase-admin";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as crypto from "crypto";
 
 import { claudeConfigured, generate, requestChars, type GenerateRequest } from "./claude";
@@ -202,7 +203,7 @@ async function assertAdmin(request: { auth?: { uid?: string; token?: any } }): P
       email,
       name: request.auth?.token?.name || email.split("@")[0],
       addedBy: "bootstrap",
-      addedAt: admin.firestore.FieldValue.serverTimestamp(),
+      addedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     return uid;
   }
@@ -256,7 +257,7 @@ async function recordChecklistOutcome(
       // `arrayRemove` rather than a filtered copy of the create-time array, for the same reason
       // the success path uses it: `data` is seconds old by now, and writing it back would
       // un-assign anybody added while the model was being asked.
-      assigneeIds: admin.firestore.FieldValue.arrayRemove("ai_assistant"),
+      assigneeIds: FieldValue.arrayRemove("ai_assistant"),
       aiChecklist: { status: "failed", reason, at: new Date().toISOString() },
     });
   } catch (err) {
@@ -389,9 +390,9 @@ async function runAutoChecklist(
   // `arrayUnion` appends without reading, and each item carries a fresh id so none collide.
   // `arrayRemove` takes out exactly the one value that needs to go.
   await snapshot.ref.update({
-    checklistItems: admin.firestore.FieldValue.arrayUnion(...newItems),
+    checklistItems: FieldValue.arrayUnion(...newItems),
     // Removed because the work is DONE, which is the one ending that needs no explanation.
-    assigneeIds: admin.firestore.FieldValue.arrayRemove("ai_assistant"),
+    assigneeIds: FieldValue.arrayRemove("ai_assistant"),
   });
   console.log(`Successfully generated checklist for: ${title}`);
 }
@@ -479,7 +480,7 @@ export const onMessageCreated = onDocumentCreated("groups/{groupId}/messages/{me
     // preview a chat keeps. Server-written for the same reason: a client-writable preview is a
     // way to put words into somebody else's list.
     await admin.firestore().doc(`groups/${groupId}`).set({
-      lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastMessageAt: FieldValue.serverTimestamp(),
       lastMessageText: typeof msgData.text === "string" && msgData.text
         ? msgData.text.slice(0, 140)
         : msgData.imageUrl ? "\u{1F4F7}" : msgData.audioUrl ? "\u{1F3A4}" : "",
@@ -528,7 +529,7 @@ export const onFriendRequestCreated = onDocumentCreated("friend_requests/{reques
     stampName = sender.name;
     // `verifiedGroupName` deleted as well: a friend request never has one, and any value there was
     // written by the sender's client before the rule that forbids it was live.
-    await event.data!.ref.update({ sender, verifiedGroupName: admin.firestore.FieldValue.delete() });
+    await event.data!.ref.update({ sender, verifiedGroupName: FieldValue.delete() });
   } catch (err) {
     // Fires once; a failure is permanent. The screen then says it could not confirm the sender,
     // which is the honest answer — and this makes the failure visible to the owner.
@@ -629,7 +630,7 @@ export const onGroupInviteCreated = onDocumentCreated("group_invites/{inviteId}"
     // sender's client put there before the rule forbade it survived — and read as the server's.
     await event.data!.ref.update({
       sender,
-      verifiedGroupName: verifiedGroupName ?? admin.firestore.FieldValue.delete(),
+      verifiedGroupName: verifiedGroupName ?? FieldValue.delete(),
     });
   } catch (err) {
     // Fires once. The screen then says it could not confirm the sender — the honest answer.
@@ -843,7 +844,7 @@ export const generateGroupDigest = onCall(AI_CALLABLE_OPTS, async (request) => {
     // in the window the survivors were the OLDEST ones — while the prompt below still asked the
     // model to highlight what happened recently. A busy day produced a digest of the day before.
     const messagesSnapshot = await db.collection(`groups/${groupId}/messages`)
-      .where('createdAt', '>=', admin.firestore.Timestamp.fromDate(pastDate))
+      .where('createdAt', '>=', Timestamp.fromDate(pastDate))
       .orderBy('createdAt', 'desc')
       .limit(50)
       .get();
@@ -1136,7 +1137,7 @@ export const notifyUsers = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async 
       ...(typeof bodyKey === "string" && bodyKey ? { bodyKey: bodyKey.slice(0, 60) } : {}),
       ...(typeof param === "string" && param ? { param: param.slice(0, 200) } : {}),
       read: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     });
     created++;
   }
@@ -1330,7 +1331,7 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
         tx.update(existing.ref, { overrideDate });
       }
       if (!exceptions.includes(overrideDate)) {
-        tx.update(parentRef, { recurrenceExceptions: admin.firestore.FieldValue.arrayUnion(overrideDate) });
+        tx.update(parentRef, { recurrenceExceptions: FieldValue.arrayUnion(overrideDate) });
       }
       if (apply) {
         const cur = existing.data();
@@ -1344,7 +1345,7 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
         upd.assigneeIds = keptAssignees;
         upd.assigneeId = keptAssignees[0] ?? null;
         const merged = overrideRsvps(cur.rsvps, (data as Record<string, unknown>).rsvps, uid);
-        upd.rsvps = merged ?? admin.firestore.FieldValue.delete();
+        upd.rsvps = merged ?? FieldValue.delete();
         tx.update(existing.ref, upd);
       }
       return { id: existing.id, existed: true };
@@ -1364,7 +1365,7 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
       createdAt: new Date().toISOString(),
     });
     tx.update(parentRef, {
-      recurrenceExceptions: admin.firestore.FieldValue.arrayUnion(overrideDate),
+      recurrenceExceptions: FieldValue.arrayUnion(overrideDate),
     });
     return { id: overrideRef.id, existed: false };
   });
@@ -1707,13 +1708,13 @@ export const acceptGroupInvite = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, 
 
     if (inv.groupId) {
       tx.update(db.doc(`groups/${inv.groupId}`), {
-        members: admin.firestore.FieldValue.arrayUnion(uid),
+        members: FieldValue.arrayUnion(uid),
       });
     }
     friendship.apply();
     tx.update(inviteRef, {
       status: "accepted", toId: uid,
-      acceptedBy: uid, acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+      acceptedBy: uid, acceptedAt: FieldValue.serverTimestamp(),
     });
     return { status: "accepted", groupId: inv.groupId || null };
   });
@@ -2011,7 +2012,7 @@ export const adminSetAdmin = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asyn
       email: targetEmail || null,
       name: targetName || (targetEmail ? targetEmail.split("@")[0] : null),
       addedBy: callerUid,
-      addedAt: admin.firestore.FieldValue.serverTimestamp(),
+      addedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     return { ok: true, uid: targetUid, makeAdmin: true };
   }
@@ -2278,7 +2279,7 @@ export const adminSetErrorStatus = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
         : status === "seen"
           ? { seenAt: now, seenBy: uid, resolvedAt: null, resolvedBy: null }
           : { seenAt: null, seenBy: null, resolvedAt: null, resolvedBy: null }),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     written++;
   }
@@ -2603,8 +2604,8 @@ export const acceptWarlordChallenge = onCall({ enforceAppCheck: ENFORCE_APP_CHEC
         [g.createdBy]: { unitIds: challenger.unitIds, combatants: challenger.combatants },
         [uid]: { unitIds: defender.unitIds, combatants: defender.combatants },
       },
-      startedAt: admin.firestore.FieldValue.serverTimestamp(),
-      lastMoveAt: admin.firestore.FieldValue.serverTimestamp(), // turn-timeout clock
+      startedAt: FieldValue.serverTimestamp(),
+      lastMoveAt: FieldValue.serverTimestamp(), // turn-timeout clock
     });
     tx.delete(deployRef); // private staging no longer needed
     return { ok: true };
@@ -2658,7 +2659,7 @@ export const createWarlordChallenge = onCall({ enforceAppCheck: ENFORCE_APP_CHEC
     date,
     gameType: WARLORD_GAME_TYPE,
     status: "waiting",
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
     createdBy: uid,
     winner: null,
     players: [uid, opponentUid],
@@ -2706,7 +2707,7 @@ interface WarlordLadderUpdate { winner: string | null; loser: string | null }
 async function recordWarlordResult(winnerUid: string | null, loserUid: string | null): Promise<void> {
   try {
     const db = admin.firestore();
-    const inc = admin.firestore.FieldValue.increment(1);
+    const inc = FieldValue.increment(1);
     const writes: Promise<unknown>[] = [];
     if (winnerUid) writes.push(db.doc(`warlordPlayers/${winnerUid}`).set({ wins: inc }, { merge: true }));
     if (loserUid) writes.push(db.doc(`warlordPlayers/${loserUid}`).set({ losses: inc }, { merge: true }));
@@ -2758,7 +2759,7 @@ export const submitWarlordCommand = onCall({ enforceAppCheck: ENFORCE_APP_CHECK 
 
     const patch: Record<string, unknown> = {
       state: next,
-      lastMoveAt: admin.firestore.FieldValue.serverTimestamp(), // resets the turn-timeout clock
+      lastMoveAt: FieldValue.serverTimestamp(), // resets the turn-timeout clock
     };
     const finished = next.status !== "ONGOING";
     if (finished) {
@@ -2768,7 +2769,7 @@ export const submitWarlordCommand = onCall({ enforceAppCheck: ENFORCE_APP_CHECK 
       patch.status = "finished";
       patch.winner = winnerUid;
       patch.finalized = true; // server-side session lock; leaderboard needs no client write
-      patch.endedAt = admin.firestore.FieldValue.serverTimestamp();
+      patch.endedAt = FieldValue.serverTimestamp();
       ladder = winnerUid
         ? { winner: winnerUid, loser: g.players.find((p: string) => p !== winnerUid) ?? null }
         : null; // draws don't move the ladder
@@ -2827,7 +2828,7 @@ export const forfeitWarlordBattle = onCall({ enforceAppCheck: ENFORCE_APP_CHECK 
       forfeitedBy: uid,
       finalized: true,
       state: s,
-      endedAt: admin.firestore.FieldValue.serverTimestamp(),
+      endedAt: FieldValue.serverTimestamp(),
     });
     ladder = { winner: winnerUid, loser: uid };
     return { ok: true };
@@ -2876,7 +2877,7 @@ export const claimWarlordTimeout = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
     // A battle from before this field existed has no clock; start it now rather than
     // handing out a free win.
     if (!stampMs) {
-      tx.update(ref, { lastMoveAt: admin.firestore.FieldValue.serverTimestamp() });
+      tx.update(ref, { lastMoveAt: FieldValue.serverTimestamp() });
       // RETURNED, not thrown. A throw inside a transaction rolls the whole transaction back, the
       // update above included — so the clock never started, every claim said it just had, and a
       // battle from before this field existed could never time out at all. The error is thrown
@@ -2903,7 +2904,7 @@ export const claimWarlordTimeout = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
       timedOutBy: stalledUid,
       finalized: true,
       state: s,
-      endedAt: admin.firestore.FieldValue.serverTimestamp(),
+      endedAt: FieldValue.serverTimestamp(),
     });
     ladder = { winner: uid, loser: stalledUid };
     return { ok: true, claimed: true };
@@ -3322,7 +3323,7 @@ export const adminSetAiConfig = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, a
 
       tx.set(configRef, {
         ...to,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
         updatedBy: uid,
         updatedByEmail: email,
       }, { merge: true });
@@ -3330,7 +3331,7 @@ export const adminSetAiConfig = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, a
       // about this one call site. A future `set` to an existing id would be a silent rewrite.
       tx.create(logRef, {
         schema: 1,
-        at: admin.firestore.FieldValue.serverTimestamp(),
+        at: FieldValue.serverTimestamp(),
         by: { uid, email },
         actor,
         from: before,

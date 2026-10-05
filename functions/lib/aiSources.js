@@ -20,6 +20,7 @@ exports.fetchChat = fetchChat;
 exports.fetchAssets = fetchAssets;
 exports.fetchExpenses = fetchExpenses;
 const admin = require("firebase-admin");
+const firestore_1 = require("firebase-admin/firestore");
 const aiScope_1 = require("./aiScope");
 const recurrenceServer_1 = require("./recurrenceServer");
 const fanOut_1 = require("./fanOut");
@@ -120,8 +121,8 @@ async function fetchChat(scope, period, budget) {
     if (scope.groupIds.length === 0)
         return { items: [], complete: true };
     const perGroup = Math.max(10, Math.floor(budget / scope.groupIds.length));
-    const from = admin.firestore.Timestamp.fromDate(new Date(period.from));
-    const to = admin.firestore.Timestamp.fromDate(new Date(period.to));
+    const from = firestore_1.Timestamp.fromDate(new Date(period.from));
+    const to = firestore_1.Timestamp.fromDate(new Date(period.to));
     const snaps = await Promise.all(scope.groupIds.map((g) => db.collection(`groups/${g}/messages`)
         .where("createdAt", ">=", from)
         .where("createdAt", "<=", to)
@@ -193,8 +194,8 @@ async function fetchAssets(scope, budget) {
  */
 async function fetchExpenses(scope, period, budget) {
     const db = admin.firestore();
-    const from = admin.firestore.Timestamp.fromDate(new Date(period.from));
-    const to = admin.firestore.Timestamp.fromDate(new Date(period.to));
+    const from = firestore_1.Timestamp.fromDate(new Date(period.from));
+    const to = firestore_1.Timestamp.fromDate(new Date(period.to));
     // One share for the caller's own, the rest split across the groups — so a member of many groups
     // does not lose sight of their own spending.
     //

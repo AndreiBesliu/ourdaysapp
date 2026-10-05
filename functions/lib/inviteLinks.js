@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = exports.LINK_USES = exports.LINK_DEFAULT_DAYS = exports.LINK_MAX_DAYS_CAP = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+const firestore_1 = require("firebase-admin/firestore");
 const crypto = require("crypto");
 const friendship_1 = require("./friendship");
 const inviteLinkState_1 = require("./inviteLinkState");
@@ -96,7 +97,7 @@ exports.createGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
         groupName = cap(((_c = snap.data()) === null || _c === void 0 ? void 0 : _c.name) || "", 60) || null;
     }
     // Daily cap, counted on the documents themselves so it cannot drift from reality.
-    const since = admin.firestore.Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
+    const since = firestore_1.Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
     const recent = await db.collection("invite_links")
         .where("createdBy", "==", uid)
         .where("createdAt", ">=", since)
@@ -112,8 +113,8 @@ exports.createGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
         groupName,
         createdBy: uid,
         createdByName: cap(((_d = profile.data()) === null || _d === void 0 ? void 0 : _d.name) || (((_f = (_e = request.auth) === null || _e === void 0 ? void 0 : _e.token) === null || _f === void 0 ? void 0 : _f.email) || "").split("@")[0] || "A friend"),
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        expiresAt: admin.firestore.Timestamp.fromMillis(Date.now() + life * 24 * 60 * 60 * 1000),
+        createdAt: firestore_1.FieldValue.serverTimestamp(),
+        expiresAt: firestore_1.Timestamp.fromMillis(Date.now() + life * 24 * 60 * 60 * 1000),
         maxUses: exports.LINK_USES,
         uses: 0,
         redeemedBy: [],
@@ -250,14 +251,14 @@ exports.redeemGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
         });
         // ── WRITE PHASE ───────────────────────────────────────────────────────────
         if (joinsGroup && groupRef) {
-            tx.update(groupRef, { members: admin.firestore.FieldValue.arrayUnion(uid) });
+            tx.update(groupRef, { members: firestore_1.FieldValue.arrayUnion(uid) });
         }
         friendship.apply();
         // Reached only by somebody who has not used this link before (a second redemption by the same
         // person returned above, and spends nothing).
         tx.update(linkRef, {
-            uses: admin.firestore.FieldValue.increment(1),
-            redeemedBy: admin.firestore.FieldValue.arrayUnion(uid),
+            uses: firestore_1.FieldValue.increment(1),
+            redeemedBy: firestore_1.FieldValue.arrayUnion(uid),
         });
         return {
             status: "accepted",

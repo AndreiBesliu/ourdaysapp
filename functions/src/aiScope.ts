@@ -23,6 +23,7 @@
 // scope gets a fixed translated label — never a name fetched behind the caller's back.
 
 import * as admin from "firebase-admin";
+import { FieldPath } from "firebase-admin/firestore";
 
 /** Most groups one turn will look across. Anyone can create groups without limit, so this is
  *  an axis the user sets for free and it has to be bounded. */
@@ -112,7 +113,7 @@ export async function fetchNames(scope: Scope): Promise<Record<string, string>> 
   const groups = chunk(scope.memberUids, 10);
   const snaps = await Promise.all(
     groups.map((ids) =>
-      db.collection("profiles").where(admin.firestore.FieldPath.documentId(), "in", ids).get()
+      db.collection("profiles").where(FieldPath.documentId(), "in", ids).get()
     )
   );
   for (const snap of snaps) {

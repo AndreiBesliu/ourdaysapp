@@ -32,6 +32,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendDueReminders = void 0;
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
+const firestore_1 = require("firebase-admin/firestore");
 const recurrenceServer_1 = require("./recurrenceServer");
 const notify_1 = require("./notify");
 const remindersCore_1 = require("./remindersCore");
@@ -116,7 +117,7 @@ exports.sendDueReminders = (0, scheduler_1.onSchedule)(
             try {
                 // `create` throws if the document exists. That is the dedupe: the first run to get here
                 // wins, and a second one stops before sending rather than having to coordinate.
-                await logRef.create({ eventId: d.eventId, day: d.day, at: d.at, sentAt: admin.firestore.FieldValue.serverTimestamp() });
+                await logRef.create({ eventId: d.eventId, day: d.day, at: d.at, sentAt: firestore_1.FieldValue.serverTimestamp() });
             }
             catch (err) {
                 // Only ALREADY_EXISTS means an overlapping run got here first. Counting every rejection

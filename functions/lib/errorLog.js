@@ -11,11 +11,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.addErrorLog = addErrorLog;
 exports.logServerError = logServerError;
 const admin = require("firebase-admin");
+const firestore_1 = require("firebase-admin/firestore");
 const errorRetention_1 = require("./errorRetention");
 async function addErrorLog(row, nowMs = Date.now()) {
-    await admin.firestore().collection("errorLogs").add(Object.assign(Object.assign({}, row), { createdAt: admin.firestore.FieldValue.serverTimestamp(), 
+    await admin.firestore().collection("errorLogs").add(Object.assign(Object.assign({}, row), { createdAt: firestore_1.FieldValue.serverTimestamp(), 
         // A Timestamp, not a string or a number: the TTL policy silently ignores any other type.
-        [errorRetention_1.ERROR_LOG_TTL_FIELD]: admin.firestore.Timestamp.fromMillis((0, errorRetention_1.errorLogExpiryMs)(nowMs)) }));
+        [errorRetention_1.ERROR_LOG_TTL_FIELD]: firestore_1.Timestamp.fromMillis((0, errorRetention_1.errorLogExpiryMs)(nowMs)) }));
 }
 /** Record a server-side error so it surfaces in the admin Health panel. Never throws. */
 async function logServerError(message, where, extra) {

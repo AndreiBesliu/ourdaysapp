@@ -11634,3 +11634,61 @@ Toate sunt reparate. Ce a rămas deliberat în afară e în BACKLOG.
 Toate verzi.
 
 **Nepublicat.** Cere funcțiile, apoi regulile, apoi hosting-ul, cu acordul lui Andrei.
+
+## 2026-10-05 · Scoaterea celor plecați de pe evenimentele grupului (Task Started)
+
+**Prompt (Andrei):** „Do this task here: “Remove leavers from event assignees””.
+**Model:** Claude Opus 5.5.
+**Plan:**
+- măsor pe live câte evenimente au deja nume rămase (doar citire);
+- citesc toate căile prin care cineva iese dintr-un grup și tot ce citește responsabilii unui eveniment;
+- reproduc pe emulatorul de reguli refuzul unei editări după plecare;
+- îl întreb pe Andrei forma (curățare pe server la ieșire, regula mai îngăduitoare, sau amândouă) înainte
+  să implementez.
+
+## 2026-10-05 · Importurile modulare Firestore în funcții (Task Started)
+
+**Prompt (Andrei):** „Do this task here: “Use modular Firestore statics in functions””.
+**Model:** Claude Opus 5.5.
+**Plan:**
+- cele 50 de `admin.firestore.FieldValue` / `Timestamp` / `FieldPath` din `functions/src` trec pe
+  `import { … } from "firebase-admin/firestore"`; `admin.firestore()` rămâne;
+- proba, în pereche, pe emulatorul de functions: `onMessageCreated` pe build-ul de dinainte, apoi pe cel
+  de după;
+- porțile, apoi o recenzie adversarială.
+
+## 2026-10-05 · Importurile modulare Firestore în funcții (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+- **Schimbarea:** cele 50 de `admin.firestore.FieldValue` / `Timestamp` / `FieldPath` din 11 fișiere
+  din `functions/src` vin acum din `import { … } from "firebase-admin/firestore"`. `admin.firestore()` și
+  tipurile `admin.firestore.X` au rămas. Pe live nu se schimbă nimic: sunt aceleași obiecte (`===`,
+  măsurat pe firebase-admin 13.10).
+- **De ce:** sub emulatorul de functions, namespace-ul n-are acești membri. Emulatorul învelește intrarea
+  principală a `firebase-admin` și leagă cu `bind` funcțiile ei, iar o funcție legată își pierde
+  membrii statici; subcalea `firebase-admin/firestore` nu e învelită.
+- **Probat în pereche, pe emulatorul de functions** (build-ul de dinainte, apoi cel de după):
+  - `onMessageCreated`: înainte, grupul nu primea previzualizarea și clopoțelul nu primea niciun rând
+    (`TypeError … reading 'serverTimestamp'`); după, apar amândouă, cu Timestamp-uri reale;
+  - `logClientError`: înainte, HTTP 500 cu aceeași eroare și niciun rând; după, 200, iar rândul are
+    `createdAt` și `expireAt` ca Timestamp-uri.
+- **Garda:** `src/utils/functionsModularStatics.test.ts` citește tot `functions/src` cu parserul
+  TypeScript. Refuză orice folosire ca valoare a namespace-ului `firestore` din `firebase-admin`, oricum
+  ar fi ajuns acolo: `admin.firestore.X`, `admin["firestore"]`, destructurare,
+  `import { firestore } from "firebase-admin"`, `import = require` sau `require`. Lasă să treacă
+  apelul `admin.firestore()`, tipurile și comentariile. Pe sursa de dinainte raportează exact cele 50.
+- **Recenzie adversarială** (3 lentile: echivalența, garda, ce mai cade pe emulator; fiecare constatare
+  verificată separat):
+  - echivalența: toate cele 50 sunt aceleași apeluri, fără umbrire, fără schimbare de ordine la
+    încărcare; `const inc = FieldValue.increment` era detașat și înainte și nu folosește `this`;
+  - garda rata `import { firestore } from "firebase-admin"`, formă care se compilează și readuce eroarea
+    (simulat cu `Proxied` din firebase-tools 15.18). Reparat, cu probe pentru fiecare formă, inclusiv
+    `interface … extends admin.firestore.DocumentData`, pe care garda îl refuza pe nedrept;
+  - restul serviciilor (`auth`, `messaging`, `storage`) sunt folosite doar ca apeluri sau tipuri.
+- `functions/test` folosește în continuare namespace-ul: rulează în node simplu, lângă emulatorul de
+  Firestore, nu în cel de functions, deci merge.
+- Scos din BACKLOG punctul despre emulatorul de functions.
+- **Porți:** `tsc -b`, `lint-gate`, `npm test` (2344), `tsc` și build-ul funcțiilor, `test:rules` (510),
+  `npm run build`, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46). Toate verzi.
+- **Nepublicat.** Doar funcțiile se schimbă, fără efect pe live; pleacă la următorul deploy de funcții.

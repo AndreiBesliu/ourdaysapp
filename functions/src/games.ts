@@ -13,6 +13,7 @@
 
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import {
   IDLE_MS,
   expiryRefusal,
@@ -105,7 +106,7 @@ export const expireIdleGames = onSchedule(
             if (expiryRefusal({ id: fresh.id, ...data }, Date.now()) !== null) return false;
             tx.update(d.ref, {
               ...closedSessionFields({ id: fresh.id, ...data }, true),
-              endedAt: admin.firestore.FieldValue.serverTimestamp(),
+              endedAt: FieldValue.serverTimestamp(),
             });
             return true;
           });

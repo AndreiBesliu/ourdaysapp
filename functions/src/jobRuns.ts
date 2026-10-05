@@ -11,6 +11,7 @@
 // rules-tests/games.test.ts). The server writes it with the Admin SDK, as epoch milliseconds only.
 
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { logServerError } from "./errorLog";
 import type { JobName } from "./jobHealthCore";
 
@@ -28,7 +29,7 @@ const markerRef = (name: JobName) => admin.firestore().doc(`jobRuns/${name}`);
 export async function markJobStart(name: JobName): Promise<void> {
   try {
     await markerRef(name).set(
-      { startedAt: Date.now(), startsSinceEnd: admin.firestore.FieldValue.increment(1) },
+      { startedAt: Date.now(), startsSinceEnd: FieldValue.increment(1) },
       { merge: true },
     );
   } catch { /* the job's work comes first */ }

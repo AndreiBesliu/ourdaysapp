@@ -101,13 +101,6 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 
 ## 3. Cod și operațiuni (C)
 
-- **Funcțiile nu pot fi rulate pe emulatorul de functions acolo unde scriu un timp sau un câmp.** 50 de
-  locuri din `functions/src` folosesc `admin.firestore.FieldValue` / `Timestamp`. Sub runtime-ul
-  emulatorului, acestea sunt `undefined`; pe live și în testele vitest merg. Măsurat pe 04.10: pe
-  emulator, `onMessageCreated`, `onDirectMessageCreated` și `logClientError` cad toate cu `Cannot read
-  properties of undefined (reading 'serverTimestamp')`. Reparația e importul modular
-  (`firebase-admin/firestore`), același obiect în producție; ștergerea contului îl folosește deja.
-
 - **AI-ul pe Claude (26.09): ce a rămas deliberat în afara livrării.**
   - **Rezervarea pe apel nu e un plafon peste un fallback.** Un apel refuzat de Opus 5.5 și servit de
     alt model plătește ambele încercări. Decontarea le încasează pe amândouă (`costOf`), dar rezervarea

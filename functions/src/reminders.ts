@@ -30,6 +30,7 @@
 
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { expandInWindow, type EventDoc } from "./recurrenceServer";
 import { notify } from "./notify";
 import { dueIn } from "./remindersCore";
@@ -126,7 +127,7 @@ export const sendDueReminders = onSchedule(
         try {
           // `create` throws if the document exists. That is the dedupe: the first run to get here
           // wins, and a second one stops before sending rather than having to coordinate.
-          await logRef.create({ eventId: d.eventId, day: d.day, at: d.at, sentAt: admin.firestore.FieldValue.serverTimestamp() });
+          await logRef.create({ eventId: d.eventId, day: d.day, at: d.at, sentAt: FieldValue.serverTimestamp() });
         } catch (err) {
           // Only ALREADY_EXISTS means an overlapping run got here first. Counting every rejection
           // as a dupe would have made a transient UNAVAILABLE read as "somebody else delivered it" —

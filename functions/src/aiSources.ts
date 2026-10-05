@@ -14,6 +14,7 @@
 //   • Be NARROWER than the rules, never wider. Where a rule is loose, mirror the intent.
 
 import * as admin from "firebase-admin";
+import { Timestamp } from "firebase-admin/firestore";
 import { inScope, type Scope } from "./aiScope";
 import { expandInWindow, lookbackMsFor, type EventDoc } from "./recurrenceServer";
 import type { Period } from "./period";
@@ -151,8 +152,8 @@ export async function fetchChat(scope: Scope, period: Period, budget: number): P
   if (scope.groupIds.length === 0) return { items: [], complete: true };
 
   const perGroup = Math.max(10, Math.floor(budget / scope.groupIds.length));
-  const from = admin.firestore.Timestamp.fromDate(new Date(period.from));
-  const to = admin.firestore.Timestamp.fromDate(new Date(period.to));
+  const from = Timestamp.fromDate(new Date(period.from));
+  const to = Timestamp.fromDate(new Date(period.to));
 
   const snaps = await Promise.all(
     scope.groupIds.map((g) =>
@@ -241,8 +242,8 @@ export async function fetchExpenses(
   scope: Scope, period: Period, budget: number,
 ): Promise<SourceResult<ExpenseItem>> {
   const db = admin.firestore();
-  const from = admin.firestore.Timestamp.fromDate(new Date(period.from));
-  const to = admin.firestore.Timestamp.fromDate(new Date(period.to));
+  const from = Timestamp.fromDate(new Date(period.from));
+  const to = Timestamp.fromDate(new Date(period.to));
   // One share for the caller's own, the rest split across the groups — so a member of many groups
   // does not lose sight of their own spending.
   //

@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.expireIdleGames = void 0;
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
+const firestore_1 = require("firebase-admin/firestore");
 const gameSession_1 = require("./gameSession");
 const jobRuns_1 = require("./jobRuns");
 /**
@@ -92,7 +93,7 @@ exports.expireIdleGames = (0, scheduler_1.onSchedule)(
                         return false;
                     if ((0, gameSession_1.expiryRefusal)(Object.assign({ id: fresh.id }, data), Date.now()) !== null)
                         return false;
-                    tx.update(d.ref, Object.assign(Object.assign({}, (0, gameSession_1.closedSessionFields)(Object.assign({ id: fresh.id }, data), true)), { endedAt: admin.firestore.FieldValue.serverTimestamp() }));
+                    tx.update(d.ref, Object.assign(Object.assign({}, (0, gameSession_1.closedSessionFields)(Object.assign({ id: fresh.id }, data), true)), { endedAt: firestore_1.FieldValue.serverTimestamp() }));
                     return true;
                 });
                 if (wrote)

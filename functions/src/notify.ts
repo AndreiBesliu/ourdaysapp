@@ -25,6 +25,7 @@
 // calls on addresses that can never arrive. Pruning happens here, once, for every caller.
 
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import {
   DEFAULT_LANG, normaliseLang, renderNotify, type NotifyLang,
 } from "./notifyStrings";
@@ -133,7 +134,7 @@ export async function notify(spec: NotifySpec): Promise<NotifyResult> {
         ? spec.bodyText.slice(0, 500)
         : spec.bodyKey ? renderNotify(spec.bodyKey, r.lang, spec.param).slice(0, 500) : "",
       read: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     });
   }
   await batch.commit();
@@ -213,7 +214,7 @@ export async function notify(spec: NotifySpec): Promise<NotifyResult> {
   for (const [uid, dead] of deadByUser) {
     try {
       await db.doc(`users/${uid}`).update({
-        fcmTokens: admin.firestore.FieldValue.arrayRemove(...dead),
+        fcmTokens: FieldValue.arrayRemove(...dead),
       });
       pruned += dead.length;
     } catch (err) {

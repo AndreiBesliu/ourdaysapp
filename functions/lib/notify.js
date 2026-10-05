@@ -28,6 +28,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEFAULT_LANG = void 0;
 exports.notify = notify;
 const admin = require("firebase-admin");
+const firestore_1 = require("firebase-admin/firestore");
 const notifyStrings_1 = require("./notifyStrings");
 Object.defineProperty(exports, "DEFAULT_LANG", { enumerable: true, get: function () { return notifyStrings_1.DEFAULT_LANG; } });
 const CAP = 200;
@@ -69,7 +70,7 @@ async function notify(spec) {
     for (const r of recipients) {
         batch.set(db.collection("notifications").doc(), Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({ userId: r.uid, createdBy: spec.createdBy, type: spec.type }, (spec.titleText ? {} : { titleKey: spec.titleKey.slice(0, 60) })), (spec.titleParam && !spec.titleText ? { titleParam: spec.titleParam.slice(0, CAP) } : {})), (spec.bodyKey ? { bodyKey: spec.bodyKey.slice(0, 60) } : {})), (spec.param ? { param: spec.param.slice(0, CAP) } : {})), { title: (spec.titleText || (0, notifyStrings_1.renderNotify)(spec.titleKey, r.lang, spec.titleParam)).slice(0, CAP), body: spec.bodyText
                 ? spec.bodyText.slice(0, 500)
-                : spec.bodyKey ? (0, notifyStrings_1.renderNotify)(spec.bodyKey, r.lang, spec.param).slice(0, 500) : "", read: false, createdAt: admin.firestore.FieldValue.serverTimestamp() }));
+                : spec.bodyKey ? (0, notifyStrings_1.renderNotify)(spec.bodyKey, r.lang, spec.param).slice(0, 500) : "", read: false, createdAt: firestore_1.FieldValue.serverTimestamp() }));
     }
     await batch.commit();
     if (spec.push === false)
@@ -143,7 +144,7 @@ async function notify(spec) {
     for (const [uid, dead] of deadByUser) {
         try {
             await db.doc(`users/${uid}`).update({
-                fcmTokens: admin.firestore.FieldValue.arrayRemove(...dead),
+                fcmTokens: firestore_1.FieldValue.arrayRemove(...dead),
             });
             pruned += dead.length;
         }

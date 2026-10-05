@@ -28,6 +28,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { notify } from "./notify";
 
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
@@ -119,11 +120,11 @@ export const openDirectChat = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
 
   await ref.set({
     members: [uid, otherUid].sort(),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
     createdBy: uid,
     // Written by the message trigger from here on; seeded empty so the list has something to
     // sort by before anybody has said anything.
-    lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+    lastMessageAt: FieldValue.serverTimestamp(),
     lastMessageText: "",
     lastMessageBy: null,
   });
@@ -164,7 +165,7 @@ export const onDirectMessageCreated = onDocumentCreated("chats/{chatId}/messages
     // Written by the server, never by a client: a writable preview is a way to put words into
     // somebody else's conversation list.
     await db.doc(`chats/${chatId}`).set({
-      lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastMessageAt: FieldValue.serverTimestamp(),
       lastMessageText: preview,
       lastMessageBy: senderId,
     }, { merge: true });

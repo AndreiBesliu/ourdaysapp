@@ -29,6 +29,7 @@ exports.inScope = inScope;
 exports.chunk = chunk;
 exports.fetchNames = fetchNames;
 const admin = require("firebase-admin");
+const firestore_1 = require("firebase-admin/firestore");
 /** Most groups one turn will look across. Anyone can create groups without limit, so this is
  *  an axis the user sets for free and it has to be bounded. */
 exports.SCOPE_FANOUT_CAP = 25;
@@ -94,7 +95,7 @@ async function fetchNames(scope) {
     const db = admin.firestore();
     const out = {};
     const groups = chunk(scope.memberUids, 10);
-    const snaps = await Promise.all(groups.map((ids) => db.collection("profiles").where(admin.firestore.FieldPath.documentId(), "in", ids).get()));
+    const snaps = await Promise.all(groups.map((ids) => db.collection("profiles").where(firestore_1.FieldPath.documentId(), "in", ids).get()));
     for (const snap of snaps) {
         for (const doc of snap.docs) {
             const d = doc.data() || {};

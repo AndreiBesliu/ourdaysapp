@@ -47,6 +47,7 @@ exports.closeLedgerRow = closeLedgerRow;
 exports.withLedger = withLedger;
 exports.estimateUsdFor = estimateUsdFor;
 const admin = require("firebase-admin");
+const firestore_1 = require("firebase-admin/firestore");
 const aiProviderError_1 = require("./aiProviderError");
 const aiLimits_1 = require("./aiLimits");
 var aiResponse_1 = require("./aiResponse");
@@ -271,7 +272,7 @@ async function recordRatio(uid, chars, tokens) {
  */
 async function openLedgerRow(entry) {
     const ref = admin.firestore().collection("aiLedger").doc();
-    await ref.set(Object.assign(Object.assign({}, entry), { date: today(), at: admin.firestore.FieldValue.serverTimestamp(), ok: null, promptTokens: 0, completionTokens: 0, costUsd: 0 }));
+    await ref.set(Object.assign(Object.assign({}, entry), { date: today(), at: firestore_1.FieldValue.serverTimestamp(), ok: null, promptTokens: 0, completionTokens: 0, costUsd: 0 }));
     return { id: ref.id, startedAt: Date.now(), entry };
 }
 /**
@@ -311,7 +312,7 @@ async function closeLedgerRow(handle, outcome) {
     const date = today();
     const batch = db.batch();
     batch.set(db.collection("aiLedger").doc(handle.id), Object.assign({ ok: outcome.ok, errorCode: outcome.errorCode || null, promptTokens: usage.promptTokens, completionTokens: usage.completionTokens, costUsd, computeMs: Date.now() - handle.startedAt }, (model !== handle.entry.model ? { servedModel: model } : {})), { merge: true });
-    const inc = admin.firestore.FieldValue.increment;
+    const inc = firestore_1.FieldValue.increment;
     const roll = {
         calls: inc(1),
         failures: inc(outcome.ok ? 0 : 1),
