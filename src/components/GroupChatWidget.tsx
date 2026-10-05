@@ -42,6 +42,11 @@ interface GroupChatWidgetProps {
   embedded?: boolean;
   /** Shown as a back/close control when embedded (the mobile chat view uses it). */
   onClose?: () => void;
+  /**
+   * Shown INSTEAD of the message box: the conversation can be read but not answered. A direct chat
+   * with an account that was deleted (utils/formerMembers.ts).
+   */
+  closedNote?: string;
 }
 
 // Audio Player sub-component for voice messages
@@ -102,7 +107,7 @@ function AudioPlayer({ src, isMe }: { src: string; isMe: boolean }) {
 }
 
 export default function GroupChatWidget({
-  convId, convKind, title, userMap, members = [], embedded = false, onClose,
+  convId, convKind, title, userMap, members = [], embedded = false, onClose, closedNote,
 }: GroupChatWidgetProps) {
   // One place the collection is chosen. Every path below is built from this, so a direct chat and
   // a group differ in exactly one line.
@@ -1171,6 +1176,8 @@ export default function GroupChatWidget({
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
+                              {/* Editing and replying use the message box, which a closed conversation does not have. */}
+                              {!closedNote && (
                               <button
                                 onClick={() => startEditing(msg)}
                                 className="p-1 text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full shrink-0"
@@ -1179,8 +1186,10 @@ export default function GroupChatWidget({
                               >
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
+                              )}
                             </>
                           )}
+                          {!closedNote && (
                           <button
                             // Editing and replying are the same composer, so they have to be
                             // the same slot. `startEditing` already clears `replyingTo`; this
@@ -1196,6 +1205,7 @@ export default function GroupChatWidget({
                           >
                             <Reply className="w-3.5 h-3.5" />
                           </button>
+                          )}
                           <button
                             onClick={() => handlePin(msg.id)}
                             className={`p-1 rounded-full shrink-0 ${msg.isPinned ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10' : 'text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'}`}
@@ -1300,7 +1310,7 @@ export default function GroupChatWidget({
           )}
 
           {/* Reply Banner */}
-          {replyingTo && (
+          {replyingTo && !closedNote && (
             <div className="px-4 py-2 bg-zinc-50 dark:bg-zinc-800/80 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
               <div className="flex items-center gap-2 overflow-hidden">
                 <Reply className="w-4 h-4 text-primary shrink-0" />
@@ -1316,7 +1326,7 @@ export default function GroupChatWidget({
           )}
 
           {/* Edit Banner */}
-          {editingMsg && (
+          {editingMsg && !closedNote && (
             <div className="px-4 py-2 bg-zinc-50 dark:bg-zinc-800/80 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
               <div className="flex items-center gap-2 overflow-hidden">
                 <Pencil className="w-4 h-4 text-primary shrink-0" />
@@ -1331,8 +1341,12 @@ export default function GroupChatWidget({
             </div>
           )}
 
-          {/* Input */}
-          {isRecording ? (
+          {/* Input — or, with nobody left to answer, why there is none */}
+          {closedNote ? (
+            <p role="note" className="px-4 py-3 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-xs text-zinc-500 dark:text-zinc-400 text-center shrink-0">
+              {closedNote}
+            </p>
+          ) : isRecording ? (
             <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex gap-2 items-center shrink-0">
               <button
                 onClick={cancelRecording}

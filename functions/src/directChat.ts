@@ -152,6 +152,10 @@ export const onDirectMessageCreated = onDocumentCreated("chats/{chatId}/messages
     const chatSnap = await db.doc(`chats/${chatId}`).get();
     const members: string[] = Array.isArray(chatSnap.data()?.members) ? chatSnap.data()!.members : [];
     if (members.length === 0) return;
+    // A deleted account stays in `members`, because it names the conversation (accountDeletion.ts).
+    // Telling it anything would only leave a bell row nobody can read.
+    const former = chatSnap.data()?.formerMembers;
+    const gone = (m: string) => !!(former && typeof former === "object" && (former as Record<string, unknown>)[m]);
 
     const preview = typeof msg.text === "string" && msg.text
       ? msg.text.slice(0, 140)
@@ -169,7 +173,7 @@ export const onDirectMessageCreated = onDocumentCreated("chats/{chatId}/messages
       (await db.doc(`profiles/${senderId}`).get()).data()?.name || "Someone";
 
     await notify({
-      userIds: members.filter((m) => m !== senderId),
+      userIds: members.filter((m) => m !== senderId && !gone(m)),
       createdBy: senderId,
       type: "chat",
       titleKey: "notifNewMessage",

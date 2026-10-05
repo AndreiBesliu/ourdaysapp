@@ -1,8 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminGetAiLedger = exports.adminSetAiConfig = exports.adminGetAiConfig = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onGroupInviteCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
-exports.adminBackfillExpenses = void 0;
-exports.deleteStoragePrefixes = deleteStoragePrefixes;
+exports.adminSetAiConfig = exports.adminGetAiConfig = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onGroupInviteCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.deleteMyAccount = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
+exports.adminBackfillExpenses = exports.adminGetAiLedger = void 0;
 // FIRST, before anything that defines a function: the global options apply only to functions
 // defined after them. See globalOptions.ts.
 require("./globalOptions");
@@ -13,7 +12,8 @@ const bootstrapAdmins_1 = require("./bootstrapAdmins");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 const claude_1 = require("./claude");
-const groupMedia_1 = require("./groupMedia");
+const groupDeletion_1 = require("./groupDeletion");
+const accountDeletion_1 = require("./accountDeletion");
 const errorLog_1 = require("./errorLog");
 const engine_1 = require("./warlordCombat/combat/engine");
 const pvp_1 = require("./warlordCombat/combat/pvp");
@@ -50,6 +50,10 @@ Object.defineProperty(exports, "listMyInviteLinks", { enumerable: true, get: fun
 var directChat_1 = require("./directChat");
 Object.defineProperty(exports, "openDirectChat", { enumerable: true, get: function () { return directChat_1.openDirectChat; } });
 Object.defineProperty(exports, "onDirectMessageCreated", { enumerable: true, get: function () { return directChat_1.onDirectMessageCreated; } });
+// A person deleting their own account, from Settings (04.10.2026). The admin's delete runs the same
+// cascade, through `deleteAccountData`.
+var accountDeletion_2 = require("./accountDeletion");
+Object.defineProperty(exports, "deleteMyAccount", { enumerable: true, get: function () { return accountDeletion_2.deleteMyAccount; } });
 var reminders_1 = require("./reminders");
 Object.defineProperty(exports, "sendDueReminders", { enumerable: true, get: function () { return reminders_1.sendDueReminders; } });
 // A daily copy of the health panel into the function logs, which the CLI can read without a
@@ -1277,7 +1281,7 @@ exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
 // do: other members' events are RE-PARENTED to personal, never deleted. Losing the group should
 // not lose their data, and the owner was never entitled to delete it.
 exports.deleteGroupCascade = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
-    var _a, _b;
+    var _a;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid) {
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
@@ -1294,84 +1298,16 @@ exports.deleteGroupCascade = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_
         .filter((x) => typeof x === "string")
         .slice(0, 2000));
     const db = admin.firestore();
-    const groupRef = db.doc(`groups/${groupId}`);
-    const groupSnap = await groupRef.get();
+    const groupSnap = await db.doc(`groups/${groupId}`).get();
     if (!groupSnap.exists) {
         throw new https_1.HttpsError("not-found", "Group not found.");
     }
     if ((groupSnap.data() || {}).ownerId !== uid) {
         throw new https_1.HttpsError("permission-denied", "Only the group's owner can delete it.");
     }
-    let deleted = 0;
-    let freed = 0;
-    // No cursor is needed: every document this loop touches stops matching `groupId == groupId`
-    // (it is either deleted or re-parented to null), so the same query drains itself. The bound is
-    // there so a write that silently fails cannot turn that into a spin — and reaching it now STOPS
-    // the cascade before the group goes (25.09.2026). It used to carry on after 40 pages and delete
-    // the group anyway, leaving every event past 12,000 pointing at a group that no longer existed.
-    // Every page is committed, so a retry picks up where this one stopped.
-    for (let page = 0;; page++) {
-        const snap = await db.collection("events").where("groupId", "==", groupId).limit(300).get();
-        if (snap.empty)
-            break;
-        if (page >= 200) {
-            throw new https_1.HttpsError("deadline-exceeded", "Still clearing the group's events — try again.");
-        }
-        const batch = db.batch();
-        for (const d of snap.docs) {
-            const ev = d.data() || {};
-            if (ev.ownerId === uid && !keep.has(d.id)) {
-                batch.delete(d.ref);
-                deleted++;
-            }
-            else {
-                batch.update(d.ref, { groupId: null, sharedWithFamily: false });
-                freed++;
-            }
-        }
-        await batch.commit();
-    }
-    const invites = await deleteQueryInBatches(db.collection("group_invites").where("groupId", "==", groupId));
-    // Its links, revoked rather than deleted, so their creators' lists still explain them. A redeem
-    // would answer "group not found" anyway; this keeps "listMyInviteLinks" honest.
-    let links = 0;
-    const linkSnap = await db.collection("invite_links").where("groupId", "==", groupId).get();
-    for (let i = 0; i < linkSnap.docs.length; i += 400) {
-        const batch = db.batch();
-        for (const d of linkSnap.docs.slice(i, i + 400)) {
-            if (((_b = d.data()) === null || _b === void 0 ? void 0 : _b.revoked) === true)
-                continue;
-            batch.update(d.ref, { revoked: true });
-            links++;
-        }
-        await batch.commit();
-    }
-    // Its chat media, BEFORE the group goes: if the sweep fails, the group still exists and the owner
-    // can retry — every step above is idempotent — whereas once the document is gone a retry answers
-    // "not found" for ever. Guarded; see groupMedia.ts for why a naive sweep would be a way to wipe
-    // somebody's direct messages.
-    let media = "skipped";
-    if (groupMedia_1.GROUP_ID.test(groupId) && !(await db.doc(`chats/${groupId}`).get()).exists) {
-        try {
-            await groupMedia_1.groupMedia.sweep(groupId);
-            media = "deleted";
-        }
-        catch (err) {
-            // Awaited: work left running after the response is not guaranteed CPU on 2nd-gen functions.
-            await (0, errorLog_1.logServerError)(String((err === null || err === void 0 ? void 0 : err.message) || err), "deleteGroupCascade.media", { uid, stack: err === null || err === void 0 ? void 0 : err.stack });
-            throw new https_1.HttpsError("unavailable", "The group's photos could not be removed yet. Try again.");
-        }
-    }
-    else {
-        await (0, errorLog_1.logServerError)(`media sweep skipped: group id is not an auto-id or names a direct chat`, "deleteGroupCascade.media", { uid });
-    }
-    // The chat lives UNDER the group document, so deleting the parent alone would leave it
-    // unreachable and still billed for. `recursiveDelete` takes the messages, the typing flags and the
-    // group itself, with no cap — the batch loop it replaces stopped at about 3,200 messages and then
-    // deleted the group anyway, orphaning the rest under a parent nobody could read through.
-    const messages = (await db.collection(`groups/${groupId}/messages`).count().get()).data().count;
-    await db.recursiveDelete(groupRef);
-    return { deleted, freed, invites, messages, media, links };
+    // What goes and what stays lives in groupDeletion.ts since 04.10.2026: the account deletion takes a
+    // group its owner was alone in through the same steps.
+    return (0, groupDeletion_1.deleteGroupData)(groupId, uid, keep);
 });
 // ── Asset transfer "keep copy" ──
 // Creating an asset owned by ANOTHER user can't be a client write (create
@@ -1689,35 +1625,7 @@ const chunk = (arr, size) => {
         out.push(arr.slice(i, i + size));
     return out;
 };
-// Delete every doc matching a query, in batches, until exhausted (or a cap).
-async function deleteQueryInBatches(query, max = 3000) {
-    let deleted = 0;
-    while (deleted < max) {
-        const snap = await query.limit(400).get();
-        if (snap.empty)
-            break;
-        const batch = admin.firestore().batch();
-        snap.docs.forEach((d) => batch.delete(d.ref));
-        await batch.commit();
-        deleted += snap.size;
-        if (snap.size < 400)
-            break;
-    }
-    return deleted;
-}
-// Delete all Storage objects under the given prefixes (best-effort), and SAY whether it worked.
-// It used to swallow each prefix's failure and return true regardless, so adminModerateUser reported
-// `storageDeleted: true` whether or not anything had been deleted (25.09.2026).
-async function deleteStoragePrefixes(prefixes, bucketOf = () => admin.storage().bucket()) {
-    try {
-        const bucket = bucketOf();
-        const results = await Promise.allSettled(prefixes.map((p) => bucket.deleteFiles({ prefix: p, force: true })));
-        return results.every((r) => r.status === "fulfilled");
-    }
-    catch (_a) {
-        return false;
-    }
-}
+// `deleteQueryInBatches` and the Storage delete live in batchDelete.ts since 04.10.2026.
 // `logServerError` lives in errorLog.ts since 25.09.2026, with the one writer every row goes through.
 // Is the current caller an admin? (Non-throwing for non-admins.)
 exports.adminCheck = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
@@ -2024,7 +1932,7 @@ exports.adminSetAdmin = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
 // Clients report captured errors here (rate-limited); the Admin SDK writes the
 // `errorLogs` collection so clients can't write it directly.
 exports.logClientError = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     const { message, stack, url, context } = request.data || {};
     if (!message)
@@ -2032,9 +1940,15 @@ exports.logClientError = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
     // Require auth so every report is rate-limited (no unauthenticated spam path).
     if (!uid)
         return { ok: false };
+    // A deleted account's session outlives it until its token runs out, up to an hour. What it reports
+    // would put back the rows the deletion removed: its uid, email and user agent, and the counter
+    // below (accountDeletion.ts). Before the counter, so that is not recreated either.
+    const deletion = await admin.firestore().doc(`accountDeletions/${uid}`).get();
+    if (deletion.exists && ((_b = deletion.data()) === null || _b === void 0 ? void 0 : _b.finishedAt))
+        return { ok: false };
     if (!(await tryConsumeQuota(uid, "error_usage", 200)))
         return { ok: false, throttled: true };
-    const ua = (_c = (_b = request.rawRequest) === null || _b === void 0 ? void 0 : _b.headers) === null || _c === void 0 ? void 0 : _c["user-agent"];
+    const ua = (_d = (_c = request.rawRequest) === null || _c === void 0 ? void 0 : _c.headers) === null || _d === void 0 ? void 0 : _d["user-agent"];
     // Through the one writer, which stamps `createdAt` and the TTL field — see errorLog.ts.
     await (0, errorLog_1.addErrorLog)({
         message: String(message).slice(0, 1000),
@@ -2042,7 +1956,7 @@ exports.logClientError = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
         url: url ? String(url).slice(0, 500) : null,
         context: context ? String(context).slice(0, 200) : null,
         uid,
-        email: ((_e = (_d = request.auth) === null || _d === void 0 ? void 0 : _d.token) === null || _e === void 0 ? void 0 : _e.email) || null,
+        email: ((_f = (_e = request.auth) === null || _e === void 0 ? void 0 : _e.token) === null || _f === void 0 ? void 0 : _f.email) || null,
         userAgent: ua ? String(ua).slice(0, 300) : null,
         source: "client",
     });
@@ -2307,8 +2221,8 @@ exports.adminGetUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK 
 });
 // Moderate a user: enable | disable | forceVerify | delete. Admins/owner and the
 // caller themselves are protected from disable/delete.
-exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
-    var _a;
+// The deletion runs the whole account cascade, the same as `deleteMyAccount`, and gets its time.
+exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540 }, async (request) => {
     const callerUid = await assertAdmin(request);
     const { uid, action } = request.data || {};
     if (!uid || typeof uid !== "string" || uid.includes("/"))
@@ -2353,78 +2267,11 @@ exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
         return { ok: true };
     }
     if (action === "delete") {
-        // Read the user's own friends first (peers) so we can unlink both sides.
-        const meDoc = await db.doc(`users/${uid}`).get();
-        const myFriends = Array.isArray((_a = meDoc.data()) === null || _a === void 0 ? void 0 : _a.friends) ? meDoc.data().friends : [];
-        // Unlink the deleted uid from every peer's mutual friends array.
-        await Promise.all(myFriends.map(async (f) => {
-            var _a;
-            if (!(f === null || f === void 0 ? void 0 : f.uid))
-                return;
-            try {
-                const peerRef = db.doc(`users/${f.uid}`);
-                const peer = await peerRef.get();
-                if (!peer.exists)
-                    return;
-                const pf = (((_a = peer.data()) === null || _a === void 0 ? void 0 : _a.friends) || []).filter((x) => x && x.uid !== uid);
-                await peerRef.set({ friends: pf }, { merge: true });
-            }
-            catch ( /* ignore a bad peer */_b) { /* ignore a bad peer */ }
-        }));
-        // Remove from every group's members.
-        const groupsSnap = await db.collection("groups").where("members", "array-contains", uid).limit(400).get();
-        await Promise.all(groupsSnap.docs.map((g) => g.ref.update({ members: admin.firestore.FieldValue.arrayRemove(uid) }).catch(() => { })));
-        // Delete owned/created content + friend requests (paginated to exhaustion).
-        const events = await deleteQueryInBatches(db.collection("events").where("ownerId", "==", uid));
-        const assets = await deleteQueryInBatches(db.collection("assets").where("ownerId", "==", uid));
-        const games = await deleteQueryInBatches(db.collection("games").where("createdBy", "==", uid));
-        const frFrom = await deleteQueryInBatches(db.collection("friend_requests").where("fromId", "==", uid));
-        const frTo = await deleteQueryInBatches(db.collection("friend_requests").where("toId", "==", uid));
-        // Expenses were NOT deleted here, and that corrupts every group the person was in. The rows
-        // survive, the surviving members can still read them (the rule grants any member the group
-        // ledger), the balance still SUMS the departed person's spending — but the divisor shrank when
-        // they were removed from the group's member list twenty lines above. So everyone left is
-        // quietly told they owe more than they do, for good.
-        const expenses = await deleteQueryInBatches(db.collection("expenses").where("ownerId", "==", uid));
-        // Notifications addressed to a deleted account are unreachable by anyone: the rules key them to
-        // the recipient's own uid, so nothing but this can ever remove them.
-        const notifications = await deleteQueryInBatches(db.collection("notifications").where("userId", "==", uid));
-        // Error rows carry the person's uid and, for client reports, their email, user agent and urls.
-        // They expire after 90 days (errorRetention.ts); a deleted account's should not wait for that
-        // (25.09.2026). Drained without the 3,000 cap: a client may write 200 a day.
-        const errorLogs = await deleteQueryInBatches(db.collection("errorLogs").where("uid", "==", uid), Number.MAX_SAFE_INTEGER);
-        // Delete the user's uploaded Storage files.
-        const storageDeleted = await deleteStoragePrefixes([
-            `assets/${uid}/`, `events/${uid}/`, `checklists/${uid}/`,
-            `profiles/${uid}_`, `backgrounds/${uid}_`,
-        ]);
-        // Delete the user's own docs.
-        await Promise.all([
-            db.doc(`users/${uid}`).delete().catch(() => { }),
-            db.doc(`profiles/${uid}`).delete().catch(() => { }),
-            db.doc(`admins/${uid}`).delete().catch(() => { }),
-            db.doc(`ai_usage/${uid}`).delete().catch(() => { }),
-            db.doc(`notif_usage/${uid}`).delete().catch(() => { }),
-            db.doc(`error_usage/${uid}`).delete().catch(() => { }),
-            db.doc(`warlord_challenge_usage/${uid}`).delete().catch(() => { }),
-            // Warlord: the world-roster entry and the cloud-synced kingdom. Both are
-            // otherwise undeletable (clients cannot delete them) and the roster is
-            // world-readable, so a deleted account would linger in the player directory.
-            db.doc(`warlordPlayers/${uid}`).delete().catch(() => { }),
-            db.doc(`warlordDomains/${uid}`).delete().catch(() => { }),
-        ]);
-        // Finally the Auth account.
-        let authDeleted = false;
-        try {
-            await admin.auth().deleteUser(uid);
-            authDeleted = true;
-        }
-        catch ( /* already gone */_b) { /* already gone */ }
-        return {
-            ok: true, deleted: true, authDeleted, storageDeleted,
-            counts: { groups: groupsSnap.size, events, assets, games, expenses, notifications, errorLogs, friendRequests: frFrom + frTo, friendsUnlinked: myFriends.length },
-            note: "Group chat messages authored by the user are retained as group history.",
-        };
+        // The same deletion the person can ask for from Settings (accountDeletion.ts, 04.10.2026): groups
+        // they own pass on, their group events stay with the group's owner, their messages stay under
+        // their name. It throws, with the account still there, when a step fails, so it can be repeated.
+        const result = await (0, accountDeletion_1.deleteAccountData)(uid, `admin:${callerUid}`);
+        return Object.assign(Object.assign({ ok: true, deleted: true }, result), { note: "Messages they wrote stay in their conversations, marked as a deleted account." });
     }
     throw new https_1.HttpsError("invalid-argument", "Unknown action.");
 });

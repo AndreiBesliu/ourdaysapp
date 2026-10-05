@@ -90,11 +90,23 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   nici în teste și comentarii. Stă în `functions/.env`, ignorat de git, cu o copie în `~/.ourdays/`.
   Dar repo-ul e public și istoria îl are.
   Rescrierea istoriei e decizia lui Andrei.
+- **Un eveniment nu mai poate fi editat după ce un responsabil al lui pleacă din grup.** Regula
+  `namedAreInGroup` cere ca toți din `assigneeIds` să fie membri, pe documentul REZULTAT, deci orice
+  editare (bifarea unui punct, un RSVP) e refuzată cât timp cel plecat e pe listă. Iar memento-urile îi
+  merg în continuare. Ieșirea din grup și scoaterea de către proprietar nu-l scot de pe evenimente;
+  ștergerea contului da (04.10).
 - **O cheltuială nu mai poate fi corectată după ce un membru pleacă din grup.** `splitIsHonest` cere
   ca toți din `splitAmong` să fie membri, pe documentul REZULTAT — deci orice editare a rândului e
   refuzată cât timp cel plecat e încă pe listă (scoaterea lui schimbă împărțirea). Ștergerea merge.
 
 ## 3. Cod și operațiuni (C)
+
+- **Funcțiile nu pot fi rulate pe emulatorul de functions acolo unde scriu un timp sau un câmp.** 50 de
+  locuri din `functions/src` folosesc `admin.firestore.FieldValue` / `Timestamp`. Sub runtime-ul
+  emulatorului, acestea sunt `undefined`; pe live și în testele vitest merg. Măsurat pe 04.10: pe
+  emulator, `onMessageCreated`, `onDirectMessageCreated` și `logClientError` cad toate cu `Cannot read
+  properties of undefined (reading 'serverTimestamp')`. Reparația e importul modular
+  (`firebase-admin/firestore`), același obiect în producție; ștergerea contului îl folosește deja.
 
 - **AI-ul pe Claude (26.09): ce a rămas deliberat în afara livrării.**
   - **Rezervarea pe apel nu e un plafon peste un fallback.** Un apel refuzat de Opus 5.5 și servit de
@@ -193,18 +205,25 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 
 ## 4. Produs (D) — doar înregistrat
 
-- **Cont:** omul nu-și poate șterge singur contul și nu-și poate schimba din aplicație emailul sau
-  parola (resetarea prin email există din 28.09). Ștergerea propriului cont e obligatorie pentru GDPR,
-  și pentru Google Play dacă aplicația ajunge acolo.
-  - **Re-măsurat 04.10:** cascada de ștergere EXISTĂ deja pe server, dar doar pentru admini, în
-    `adminModerateUser` cu acțiunea `delete` (`functions/src/index.ts`). Ea:
-    - dezleagă prietenii și scoate contul din grupuri;
-    - șterge conținutul, cererile, cheltuielile, notificările, rândurile de eroare, fișierele din
-      Storage și datele Warlord;
-    - șterge apoi contul de Auth.
-  - Lipsesc deci doar un callable pentru propriul cont, care refolosește cascada și cere o
-    autentificare recentă, și un ecran de confirmare.
-  - (Rândul de dinainte spunea „niciun apel la `deleteUser`”, ceea ce era fals.)
+- **Cont:** omul nu-și poate schimba din aplicație emailul sau parola (resetarea prin email există din
+  28.09). Ștergerea propriului cont există din 04.10 (Settings → „Delete account”, DEVLOG 04.10).
+- **Ștergerea contului (04.10) — ce a rămas deliberat în afară:**
+  - **Mesajele din grupurile părăsite mai demult** apar tot „Necunoscut”: numele se păstrează doar pe
+    conversațiile în care persoana era când și-a șters contul. Așa arată azi și cineva care doar a
+    plecat dintr-un grup.
+  - **Pozele de pe copii se pierd.** Pe o copie a unui eveniment făcută de cineva care a ieșit dintr-un
+    grup, poza lui se șterge: nimic nu dovedește de unde vine linkul, iar a ține fișierul pe baza lui
+    ar lăsa pe oricine să păstreze pozele oricui. Se pierd la fel pozele puse în evenimentele altora
+    din grupurile părăsite mai demult, pe care cascada nu le mai vede.
+  - **Evenimentele moștenite nu-și mai arată autorul:** apar ale proprietarului grupului. Un câmp cu
+    autorul inițial și „de X (cont șters)” în detalii ar fi un pas mic, dacă vrei.
+  - **Rezumatul AI al chatului** spune „Someone” pentru un cont șters: nu citește `formerMembers`.
+  - **O sesiune deschisă pe alt dispozitiv** mai poate scrie până la o oră după ștergere (tokenul e încă
+    valabil): un eveniment, un card, un mesaj, o poză urcată. Contul însuși, profilul și datele Warlord
+    nu se mai pot recrea (regulile), rapoartele ei de erori sunt ignorate, iar o pornire cu internet o
+    delogează.
+  - **Ordinea membrilor din grupurile de pe live** e cea de azi. Dacă cineva a reordonat-o înainte de
+    04.10, cât era încă permis, moștenitorul se alege după acea ordine.
 - **Invitațiile la evenimente (`inviteeId`), partea de server:** clientul nu le mai ascultă și nu le mai
   afișează (28.09). Regulile (`events` read/create/update) și logica de vizibilitate AI de pe server încă
   tratează un invitat drept cititor, inofensiv cât timp nimic nu scrie câmpul. Un test (`falseUi.test.ts`)

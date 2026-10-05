@@ -160,16 +160,5 @@ describe('when the media cannot be removed', () => {
   });
 });
 
-describe('deleteStoragePrefixes says whether it worked', () => {
-  // adminModerateUser reports `storageDeleted` from this. It swallowed every prefix's failure and
-  // returned true regardless, so the admin was told the files were gone when nothing had been deleted.
-  it('false when any prefix fails, true only when all succeed', async () => {
-    const { deleteStoragePrefixes } = (await import('../src/index')) as unknown as {
-      deleteStoragePrefixes: (p: string[], b: () => { deleteFiles(o: { prefix: string }): Promise<unknown> }) => Promise<boolean>;
-    };
-    const failing = () => ({ deleteFiles: async (o: { prefix: string }) => { if (o.prefix === 'events/u/') throw [new Error('denied')]; } });
-    const fine = () => ({ deleteFiles: async () => undefined });
-    expect(await deleteStoragePrefixes(['assets/u/', 'events/u/'], failing)).toBe(false);
-    expect(await deleteStoragePrefixes(['assets/u/', 'events/u/'], fine)).toBe(true);
-  });
-});
+// `deleteStoragePrefixes` was replaced on 04.10.2026 by `deleteFilesExcept` (batchDelete.ts), whose
+// failure reporting is tested in deleteMyAccount.test.ts.

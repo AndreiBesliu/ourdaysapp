@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { reportError } from '../reportError';
-import { Moon, Sun, Palette, LogOut, Settings as SettingsIcon, Camera, Home, Image as ImageIcon } from 'lucide-react';
+import { Moon, Sun, Palette, LogOut, Settings as SettingsIcon, Camera, Home, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { t } from '../utils/i18n';
 import { shouldUseLightText, isUnreadableBackground, effectiveTextContrast } from '../utils/themeContrast';
 import { useThemeStore } from '../store';
 import { auth, db, messaging } from '../firebase';
 import { signOut, updateProfile } from 'firebase/auth';
-import { doc, updateDoc, setDoc, arrayRemove } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, arrayRemove, terminate, clearIndexedDbPersistence } from 'firebase/firestore';
 import { deleteToken } from 'firebase/messaging';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
@@ -20,6 +20,9 @@ import { stopOfflineWalletSync } from '../utils/offlineWalletSync';
 import { uploadFile, UploadRefused } from '../utils/uploadFile';
 import { refusalKey, refusalDetail } from '../utils/uploadLimits';
 import { localZone, zoneChoices, zoneLabel } from '../utils/eventTime';
+import { CACHE_CLEAR_WAIT_MS, forgetAccountOnDevice, markAccountDeleted, tellOtherTabs } from '../utils/accountDeletion';
+import { settleWithin } from '../utils/pendingWrite';
+import DeleteAccountDialog from '../components/DeleteAccountDialog';
 
 const THEME_COLORS = [
   { name: 'Blue', value: '221.2 83.2% 53.3%', class: 'bg-blue-500' },
@@ -88,6 +91,7 @@ export default function Settings() {
   const [name, setName] = useState<string>(auth.currentUser?.displayName || '');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingBg, setUploadingBg] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   useEffect(() => {
     if (!auth.currentUser) return;
 
@@ -228,6 +232,18 @@ export default function Settings() {
     }
   };
 
+  // Stops this device receiving pushes for the account (utils/pushRelease.ts, step 2).
+  const invalidatePushOnDevice = async () => {
+    if (Capacitor.isNativePlatform()) {
+      await PushNotifications.unregister();
+      await PushNotifications.removeAllListeners();
+    } else if (messaging && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      // Only when there can be a token: otherwise deleteToken throws for everybody who never
+      // allowed notifications, and every sign-out would file an error nobody can act on.
+      await deleteToken(messaging);
+    }
+  };
+
   // Takes this device's push token with it — see utils/pushRelease.ts. A bare signOut left the
   // token on the account, so a shared phone kept delivering the leaver's chat and events.
   const handleSignOut = async () => {
@@ -240,20 +256,42 @@ export default function Settings() {
       uid: auth.currentUser?.uid ?? null,
       remembered: rememberedPushToken(),
       removeFromAccount: (uid, token) => updateDoc(doc(db, 'users', uid), { fcmTokens: arrayRemove(token) }),
-      invalidateOnDevice: async () => {
-        if (Capacitor.isNativePlatform()) {
-          await PushNotifications.unregister();
-          await PushNotifications.removeAllListeners();
-        } else if (messaging && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          // Only when there can be a token: otherwise deleteToken throws for everybody who never
-          // allowed notifications, and every sign-out would file an error nobody can act on.
-          await deleteToken(messaging);
-        }
-      },
+      invalidateOnDevice: invalidatePushOnDevice,
       signOut: () => signOut(auth),
       report: (err, context) => reportError(err instanceof Error ? err.message : String(err), { context }),
     });
     navigate('/login');
+  };
+
+  // After the server has deleted the account (utils/accountDeletion.ts): nothing of it stays on this
+  // device. The offline cards, the per-account keys, the push token, the sign-in, and Firestore's own
+  // copy of what the account could read, which would otherwise answer the next person's queries
+  // offline. Then a full reload, which is what a cleared Firestore needs. `uid` is read before the
+  // deletion: Auth may already have signed the session out.
+  const leaveDeletedAccount = async (uid: string) => {
+    stopOfflineWalletSync();
+    forgetOfflineWallet();
+    forgetAccountOnDevice(uid);
+    // Clearing the cache below shuts down Firestore in every other tab of the app, so they reload.
+    tellOtherTabs();
+    try {
+      await releasePushThenSignOut({
+        uid,
+        // The token list went with the account document; there is nothing left to remove it from.
+        remembered: null,
+        removeFromAccount: async () => {},
+        invalidateOnDevice: invalidatePushOnDevice,
+        signOut: () => signOut(auth),
+        // Nothing is reported: a report sent now would write back the error rows, uid and email
+        // included, that the deletion has just removed.
+        report: () => {},
+      });
+    } catch { /* the reload below signs nobody in */ }
+    // At most a few seconds (CACHE_CLEAR_WAIT_MS): a tab that cannot answer could otherwise hold the
+    // deletion of the cache, and this one would never reach its reload.
+    await settleWithin((async () => { await terminate(db); await clearIndexedDbPersistence(db); })(), CACHE_CLEAR_WAIT_MS);
+    markAccountDeleted();
+    window.location.replace('/login');
   };
 
   return (
@@ -356,6 +394,19 @@ export default function Settings() {
               <LogOut className="w-5 h-5" />
             </button>
           </div>
+          {/* Apart from Sign out, and below it: the two must never be one mis-tap apart. */}
+          <button
+            aria-label={t('deleteAccount', language)}
+            onClick={() => setDeletingAccount(true)}
+            className="w-full mt-3 p-4 flex items-center justify-between rounded-xl border border-red-200 dark:border-red-500/30 bg-white dark:bg-zinc-900 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors text-left"
+          >
+            <span>
+              <span className="block font-medium">{t('deleteAccount', language)}</span>
+              <span className="block text-sm text-zinc-500">{t('deleteAccountDesc', language)}</span>
+            </span>
+            <Trash2 className="w-5 h-5 shrink-0" />
+          </button>
+          <DeleteAccountDialog isOpen={deletingAccount} onClose={() => setDeletingAccount(false)} afterDeleted={leaveDeletedAccount} />
         </section>
 
         {/* General Settings */}

@@ -113,6 +113,21 @@ describe('keys', () => {
   });
 });
 
+describe('a direct chat with an account that was deleted (04.10.2026)', () => {
+  it('says so, from the name the deletion left on the conversation', () => {
+    const [gone] = build([], [{ id: 'c1', members: [ME, 'uid-x'], formerMembers: { 'uid-x': { name: 'Xena' } } }]);
+    expect(gone.otherGone).toBe(true);
+    const [alive] = build([], [{ id: 'c2', members: [ME, ANA] }]);
+    expect(alive.otherGone).toBe(false);
+  });
+
+  it('only for the OTHER person, and never for a group', () => {
+    // A note about me on my own chat cannot close it for me.
+    expect(build([], [{ id: 'c1', members: [ME, ANA], formerMembers: { [ME]: { name: 'Me' } } }])[0].otherGone).toBe(false);
+    expect(build([{ id: 'g1', name: 'Family', members: [ME], formerMembers: { [ANA]: { name: 'Ana' } } }], [])[0].otherGone).toBe(false);
+  });
+});
+
 describe('who you can start a new conversation with', () => {
   it('people from your groups and your friends', () => {
     const who = startableWith({

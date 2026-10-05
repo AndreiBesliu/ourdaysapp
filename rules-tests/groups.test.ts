@@ -11,7 +11,7 @@
 
 import { beforeAll, afterAll, beforeEach, describe, it } from 'vitest';
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { arrayUnion, deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { ALICE, BOB, CAROL, DAVE, G1, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
 
 beforeAll(async () => { await startEnv('demo-ourdays-groups'); });
@@ -141,6 +141,69 @@ describe('updating a group — the three branches', () => {
 
   it('an outsider may not touch it at all', async () => {
     await assertFails(updateDoc(doc(as(DAVE), 'groups', G1), { name: 'x' }));
+  });
+});
+
+describe('the order of members is who has been in the group longest (04.10.2026)', () => {
+  // A group whose owner deletes the account passes to the first member after them
+  // (functions/src/accountDeletion.ts). Compared as sets, any member could reorder the list and put
+  // themselves first in line.
+  beforeEach(async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'groups', 'g-three'), { name: 'Three', ownerId: ALICE, members: [ALICE, BOB, CAROL] });
+    });
+  });
+
+  it('a plain member may not reorder it, not even with a rename beside it', async () => {
+    await assertFails(updateDoc(doc(as(CAROL), 'groups', 'g-three'), { members: [ALICE, CAROL, BOB] }));
+    await assertFails(updateDoc(doc(as(CAROL), 'groups', 'g-three'), { name: 'x', members: [CAROL, ALICE, BOB] }));
+  });
+
+  it('nor leave in a way that reorders the rest', async () => {
+    await assertFails(updateDoc(doc(as(BOB), 'groups', 'g-three'), { members: [CAROL, ALICE] }));
+  });
+
+  it('leaving the way the app does it keeps the order, and works', async () => {
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', 'g-three'), { members: arrayRemove(BOB) }));
+  });
+
+  it('the owner may still reorder and remove', async () => {
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', 'g-three'), { members: [ALICE, CAROL, BOB] }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', 'g-three'), { members: [ALICE, BOB] }));
+  });
+});
+
+describe('the names of deleted accounts (formerMembers, 04.10.2026)', () => {
+  // Written by the account deletion on the Admin SDK, and read by the chat to show what a deleted
+  // account wrote under its old name. A member who could write it could mark somebody who simply
+  // LEFT as deleted, under any name, in everybody's chat.
+  it('no member writes it, the owner included, and not beside a legitimate edit', async () => {
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1), { formerMembers: { [CAROL]: { name: 'X' } } }));
+    await assertFails(updateDoc(doc(as(ALICE), 'groups', G1), { formerMembers: { [CAROL]: { name: 'X' } } }));
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1), { name: 'Family', 'formerMembers.x': { name: 'X' } }));
+  });
+
+  it('nor removes or changes one the server wrote, while every other edit still works', async () => {
+    await seed(async (db) => {
+      await updateDoc(doc(db, 'groups', G1), { formerMembers: { 'uid-gone': { name: 'Ana', deletedAt: 1 } } });
+    });
+    await assertFails(updateDoc(doc(as(ALICE), 'groups', G1), { formerMembers: {} }));
+    await assertFails(updateDoc(doc(as(BOB), 'groups', G1), { 'formerMembers.uid-gone.name': 'Someone else' }));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1), { name: 'The Family' }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', G1), { members: [ALICE] }));
+  });
+
+  it('nobody creates a group carrying one', async () => {
+    await assertFails(setDoc(doc(as(DAVE), 'groups', 'g-former'), {
+      name: 'Mine', ownerId: DAVE, members: [DAVE], formerMembers: { [ALICE]: { name: 'Alice' } },
+    }));
+  });
+});
+
+describe('the record of a deleted account', () => {
+  it('is nobody’s to read or write from the app', async () => {
+    await assertFails(getDoc(doc(as(ALICE), 'accountDeletions', ALICE)));
+    await assertFails(setDoc(doc(as(ALICE), 'accountDeletions', ALICE), { filesDone: true }));
   });
 });
 

@@ -11,6 +11,8 @@
 //
 // Pure: no React, no Firestore.
 
+import { formerMembersOf } from './formerMembers';
+
 export type ConversationKind = 'group' | 'chat';
 
 export interface Conversation {
@@ -27,6 +29,11 @@ export interface Conversation {
   lastBy: string | null;
   /** The other person, for a direct chat. Null for a group. */
   otherUid: string | null;
+  /**
+   * The other person deleted their account (utils/formerMembers.ts). The conversation stays, to be
+   * read; there is nobody left to answer.
+   */
+  otherGone: boolean;
   photoURL: string | null;
 }
 
@@ -42,6 +49,7 @@ export interface RawGroup {
 export interface RawChat {
   id: string;
   members?: unknown;
+  formerMembers?: unknown;
   lastMessageAt?: unknown;
   lastMessageText?: unknown;
   lastMessageBy?: unknown;
@@ -108,6 +116,7 @@ export function buildConversations(args: {
       lastText: str(g.lastMessageText),
       lastBy: typeof g.lastMessageBy === 'string' ? g.lastMessageBy : null,
       otherUid: null,
+      otherGone: false,
       photoURL: null,
     }));
 
@@ -127,6 +136,7 @@ export function buildConversations(args: {
         lastText: str(c.lastMessageText),
         lastBy: typeof c.lastMessageBy === 'string' ? c.lastMessageBy : null,
         otherUid: other,
+        otherGone: !!other && other in formerMembersOf(c),
         photoURL: (other && people[other]?.photoURL) || null,
       };
     });

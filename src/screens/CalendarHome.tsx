@@ -36,6 +36,7 @@ import { displayTime, localZone, occursOn, localDayKey } from '../utils/eventTim
 import { categoryIcon, eventTint, BIRTHDAY_CATEGORY_ID } from '../utils/eventCategories';
 import { useDialog } from '../hooks/useDialog';
 import { useMenu } from '../hooks/useMenu';
+import { deletedName, withFormerMembers } from '../utils/formerMembers';
 
 export default function CalendarHome() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -109,6 +110,15 @@ export default function CalendarHome() {
     label: t('quickAddLabel', language),
   });
   const dateLocale = getDateLocale(language);
+  // The group chat's map: `userMap` plus the names deleted accounts left on this group, so what they
+  // wrote keeps their name, marked as deleted (utils/formerMembers.ts). Not `userMap` itself, which
+  // is also the list of people an event can be assigned to.
+  const activeGroupDoc = groups.find((g) => g.id === activeGroupId);
+  const chatUserMap = useMemo(
+    () => withFormerMembers(userMap, activeGroupDoc ? [activeGroupDoc] : [],
+      (name) => deletedName(name, t('deletedAccountName', language), t('deletedAccount', language))),
+    [userMap, activeGroupDoc, language],
+  );
   // Cosmetic gate for the Admin entry (the /admin screen + callables re-check server-side).
   // Whether this person is an admin, from their OWN admin record — the same document the server's
   // `assertAdmin` checks. It was a hard-coded email, so every other admin never saw the entry.
@@ -1063,7 +1073,7 @@ export default function CalendarHome() {
           // is visibly a chat; it does not need to say so twice. Measured: with the prefix the
           // Romanian title shows 64% at 320px, without it the name fits whole with room spare.
           title={groups.find(g => g.id === activeGroupId)?.name || t('group', language)}
-          userMap={userMap}
+          userMap={chatUserMap}
           members={groups.find(g => g.id === activeGroupId)?.members || []}
         />
       )}

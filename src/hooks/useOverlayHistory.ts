@@ -18,7 +18,9 @@ import {
 } from '../utils/dialogStack';
 
 /**
- * Push an entry while `isOpen`, and call `onBack` when the user pops it.
+ * Push an entry while `isOpen`, and call `onBack` when the user pops it. An `onBack` that returns
+ * `false` kept the overlay open (a dialog busy deleting an account, say), and the entry is pushed
+ * again: without it, the next Back would walk the app out from under the overlay.
  *
  * `id` must be the same id the overlay registered on the stack, so that "am I on top" is asked of
  * the same identity that Escape asks it of.
@@ -27,7 +29,7 @@ import {
  * dropdown is an affordance, not a place, and giving every one of them an entry would make Back
  * feel like it is stuttering.
  */
-export function useOverlayHistory(isOpen: boolean, id: string, enabled: boolean, onBack: () => void): void {
+export function useOverlayHistory(isOpen: boolean, id: string, enabled: boolean, onBack: () => void | boolean): void {
   const onBackRef = useRef(onBack);
   useEffect(() => {
     onBackRef.current = onBack;
@@ -64,7 +66,7 @@ export function useOverlayHistory(isOpen: boolean, id: string, enabled: boolean,
       // Back press, then the next one leaves the screen with the dialog still open.
       if (!isTopHistoryOwner(id)) return;
       pushed = false; // the entry this overlay pushed is the one that was just popped
-      onBackRef.current();
+      if (onBackRef.current() === false) push();
     };
 
     // Registered before the push rather than after it, because the push itself can be deferred

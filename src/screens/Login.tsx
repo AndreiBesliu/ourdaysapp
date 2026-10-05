@@ -7,6 +7,7 @@ import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
 import { reportError } from '../reportError';
 import { resetOutcome, RESET_MESSAGE_KEY, emailLanguage } from '../utils/passwordReset';
+import { takeAccountDeletedNotice } from '../utils/accountDeletion';
 
 // Firebase's `auth/*` codes are stable and few; these four are the ones a person can act on.
 // Everything else falls back to one sentence keyed off which button they pressed, because
@@ -32,6 +33,8 @@ export default function Login() {
   // "Forgot password?": the same form with only the email field (utils/passwordReset.ts).
   const [resetting, setResetting] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  // Said once, on the sign-in screen the deletion reloads to (utils/accountDeletion.ts).
+  const [accountDeleted] = useState(() => takeAccountDeletedNotice());
 
   const showReset = (on: boolean) => {
     setResetting(on);
@@ -170,6 +173,13 @@ export default function Login() {
             <div className="space-y-1">
               <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t('resetPasswordTitle', language)}</h2>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">{t('resetPasswordDesc', language)}</p>
+            </div>
+          )}
+
+          {accountDeleted && !error && (
+            <div role="status" className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 p-3 rounded-lg flex items-start gap-2 text-sm">
+              <CheckCircle2 className="w-5 h-5 shrink-0" />
+              <span>{t('accountDeletedNotice', language)}</span>
             </div>
           )}
 

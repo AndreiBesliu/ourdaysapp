@@ -396,7 +396,8 @@ export default function Admin() {
   };
 
   const moderate = async (uid: string, action: 'enable' | 'disable' | 'forceVerify' | 'delete') => {
-    if (action === 'delete' && !confirm('Permanently delete this user (account + owned events/assets, removed from groups)? This cannot be undone.')) return;
+    // The same deletion a person can ask for from Settings (functions/src/accountDeletion.ts).
+    if (action === 'delete' && !confirm('Permanently delete this user? Their personal data goes; groups they own pass to the longest-standing member (or are deleted if they are alone); their group events stay with the group\'s owner; their messages stay, marked as a deleted account. This cannot be undone.')) return;
     setModBusy(true);
     try {
       await adminModerateUser(uid, action);

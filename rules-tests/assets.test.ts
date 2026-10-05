@@ -152,6 +152,25 @@ describe('writing', () => {
   });
 });
 
+describe('where a card came from is the server’s to say (transferredFrom, 04.10.2026)', () => {
+  // Deleting the giver's account keeps the file a given card shows (functions/src/accountDeletion.ts).
+  // A client that could write the field could keep anybody's file alive by naming them.
+  it('no client creates a card claiming to come from somebody', async () => {
+    await assertFails(setDoc(doc(as(BOB), 'assets', 'a-forged'), { ownerId: BOB, name: 'x', transferredFrom: ALICE }));
+    await assertSucceeds(setDoc(doc(as(BOB), 'assets', 'a-own'), { ownerId: BOB, name: 'x' }));
+  });
+
+  it('nor changes or removes it later, while every other edit of a given card still works', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'assets', 'a-given'), { ownerId: BOB, name: 'Gift', transferredFrom: ALICE });
+    });
+    await assertFails(updateDoc(doc(as(BOB), 'assets', 'a-given'), { transferredFrom: CAROL }));
+    // A card that never had one cannot gain one either.
+    await assertFails(updateDoc(doc(as(ALICE), 'assets', 'a-private'), { transferredFrom: BOB }));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'assets', 'a-given'), { name: 'Gift, renamed' }));
+  });
+});
+
 describe('the owner of a card shared with a group they have LEFT', () => {
   // `shareTargetOk` is evaluated on the MERGED document, so a card still naming a group the
   // owner is no longer in fails the check on every update — even an update that does not touch

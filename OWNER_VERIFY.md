@@ -118,6 +118,62 @@
 
 ---
 
+## 🆕 Ștergerea propriului cont (04.10) — NEPUBLICAT (cere funcțiile, regulile, apoi hosting-ul)
+
+**Fapt:** din Settings → „Delete account” (sub Sign Out, separat de el), oricine își poate șterge singur
+contul. Dialogul spune ce pleacă și ce rămâne. Cere cuvântul de confirmare (ȘTERGE; merge și fără
+diacritice) și parola, sau Google încă o dată. Ștergerea e imediată.
+- **Ce se întâmplă, după deciziile tale:**
+  - un grup pe care îl deține trece la membrul care e în el de cel mai mult timp; unde nu mai e nimeni
+    altcineva, grupul se șterge;
+  - evenimentele lui din grupuri rămân acolo și trec la proprietarul grupului; cele personale se șterg;
+  - mesajele lui rămân, cu numele: „Ana (cont șters)”. O conversație directă cu el se poate citi, dar
+    nu i se mai poate răspunde. Când și celălalt își șterge contul, conversația dispare de tot.
+- **Ștergerea din Admin face acum exact același lucru** (e aceeași funcție). Înainte, un grup al celui
+  șters rămânea fără proprietar, deci nimeni nu-l mai putea șterge, iar evenimentele lui din grupuri
+  dispăreau pentru toți.
+- **Ordinea din grup nu mai poate fi schimbată de un membru oarecare** (doar de proprietar): ea decide
+  cine moștenește grupul. Înainte, orice membru putea să se pună primul la rând.
+- **Probat** pe emulatori, cu aplicația reală și funcțiile reale:
+  - ștergerea din Settings, de la un capăt la altul, și ce vede Ana după;
+  - parola greșită, refuzată fără nicio urmă;
+  - butonul Back în timpul ștergerii nu mai scoate dialogul din ecran;
+  - un al doilea tab deschis se reîncarcă singur. Fără asta, acolo nu se mai putea intra în cont fără o
+    reîncărcare manuală (reprodus).
+- **Trei recenzii independente ale primei versiuni** au găsit probleme reale, toate reparate sau scrise în
+  BACKLOG ca limite. Printre ele:
+  - un membru își putea fura moștenirea grupului, reordonând lista;
+  - pozele se puteau păstra cu linkuri falsificate;
+  - un al doilea tab rămânea blocat;
+  - un răspuns pierdut lăsa omul autentificat într-un cont deja șters.
+
+**Deciziile pe care le-am luat eu, cu implicitul pus** (spune-mi dacă vrei altfel):
+- **Un eveniment ascuns de proprietarul grupului** (o surpriză) nu trece la el, ci la primul membru care
+  îl poate vedea. Ascuns de toți ceilalți, se șterge.
+- **Cheltuielile pe care le-a trecut se șterg, și cele din grup**, ca la ștergerea din Admin de până
+  acum. Motivul, scris în cod de atunci: rândurile rămase ale unui plecat stricau împărțirea pentru toți
+  ceilalți. Dacă vrei să rămână în grup, ca evenimentele, e o schimbare mică.
+- **Cardurile lui din Wallet se șterg, și cele partajate cu un grup:** sunt ale lui, nu ale grupului.
+  Un card pe care l-a dăruit cuiva rămâne la acela, cu poză cu tot.
+- **Pozele păstrate sunt doar cele pe care ceva rămas le arată, judecat după date pe care nu le poate
+  falsifica nimeni.** Rămân pozele evenimentelor lui care trec mai departe și ce a încărcat el în
+  evenimentele altora din grupurile lui. Restul pleacă, inclusiv poza de pe o copie a unui eveniment
+  făcută de cineva care a ieșit dintr-un grup: nimic nu dovedește de unde vine linkul ei.
+- **Un admin nu se poate șterge singur.** Aplicația ar putea rămâne fără admin, iar o adresă de
+  bootstrap ar redeveni admin la prima înscriere.
+- **Registrul de cost AI își păstrează rândurile, dar fără uid**, ca totalurile să rămână corecte.
+
+- [ ] **După publicare: proba pe un cont de TEST** (5 minute; ștergerea nu se poate anula)
+      1. Fă-ți un cont nou, cu alt email, și invită-l într-un grup de-al tău. Din el, scrie un mesaj în
+         grup.
+      2. Din contul acela: Settings → Delete account. Scrie cuvântul și parola, apoi „Șterge-mi contul”.
+      3. **Cum arată bine:** aplicația se întoarce la login cu „Contul tău a fost șters.” Din contul tău,
+         mesajul lui apare „Nume (cont șters)”.
+      - **Ce e greșit:** mesajul „Ștergerea nu s-a terminat…”, sau numele apare „Necunoscut”. Spune-mi.
+      - În APK-ul instalat butonul apare abia după reconstruirea lui.
+
+---
+
 ## 🆕 Salvarea în Wallet fără internet (03.10) — PUBLICAT pe 04.10 (doar hosting, la „publică doar hosting”)
 
 **Fapt:** fără internet, Save din Wallet rămânea „în lucru” pentru totdeauna, deși cardul era deja în

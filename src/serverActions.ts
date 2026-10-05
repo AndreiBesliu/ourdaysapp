@@ -167,7 +167,8 @@ export async function adminGetUser(uid: string): Promise<any> {
   return (await fn({ uid })).data;
 }
 export async function adminModerateUser(uid: string, action: 'enable' | 'disable' | 'forceVerify' | 'delete'): Promise<any> {
-  const fn = httpsCallable(getFunctions(app), "adminModerateUser");
+  // A delete runs the whole account cascade (accountDeletion.ts): the client waits as long as it may run.
+  const fn = httpsCallable(getFunctions(app), "adminModerateUser", { timeout: 560_000 });
   return (await fn({ uid, action })).data;
 }
 export async function adminBroadcast(params: { target: string; title: string; body?: string }): Promise<{ created: number; pushed?: number; pruned?: number }> {
@@ -454,4 +455,13 @@ export async function listMyInviteLinks(groupId?: string | null): Promise<Invite
 export async function openDirectChat(otherUid: string): Promise<{ chatId: string; created: boolean }> {
   const fn = httpsCallable(getFunctions(app), "openDirectChat");
   return (await fn({ otherUid })).data as { chatId: string; created: boolean };
+}
+
+// ── Your own account ──────────────────────────────────────────────────────────────
+// Deletes the caller's account (functions/src/accountDeletion.ts). The server requires a sign-in from
+// the last five minutes. It may take a while for a large account, so the client waits as long as the
+// function may run: the SDK's default 70 s would report a failure while the deletion carried on.
+export async function deleteMyAccount(): Promise<void> {
+  const fn = httpsCallable(getFunctions(app), "deleteMyAccount", { timeout: 560_000 });
+  await fn({});
 }

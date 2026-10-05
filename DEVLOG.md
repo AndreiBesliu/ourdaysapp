@@ -11471,6 +11471,18 @@ nicio schimbare de la ultima publicare completă.
 - Pornirea însăși rulează după login, deci comportamentul ei a fost probat pe banc (DEVLOG 04.10), cu
   `App.tsx` real și emulatorii: citirea eșuată, cache-ul vechi, pornirea normală și contul nou.
 
+## 2026-10-04 · Ștergerea propriului cont (Task Started)
+
+**Prompt (Andrei):** la întrebarea ce iau din BACKLOG: „Ștergerea contului (Recomandat)”.
+**Model:** Claude Opus 5.5.
+**Plan:**
+- citesc cascada existentă (`adminModerateUser`, acțiunea `delete`) și ce lasă în urmă;
+- o scot într-o funcție comună, folosită de admin și de un callable nou pentru propriul cont, cu
+  autentificare recentă;
+- adaug ecranul de confirmare din Settings;
+- probez pe emulator;
+- ordinea publicării: functions, apoi hosting, cu acordul lui Andrei.
+
 ## 2026-10-05 · Un test al paginii offline s-a înroșit singur (Task Started + Completed)
 
 **Prompt (Andrei):** găsit în timpul sarcinii „Remove leavers from event assignees”, la controlul
@@ -11484,3 +11496,141 @@ negativ al mutațiilor: suita unitară pica pe un test pe care nu-l atinsese nim
 - **Reparat:** testul paginii dă o copie confirmată acum, după ceasul real. Celelalte fixturi cu `NOW`
   fix trec timpul ca argument și nu sunt afectate.
 - Doar testul s-a schimbat; nimic de publicat.
+
+## 2026-10-04 · Ștergerea propriului cont (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Deciziile lui Andrei (04.10):**
+- un grup pe care îl deține trece la membrul cel mai vechi; unde nu mai e nimeni altcineva, se șterge;
+- evenimentele lui din grupuri rămân și trec la proprietarul grupului; cele personale se șterg;
+- mesajele rămân, cu numele, marcate drept cont șters („Rămân, și cu nume, dar apare ca șters”);
+- imediat, după un cuvânt tastat și o autentificare recentă.
+
+**Serverul** (`functions/src/accountDeletion.ts`):
+- **O singură cascadă** pentru ambele uși: callable-ul nou `deleteMyAccount` și `adminModerateUser`
+  (acțiunea `delete`), care face acum exact același lucru și are aceleași 540 s. Ștergerea de admin
+  lăsa grupurile celui șters fără proprietar, deci nimeni nu le mai putea șterge, iar evenimentele lui
+  din calendarele de grup dispăreau pentru toți.
+- **`deleteMyAccount`** cere autentificarea din ultimele 5 minute (`auth_time`, verificat pe server) și
+  refuză conturile de admin.
+- **Moștenirea:**
+  - predarea grupului citește grupul din nou, într-o tranzacție;
+  - evenimentul trece la proprietar dacă e membru și îl poate vedea; altfel trece la primul membru
+    căruia nu-i e ascuns (`hiddenFrom`); dacă nu-l poate vedea nimeni, se șterge;
+  - sunt acoperite și un grup deținut fără a fi membru, și un grup vechi, fără `ownerId`.
+- **Numele rămâne pe conversații:** grupurile și chaturile directe primesc
+  `formerMembers.{uid} = { name, deletedAt }`, cu numele public, nu cu emailul. Un chat direct în care
+  nu mai e nimeni se șterge, cu tot cu poze.
+- **Ordinea pașilor, ca o ștergere oprită la jumătate să poată fi reluată:**
+  1. Fișierele, o singură dată (`accountDeletions/{uid}.filesDone`).
+  2. Ieșirea de pe evenimente (responsabil, RSVP), cât e încă membru. Altfel regula `namedAreInGroup`
+     ar îngheța acele evenimente pentru toți.
+  3. Grupurile, apoi evenimentele, chaturile, invitațiile, cererile și linkurile (revocate și fără
+     nume), restul datelor și registrul AI (păstrat, fără uid).
+  4. Contul de Auth, ultimul. Marcajul de final e best-effort.
+- **Fișierele** nu se mai șterg în bloc. Rămâne doar ce arată ceva rămas, judecat după date pe care nu
+  le poate falsifica nimeni:
+  - evenimentele lui care trec mai departe;
+  - ce a încărcat în evenimentele altora din grupurile lui (`events/`, `checklists/`);
+  - cardurile dăruite (`transferredFrom`, scris doar de server).
+  - Niciodată poza de profil sau fundalul.
+- **Mutate fără schimbare de comportament:**
+  - corpul lui `deleteGroupCascade` e acum `deleteGroupData`, în `groupDeletion.ts`;
+  - `deleteQueryInBatches` e în `batchDelete.ts`;
+  - ștergerea de fișiere spune acum, fișier cu fișier, dacă a reușit.
+- **`logClientError`** ignoră rapoartele unui cont deja șters, ca să nu-i readucă rândurile de eroare.
+- **`onDirectMessageCreated`** nu mai lasă clopoțel pentru un cont șters.
+
+**Regulile:**
+- **`groups`:**
+  - `formerMembers` nu-l scrie nimeni din aplicație;
+  - ordinea `members` e fixă pentru cine nu e proprietar. Comparată ca mulțime, orice membru putea
+    reordona lista și se putea pune primul la moștenire.
+- **`assets`:** `transferredFrom` e scris doar de server.
+- **`accountDeletions`:** închis.
+- **După ce există `accountDeletions/{uid}`**, nu se mai pot CREA din nou `users`, `profiles`,
+  `warlordPlayers` și `warlordDomains`.
+
+**Aplicația:**
+- **Settings → „Delete account”**, sub Sign Out, separat. Dialogul spune ce pleacă și ce rămâne și cere
+  cuvântul (fără diacritice merge și el) și parola, sau Google încă o dată.
+- **Ordinea** (`src/utils/accountDeletion.ts`):
+  1. autentificarea, prima, ca fereastra Google să nu fie blocată;
+  2. așteptarea scrierilor din coadă;
+  3. serverul;
+  4. abia apoi curățenia telefonului, apoi reîncărcarea pe login cu „Contul tău a fost șters.”
+- **Un răspuns pierdut** e verificat cu `user.reload()`. Dacă dă `auth/user-token-expired`, contul a
+  fost șters și se curăță telefonul. Altfel apare „încearcă din nou”, sau „nu s-a putut confirma”.
+- **Celelalte taburi** se reîncarcă singure (un eveniment `storage` ascultat în `main.tsx`). Curățarea
+  cache-ului Firestore are o limită de 4 s.
+- **Back în timpul ștergerii** nu mai scoate dialogul din ecran: `useOverlayHistory` repune intrarea
+  când închiderea e refuzată.
+- **Chatul:**
+  - „Ana (cont șters)” apare în Chat și în chatul din calendar; nota câștigă în fața unui profil rămas
+    în memorie;
+  - o conversație directă cu un cont șters se citește, dar nu mai are casetă de scris, nici Reply/Edit;
+  - numele intră doar în harta chatului, nu și în lista celor cărora li se poate da un eveniment.
+- 28 de texte noi, în 6 limbi.
+
+**Recenzia:** 3 agenți, pe o copie înghețată a codului, cât rulau mutațiile. Constatările au fost
+verificate una câte una pe cod și pe emulator înainte de reparație. Cele mai grave:
+- un membru își putea fura moștenirea grupului, reordonând lista;
+- pozele se puteau păstra cu linkuri falsificate, iar scanările pe toată colecția se puteau umple ca să
+  blocheze ștergerea;
+- un al doilea tab rămânea fără Firestore (reprodus pe banc: Ana nu mai intra în cont acolo);
+- un răspuns pierdut lăsa omul autentificat într-un cont deja șters.
+Toate sunt reparate. Ce a rămas deliberat în afară e în BACKLOG.
+
+**Probat pe banc**, cu aplicația reală, SDK-ul real și emulatorii Auth, Firestore, Storage și Functions
+(funcțiile construite din repo, regulile repo-ului):
+- **Prima ștergere a eșuat pe emulator:** `admin.firestore.FieldValue` nu există sub runtime-ul lui
+  (capcana din memorie). Codul nou folosește `firebase-admin/firestore`. Încercarea eșuată nu atinsese
+  nimic.
+- **Cap-coadă:**
+  - parola greșită e refuzată fără nicio schimbare;
+  - după ștergere: login cu mesajul, delogat, IndexedDB-ul Firestore șters;
+  - pe server: grupul a trecut la Ana, cu numele păstrat;
+  - ca Ana: „Gina (deleted account)”, cu nota în locul casetei.
+- **Back de două ori în timpul ștergerii** (serverul întârziat 6 s): ecranul și dialogul rămân, iar
+  ștergerea se termină normal.
+- **Două taburi, în pereche:**
+  - fără ascultător, al doilea tab nu se reîncarcă, iar o autentificare acolo rămâne blocată pe login;
+  - cu ascultător, se reîncarcă singur, iar autentificarea merge.
+- **Pornirea unui cont șters:**
+  - cu internet, SDK-ul Auth îl deloghează singur. Paza pusă la pornire n-avea ce face și a ieșit din
+    cod.
+  - fără internet: controlul fără `accountDeletions` recrea `users/` și `profiles/`, iar regula nouă le
+    refuză.
+- **Măsurat pe emulatorul Auth:** pentru un cont șters, `reload()` dă `auth/user-token-expired`, iar
+  reautentificarea cu parolă dă `auth/user-mismatch`.
+- **Pe live, doar citire, cu un uid inexistent:** toate formele de interogare ale cascadei merg, deci
+  niciun index lipsă.
+
+**Teste:**
+- **Pe emulatori:** `deleteMyAccount.test.ts` (26):
+  - deciziile și moștenirea, cu `hiddenFrom`, proprietarul din afară, grupul vechi și cursa în timpul
+    ștergerii (inclusiv un grup părăsit de altcineva chiar atunci, citit din nou la predare);
+  - fișierele, inclusiv referințele falsificate și poza de profil pusă pe un eveniment care rămâne;
+  - reluarea, eșecurile de Storage, Auth și marcaj;
+  - adminul, clopoțelul și rapoartele de după.
+- **Pe reguli:** `formerMembers` și ordinea membrilor (groups.test), `transferredFrom` (assets.test),
+  jurnalul și recrearea refuzată (personal.test).
+- **Unitare:** `accountDeletion.test.ts` (27), `formerMembers.test.ts`, `conversations.test.ts`.
+- **Structurale:** `deleteAccountWiring.test.ts` (TypeScript parser).
+
+**Mutații: 106, toate prinse** (55 pe server, 39 în aplicație, 12 în reguli).
+- Controalele negative întâi. Fiecare mutant: ancora găsită exact o dată, suita lui, fișierul restaurat
+  byte cu byte și verificat.
+- Prima rundă a lăsat două supraviețuitoare, amândouă goluri de test:
+  - **S16:** poza de profil putea fi păstrată dacă cineva o pusese pe un eveniment care rămâne;
+  - **S23:** predarea grupului putea folosi lista citită la început, nu grupul citit din nou.
+  Au acum câte un test și sunt prinse.
+- A doua rundă s-a oprit la controlul unitar, pe un test fără legătură cu ștergerea, care se înroșise
+  singur odată cu ceasul. A fost reparat separat (intrarea de mai sus, 05.10), apoi runda a fost reluată.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2341), `tsc` și build-ul funcțiilor, `test:rules` (510, reguli
+și funcții pe emulatori), `npm run build`, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46).
+Toate verzi.
+
+**Nepublicat.** Cere funcțiile, apoi regulile, apoi hosting-ul, cu acordul lui Andrei.

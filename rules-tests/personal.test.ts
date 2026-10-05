@@ -131,6 +131,45 @@ describe('the public profile mirror', () => {
   });
 });
 
+describe('a deleted account is not brought back (04.10.2026)', () => {
+  // Its session outlives it until the token runs out, up to an hour. Opened without a connection, the
+  // app keeps that session and queues its start's write of the account document, which goes out when
+  // the connection returns. Once the deletion has left `accountDeletions/{uid}`, both documents can no
+  // longer be CREATED; the ones it still has are another matter (the deletion removes them).
+  it('neither document can be created again once the deletion is recorded', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'accountDeletions', CAROL), { by: 'self' });
+    });
+    await assertFails(setDoc(doc(as(CAROL), 'users', CAROL), { email: EMAIL[CAROL], lastLogin: 'now' }, { merge: true }));
+    await assertFails(setDoc(doc(as(CAROL), 'profiles', CAROL), { name: 'Carol' }, { merge: true }));
+  });
+
+  it('nor its Warlord kingdom or its line in the public roster', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'accountDeletions', CAROL), { by: 'self' });
+    });
+    await assertFails(setDoc(doc(as(CAROL), 'warlordDomains', CAROL), { save: {}, rev: 1 }));
+    await assertFails(setDoc(doc(as(CAROL), 'warlordPlayers', CAROL), { name: 'Carol', nameLower: 'carol', power: 0, photoURL: null }));
+    // Somebody without a record still can.
+    await assertSucceeds(setDoc(doc(as(BOB), 'warlordDomains', BOB), { save: {}, rev: 1 }));
+    await assertSucceeds(setDoc(doc(as(BOB), 'warlordPlayers', BOB), { name: 'Bob', nameLower: 'bob', power: 0, photoURL: null }));
+  });
+
+  it('an account with no such record creates both as before', async () => {
+    await assertSucceeds(setDoc(doc(as(CAROL), 'users', CAROL), { email: EMAIL[CAROL], lastLogin: 'now' }, { merge: true }));
+    await assertSucceeds(setDoc(doc(as(CAROL), 'profiles', CAROL), { name: 'Carol' }, { merge: true }));
+  });
+
+  it('and nobody else’s record stands in the way', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'accountDeletions', BOB), { by: 'self' });
+    });
+    await assertSucceeds(setDoc(doc(as(CAROL), 'users', CAROL), { email: EMAIL[CAROL] }, { merge: true }));
+    // Updating an existing document is not a creation, and is the owner's as before.
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'users', ALICE), { lastLogin: 'now' }));
+  });
+});
+
 describe('notifications: the recipient owns them, and nobody creates them from a browser', () => {
   it('the recipient reads their own', async () => {
     await assertSucceeds(getDoc(doc(as(ALICE), 'notifications', 'n-alice')));

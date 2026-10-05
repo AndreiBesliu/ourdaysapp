@@ -97,8 +97,21 @@ service cloud.firestore {
     // ── Users ──
     // Owner-only: the full user doc holds sensitive data (email, fcmTokens,
     // preferences). Other members read the public `profiles` mirror instead.
+    //
+    // A deleted account's session outlives it until its token runs out, up to an hour, and Firestore
+    // accepts that token. Opened WITH a connection, the app is safe: Auth finds the account gone at
+    // start and signs it out before anything is written (measured on the emulators, 04.10.2026).
+    // Opened WITHOUT one, the session is kept, the start queues its write of the account document, and
+    // the queue goes out when the connection returns. The account's documents are gone by then, so
+    // that write is a CREATE, and it would bring the account back. The deletion leaves
+    // `accountDeletions/{uid}` for good (functions/src/accountDeletion.ts), and creating is refused
+    // once it is there. One read, and only on a create, which each account does once.
+    function notDeleted(uid) {
+      return !exists(/databases/$(database)/documents/accountDeletions/$(uid));
+    }
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read, update, delete: if isOwner(userId);
+      allow create: if isOwner(userId) && notDeleted(userId);
     }
 
     // ── Profiles (public, non-sensitive) ──
@@ -233,7 +246,8 @@ service cloud.firestore {
     }
     match /profiles/{userId} {
       allow read: if isSignedIn();
-      allow write: if isOwner(userId) && profileShapeOk();
+      allow update, delete: if isOwner(userId) && profileShapeOk();
+      allow create: if isOwner(userId) && profileShapeOk() && notDeleted(userId);
     }
 
     // ── Groups ──
@@ -261,7 +275,8 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
         request.resource.data.ownerId == request.auth.uid &&
         request.resource.data.members.hasOnly([request.auth.uid]) &&
-        request.auth.uid in request.resource.data.members;
+        request.auth.uid in request.resource.data.members &&
+        !('formerMembers' in request.resource.data);
       // This used to be `update, delete: if uid in members` — which let ANY member eject any
       // other member, the owner included, and delete the whole group with its events. The UI
       // already intended owner-only (`isOwner` guards both the delete path and the remove
@@ -311,15 +326,23 @@ service cloud.firestore {
              == resource.data.get('lastMessageText', null)
         && request.resource.data.get('lastMessageBy', null)
              == resource.data.get('lastMessageBy', null)
+        // The names of members whose accounts were deleted, which the chat shows on what they
+        // wrote (04.10.2026). Written only by the account deletion, on the Admin SDK: a member
+        // who could write it could mark somebody who simply LEFT as deleted, under any name.
+        && request.resource.data.get('formerMembers', null)
+             == resource.data.get('formerMembers', null)
         && (
           // the owner may change anything else, and may remove members
           resource.data.ownerId == request.auth.uid ||
           // anyone else may edit the group as long as they do not touch who is in it…
-          request.resource.data.members.toSet() == resource.data.members.toSet() ||
+          request.resource.data.members == resource.data.members ||
           // …except to remove THEMSELVES, which is leaving.
-          request.resource.data.members.toSet() ==
-            resource.data.members.toSet().difference([request.auth.uid].toSet())
+          request.resource.data.members == resource.data.members.removeAll([request.auth.uid])
         );
+        // Both as LISTS, not sets (04.10.2026): the order of `members` is who has been in the group
+        // longest, and a group whose owner deletes the account passes to the first one in it
+        // (functions/src/accountDeletion.ts). Compared as sets, any member could reorder the list and
+        // put themselves first in line. `arrayRemove`, which is how the app leaves, keeps the order.
       allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
 
       // Chat messages subcollection
@@ -747,7 +770,8 @@ service cloud.firestore {
     }
     match /warlordPlayers/{ownerId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == ownerId &&
+      // The public roster: a deleted account's session must not put it back (`notDeleted`).
+      allow create: if isSignedIn() && request.auth.uid == ownerId && notDeleted(ownerId) &&
         warlordPlayerShapeOk() &&
         !request.resource.data.keys().hasAny(['wins', 'losses']);
       allow update: if isSignedIn() && request.auth.uid == ownerId &&
@@ -760,7 +784,9 @@ service cloud.firestore {
     // Each user's own economy/army save. Strictly owner-only — this is the user's
     // private game account, readable/writable only by them.
     match /warlordDomains/{ownerId} {
-      allow read, write: if isSignedIn() && request.auth.uid == ownerId;
+      allow read, update, delete: if isSignedIn() && request.auth.uid == ownerId;
+      // Not brought back by a deleted account's session, which outlives it up to an hour (`notDeleted`).
+      allow create: if isSignedIn() && request.auth.uid == ownerId && notDeleted(ownerId);
     }
 
     // ── Warlord game configuration (admin-tuned balance) ──
@@ -901,9 +927,13 @@ service cloud.firestore {
         resource.data.ownerId == request.auth.uid ||
         sharedWithMe(resource.data)
       );
+      // `transferredFrom` says which account a card came from, and only `transferAssetCopy` writes it.
+      // Deleting that account keeps the file the card shows on its word (accountDeletion.ts), so a
+      // client that could write it could keep anybody's file alive by naming them (04.10.2026).
       allow create: if isSignedIn()
         && request.resource.data.ownerId == request.auth.uid
-        && shareTargetOk(request.resource.data);
+        && shareTargetOk(request.resource.data)
+        && !('transferredFrom' in request.resource.data);
       allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
       // An update may not CHANGE the owner.
       //
@@ -920,7 +950,8 @@ service cloud.firestore {
       allow update: if isSignedIn()
         && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == resource.data.ownerId
-        && shareTargetOk(request.resource.data);
+        && shareTargetOk(request.resource.data)
+        && request.resource.data.get('transferredFrom', null) == resource.data.get('transferredFrom', null);
     }
 
     // ── AI cost ledger, spend rollups, and budget counters ──
@@ -944,6 +975,13 @@ service cloud.firestore {
       }
     }
     match /ai_budget/{docId} {
+      allow read, write: if false;
+    }
+
+    // One row per deleted account: when, who asked ("self" or "admin:<uid>"), and whether its files
+    // are already gone, which keeps a repeated deletion from re-reading a shorter keep list
+    // (functions/src/accountDeletion.ts). Admin SDK only.
+    match /accountDeletions/{uid} {
       allow read, write: if false;
     }
 

@@ -27,6 +27,7 @@ import {
   buildConversations, conversationKey, findConversation, personName, startableWith,
   type Conversation, type People,
 } from '../utils/conversations';
+import { deletedName, formerMembersOf, withFormerMembers } from '../utils/formerMembers';
 
 export default function Chat() {
   const navigate = useNavigate();
@@ -78,7 +79,11 @@ export default function Chat() {
   const peopleKey = useMemo(() => {
     const ids = new Set<string>();
     groups.forEach((g) => (g.members || []).forEach((m: string) => ids.add(m)));
-    chats.forEach((c) => (c.members || []).forEach((m: string) => ids.add(m)));
+    // A deleted account stays in its direct chats' `members`, and has no profile left to read.
+    chats.forEach((c) => {
+      const gone = formerMembersOf(c);
+      (c.members || []).forEach((m: string) => { if (!(m in gone)) ids.add(m); });
+    });
     friends.forEach((f) => f?.uid && ids.add(f.uid));
     ids.delete(uid);
     return [...ids].sort().join(',');
@@ -108,11 +113,17 @@ export default function Chat() {
     return () => { cancelled = true; };
   }, [peopleKey]);
 
+  // The names deleted accounts left on the conversations they were in (utils/formerMembers.ts).
+  const shown = useMemo(() => withFormerMembers(
+    people, [...groups, ...chats],
+    (name) => deletedName(name, t('deletedAccountName', language), t('deletedAccount', language)),
+  ) as People, [people, groups, chats, language]);
+
   const conversations = useMemo(() => buildConversations({
-    groups, chats, people, myUid: uid,
+    groups, chats, people: shown, myUid: uid,
     unknownLabel: t('chatSomeone', language),
     untitledGroup: t('group', language),
-  }), [groups, chats, people, uid, language]);
+  }), [groups, chats, shown, uid, language]);
 
   const active = findConversation(conversations, selected);
 
@@ -182,7 +193,7 @@ export default function Chat() {
               <ConversationRow
                 key={conversationKey(c)}
                 conversation={c}
-                people={people}
+                people={shown}
                 myUid={uid}
                 language={language}
                 active={conversationKey(c) === selected}
@@ -203,8 +214,9 @@ export default function Chat() {
               convId={active.id}
               convKind={active.kind}
               title={active.title}
-              userMap={people as Record<string, any>}
+              userMap={shown as Record<string, any>}
               members={active.members}
+              closedNote={active.otherGone ? t('chatWithDeletedAccount', language) : undefined}
               embedded
               onClose={() => setSelected(null)}
             />

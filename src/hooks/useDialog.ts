@@ -59,7 +59,7 @@ export interface DialogOptions {
  *   <div className="fixed inset-0 ...">
  *     <div ref={dialogRef} {...dialogProps} className="...panel...">
  */
-export function useDialog(isOpen: boolean, onClose: () => void, opts: DialogOptions = {}) {
+export function useDialog(isOpen: boolean, onClose: () => void | boolean, opts: DialogOptions = {}) {
   const id = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
 

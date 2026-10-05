@@ -134,7 +134,7 @@ exports.openDirectChat = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
  * The message TEXT rides as `bodyText`: it is the sender's own words and must not be translated.
  */
 exports.onDirectMessageCreated = (0, firestore_1.onDocumentCreated)("chats/{chatId}/messages/{messageId}", async (event) => {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     const msg = (_a = event.data) === null || _a === void 0 ? void 0 : _a.data();
     const chatId = event.params.chatId;
     if (!msg || !chatId)
@@ -148,6 +148,10 @@ exports.onDirectMessageCreated = (0, firestore_1.onDocumentCreated)("chats/{chat
         const members = Array.isArray((_b = chatSnap.data()) === null || _b === void 0 ? void 0 : _b.members) ? chatSnap.data().members : [];
         if (members.length === 0)
             return;
+        // A deleted account stays in `members`, because it names the conversation (accountDeletion.ts).
+        // Telling it anything would only leave a bell row nobody can read.
+        const former = (_c = chatSnap.data()) === null || _c === void 0 ? void 0 : _c.formerMembers;
+        const gone = (m) => !!(former && typeof former === "object" && former[m]);
         const preview = typeof msg.text === "string" && msg.text
             ? msg.text.slice(0, 140)
             : msg.imageUrl ? "\u{1F4F7}" : msg.audioUrl ? "\u{1F3A4}" : "";
@@ -158,8 +162,8 @@ exports.onDirectMessageCreated = (0, firestore_1.onDocumentCreated)("chats/{chat
             lastMessageText: preview,
             lastMessageBy: senderId,
         }, { merge: true });
-        const senderName = ((_c = (await db.doc(`profiles/${senderId}`).get()).data()) === null || _c === void 0 ? void 0 : _c.name) || "Someone";
-        await (0, notify_1.notify)(Object.assign(Object.assign({ userIds: members.filter((m) => m !== senderId), createdBy: senderId, type: "chat", titleKey: "notifNewMessage", titleParam: senderName }, (typeof msg.text === "string" && msg.text
+        const senderName = ((_d = (await db.doc(`profiles/${senderId}`).get()).data()) === null || _d === void 0 ? void 0 : _d.name) || "Someone";
+        await (0, notify_1.notify)(Object.assign(Object.assign({ userIds: members.filter((m) => m !== senderId && !gone(m)), createdBy: senderId, type: "chat", titleKey: "notifNewMessage", titleParam: senderName }, (typeof msg.text === "string" && msg.text
             ? { bodyText: msg.text }
             : { bodyKey: msg.imageUrl ? "notifSentImage" : "notifSentMessage" })), { data: { route: "/chat", chatId } }));
     }
