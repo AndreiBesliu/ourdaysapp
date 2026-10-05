@@ -574,3 +574,48 @@ describe('answers (RSVP): each person answers for themselves (05.10.2026)', () =
     });
   });
 });
+
+describe('moving an event to another calendar is for its owner or its group (05.10.2026)', () => {
+  // The update header lets in anybody NAMED on an event, and the destination clause checked only the
+  // group the event lands in. So somebody named but neither its owner nor in its group could take it
+  // out of the group, or put somebody's personal event into their own group, where people its owner
+  // does not know read it. Harness: G1 = Alice, Bob. G2 = Carol.
+  beforeEach(async () => {
+    await seed(async (db) => {
+      // Carol left G1 and stays named on its events that are over (Andrei, 05.10: history stays).
+      await setDoc(doc(db, 'events', 'mv-left'), {
+        ownerId: ALICE, title: 'Bins', groupId: G1, assigneeIds: [BOB, CAROL], rsvps: { [ALICE]: 'yes', [CAROL]: 'yes' },
+      });
+      // A personal event of Alice's from before the field existed, Carol assigned.
+      await setDoc(doc(db, 'events', 'mv-legacy'), { ownerId: ALICE, title: 'Old', assigneeIds: [CAROL] });
+      await setDoc(doc(db, 'events', 'mv-alice'), { ownerId: ALICE, title: 'Mine', groupId: null });
+      // Dave's own event in G1, after he left G1: it stays his (Andrei, 05.10).
+      await setDoc(doc(db, 'events', 'mv-dave'), { ownerId: DAVE, title: 'His', groupId: G1 });
+      await setDoc(doc(db, 'events', 'mv-bob'), { ownerId: BOB, title: 'Bob’s', groupId: G1 });
+    });
+  });
+
+  it('somebody only named, and not in its group, cannot take it out of the group', async () => {
+    await assertFails(updateDoc(doc(as(CAROL), 'events', 'mv-left'), { groupId: null, assigneeIds: [CAROL], assigneeId: CAROL }));
+  });
+
+  it('the assignee of somebody’s personal event cannot put it into their own group', async () => {
+    await assertFails(updateDoc(doc(as(CAROL), 'events', 'e-assigned'), { groupId: G2 }));
+    await assertFails(updateDoc(doc(as(CAROL), 'events', 'mv-legacy'), { groupId: G2 }));
+  });
+
+  it('the assignee still edits it where it is, the form sending the calendar it already has', async () => {
+    await assertSucceeds(updateDoc(doc(as(CAROL), 'events', 'e-assigned'), { title: 'Bins, Tuesday', groupId: null }));
+    // No `groupId` stored at all: the form's null is the same calendar.
+    await assertSucceeds(updateDoc(doc(as(CAROL), 'events', 'mv-legacy'), { title: 'Old, renamed', groupId: null }));
+  });
+
+  it('the owner moves their own event, even out of a group they have left', async () => {
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'mv-alice'), { groupId: G1 }));
+    await assertSucceeds(updateDoc(doc(as(DAVE), 'events', 'mv-dave'), { groupId: null }));
+  });
+
+  it('a member of its group moves it, as the group calendar has always allowed', async () => {
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'mv-bob'), { groupId: null, sharedWithFamily: false }));
+  });
+});

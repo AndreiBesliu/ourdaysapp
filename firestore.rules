@@ -702,6 +702,18 @@ service cloud.firestore {
         request.resource.data.groupId == null ||
         isMemberOfGroup(request.resource.data.groupId)
       )
+      // And the calendar it LEAVES: moving an event — out of a group, into one, or between two — is
+      // for its owner or a member of the calendar it is on now. The header above lets in anybody
+      // NAMED on it, and the line above judged only where it lands, so somebody only named could take
+      // a group's event out of the group (a person who left stays named on its events that are over),
+      // or put somebody's personal event into their own group, where people its owner does not know
+      // read it (05.10.2026, found by the review of the RSVP fix, reproduced in events.test.ts).
+      // A stored event with no `groupId` is a personal one: the form's null is the same calendar.
+      && (
+        request.resource.data.get('groupId', null) == resource.data.get('groupId', null) ||
+        resource.data.ownerId == request.auth.uid ||
+        (resource.data.get('groupId', null) != null && isMemberOfGroup(resource.data.groupId))
+      )
       // The injection guard was on CREATE alone, so it bought nothing: create a clean personal
       // event, then UPDATE it to name a stranger. The read rule grants access to whoever is
       // named, so arbitrary text lands in that person's calendar exactly as if the create rule

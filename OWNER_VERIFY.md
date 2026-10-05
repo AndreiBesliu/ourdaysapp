@@ -118,6 +118,26 @@
 
 ---
 
+## 🆕 Doar proprietarul sau grupul mută un eveniment între calendare (05.10) — NEPUBLICAT (cere funcțiile și regulile)
+
+**Fapt:** cine era doar numit pe un eveniment (responsabil), fără să fie proprietarul lui sau în grupul
+lui, îl putea muta:
+- cine a plecat dintr-un grup (rămâne numit pe evenimentele lui trecute) le putea scoate din grup și
+  pune în grupul lui;
+- responsabilul unui eveniment personal al tău îl putea pune în grupul lui, unde îl vedeau oameni pe
+  care nu-i cunoști.
+
+Reprodus pe emulator. Acum doar proprietarul sau un membru al calendarului pe care e evenimentul îl
+poate muta. Pe același drept „doar numit”, serverul lăsa pe cineva plecat din grup să scrie apariții
+noi ale unei serii în calendarul grupului și să se pună singur pe ele. Acum și acolo contează doar
+proprietarul și membrii; pe o serie personală, cel numit pe ea o editează ca până acum.
+- Ce rămâne ca până acum: responsabilul editează evenimentul acolo unde e; orice membru al grupului
+  mută un eveniment al grupului; proprietarul își mută evenimentele, chiar dacă a plecat din grup
+  (decizia ta: rămân ale lui).
+- În aplicație nu se schimbă nimic din ce vezi: nimic de verificat.
+
+---
+
 ## 🆕 Răspunsurile RSVP: fiecare doar pentru el; mutarea între calendare (05.10) — NEPUBLICAT (cere regulile, apoi hosting-ul)
 
 **Fapt:** până acum, oricine dintr-un grup putea scrie răspunsul altcuiva la RSVP („Ana: vin”):

@@ -234,3 +234,31 @@ describe('05.10.2026 — an occurrence of a group event names only who is in the
     expect((await db.doc(`events/${id}`).get()).data()).toMatchObject({ assigneeIds: [BOB], assigneeId: BOB });
   });
 });
+
+describe('05.10.2026 — being named on a group event is not being in the group', () => {
+  it('somebody named but out of the group cannot write an occurrence into its calendar', async () => {
+    // Carol left g1 and stays named on its series (events that are over keep the name).
+    await db.doc('groups/g1').update({ members: [ALICE, BOB] });
+    await db.doc(`events/${PARENT}`).update({ assigneeIds: [CAROL] });
+    await expect(call(CAROL, { parentId: PARENT, overrideDate: '2026-09-25', data: { title: 'Mine now' } }))
+      .rejects.toMatchObject({ code: 'permission-denied' });
+    expect(await overridesOf(PARENT)).toHaveLength(0);
+  });
+
+  it('nor, on an occurrence that already exists, name somebody who is not in the group', async () => {
+    // Alice owns the series and has left g1; Bob made the occurrence.
+    await db.doc('groups/g1').update({ members: [BOB, CAROL] });
+    await db.doc(`events/${PARENT}`).update({ assigneeIds: [BOB] });
+    await call(BOB, { parentId: PARENT, overrideDate: '2026-09-26', data: { title: 'Walk' } });
+    const { id } = await call(ALICE, {
+      parentId: PARENT, overrideDate: '2026-09-26', apply: true, data: { title: 'Walk, later', assigneeIds: [ALICE, BOB] },
+    });
+    expect((await db.doc(`events/${id}`).get()).data()).toMatchObject({ title: 'Walk, later', assigneeIds: [BOB], assigneeId: BOB });
+  });
+
+  it('on a PERSONAL series, the person named on it still edits an occurrence, as the rules allow', async () => {
+    await db.doc(`events/${PARENT}`).update({ groupId: null, assigneeIds: [CAROL] });
+    const { id } = await call(CAROL, { parentId: PARENT, overrideDate: '2026-09-27', data: { title: 'Walk, Carol' } });
+    expect((await db.doc(`events/${id}`).get()).data()).toMatchObject({ title: 'Walk, Carol', groupId: null });
+  });
+});

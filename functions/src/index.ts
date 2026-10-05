@@ -1218,10 +1218,15 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   }
   const p = parentSnap.data() || {};
 
+  // Somebody only NAMED on the parent edits it here only when it is personal, as the update rule
+  // allows. On a group's event, being named is not being in the group: a person who left stays named
+  // on its events that are over, and this callable writes on the Admin SDK, into that group's calendar
+  // (05.10.2026, the review of "moving an event is for its owner or its group").
   const canEdit =
     p.ownerId === uid ||
-    (!!p.groupId && (await userInGroup(uid, p.groupId))) ||
-    (Array.isArray(p.assigneeIds) && p.assigneeIds.includes(uid));
+    (p.groupId
+      ? await userInGroup(uid, p.groupId)
+      : Array.isArray(p.assigneeIds) && p.assigneeIds.includes(uid));
   if (!canEdit) {
     throw new HttpsError("permission-denied", "You can't edit this event.");
   }
@@ -1351,7 +1356,9 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
         const curAssignees = Array.isArray(cur.assigneeIds)
           ? cur.assigneeIds.filter((x: unknown): x is string => typeof x === "string") : [];
         const mayAssign = new Set([...curAssignees, ...parentAssignees, uid]);
-        const keptAssignees = requested.filter((id) => mayAssign.has(id) && id !== "ai_assistant");
+        // The same rule as a new occurrence: on a group event, only who is in the group now.
+        const keptAssignees = requested.filter((id) =>
+          mayAssign.has(id) && id !== "ai_assistant" && (!groupMembers || groupMembers.has(id)));
         upd.assigneeIds = keptAssignees;
         upd.assigneeId = keptAssignees[0] ?? null;
         const merged = overrideRsvps(cur.rsvps, (data as Record<string, unknown>).rsvps, uid);

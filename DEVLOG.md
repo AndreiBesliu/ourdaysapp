@@ -11951,3 +11951,71 @@ testele). Fiecare constatare a fost verificată separat:
 **Nepublicat.** Cere regulile, apoi hosting-ul, cu acordul lui Andrei. Clientul nou are nevoie de
 regulile noi: mutarea scrie răspunsuri pe care regula veche le refuză, iar ascultătorul după uid e
 refuzat de regula veche.
+
+## 2026-10-05 · Un responsabil nu mai mută evenimentul altcuiva între calendare (Task Started)
+
+**Prompt (Andrei):** „Do this task here: “Stop assignees moving events into their groups””.
+**Model:** Claude Opus 5.5.
+**Ce s-a găsit** (recenzia RSVP, din textul regulii, neprobat): antetul de update lasă să scrie pe
+oricine e numit pe eveniment, iar clauza de destinație verifică doar grupul REZULTAT. Deci cineva doar
+numit, care nu e nici proprietarul, nici în grupul evenimentului, îi poate schimba `groupId`:
+- cine a plecat dintr-un grup și a rămas numit pe evenimentele trecute le poate scoate din grup, apoi
+  muta în grupul lui;
+- responsabilul unui eveniment PERSONAL al altcuiva îl poate muta direct în grupul lui, unde îl văd
+  oameni pe care proprietarul nu-i cunoaște.
+**Plan:**
+- reproduc ambele pe emulatorul de reguli;
+- schimbarea calendarului doar pentru proprietar sau un membru al calendarului pe care e acum;
+- verific fiecare scriere legitimă (web, APK, server);
+- porțile, mutațiile, o recenzie; regulile se publică doar cu acordul lui Andrei.
+
+## 2026-10-05 · Un responsabil nu mai mută evenimentul altcuiva între calendare (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Reprodus pe emulatorul de reguli, înainte de reparație:**
+- **Doar numit, în afara grupului:** cineva plecat din G1, rămas numit pe un eveniment trecut, îl
+  scotea din grup (`groupId: null`, cu el singur responsabil).
+- **Responsabilul unui eveniment personal al altcuiva** îl punea în grupul lui (și pe unul vechi,
+  fără câmpul `groupId`).
+
+**Regula** (`events` update): schimbarea calendarului, din sau într-un grup, ori între două, e voie
+doar proprietarului sau unui membru al calendarului pe care e evenimentul ACUM. Antetul lasă în
+continuare să scrie pe oricine e numit, dar doar acolo unde e evenimentul. Un eveniment fără `groupId`
+e personal, deci `null`-ul trimis de formular înseamnă același calendar.
+
+**Serverul** (`createEventOverride`), găsit de recenzie pe același drept:
+- `canEdit` primea orice responsabil al părintelui. Cineva plecat și rămas numit pe o serie putea scrie
+  apariții noi în calendarul grupului, prin Admin SDK, unde regula nu ajunge. Acum, pe un eveniment de
+  grup, doar proprietarul și membrii; pe unul personal, și cel numit, ca în reguli.
+- Calea `apply` (o apariție deja existentă) nu avea filtrul după membri pus azi pe apariția nouă:
+  proprietarul plecat se putea numi singur. Acum îl are și ea.
+
+**Ce rămâne ca înainte**, verificat de recenzie pe web, pe APK și pe server, fără nicio scriere legitimă
+refuzată: responsabilul editează evenimentul acolo unde e; orice membru mută un eveniment al grupului;
+proprietarul își mută evenimentele chiar după ce a plecat (decizia lui Andrei); ștergerea grupului din
+APK (`groupId: null` pe evenimentele păstrate) o face proprietarul grupului, deci un membru.
+
+**Teste:**
+- `rules-tests/events.test.ts`: 5 noi. Pe regulile vechi, cele două găuri treceau.
+- `functions/test/createEventOverride.test.ts`: 3 noi (cel doar numit în afara grupului, refuzat;
+  `apply` fără nume din afara grupului; cel numit pe o serie personală, acceptat).
+- Toate cele 426 de teste de reguli trec, inclusiv `apk-compat`.
+
+**Mutații: 8, toate prinse.** Controalele negative au trecut întâi, și pe suitele de a doua șansă.
+- 5 pe regulă: clauza scoasă, fără ramura proprietarului, fără cea a membrilor, un `groupId` lipsă
+  citit direct, judecata făcută după calendarul în care ajunge;
+- 3 pe server: vechiul `canEdit`, cel numit pe o serie personală refuzat, `apply` fără filtrul după
+  membri.
+
+**Recenzie adversarială** (2 lentile: atacul; scrierile legitime refuzate), cu verificare separată:
+- clauza ține și nu refuză nimic legitim;
+- confirmată și reparată: scăparea din `createEventOverride` (mai sus);
+- confirmată, veche, în afara sarcinii: un id de grup șters poate fi recreat de oricine îl știe și
+  deschide ce a rămas în urmă (cheltuieli, jocuri, carduri partajate, mesaje dacă APK-ul a șters
+  grupul). Propusă ca sarcină separată.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2386), `tsc` și build-ul funcțiilor, `test:rules` (567),
+`npm run build`, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46). Toate verzi.
+
+**Nepublicat.** Cere funcțiile și regulile, cu acordul lui Andrei.
