@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminSetAiConfig = exports.adminGetAiConfig = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onGroupInviteCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.deleteMyAccount = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
-exports.adminBackfillExpenses = exports.adminGetAiLedger = void 0;
+exports.adminGetAiConfig = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onGroupInviteCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onGroupMembersChanged = exports.deleteMyAccount = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
+exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminSetAiConfig = void 0;
 // FIRST, before anything that defines a function: the global options apply only to functions
 // defined after them. See globalOptions.ts.
 require("./globalOptions");
@@ -55,6 +55,9 @@ Object.defineProperty(exports, "onDirectMessageCreated", { enumerable: true, get
 // cascade, through `deleteAccountData`.
 var accountDeletion_2 = require("./accountDeletion");
 Object.defineProperty(exports, "deleteMyAccount", { enumerable: true, get: function () { return accountDeletion_2.deleteMyAccount; } });
+// Somebody out of a group comes off its events still to come (05.10.2026).
+var groupLeave_1 = require("./groupLeave");
+Object.defineProperty(exports, "onGroupMembersChanged", { enumerable: true, get: function () { return groupLeave_1.onGroupMembersChanged; } });
 var reminders_1 = require("./reminders");
 Object.defineProperty(exports, "sendDueReminders", { enumerable: true, get: function () { return reminders_1.sendDueReminders; } });
 // A daily copy of the health panel into the function logs, which the CLI can read without a
@@ -1105,7 +1108,7 @@ const OVERRIDE_FIELDS = [
     "rsvpEnabled", "rsvps", "visibleTo", "hiddenFrom",
 ];
 exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
-    var _a, _b;
+    var _a, _b, _c, _d;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid) {
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
@@ -1161,9 +1164,16 @@ exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
         ? data.assigneeIds
             .filter((x) => typeof x === "string")
         : [];
-    const assigneeIds = requested.filter((id) => allowed.has(id) && id !== "ai_assistant");
+    // And on a group event, only who is in the group NOW. Somebody who left still passes `canEdit` as
+    // the series' owner, and a parent read just before the leaver sweep cleaned it (groupLeave.ts)
+    // still names them; an occurrence naming a non-member is born frozen (`namedAreInGroup`) and
+    // sends them its reminders (05.10.2026).
+    const groupMembers = typeof p.groupId === "string" && p.groupId
+        ? new Set(((_c = (_b = (await db.doc(`groups/${p.groupId}`).get()).data()) === null || _b === void 0 ? void 0 : _b.members) !== null && _c !== void 0 ? _c : []))
+        : null;
+    const assigneeIds = requested.filter((id) => allowed.has(id) && id !== "ai_assistant" && (!groupMembers || groupMembers.has(id)));
     safe.assigneeIds = assigneeIds;
-    safe.assigneeId = (_b = assigneeIds[0]) !== null && _b !== void 0 ? _b : null;
+    safe.assigneeId = (_d = assigneeIds[0]) !== null && _d !== void 0 ? _d : null;
     // RSVPs: everybody else's from the PARENT, only the caller's own from the request. The loop above
     // copied the whole map from the client, on the Admin SDK — so the per-person rule was never
     // consulted and one member could answer for the family. See overrideRsvps.ts.

@@ -141,8 +141,13 @@ describe('the chat keeps a deleted account’s name', () => {
     const h = parse('screens/CalendarHome.tsx');
     expect(h.decl('chatUserMap').getText(h.sf)).toMatch(/withFormerMembers\(userMap, activeGroupDoc \? \[activeGroupDoc\] : \[\],\s*\(name\) => deletedName\(name, t\('deletedAccountName', language\), t\('deletedAccount', language\)\)\)/);
     expect(h.attrs('GroupChatWidget', 'userMap')).toEqual(['chatUserMap']);
+    // Every other screen gets a map WITHOUT the deleted-account names: the members' map, or the one
+    // events are shown with (the names of people who LEFT, 05.10.2026 — which screen gets which, and
+    // what `eventUserMap` is made of, is namesOnEventsWiring.test.ts's to say).
     for (const tag of ['AddEventModal', 'EventDetailsModal', 'GroupSettingsModal', 'GamesHubModal', 'CalendarGrid']) {
-      expect(h.attrs(tag, 'userMap').every((v) => v === 'userMap'), tag).toBe(true);
+      const given = h.attrs(tag, 'userMap');
+      expect(given.length, tag).toBeGreaterThan(0);
+      expect(given.every((v) => v === 'userMap' || v === 'eventUserMap'), tag).toBe(true);
     }
   });
 

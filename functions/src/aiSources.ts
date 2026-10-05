@@ -110,8 +110,10 @@ export async function fetchEvents(scope: Scope, period: Period, budget: number):
     const ev = occ.source;
     const gid = typeof ev.groupId === "string" ? ev.groupId : null;
     // A group the caller has LEFT still yields events where they are a named assignee — the
-    // read rule has no membership test on that branch and leaving clears only `members`. Those
-    // stay visible in the product, so they stay here; but they are labelled by CODE and never
+    // read rule has no membership test on that branch. Leaving takes them off the group's events
+    // still to come (groupLeave.ts, 05.10.2026), not off those that are over; and events they OWN
+    // stay theirs, found here by the `ownerId` query.
+    // Those stay visible in the product, so they stay here; but they are labelled by CODE and never
     // by name, because reading `groups/{id}` for a name would be a read the caller cannot make.
     const outOfScope = !!gid && !inScope(scope, gid);
     return {

@@ -37,6 +37,7 @@ import { categoryIcon, eventTint, BIRTHDAY_CATEGORY_ID } from '../utils/eventCat
 import { useDialog } from '../hooks/useDialog';
 import { useMenu } from '../hooks/useMenu';
 import { deletedName, withFormerMembers } from '../utils/formerMembers';
+import { namedOutside, withNamesOnEvents } from '../utils/namesOnEvents';
 
 export default function CalendarHome() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -119,6 +120,31 @@ export default function CalendarHome() {
       (name) => deletedName(name, t('deletedAccountName', language), t('deletedAccount', language))),
     [userMap, activeGroupDoc, language],
   );
+  // The map events are SHOWN with: `userMap` plus the people named on them who are no longer in
+  // your groups (Andrei, 05.10.2026: events that are over keep the name of somebody who left, and
+  // it read "Member"). Not for AddEventModal, which offers all of `userMap` as assignees.
+  const [namesOutside, setNamesOutside] = useState<Record<string, any>>({});
+  const askedNames = useRef(new Set<string>());
+  useEffect(() => {
+    const missing = namedOutside(allEvents, userMap).filter((id) => !askedNames.current.has(id));
+    if (!missing.length) return;
+    missing.forEach((id) => askedNames.current.add(id));
+    void (async () => {
+      const found: Record<string, any> = {};
+      for (const id of missing) {
+        try {
+          const p = await getDoc(doc(db, 'profiles', id));
+          if (p.exists()) found[id] = { id, ...p.data() };
+        } catch (err) {
+          // One name we could not read stays "Member"; the next change of events asks again.
+          askedNames.current.delete(id);
+          reportError(err instanceof Error ? err.message : String(err), { context: 'CalendarHome.nameOutside' });
+        }
+      }
+      if (Object.keys(found).length) setNamesOutside((prev) => ({ ...prev, ...found }));
+    })();
+  }, [allEvents, userMap]);
+  const eventUserMap = useMemo(() => withNamesOnEvents(userMap, namesOutside), [userMap, namesOutside]);
   // Cosmetic gate for the Admin entry (the /admin screen + callables re-check server-side).
   // Whether this person is an admin, from their OWN admin record — the same document the server's
   // `assertAdmin` checks. It was a hard-coded email, so every other admin never saw the entry.
@@ -970,7 +996,7 @@ export default function CalendarHome() {
           selectedDate={selectedDate} 
           setSelectedDate={setSelectedDate} 
           events={allCalendarEvents}
-          userMap={userMap}
+          userMap={eventUserMap}
           view={activeGroupId === 'personal' ? 'personal' : 'family'}
           onEventClick={(ev) => setSelectedEvent(ev)}
           onAddEventClick={() => { setEventToEdit(null); setInitialTemplate(null); setIsAddModalOpen(true); }}
@@ -1146,18 +1172,18 @@ export default function CalendarHome() {
                           {ev.time && (
                             <span className="text-xs text-zinc-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {displayTime(ev, timezone || localZone())?.text ?? ev.time}</span>
                           )}
-                          {activeGroupId !== 'personal' && userMap && (
+                          {activeGroupId !== 'personal' && eventUserMap && (
                             <div className="flex items-center gap-1">
                               <div className="flex -space-x-1 shrink-0">
                                 {(() => {
                                   const ids = ev.assigneeIds?.length > 0 ? ev.assigneeIds : (ev.assigneeId ? [ev.assigneeId] : [ev.ownerId]);
-                                  return ids.slice(0, 3).map((id: string, idx: number) => userMap[id] && (
-                                    <div key={id} className={`w-4 h-4 rounded-full border border-white dark:border-zinc-900 bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center overflow-hidden shrink-0 z-[${3 - idx}]`} title={userMap[id].name || userMap[id].email}>
-                                      {userMap[id].photoURL ? (
-                                        <img src={userMap[id].photoURL} className="w-full h-full object-cover" />
+                                  return ids.slice(0, 3).map((id: string, idx: number) => eventUserMap[id] && (
+                                    <div key={id} className={`w-4 h-4 rounded-full border border-white dark:border-zinc-900 bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center overflow-hidden shrink-0 z-[${3 - idx}]`} title={eventUserMap[id].name || eventUserMap[id].email}>
+                                      {eventUserMap[id].photoURL ? (
+                                        <img src={eventUserMap[id].photoURL} className="w-full h-full object-cover" />
                                       ) : (
                                         <span className="text-[8px] font-bold text-zinc-500">
-                                          {(userMap[id].name || userMap[id].email)?.charAt(0).toUpperCase() || '?'}
+                                          {(eventUserMap[id].name || eventUserMap[id].email)?.charAt(0).toUpperCase() || '?'}
                                         </span>
                                       )}
                                     </div>
@@ -1188,7 +1214,7 @@ export default function CalendarHome() {
         isOpen={selectedEvent !== null}
         onClose={() => setSelectedEvent(null)}
         event={selectedEvent}
-        userMap={userMap}
+        userMap={eventUserMap}
         groups={groups}
         onEdit={() => {
           setEventToEdit(selectedEvent);

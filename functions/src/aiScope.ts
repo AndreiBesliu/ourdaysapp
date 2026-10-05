@@ -11,9 +11,11 @@
 // ── Why it is re-derived on EVERY turn, never cached ───────────────────────────────────
 //
 // Group membership is the only cross-user grant in the whole app, and it can be revoked with
-// no signal at all: `handleRemoveMember` is a bare `arrayRemove`, there is no trigger, no
-// notification, and nothing writes a `joinedAt`. There is therefore nothing a cache could
-// listen to for invalidation. Re-deriving costs one query and removes the entire class.
+// no signal at all: `handleRemoveMember` is a bare `arrayRemove`, there is no notification, and
+// nothing writes a `joinedAt`. The one thing that reacts is a server trigger taking the person off
+// the group's events still to come (groupLeave.ts, 05.10.2026), nothing a client cache sees. There
+// is therefore nothing a cache could listen to for invalidation. Re-deriving costs one query and
+// removes the entire class.
 //
 // ── Why `groups/{id}.get()` is forbidden outside this file ─────────────────────────────
 //

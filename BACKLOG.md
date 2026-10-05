@@ -90,11 +90,21 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   nici în teste și comentarii. Stă în `functions/.env`, ignorat de git, cu o copie în `~/.ourdays/`.
   Dar repo-ul e public și istoria îl are.
   Rescrierea istoriei e decizia lui Andrei.
-- **Un eveniment nu mai poate fi editat după ce un responsabil al lui pleacă din grup.** Regula
-  `namedAreInGroup` cere ca toți din `assigneeIds` să fie membri, pe documentul REZULTAT, deci orice
-  editare (bifarea unui punct, un RSVP) e refuzată cât timp cel plecat e pe listă. Iar memento-urile îi
-  merg în continuare. Ieșirea din grup și scoaterea de către proprietar nu-l scot de pe evenimente;
-  ștergerea contului da (04.10).
+- **Cine iese dintr-un grup e scos de pe evenimentele care URMEAZĂ (05.10), nu de pe toate.** Ce a
+  rămas deliberat, după deciziile lui Andrei din 05.10:
+  - **Evenimentele trecute își păstrează numele lui** (istoria rămâne, și se vede: „Gina”, nu
+    „Membru”). „Trecut” = ultima zi s-a terminat peste tot pe glob (UTC−12). Le citește în continuare,
+    iar orice editare a lor e refuzată cât timp e pe listă (`namedAreInGroup`, pe documentul REZULTAT).
+    Singura ieșire din aplicație: pe un task, proprietarul sau un responsabil îl scoate cu X-ul de pe
+    numele lui, în detalii.
+  - **Evenimentele create de el rămân ale lui.** Le citește, îi vin memento-urile lor și le poate
+    șterge chiar și după ce a plecat. Nimeni din grup nu le mai poate șterge, iar
+    `createEventOverride` îl lasă să modifice o apariție a seriei lui (fără să se poată pune pe ea).
+  - **La ștergerea unui grup** evenimentele celorlalți devin personale și păstrează numele colegilor,
+    deci rămân înghețate, chiar și pentru autor. Pe live: 5, toate în trecut.
+  - **Alte urme ale plecării, mărunte:** invitațiile trimise de el rămân în așteptare (acceptarea dă
+    „nu mai e în grup”), linkurile lui nu sunt revocate (doar refuzate la folosire), iar indicatorul
+    „scrie…” rămâne. Ștergerea contului le curăță pe toate.
 - **O cheltuială nu mai poate fi corectată după ce un membru pleacă din grup.** `splitIsHonest` cere
   ca toți din `splitAmong` să fie membri, pe documentul REZULTAT — deci orice editare a rândului e
   refuzată cât timp cel plecat e încă pe listă (scoaterea lui schimbă împărțirea). Ștergerea merge.

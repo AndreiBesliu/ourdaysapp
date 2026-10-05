@@ -213,3 +213,24 @@ describe('pre-deploy review 24.09 — no client-written stamp survives the trigg
     expect(after?.sender).toBeDefined();
   });
 });
+
+describe('05.10.2026 — an occurrence of a group event names only who is in the group now', () => {
+  it('the owner who has left still edits their series, but cannot name themselves on it', async () => {
+    // Alice owns the series and has left g1: her events stay hers (Andrei, 05.10).
+    await db.doc('groups/g1').update({ members: [BOB, CAROL] });
+    await db.doc(`events/${PARENT}`).update({ assigneeIds: [BOB] });
+    const { id } = await call(ALICE, {
+      parentId: PARENT, overrideDate: '2026-09-23', data: { title: 'Walk, later', assigneeIds: [ALICE, BOB] },
+    });
+    expect((await db.doc(`events/${id}`).get()).data()).toMatchObject({ title: 'Walk, later', assigneeIds: [BOB], assigneeId: BOB });
+  });
+
+  it('a parent still naming somebody who left does not pass them on', async () => {
+    await db.doc('groups/g1').update({ members: [ALICE, BOB] });
+    await db.doc(`events/${PARENT}`).update({ assigneeIds: [BOB, CAROL] });
+    const { id } = await call(BOB, {
+      parentId: PARENT, overrideDate: '2026-09-24', data: { title: 'Walk', assigneeIds: [BOB, CAROL] },
+    });
+    expect((await db.doc(`events/${id}`).get()).data()).toMatchObject({ assigneeIds: [BOB], assigneeId: BOB });
+  });
+});

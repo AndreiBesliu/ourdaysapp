@@ -118,6 +118,51 @@
 
 ---
 
+## 🆕 Cine iese dintr-un grup e scos de pe evenimentele care urmează (05.10) — NEPUBLICAT (cere funcțiile, apoi hosting-ul)
+
+**Fapt:** când cineva iese dintr-un grup, sau îl scoți tu, serverul îl scoate în câteva secunde de pe
+evenimentele grupului care urmează și de pe seriile care încă se repetă: ca responsabil și din RSVP-uri.
+Până acum rămânea pe ele, cu trei urmări:
+- orice editare a altcuiva era refuzată, chiar și o bifă sau un RSVP;
+- le vedea în continuare;
+- îi veneau memento-urile lor.
+
+Merge și pentru cine pleacă din APK-ul instalat. La ștergerea contului rămâne regula de la 04.10: e scos
+de pe TOATE evenimentele, și de pe cele trecute.
+
+**Deciziile tale (05.10):**
+- doar evenimentele care urmează; cele trecute își păstrează numele lui, deci rămân și înghețate la
+  editare;
+- evenimentele create de el rămân ale lui;
+- ștergerea unui grup nu se schimbă;
+- un eveniment ascuns de el (o surpriză) rămâne ascuns, dacă revine în grup;
+- **pe evenimentele trecute i se vede numele** („Gina”), nu „Membru” cum apărea până acum pentru oricine
+  nu mai e în grupurile tale. Numele apare doar la afișare: nu poate fi ales ca responsabil.
+
+**Deciziile pe care le-am luat eu, cu implicitul pus** (spune-mi dacă vrei altfel):
+- **Un eveniment „urmează” cât timp ultima lui zi nu s-a terminat peste tot pe glob.** Zilele din
+  calendar n-au fus orar, iar în Samoa Americană (UTC−11) e încă ieri până pe la 14:00–15:00, ora
+  României. Deci cine pleacă dimineața e scos și de pe evenimentele de ieri; după-amiaza, nu. Un
+  eveniment cu data ilizibilă e tratat ca unul care urmează.
+- **O apariție nouă a unei serii de grup** (editată ca „doar aceasta”) păstrează doar responsabilii
+  care sunt acum în grup. Cel plecat își poate edita în continuare seriile lui, dar nu se mai poate
+  pune pe ele.
+- **Sunt scoși toți cei numiți care nu mai sunt membri, nu doar cel care tocmai a ieșit.** Așa, o
+  curățare eșuată e reparată de următoarea, iar cine a revenit între timp rămâne pe evenimente.
+- **Funcția pornește la orice scriere pe grup**, inclusiv la fiecare mesaj din chat (care actualizează
+  previzualizarea), și se oprește imediat dacă n-a ieșit nimeni. Costul e o invocare în plus pe mesaj.
+- **Dacă eșuează**, eroarea apare în Admin → Health, iar platforma o reîncearcă singură.
+
+- [ ] **După publicare: proba, pe un al doilea cont al tău** (3 minute)
+      1. Într-un grup de-al tău, fă un task pe mâine și pune al doilea cont responsabil.
+      2. Setările grupului → scoate-l din grup.
+      3. **Cum arată bine:** în câteva secunde task-ul nu-l mai arată ca responsabil și îl poți bifa și
+         edita normal. Un task de-al lui de săptămâna trecută îi arată în continuare numele.
+      - **Ce e greșit:** după un minut e tot acolo, bifa dă eroare, sau pe cel trecut scrie „Membru”.
+        Spune-mi.
+
+---
+
 ## 🆕 Ștergerea propriului cont (04.10) — NEPUBLICAT (cere funcțiile, regulile, apoi hosting-ul)
 
 **Fapt:** din Settings → „Delete account” (sub Sign Out, separat de el), oricine își poate șterge singur

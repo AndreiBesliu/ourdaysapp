@@ -372,3 +372,45 @@ describe('the keys that make an event an override (pre-deploy review 24.09)', ()
     await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'plain'), { title: 'y' }));
   });
 });
+
+describe('somebody who left the group, still named on its event (05.10.2026)', () => {
+  // Carol left G1 and is still named. Leaving only shrinks `members`, so this is what every group
+  // event naming a leaver looked like; the server now takes them off the ones still to come
+  // (functions/src/groupLeave.ts). These say why it has to be the server.
+  beforeEach(async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'events', 'left-named'), {
+        ownerId: ALICE, title: 'Bins', groupId: G1, assigneeIds: [BOB, CAROL], rsvps: { [CAROL]: 'yes' },
+      });
+      // The same event as the server leaves it.
+      await setDoc(doc(db, 'events', 'left-cleaned'), {
+        ownerId: ALICE, title: 'Bins', groupId: G1, assigneeIds: [BOB], rsvps: {},
+      });
+    });
+  });
+
+  it('while she is named, nobody in the group can change it, not even their own answer', async () => {
+    await assertFails(updateDoc(doc(as(BOB), 'events', 'left-named'), { rsvps: { [CAROL]: 'yes', [BOB]: 'yes' } }));
+    await assertFails(updateDoc(doc(as(ALICE), 'events', 'left-named'), { title: 'Bins, Tuesday' }));
+  });
+
+  it('and she still reads it: being named is a read grant', async () => {
+    await assertSucceeds(getDoc(doc(as(CAROL), 'events', 'left-named')));
+  });
+
+  it('the owner cannot delete her answer from the app: it is not theirs', async () => {
+    await assertFails(updateDoc(doc(as(ALICE), 'events', 'left-named'), { assigneeIds: [BOB], rsvps: {} }));
+  });
+
+  it('but can take her off the list with the X, which is how an event that is over gets unfrozen', async () => {
+    // Events that are over keep her name (Andrei, 05.10); the X on her chip is the way out.
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'left-named'), { assigneeIds: [BOB] }));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'left-named'), { title: 'Bins, Tuesday' }));
+  });
+
+  it('once she is off, the group edits it again and she no longer reads it', async () => {
+    await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'left-cleaned'), { rsvps: { [BOB]: 'yes' } }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'left-cleaned'), { title: 'Bins, Tuesday' }));
+    await assertFails(getDoc(doc(as(CAROL), 'events', 'left-cleaned')));
+  });
+});

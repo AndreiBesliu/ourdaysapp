@@ -60,6 +60,8 @@ export { openDirectChat, onDirectMessageCreated } from "./directChat";
 // A person deleting their own account, from Settings (04.10.2026). The admin's delete runs the same
 // cascade, through `deleteAccountData`.
 export { deleteMyAccount } from "./accountDeletion";
+// Somebody out of a group comes off its events still to come (05.10.2026).
+export { onGroupMembersChanged } from "./groupLeave";
 export { sendDueReminders } from "./reminders";
 // A daily copy of the health panel into the function logs, which the CLI can read without a
 // key — see functions/src/errorDigest.ts for why that gap was worth closing.
@@ -1253,7 +1255,15 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
     ? ((data as Record<string, unknown>).assigneeIds as unknown[])
         .filter((x): x is string => typeof x === "string")
     : [];
-  const assigneeIds = requested.filter((id) => allowed.has(id) && id !== "ai_assistant");
+  // And on a group event, only who is in the group NOW. Somebody who left still passes `canEdit` as
+  // the series' owner, and a parent read just before the leaver sweep cleaned it (groupLeave.ts)
+  // still names them; an occurrence naming a non-member is born frozen (`namedAreInGroup`) and
+  // sends them its reminders (05.10.2026).
+  const groupMembers = typeof p.groupId === "string" && p.groupId
+    ? new Set(((await db.doc(`groups/${p.groupId}`).get()).data()?.members ?? []) as unknown[])
+    : null;
+  const assigneeIds = requested.filter((id) =>
+    allowed.has(id) && id !== "ai_assistant" && (!groupMembers || groupMembers.has(id)));
   safe.assigneeIds = assigneeIds;
   safe.assigneeId = assigneeIds[0] ?? null;
 

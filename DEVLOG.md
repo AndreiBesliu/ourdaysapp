@@ -11692,3 +11692,142 @@ Toate verzi.
 - **Porți:** `tsc -b`, `lint-gate`, `npm test` (2344), `tsc` și build-ul funcțiilor, `test:rules` (510),
   `npm run build`, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46). Toate verzi.
 - **Nepublicat.** Doar funcțiile se schimbă, fără efect pe live; pleacă la următorul deploy de funcții.
+
+## 2026-10-05 · Răspunsurile RSVP în numele altora (Task Started)
+
+**Prompt (Andrei):** „Do this task here: “Close the RSVP forging hole in events rules””.
+**Model:** Claude Opus 5.5.
+**Ce s-a găsit** (la analiza pentru cei plecați, doar din textul regulii): `rsvpsOnlyMine` lasă orice hartă
+`rsvps` când evenimentul salvat n-are câmpul. Pe un astfel de eveniment, orice membru poate scrie
+răspunsurile altora dintr-o singură scriere. A doua cale: ștergerea întregii hărți e permisă, iar
+după ea calea de mai sus se deschide din nou.
+**Plan:**
+- toate locurile care scriu `rsvps` (web, APK-ul instalat, server) și forma exactă a scrierii;
+- reproduc ambele căi pe emulatorul de reguli;
+- închid regula fără să stric APK-ul și copiile făcute la ieșirea din grup;
+- porțile, mutațiile, o recenzie; regulile se publică doar cu acordul lui Andrei.
+
+## 2026-10-05 · Scoaterea celor plecați de pe evenimentele grupului (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Ce era:** ieșirea dintr-un grup (web sau APK) și scoaterea de către proprietar micșorau doar
+`members`. Cel plecat rămânea numit pe evenimentele grupului, cu trei urmări:
+- orice editare a altcuiva era refuzată (`namedAreInGroup` judecă documentul REZULTAT), chiar și o bifă
+  sau un RSVP;
+- le citea în continuare (a fi numit e drept de citire);
+- îi veneau memento-urile lor.
+
+Reprodus pe emulatorul de reguli (`rules-tests/events.test.ts`, ultimul bloc). Tot acolo se vede de ce
+nu se poate repara din aplicație: proprietarul nu are voie să șteargă răspunsul altcuiva.
+Măsurat pe live (doar citire): 0 evenimente de grup cu nume rămase. E deci prevenție.
+
+**Deciziile lui Andrei (05.10):**
+- serverul, automat (nu regula mai îngăduitoare);
+- doar evenimentele care urmează și seriile care încă se repetă; cele trecute își păstrează numele;
+- evenimentele create de cel plecat rămân ale lui;
+- ștergerea unui grup nu se schimbă;
+- după recenzie: numele de pe evenimentele trecute **să se și vadă**. I-am spus, la prima întrebare, că
+  scoaterea de pe cele trecute ar ascunde cine a făcut un task; de fapt aplicația scria oricum „Membru”
+  pentru oricine nu mai e în grupurile tale. L-am corectat și a ales afișarea numelui.
+
+**Serverul:**
+- `onGroupMembersChanged` (`functions/src/groupLeave.ts`) pornește la orice scriere pe `groups/{id}` și
+  se oprește imediat dacă lista n-a pierdut pe nimeni (un mesaj din chat, o redenumire, cineva care
+  intră).
+- `takeLeaversOffEvents` recitește grupul ACUM și scoate de pe evenimentele lui care urmează pe oricine e
+  numit fără să fie membru, nu doar persoana din diff. Ținte: `assigneeIds`, `assigneeId` (trece la
+  următorul rămas pe listă, sau null) și cheia lui din `rsvps`, ștearsă după cale. `hiddenFrom`,
+  `ownerId` și asistentul AI rămân.
+  - **De ce toți, nu doar cel plecat:** o rulare eșuată e reparată de următoarea, iar cine a revenit
+    între timp rămâne pe evenimente.
+  - Un grup fără listă de membri sau șters nu e judecat.
+- Câte o tranzacție pe eveniment, care recitește și evenimentul, și grupul. Așa:
+  - o editare făcută între timp nu e anulată;
+  - un eveniment șters sau mutat în alt calendar între timp e lăsat în pace;
+  - cine e primit înapoi în timpul rulării e judecat ca membru.
+- `retry: true`: o eroare e scrisă în `errorLogs` și aruncată, iar platforma reia rularea. Rezultatul e
+  același oricâte rulări ar fi.
+- **„Urmează”** (`functions/src/leaverCore.ts`, pur) înseamnă că ultima zi a evenimentului nu s-a
+  terminat peste tot pe glob: e cel puțin ziua care e încă azi la UTC−12 (`earliestTodayOf`).
+  - Ultima zi e ziua lui plus `endDayOffset`; la o serie, e ultima apariție până la orizont
+    (`lastOccurrenceDay`, cu filtrul de zile), plus același decalaj.
+  - Zilele din calendar n-au fus orar. Prima versiune lua o zi întreagă de toleranță pe ziua UTC, iar
+    noaptea scotea numele și de pe evenimentele de alaltăieri (recenzia).
+  - O dată ilizibilă e tratată ca un eveniment care urmează.
+- **`createEventOverride`:** o apariție nouă a unei serii de grup păstrează doar responsabilii care sunt
+  ACUM membri. Cel plecat, ca proprietar al seriei, trecea de `canEdit` și se putea pune singur pe o
+  apariție. Iar un părinte citit chiar înainte de curățare îl ducea mai departe într-un document nou,
+  înghețat din naștere.
+
+**Aplicația:** pe un eveniment, numele celor care nu mai sunt în grupurile tale se vede (`Gina`, nu
+`Member`).
+- `CalendarHome` citește profilul fiecărui om numit pe evenimentele încărcate și absent din hartă:
+  proprietar, responsabili sau răspunsuri.
+- Harta extinsă, `eventUserMap`, merge doar la afișare: detaliile, grila și lista.
+- `AddEventModal`, setările grupului și jocurile rămân pe harta membrilor. Formularul oferă ca
+  responsabil orice intrare din ea, iar pe un fost membru regula l-ar refuza.
+
+**Teste:**
+- **Reproducerea, pe regulile reale** (`rules-tests/events.test.ts`):
+  - cât e numită, nimeni din grup nu poate schimba evenimentul, nici răspunsul lui;
+  - ea îl citește în continuare;
+  - proprietarul nu-i poate șterge răspunsul din aplicație;
+  - X-ul pe numele ei o scoate, după care evenimentul se poate edita din nou.
+- **Unitare:** `leaverCore.test.ts` (12) și `namesOnEvents.test.ts` (3). Structural:
+  `namesOnEventsWiring.test.ts` (parserul TypeScript), care verifică ce hartă primește fiecare ecran.
+- **Pe emulator:**
+  - `groupLeave.test.ts` (14), cu „azi” fixat în 2031, departe de ceasul real;
+  - triggerul, cu un eveniment de acum zece zile care trebuie să rămână neatins;
+  - editarea, mutarea, ștergerea și revenirea în grup în timpul rulării;
+  - în `createEventOverride.test.ts`, două cazuri noi.
+- **Pe banc, cap-coadă:** aplicația reală, emulatorii, funcțiile construite, deci triggerul rulând în
+  emulatorul de functions (posibil doar după importurile modulare de azi).
+  - Ana o scoate pe Gina din grup. În câteva secunde, taskul viitor trece la Bob și răspunsul ei la
+    cină dispare; taskul de acum trei zile o păstrează (`LEAVERS_OFF_EVENTS`: 3 citite, 2 schimbate).
+  - În detaliile taskului trecut scrie „Gina”, iar lista de atribuire oferă doar Bob și Ana.
+  - **Controlul, cu numele extra oprite:** pe același ecran scrie „Member”.
+
+**Mutații, două runde, toate prinse.** Controalele negative au trecut întâi, de fiecare dată.
+- **Runda 1: 25 de mutanți**, pe ce „urmează”, pe ce se scoate, pe trigger și pe curățare.
+  - Golul găsit înainte de rulare: niciun test n-ar fi observat un `select` fără `rsvps` sau fără
+    `endDayOffset`. Am adăugat un eveniment numit doar prin RSVP și o excursie pe mai multe zile.
+- **Runda 2, după recenzie: 42 de mutanți.**
+  - ziua de la UTC−12;
+  - grupul și evenimentul citite din nou în tranzacție;
+  - filtrul din `createEventOverride`;
+  - căutarea numelor și firele din `CalendarHome`: harta greșită dată formularului de atribuire sau
+    detaliilor, numele niciodată adăugate.
+- **Prinși doar de suita completă:** N1 și N2 (proprietarul, câmpul unic necăutat). Suita completă era
+  roșie pe arborele NEMUTAT: schimbarea mea din `CalendarHome` rupsese `deleteAccountWiring.test.ts`
+  (cerea `userMap` exact, nu „fără numele conturilor șterse”). Deci acele „prinderi” nu dovedeau nimic.
+  - Am rescris testul pe invariant: niciun ecran în afară de chat nu primește numele conturilor șterse.
+  - Am întărit testul de nume: fiecare câmp, singur.
+  - N1 și N2, rulați din nou, sunt prinși de suita lor.
+  - Lecția: controlul negativ trebuie să acopere și suitele pe care harness-ul le folosește ca a doua
+    șansă.
+
+**Recenzie adversarială** (3 lentile: concurența și eșecurile; fidelitatea față de decizii; ce văd
+oamenii și testele). Fiecare constatare a fost verificată separat. Confirmate și reparate:
+- **Prezentarea deciziei era falsă:** istoria păstrată nu se vedea pe ecran. Corectat cu Andrei
+  (mai sus).
+- **În OWNER_VERIFY scrisesem regula „urmează” pe dos.**
+- **Testele nu puteau observa ceasul:** `NOW` fix era chiar ziua de azi, iar un trigger care ar fi
+  judecat după 1970 trecea toate testele.
+- **Mai mici:**
+  - toleranța de o zi;
+  - tranzacția fără `groupId` și fără membrii citiți din nou;
+  - `createEventOverride`;
+  - un test al regulilor cu titlu înșelător;
+  - o probă de decalaj care nu putea pica;
+  - rândul de eroare fără grup;
+  - un comentariu greșit în `aiSources`.
+
+Infirmate: „lipsește o curățare a evenimentelor deja înghețate pe live”. Am măsurat live-ul înainte:
+0 evenimente de grup cu nume rămase.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2363), `tsc` și build-ul funcțiilor, `test:rules` (531),
+`npm run build`, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46). Toate verzi.
+
+**Nepublicat.** Cere funcțiile, apoi hosting-ul (numele de pe evenimentele trecute), fără reguli, cu
+acordul lui Andrei.
