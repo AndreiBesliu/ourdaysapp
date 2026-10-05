@@ -34,7 +34,7 @@
 
 import { beforeAll, afterAll, beforeEach, describe, it } from 'vitest';
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import {
   ALICE, BOB, CAROL, DAVE, EMAIL, G1,
   as, asUnverified, asEmail, asNoEmail, resetWorld, seed, startEnv, stopEnv,
@@ -199,5 +199,72 @@ describe('a friend request addressed to an email', () => {
 
   it('the sender still reads their own, verified or not', async () => {
     await assertSucceeds(getDoc(doc(asUnverified(ALICE), 'friend_requests', 'fr-email')));
+  });
+});
+
+describe('an invitation addressed to a uid alone (05.10.2026)', () => {
+  // Moving an event to another group may invite the people on it who are not in that group
+  // (Andrei). The mover does not know their addresses and must not learn them, so the invitation
+  // names a uid and NO address; only that shape is readable by uid. `i-by-uid` above is one.
+  beforeEach(async () => {
+    await seed(async (db) => {
+      // Named by uid AND by an address: the address still has to be proved.
+      await setDoc(doc(db, 'group_invites', 'i-uid-and-email'), {
+        fromId: ALICE, toId: DAVE, toEmail: EMAIL[DAVE], groupId: G1, status: 'pending',
+      });
+      // Dave's uid with somebody else's address: Dave may not read it by any branch.
+      await setDoc(doc(db, 'group_invites', 'i-uid-other-email'), {
+        fromId: ALICE, toId: DAVE, toEmail: EMAIL[CAROL], groupId: G1, status: 'pending',
+      });
+    });
+  });
+
+  it('the person it names reads it, whatever their address', async () => {
+    await assertSucceeds(getDoc(doc(as(DAVE), 'group_invites', 'i-by-uid')));
+    await assertSucceeds(getDoc(doc(asNoEmail(DAVE), 'group_invites', 'i-by-uid')));
+    await assertSucceeds(getDoc(doc(asUnverified(DAVE), 'group_invites', 'i-by-uid')));
+  });
+
+  it('and lists it with the query the calendar runs', async () => {
+    await assertSucceeds(getDocs(query(
+      collection(as(DAVE), 'group_invites'),
+      where('toId', '==', DAVE), where('toEmail', '==', null), where('status', '==', 'pending'),
+    )));
+  });
+
+  it('a list by uid alone is refused: it could hold an invitation naming somebody else’s address', async () => {
+    await assertFails(getDocs(query(collection(as(DAVE), 'group_invites'), where('toId', '==', DAVE), where('status', '==', 'pending'))));
+  });
+
+  it('an invitation that also names an address still needs that address proved', async () => {
+    await assertFails(getDoc(doc(asUnverified(DAVE), 'group_invites', 'i-uid-and-email')));
+    await assertSucceeds(getDoc(doc(as(DAVE), 'group_invites', 'i-uid-and-email')));
+  });
+
+  it('nobody else reads it by uid, and a uid does not open an invitation that names another address', async () => {
+    await assertFails(getDoc(doc(as(CAROL), 'group_invites', 'i-by-uid')));
+    await assertFails(getDoc(doc(as(DAVE), 'group_invites', 'i-uid-other-email')));
+  });
+
+  it('the person it names declines it, once', async () => {
+    await assertSucceeds(updateDoc(doc(asNoEmail(DAVE), 'group_invites', 'i-by-uid'), { status: 'declined' }));
+    await assertFails(updateDoc(doc(asNoEmail(DAVE), 'group_invites', 'i-by-uid'), { status: 'accepted' }));
+  });
+
+  it('a member of the group sends one; a stranger cannot', async () => {
+    const invite = (from: string) => ({
+      fromId: from, toId: DAVE, toEmail: null, groupId: G1, groupName: 'Family', status: 'pending', createdAt: '2026-10-05T12:00:00.000Z',
+    });
+    await assertSucceeds(addDoc(collection(as(BOB), 'group_invites'), invite(BOB)));
+    await assertFails(addDoc(collection(as(CAROL), 'group_invites'), invite(CAROL)));
+  });
+
+  it('one with no address names a group: a personal one by uid, accepted, would make a friendship', async () => {
+    await assertFails(addDoc(collection(as(CAROL), 'group_invites'), {
+      fromId: CAROL, toId: DAVE, toEmail: null, groupId: null, status: 'pending', createdAt: '2026-10-05T12:00:00.000Z',
+    }));
+    await assertSucceeds(addDoc(collection(as(CAROL), 'group_invites'), {
+      fromId: CAROL, toId: null, toEmail: EMAIL[DAVE], groupId: null, status: 'pending', createdAt: '2026-10-05T12:00:00.000Z',
+    }));
   });
 });

@@ -11831,3 +11831,123 @@ Infirmate: „lipsește o curățare a evenimentelor deja înghețate pe live”
 
 **Nepublicat.** Cere funcțiile, apoi hosting-ul (numele de pe evenimentele trecute), fără reguli, cu
 acordul lui Andrei.
+
+## 2026-10-05 · Răspunsurile RSVP în numele altora (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Ce era, reprodus pe emulatorul de reguli:** `rsvpsOnlyMine` judeca doar o actualizare a unui eveniment
+care avea deja harta `rsvps`. Deci:
+- pe un eveniment fără `rsvps` (toate cele făcute de APK, cele web mai vechi, o apariție la care nu
+  răspunsese nimeni), orice membru scria răspunsurile oricui, într-o singură scriere;
+- ștergerea întregii hărți era permisă, după care calea de mai sus se deschidea din nou;
+- crearea nu verifica nimic, deci un eveniment de grup se putea naște cu răspunsuri inventate, sau cu o
+  valoare care nu e hartă și care îl îngheța pentru orice editare;
+- valorile erau libere.
+Pe regulile vechi, 11 dintre probele noi treceau. Pe live (doar citire): 29 de evenimente, 5 fără
+`rsvps` (niciunul de grup), nicio valoare ciudată, nimic falsificat.
+
+**Deciziile lui Andrei (05.10):**
+- fiecare își scrie doar răspunsul lui;
+- un eveniment personal mutat într-un grup devine al grupului, iar membrii răspund singuri: rămâne
+  doar răspunsul celui care îl mută;
+- mutat dintr-un grup în altul, păstrează răspunsurile membrilor comuni;
+- la mutare, cel care mută alege dacă îi invită în noul grup pe cei de pe eveniment (cu răspuns sau
+  responsabili) care sunt în primul grup și nu în al doilea.
+- La întrebarea despre răspunsurile altora pe un eveniment personal a întrebat „ale cui să fie?”.
+  Corect: în mod normal nu există. Ajung acolo doar prin copia de la ieșirea dintr-un grup, un grup
+  șters, sau gaura de acum. Am aplicat modelul lui.
+
+**Regulile:**
+- `rsvpsOkOnCreate`: un eveniment de grup se creează cel mult cu răspunsul tău. Unul personal rămâne
+  deschis, fiindcă la ieșirea dintr-un grup APK-ul copiază răspunsurile tuturor, se oprește la prima
+  copie refuzată și nu poate fi schimbat.
+- `rsvpsOkOnUpdate`:
+  - **pe loc** (și grup → personal): se poate schimba doar propriul răspuns; o valoare salvată care nu e
+    hartă contează ca niciun răspuns, iar o editare care nu atinge `rsvps` nu mai e judecată pe ea
+    (evenimentele cu valori stricate nu mai îngheață);
+  - **personal → grup:** cel mult răspunsul tău;
+  - **grup → alt grup** (`answersCarriedInto`): nimic adăugat sau schimbat în afară de răspunsul tău,
+    nimic rămas de la cine nu e în noul grup, nimic luat de la cine e.
+  - Răspunsul tău e `yes`, `maybe` sau `no`.
+- **Invitațiile doar după uid:** `canAccessInvite` citește acum și o invitație cu `toId` = tu și FĂRĂ
+  adresă. O invitație care numește și o adresă cere în continuare adresa dovedită.
+  - Prima versiune folosea `get('toEmail', null)` și avea o scurgere: o listă doar după `toId` întorcea
+    invitații adresate altcuiva. Lista e judecată pe un document făcut din filtrele interogării, unde
+    `toEmail` lipsește, deci implicitul trecea. Măsurat pe emulator, reparat cu citire directă, fixat
+    în test. Nicio altă regulă de citire nu folosește `get` cu implicit (verificat cu un parser).
+
+**Aplicația:**
+- `utils/eventMove.ts` (pur) spune ce răspunsuri merg cu o mutare și pe cine se poate invita.
+- **Formularul:**
+  - autosave nu mai mută evenimentul între calendare: mutarea așteaptă butonul Gata. Sub calendar apar
+    o notă, propoziția despre răspunsurile care rămân și bifa „Invită și pe Dan în Friends”, nebifată;
+  - Gata (editare simplă sau toată seria) recitește evenimentul, scrie răspunsurile pe care le cere
+    regula și trimite invitațiile, fără să-i invite din nou pe cei deja invitați;
+  - o apariție singulară nu poate schimba grupul, ca până acum.
+- `CalendarHome` ascultă și invitațiile după uid (`toId`, `toEmail == null`), lângă cele după adresă.
+- Copia păstrată la ieșirea dintr-un grup (web) ține doar răspunsul tău.
+- 5 texte noi, în 6 limbi.
+
+**Teste:**
+- **Pe reguli:**
+  - `events.test.ts`, 19 noi: fiecare cale de falsificare (fără hartă, ștergere, golire, creare,
+    valori, calea ocolită, inclusiv într-un singur batch), scrierile legitime (primul răspuns, schimbare,
+    retragere, copia de la ieșire, evenimente cu valori stricate deblocate) și toate mutările;
+  - `email-addressed.test.ts`, 8 noi: invitațiile doar după uid, inclusiv fixtura care a prins
+    scurgerea (uid-ul destinatarului cu adresa altcuiva) și invitația personală fără adresă, refuzată.
+- **Unitare:** `eventMove.test.ts` (14). Structurale (parserul TypeScript):
+  - `eventMoveWiring.test.ts`: autosave care nu mută și nu blochează Gata, ambele salvări, invitații
+    doar din cei numiți, bifa resetată, copia de la ieșire, lista unită de invitații;
+  - `verifiedEmail.test.ts` deosebește acum ascultătorul după uid de cele după adresă, în loc să-l
+    refuze.
+- **Pe emulatorul de funcții:** `acceptGroupInvite` primește invitația doar după uid de la cel numit,
+  fără adresă dovedită, și o refuză oricui altcuiva.
+- **Pe live, doar citire:** cele două interogări noi pe `group_invites` merg fără index nou.
+- **Pe banc, cap-coadă** (aplicația reală, regulile noi, funcțiile reale):
+  - Ana mută „Dinner at Ana” din Family (Ana, Bob, Dan) în Friends (Ana, Bob, Eve);
+  - nota și bifa „Also invite Dan to Friends” apar, iar autosave nu mută nimic între timp;
+  - după Gata, evenimentul e în Friends cu răspunsurile Anei și lui Bob, iar Dan are o invitație
+    `toEmail: null`;
+  - ca Dan, invitația apare („Ana <…> invited you to Friends”), iar Accept îl face membru.
+  - Textul spunea „when you press Save”, dar butonul de editare e „Done”: corectat, cu eticheta reală a
+    butonului în fiecare limbă.
+  - Prima încercare a picat pe o fixtură a mea fără `sharedWithFamily`, pe care formularul o trimite
+    ca `undefined`. Pe live: 0 evenimente fără aceste câmpuri (măsurat).
+
+**Mutații: 44, toate prinse.**
+- Controalele negative au trecut întâi, de data asta și pe suitele de a doua șansă (lecția de mai sus,
+  din aceeași zi).
+- **Prima rundă, 41:**
+  - 18 pe reguli: creare, normalizare, poarta de schimbare, valori, cele trei feluri de mutare, fiecare
+    clauză a mutării între grupuri, ramura după uid, inclusiv varianta cu `get` care scurgea;
+  - 12 pe `eventMove`, 8 pe formular, 2 pe calendar, 1 pe copia de la ieșire.
+  - **A supraviețuit E8** („cel care mută se invită singur”): în fixtură era deja în grupul țintă, deci
+    nu-l invita oricum. Proba nouă are o listă țintă citită înainte să intre el.
+- **A doua rundă, 4:** E8 din nou, plus reparațiile din recenzie: starea de autosave, intersecția
+  invitaților, invitația personală după uid. Toate prinse.
+
+**Recenzie adversarială** (3 lentile: atacul pe reguli; scrierile legitime refuzate; clientul și
+testele). Fiecare constatare a fost verificată separat:
+- **Regulile:** nicio cale rămasă de a scrie răspunsul altcuiva. Lentila a făcut demonstrația prin
+  inducție pe toate scrierile.
+- **Confirmate și reparate:**
+  - **o mutare cerută exact când autosave lucra lăsa starea pe „saving” și bloca Gata pentru
+    totdeauna;**
+  - bifa numea oamenii de la deschiderea formularului, iar Gata îi invita pe cei din citirea proaspătă:
+    acum doar intersecția;
+  - o invitație personală fără adresă, acum afișată după uid, ar fi permis cereri de prietenie trimise
+    oricui știe un uid: o invitație fără adresă trebuie să numească un grup;
+  - mesajul „verifică-ți emailul” la o invitație doar după uid;
+  - costul pentru APK, scris în `apk-compat.test.ts`.
+- **Confirmată, veche, în afara sarcinii:** cine e doar responsabil pe un eveniment, fără să fie în
+  grupul lui, îl poate muta în grupul lui. Propusă ca sarcină separată.
+- **Infirmate:** „cel care mută află adresa invitatului”. O află doar dacă acesta acceptă: orice
+  invitație acceptată face prietenia, cod vechi, iar aceeași pereche putea ajunge acolo și pe alte căi.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2386), `tsc` și build-ul funcțiilor (`lib` neschimbat),
+`test:rules` (559), `npm run build`, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46). Toate verzi.
+
+**Nepublicat.** Cere regulile, apoi hosting-ul, cu acordul lui Andrei. Clientul nou are nevoie de
+regulile noi: mutarea scrie răspunsuri pe care regula veche le refuză, iar ascultătorul după uid e
+refuzat de regula veche.

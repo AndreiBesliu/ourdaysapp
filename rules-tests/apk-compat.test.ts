@@ -30,6 +30,12 @@
 //   * The in-app notification when a task is assigned to somebody else. The APK writes the row
 //     itself; the rule refuses it. The event is still created — only the notice is lost.
 //
+//   * Moving an event to another calendar (05.10.2026): the rules now carry RSVP answers into a
+//     group only as Andrei decided (the mover's answer into a group; the answers of people in both
+//     between groups), and the APK never writes `rsvps`, so its move is refused whenever the stored
+//     answers would not fit. Unreachable in practice: the APK's calendar is empty (see below), so it
+//     cannot open an event to edit. Accepted with the RSVP fix.
+//
 // Pinning those as `assertFails` would make this file defend the breakage. They are recorded in
 // the DEVLOG and in the report on the rebuild; they are fixed by rebuilding, not by loosening.
 //

@@ -8,6 +8,7 @@ import { useDialog } from '../hooks/useDialog';
 import { format } from 'date-fns';
 import { eventDayAsLocalDate } from '../utils/dayLabel';
 import { dayOf } from '../utils/eventTime';
+import { onlyMyAnswer } from '../utils/eventMove';
 import { t, getDateLocale } from '../utils/i18n';
 import { useThemeStore } from '../store';
 
@@ -128,7 +129,10 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
               sharedWithFamily: false,
               ownerId: auth.currentUser.uid, // make them the owner of the copy
               assigneeIds: [auth.currentUser.uid], // reset assignees to just them
-              assigneeId: auth.currentUser.uid
+              assigneeId: auth.currentUser.uid,
+              // A personal event holds your answer only (Andrei, 05.10.2026): the group's answers
+              // stay with the group.
+              rsvps: onlyMyAnswer(eventData.rsvps, auth.currentUser.uid),
             });
           }
         }

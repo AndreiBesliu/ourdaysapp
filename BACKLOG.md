@@ -105,6 +105,21 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   - **Alte urme ale plecării, mărunte:** invitațiile trimise de el rămân în așteptare (acceptarea dă
     „nu mai e în grup”), linkurile lui nu sunt revocate (doar refuzate la folosire), iar indicatorul
     „scrie…” rămâne. Ștergerea contului le curăță pe toate.
+- **Răspunsurile RSVP (05.10): ce a rămas deliberat.**
+  - **Un eveniment PERSONAL poate fi creat cu răspunsurile oricui.** Copia de la ieșirea dintr-un grup
+    le are în APK, care nu poate fi schimbat. Le citește doar proprietarul și nu pot ajunge într-un
+    grup: mutarea într-un grup păstrează doar răspunsul celui care mută.
+  - **Mutarea între grupuri păstrează doar răspunsurile membrilor comuni** (decizia lui Andrei). Deci
+    oricine poate muta un eveniment al grupului (orice membru poate) poate șterge răspunsurile celorlalți
+    în doi pași: îl mută într-un grup doar al lui și înapoi. Ștergerea directă e refuzată. Poate deja
+    scoate evenimentul din grup, așa că nu e o putere nouă.
+  - **Mutarea din web nu e o tranzacție:** cine răspunde exact între citire și scriere face mutarea să
+    fie refuzată („Evenimentul nu a fost salvat”), nu stricată. Se reface apăsând din nou.
+  - **Invitațiile doar după uid nu apar în APK** (ascultă doar după email).
+  - **Membrii unui grup văd invitațiile acceptate ale grupului**, cu uid-ul și adresa invitatului
+    (`acceptGroupInvite` scrie `toId` pe o invitație adresată pe email). Deci un membru poate afla
+    adresa unui coleg intrat prin invitație pe email. E veche, nu ține de RSVP. De închis împreună cu
+    citirea invitațiilor după grup.
 - **O cheltuială nu mai poate fi corectată după ce un membru pleacă din grup.** `splitIsHonest` cere
   ca toți din `splitAmong` să fie membri, pe documentul REZULTAT — deci orice editare a rândului e
   refuzată cât timp cel plecat e încă pe listă (scoaterea lui schimbă împărțirea). Ștergerea merge.

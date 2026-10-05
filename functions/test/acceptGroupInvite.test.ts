@@ -82,6 +82,19 @@ describe('accepting an invitation', () => {
     expect(await invite()).toMatchObject({ status: 'pending' });
   });
 
+  it('an invitation by uid alone (moving an event invites the people on it) admits that uid, and only it', async () => {
+    // 05.10.2026: the mover does not know the address, so the invitation has none. Whose it is, is the
+    // uid, which cannot be spoofed: no proved address is needed, and nobody else gets in on it.
+    await db.doc('group_invites/i-uid').set({
+      fromId: BOB, fromEmail: 'bob@example.test', toId: DAVE, toEmail: null,
+      groupId: 'g1', groupName: 'Family', status: 'pending', createdAt: new Date().toISOString(),
+    });
+    await expect(accept(EVE, 'i-uid')).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(await accept(DAVE, 'i-uid', { email_verified: false })).toEqual({ status: 'accepted', groupId: 'g1' });
+    expect(await members()).toEqual([ALICE, BOB, DAVE]);
+    expect(await invite('i-uid')).toMatchObject({ status: 'accepted', toId: DAVE });
+  });
+
   it('a bystander cannot accept somebody else’s invitation', async () => {
     await expect(accept(EVE, 'i1')).rejects.toMatchObject({ code: 'permission-denied' });
   });

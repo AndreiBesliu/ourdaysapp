@@ -118,6 +118,53 @@
 
 ---
 
+## 🆕 Răspunsurile RSVP: fiecare doar pentru el; mutarea între calendare (05.10) — NEPUBLICAT (cere regulile, apoi hosting-ul)
+
+**Fapt:** până acum, oricine dintr-un grup putea scrie răspunsul altcuiva la RSVP („Ana: vin”):
+- pe un eveniment la care nu răspunsese încă nimeni;
+- după ce ștergea răspunsurile tuturor;
+- sau chiar la crearea evenimentului.
+
+Reprodus pe emulator. Acum fiecare își scrie doar răspunsul lui: vin, poate sau nu vin. Pe live nu era
+nicio urmă de așa ceva (măsurat).
+
+**Deciziile tale (05.10):**
+- un eveniment personal mutat într-un grup devine al grupului, iar membrii răspund singuri (rămâne doar
+  răspunsul celui care îl mută);
+- mutat dintr-un grup în altul, păstrează răspunsurile membrilor comuni;
+- cel care mută poate invita în noul grup pe cei de pe eveniment (cu răspuns sau responsabili) care nu
+  sunt acolo.
+
+**Ce vezi:**
+- în editare, când schimbi calendarul:
+  - „Mutarea în alt calendar se face când apeși Gata.”;
+  - dacă rămân răspunsuri pe drum, o propoziție care o spune;
+  - bifa „Invită și pe Dan în Friends”.
+- Dan primește invitația ca pe orice invitație în grup: pe calendar, cu Accept și Refuză.
+
+**Deciziile pe care le-am luat eu, cu implicitul pus** (spune-mi dacă vrei altfel):
+- **Autosave nu mai mută evenimentul între calendare.** Mutarea se face doar la Gata, ca să poți decide
+  invitațiile. Cât timp o mutare așteaptă, nici celelalte modificări nu se salvează singure.
+- **Bifa de invitație e nebifată.** Sunt invitați doar oamenii numiți lângă bifă.
+- **Invitațiile acestea au doar uid-ul, fără adresă.** Tu nu afli emailul nimănui. Dan vede numele și
+  adresa ta, ca la orice invitație. Dacă acceptă, deveniți prieteni, tot ca la orice invitație, deci
+  atunci îi vezi și tu adresa.
+- **Copia păstrată la ieșirea dintr-un grup** (din web) păstrează doar răspunsul tău.
+- **APK-ul instalat:** nu vede invitațiile adresate doar după uid. Dacă Dan folosește doar APK-ul,
+  invitația îi apare abia în web. Mutarea din APK a unui eveniment cu răspunsuri care nu se potrivesc
+  noului grup e refuzată; în practică nu se ajunge acolo, fiindcă în APK calendarul e gol din mai.
+
+- [ ] **După publicare (regulile, apoi hosting-ul): proba, pe un al doilea cont** (5 minute)
+      1. Fă un grup B în care al doilea cont NU e. Într-un grup A, comun, fă un eveniment cu RSVP și
+         răspunde din al doilea cont.
+      2. Din contul tău: editează evenimentul, alege B la calendar, bifează „Invită și pe …”, apasă Gata.
+      3. **Cum arată bine:** evenimentul e în B, fără răspunsul celuilalt cont. În al doilea cont apare
+         invitația în B; după Accept, evenimentul apare și la el.
+      - **Ce e greșit:** „Evenimentul nu a fost salvat”, Gata care nu se poate apăsa, sau nicio
+        invitație. Spune-mi.
+
+---
+
 ## 🆕 Cine iese dintr-un grup e scos de pe evenimentele care urmează (05.10) — NEPUBLICAT (cere funcțiile, apoi hosting-ul)
 
 **Fapt:** când cineva iese dintr-un grup, sau îl scoți tu, serverul îl scoate în câteva secunde de pe

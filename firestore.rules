@@ -47,11 +47,58 @@ service cloud.firestore {
     // nothing about it — so any member of the group could overwrite anybody's answer, including
     // accepting on their behalf. A per-person field that anybody may write is not a per-person
     // field.
-    function rsvpsOnlyMine() {
-      return !('rsvps' in request.resource.data)
-        || !('rsvps' in resource.data)
-        || request.resource.data.rsvps.diff(resource.data.rsvps)
-             .affectedKeys().hasOnly([request.auth.uid]);
+    //
+    // The first repair judged only an update whose stored event already HAD a map (05.10.2026, found
+    // while mapping who stays named after leaving a group). On an event with no `rsvps` — every one
+    // the installed APK made, older web ones, an override nobody had answered — and after deleting
+    // the field, any member wrote anybody's answers in one write; and create checked nothing, so an
+    // event could be born with them. Now (Andrei, 05.10.2026):
+    //   * a change is only ever to your OWN answer, a missing or broken stored value counting as
+    //     none, and your answer is one the app writes;
+    //   * a group event is created with your answer at most;
+    //   * a personal event moved into a group keeps your answer only: the group answers for itself;
+    //   * an event moved from one group to another keeps exactly the answers of the people in both.
+    // A personal CREATE stays open: leaving a group copies the event with everyone's answers, on the
+    // web and in the installed APK (whose leave stops at the first refused copy), and only the owner
+    // reads a personal event. Its answers cannot reach a group: the move into one is judged.
+
+    // A stored value that is not a map counts as no answers (a title edit must not trip on it).
+    function rsvpsOf(d) {
+      return d.get('rsvps', null) is map ? d.get('rsvps', null) : {};
+    }
+    // The writer's own answer, if the map holds one, is one the app writes.
+    function myAnswerOk(m) {
+      return !(request.auth.uid in m) || m[request.auth.uid] in ['yes', 'maybe', 'no'];
+    }
+    // What a group may RECEIVE from one person: no answers, or theirs alone.
+    function onlyMyAnswerIn(d) {
+      return !('rsvps' in d)
+        || (d.rsvps is map && d.rsvps.keys().hasOnly([request.auth.uid]) && myAnswerOk(d.rsvps));
+    }
+    function rsvpsOkOnCreate() {
+      return request.resource.data.get('groupId', null) == null || onlyMyAnswerIn(request.resource.data);
+    }
+    // From one group into another: nothing added or changed but your own answer, nothing left from
+    // anybody who is not in the new group, nothing taken from anybody who is.
+    function answersCarriedInto(after, before, members) {
+      return after.diff(before).addedKeys().hasOnly([request.auth.uid])
+        && after.diff(before).changedKeys().hasOnly([request.auth.uid])
+        && after.keys().hasOnly(members)
+        && !after.diff(before).removedKeys().difference([request.auth.uid].toSet()).hasAny(members)
+        && myAnswerOk(after);
+    }
+    function rsvpsOkOnUpdate() {
+      return (resource.data.get('groupId', null) == null && request.resource.data.get('groupId', null) != null)
+        ? onlyMyAnswerIn(request.resource.data)
+        : (resource.data.get('groupId', null) != null && request.resource.data.get('groupId', null) != null
+            && resource.data.groupId != request.resource.data.groupId)
+          ? ((!('rsvps' in request.resource.data) || request.resource.data.rsvps is map)
+              && answersCarriedInto(request.resource.data.get('rsvps', {}), rsvpsOf(resource.data),
+                   get(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.members))
+          : (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['rsvps'])
+              || (request.resource.data.get('rsvps', null) is map
+                  && request.resource.data.rsvps.diff(rsvpsOf(resource.data)).affectedKeys().hasOnly([request.auth.uid])
+                  && myAnswerOk(request.resource.data.rsvps)));
     }
 
     // Is this document addressed to an email address the caller has PROVED is theirs?
@@ -406,9 +453,21 @@ service cloud.firestore {
     //
     // If a uid-ONLY invitation is ever introduced, this needs revisiting together with a listener,
     // because nothing queries `group_invites` by `toId` either.
+    //
+    // Revisited 05.10.2026: moving an event to another group may invite the people on it who are
+    // not in that group (Andrei). The mover does not know their addresses, and must not learn them
+    // (an invitation is readable by its sender and by the group). So those invitations carry a uid
+    // and NO address, and only those are readable by uid: an invitation that also names an address
+    // still needs that address proved, so the gate above is untouched. CalendarHome listens to both.
+    // Plain field reads, NOT `.get(field, default)`: a LIST is judged on a document made of the
+    // query's own filters, where an unfiltered field is absent, so `get('toEmail', null) == null`
+    // held for every invitation and a list by `toId` alone returned ones addressed elsewhere
+    // (measured on the emulator, 05.10.2026). Read plainly, the list must itself filter
+    // `toEmail == null`, which the calendar's does.
     function canAccessInvite() {
       return isSignedIn() && (
         addressedToVerifiedEmail(resource.data.toEmail) ||
+        (resource.data.toEmail == null && resource.data.toId == request.auth.uid) ||
         request.auth.uid == resource.data.fromId ||
         (resource.data.groupId != null && isMemberOfGroup(resource.data.groupId))
       );
@@ -429,6 +488,9 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
         request.resource.data.fromId == request.auth.uid &&
         noServerStamp() &&
+        // An invitation with no address names a GROUP (05.10.2026). Those are now shown to their
+        // recipient by uid, and uids are not secret; a personal one, accepted, makes a friendship.
+        (request.resource.data.get('toEmail', null) != null || request.resource.data.get('groupId', null) != null) &&
         (request.resource.data.groupId == null ||
          isMemberOfGroup(request.resource.data.groupId));
       // Only `status` may change — SEVENTH instance of a rule that decides on `resource` while
@@ -582,7 +644,7 @@ service cloud.firestore {
         ) && (
           !('inviteeId' in request.resource.data) ||
           request.resource.data.inviteeId == null
-        ) && (
+        ) && rsvpsOkOnCreate() && (
           (request.resource.data.groupId != null &&
             isMemberOfGroup(request.resource.data.groupId) &&
             namedAreInGroup(request.resource.data.groupId)) ||
@@ -653,7 +715,7 @@ service cloud.firestore {
         !('inviteeId' in request.resource.data) ||
         request.resource.data.inviteeId == null
       )
-      && rsvpsOnlyMine()
+      && rsvpsOkOnUpdate()
       // What makes a document an override. The server now accepts one only if it also carries the
       // parent's owner and group, but these two keys still must not be WRITTEN onto an existing
       // event by an update. Create stays open on purpose: leaving a group copies them into a

@@ -59,7 +59,9 @@ export default function CalendarHome() {
   const [allEvents, setAllEvents] = useState<any[]>([]);
   // A calendar that could not be READ must not look like a calendar with nothing in it.
   const [eventsLoadError, setEventsLoadError] = useState(false);
-  const [pendingFamilyInvites, setPendingFamilyInvites] = useState<any[]>([]);
+  // Group invitations, from the two listeners below: by proved address, and by uid alone.
+  const [invitesByEmail, setInvitesByEmail] = useState<any[]>([]);
+  const [invitesByUid, setInvitesByUid] = useState<any[]>([]);
   // The address the RULES will accept for an email-addressed invitation, which is the token
   // claim and not the user record. Null while it is unknown or unproved.
   const { email: verifiedEmail } = useVerifiedEmail();
@@ -308,7 +310,7 @@ export default function CalendarHome() {
   // for the whole listener, reported to the health panel on every mount. `VerifyEmailBanner`,
   // rendered further down this screen, is what tells the person why.
   useEffect(() => {
-    if (!auth.currentUser || !verifiedEmail) { setPendingFamilyInvites([]); return; }
+    if (!auth.currentUser || !verifiedEmail) { setInvitesByEmail([]); return; }
     const q = query(
       collection(db, 'group_invites'),
       where('toEmail', '==', verifiedEmail),
@@ -317,10 +319,33 @@ export default function CalendarHome() {
     // Reported rather than swallowed: an invitation you were never shown is indistinguishable
     // from one that was never sent, and the person who invited you has no way to tell either.
     const unsubscribe = liveQuery<any>(q, 'CalendarHome.groupInvites',
-      (docs) => setPendingFamilyInvites(docs),
-      () => setPendingFamilyInvites([]));
+      (docs) => setInvitesByEmail(docs),
+      () => setInvitesByEmail([]));
     return () => unsubscribe();
   }, [verifiedEmail]);
+
+  // And invitations addressed to this account by uid ALONE: moving an event to another group may
+  // invite the people on it, whose addresses the mover does not know (Andrei, 05.10.2026). The rule
+  // reads those only for an invitation with NO address, so the query says `toEmail == null` too:
+  // without it the whole list is refused (rules-tests/email-addressed.test.ts).
+  const myUid = auth.currentUser?.uid;
+  useEffect(() => {
+    if (!myUid) { setInvitesByUid([]); return; }
+    const q = query(
+      collection(db, 'group_invites'),
+      where('toId', '==', myUid),
+      where('toEmail', '==', null),
+      where('status', '==', 'pending')
+    );
+    const unsubscribe = liveQuery<any>(q, 'CalendarHome.groupInvitesByUid',
+      (docs) => setInvitesByUid(docs),
+      () => setInvitesByUid([]));
+    return () => unsubscribe();
+  }, [myUid]);
+  const pendingFamilyInvites = useMemo(() => {
+    const seen = new Set<string>();
+    return [...invitesByEmail, ...invitesByUid].filter((i) => !seen.has(i.id) && !!seen.add(i.id));
+  }, [invitesByEmail, invitesByUid]);
 
   // Count incoming pending friend requests (by uid or email) for the menu badge.
   //
@@ -520,7 +545,8 @@ export default function CalendarHome() {
       // The unverified-email hint is the LIKELIEST cause for an email-addressed invite, not the
       // only one. It used to be the only branch, so every other failure was invisible.
       setInviteError(
-        !auth.currentUser.emailVerified
+        // Only for an invitation addressed to an email: one addressed by uid alone needs no proof.
+        !auth.currentUser.emailVerified && invite.toEmail
           ? t('verifyEmailDesc', language)
           : t('inviteResponseFailed', language),
       );

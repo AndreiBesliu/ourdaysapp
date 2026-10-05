@@ -170,13 +170,22 @@ describe('no listener asks the old way', () => {
     return found;
   }
 
-  const filters = toEmailFilters();
+  // `where('toEmail', '==', null)` is not an address at all: it is the listener for invitations
+  // addressed by uid ALONE (05.10.2026), which the rule reads only for an invitation with no address
+  // — so the query must say so. It is held separately below, not exempted silently.
+  const all = toEmailFilters();
+  const filters = all.filter((f) => f.arg !== 'null');
+  const uidOnly = all.filter((f) => f.arg === 'null');
 
   it('found the listeners, so an empty pass cannot be a silent pass', () => {
     // Three: group invites and the friend badge in CalendarHome, incoming requests in Friends.
     // A parser rather than a regex, because a regex over source is satisfied by a comment — which
     // is how two guards in this repo were green while testing nothing.
     expect(filters.length).toBe(3);
+  });
+
+  it('the one listener for invitations by uid alone sits in CalendarHome, guarded by the uid', () => {
+    expect(uidOnly.map((f) => `${f.file} — guard ${f.guard}`)).toEqual(['screens/CalendarHome.tsx — guard !myUid']);
   });
 
   it('every one of them filters by the verified address', () => {

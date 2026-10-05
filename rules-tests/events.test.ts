@@ -13,7 +13,7 @@
 
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { ALICE, BOB, CAROL, DAVE, G1, G2, anon, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
 
 beforeAll(async () => { await startEnv('demo-ourdays-events'); });
@@ -412,5 +412,165 @@ describe('somebody who left the group, still named on its event (05.10.2026)', (
     await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'left-cleaned'), { rsvps: { [BOB]: 'yes' } }));
     await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'left-cleaned'), { title: 'Bins, Tuesday' }));
     await assertFails(getDoc(doc(as(CAROL), 'events', 'left-cleaned')));
+  });
+});
+
+describe('answers (RSVP): each person answers for themselves (05.10.2026)', () => {
+  // Until today the rule judged only an update whose stored event already had a map. On one with no
+  // `rsvps` — every APK event, older web ones, an override nobody had answered — and after deleting
+  // the field, any member wrote anybody's answers; and create checked nothing. The decisions on moves
+  // are Andrei's: a personal event moved into a group keeps the mover's answer only, and a move
+  // between groups keeps exactly the answers of the people in both.
+  // G4 and G5 share Alice and Bob; Dave is only in G4, Carol only in G5.
+  const G4 = 'group-four', G5 = 'group-five';
+  beforeEach(async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'groups', G4), { name: 'Four', members: [ALICE, BOB, DAVE], ownerId: ALICE });
+      await setDoc(doc(db, 'groups', G5), { name: 'Five', members: [ALICE, BOB, CAROL], ownerId: ALICE });
+      await setDoc(doc(db, 'events', 'rv-none'), { ownerId: ALICE, title: 'Party', groupId: G1 });
+      await setDoc(doc(db, 'events', 'rv-some'), { ownerId: ALICE, title: 'Party', groupId: G1, rsvps: { [ALICE]: 'yes' } });
+      await setDoc(doc(db, 'events', 'rv-null'), { ownerId: ALICE, title: 'Party', groupId: G1, rsvps: null });
+      await setDoc(doc(db, 'events', 'rv-str'), { ownerId: ALICE, title: 'Party', groupId: G1, rsvps: 'x' });
+      await setDoc(doc(db, 'events', 'rv-list'), { ownerId: ALICE, title: 'Party', groupId: G1, rsvps: [ALICE] });
+      await setDoc(doc(db, 'events', 'rv-g4'), {
+        ownerId: ALICE, title: 'Trip', groupId: G4, rsvps: { [ALICE]: 'yes', [BOB]: 'no', [DAVE]: 'maybe' },
+      });
+      // A copy kept when leaving a group carries everybody's answers; only its owner reads it.
+      await setDoc(doc(db, 'events', 'rv-pers-others'), {
+        ownerId: ALICE, title: 'Copy', groupId: null, rsvps: { [ALICE]: 'yes', [CAROL]: 'no' },
+      });
+      await setDoc(doc(db, 'events', 'rv-pers-mine'), { ownerId: ALICE, title: 'Mine', groupId: null, rsvps: { [ALICE]: 'yes' } });
+      // An occurrence the server made before anybody answered: no `rsvps` at all.
+      await setDoc(doc(db, 'events', 'rv-override'), {
+        ownerId: ALICE, title: 'Walk', groupId: G1, overrideOfParent: 'series-walk', overrideDate: '2026-10-10',
+      });
+    });
+  });
+
+  describe('nobody writes somebody else’s answer', () => {
+    it('not on an event that has no answers yet', async () => {
+      await assertFails(updateDoc(doc(as(BOB), 'events', 'rv-none'), { rsvps: { [ALICE]: 'yes' } }));
+      await assertFails(updateDoc(doc(as(BOB), 'events', 'rv-none'), { rsvps: { [ALICE]: 'no', [BOB]: 'yes' } }));
+      await assertFails(updateDoc(doc(as(BOB), 'events', 'rv-none'), { [`rsvps.${ALICE}`]: 'yes' }));
+      await assertFails(updateDoc(doc(as(BOB), 'events', 'rv-override'), { rsvps: { [CAROL]: 'yes', [BOB]: 'yes' } }));
+    });
+
+    it('not by deleting everybody’s answers, nor by blanking the map', async () => {
+      await assertFails(updateDoc(doc(as(BOB), 'events', 'rv-some'), { rsvps: deleteField() }));
+      await assertFails(updateDoc(doc(as(BOB), 'events', 'rv-some'), { rsvps: {} }));
+      await assertFails(updateDoc(doc(as(BOB), 'events', 'rv-some'), { rsvps: null }));
+      await assertFails(updateDoc(doc(as(BOB), 'events', 'rv-some'), { [`rsvps.${ALICE}`]: deleteField() }));
+    });
+
+    it('not by creating a group event with them', async () => {
+      for (const rsvps of [{ [ALICE]: 'yes' }, { [BOB]: 'yes', [ALICE]: 'no' }, null, 'x', [BOB], { [BOB]: 'banana' }]) {
+        await assertFails(setDoc(doc(as(BOB), 'events', 'new-forged'), { ownerId: BOB, title: 'x', groupId: G1, rsvps }));
+      }
+    });
+
+    it('and your own answer is one the app writes', async () => {
+      await assertFails(updateDoc(doc(as(BOB), 'events', 'rv-some'), { rsvps: { [ALICE]: 'yes', [BOB]: 'banana' } }));
+      await assertFails(updateDoc(doc(as(BOB), 'events', 'rv-some'), { rsvps: { [ALICE]: 'yes', [BOB]: { n: 1 } } }));
+      await assertFails(updateDoc(doc(as(BOB), 'events', 'rv-some'), { [`rsvps.${BOB}`]: true }));
+      await assertFails(updateDoc(doc(as(BOB), 'events', 'rv-none'), { rsvps: 'x' }));
+    });
+
+    it('an assignee of somebody’s personal event answers only for themselves', async () => {
+      await assertSucceeds(updateDoc(doc(as(CAROL), 'events', 'e-assigned'), { rsvps: { [CAROL]: 'yes' } }));
+      await assertFails(updateDoc(doc(as(CAROL), 'events', 'e-assigned'), { rsvps: { [CAROL]: 'yes', [ALICE]: 'yes' } }));
+    });
+  });
+
+  describe('your own answer, as the app writes it, still works', () => {
+    it('the first answer on an event with none, as a whole map or by path', async () => {
+      await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'rv-none'), { rsvps: { [BOB]: 'yes' } }));
+      await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'rv-override'), { rsvps: { [BOB]: 'maybe' } }));
+      await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'rv-none'), { [`rsvps.${ALICE}`]: 'no' }));
+    });
+
+    it('changing it, and taking it back', async () => {
+      for (const a of ['yes', 'maybe', 'no']) {
+        await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'rv-some'), { rsvps: { [ALICE]: 'yes', [BOB]: a } }));
+      }
+      await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'rv-some'), { rsvps: { [ALICE]: 'yes' } }));
+      await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'rv-some'), { [`rsvps.${BOB}`]: 'yes' }));
+      await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'rv-some'), { [`rsvps.${BOB}`]: deleteField() }));
+    });
+
+    it('creating an event with your answer, or with none', async () => {
+      await assertSucceeds(setDoc(doc(as(BOB), 'events', 'new-1'), { ownerId: BOB, title: 'x', groupId: G1, rsvps: { [BOB]: 'yes' } }));
+      await assertSucceeds(setDoc(doc(as(BOB), 'events', 'new-2'), { ownerId: BOB, title: 'x', groupId: G1, rsvps: {} }));
+      await assertSucceeds(setDoc(doc(as(BOB), 'events', 'new-3'), { ownerId: BOB, title: 'x', groupId: G1 }));
+      await assertSucceeds(setDoc(doc(as(BOB), 'events', 'new-4'), { ownerId: BOB, title: 'x', groupId: null, rsvps: {} }));
+    });
+
+    it('a copy kept when leaving a group may carry everybody’s answers: it is personal', async () => {
+      await assertSucceeds(addDoc(collection(as(BOB), 'events'), {
+        ownerId: BOB, title: 'Copy', groupId: null, sharedWithFamily: false, assigneeIds: [BOB], assigneeId: BOB,
+        rsvpEnabled: true, rsvps: { [ALICE]: 'yes', [BOB]: 'no', [CAROL]: 'maybe' },
+        overrideOfParent: 'series-walk', overrideDate: '2026-10-10',
+      }));
+    });
+
+    it('an event whose stored answers are broken is not frozen: edits pass, and it can be repaired', async () => {
+      for (const id of ['rv-null', 'rv-str', 'rv-list']) {
+        await assertSucceeds(updateDoc(doc(as(BOB), 'events', id), { title: 'Party, 8pm' }));
+        await assertSucceeds(updateDoc(doc(as(ALICE), 'events', id), { title: 'Party, 9pm' }));
+      }
+      await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'rv-null'), { rsvps: { [BOB]: 'yes' } }));
+      await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'rv-str'), { rsvps: { [BOB]: 'yes' } }));
+      await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'rv-list'), { rsvps: {} }));
+    });
+
+    it('a personal event’s owner edits it and changes their own answer, whatever else it holds', async () => {
+      await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'rv-pers-others'), { title: 'Copy, renamed' }));
+      await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'rv-pers-others'), { rsvps: { [ALICE]: 'no', [CAROL]: 'no' } }));
+    });
+  });
+
+  describe('moving an event', () => {
+    it('personal into a group: only the mover’s answer goes with it, the group answers for itself', async () => {
+      await assertFails(updateDoc(doc(as(ALICE), 'events', 'rv-pers-others'), { groupId: G1 }));
+      await assertFails(updateDoc(doc(as(ALICE), 'events', 'rv-pers-others'), { groupId: G1, rsvps: { [ALICE]: 'yes', [CAROL]: 'no' } }));
+      await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'rv-pers-others'), { groupId: G1, rsvps: { [ALICE]: 'yes' } }));
+    });
+
+    it('personal into a group with no answers left, or with only the mover’s: as it is', async () => {
+      await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'rv-pers-others'), { groupId: G1, rsvps: deleteField() }));
+      await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'rv-pers-mine'), { groupId: G1 }));
+    });
+
+    it('the detour is closed: make a personal event with somebody’s answer, then move it in', async () => {
+      await assertSucceeds(setDoc(doc(as(BOB), 'events', 'detour'), { ownerId: BOB, title: 'x', groupId: null, rsvps: { [ALICE]: 'yes' } }));
+      await assertFails(updateDoc(doc(as(BOB), 'events', 'detour'), { groupId: G1 }));
+      await assertFails(updateDoc(doc(as(BOB), 'events', 'detour'), { groupId: G1, rsvps: { [ALICE]: 'yes', [BOB]: 'yes' } }));
+    });
+
+    it('and not in one batch either', async () => {
+      const db = as(BOB);
+      const b = writeBatch(db);
+      b.set(doc(db, 'events', 'detour-batch'), { ownerId: BOB, title: 'x', groupId: null, rsvps: { [ALICE]: 'yes' } });
+      b.update(doc(db, 'events', 'detour-batch'), { groupId: G1 });
+      await assertFails(b.commit());
+    });
+
+    it('between groups: the answers of the people in both stay, the rest go', async () => {
+      await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'rv-g4'), { groupId: G5, rsvps: { [ALICE]: 'yes', [BOB]: 'no' } }));
+    });
+
+    it('between groups, refused: an answer kept from outside, one dropped from inside, one changed or added', async () => {
+      await assertFails(updateDoc(doc(as(ALICE), 'events', 'rv-g4'), { groupId: G5 }));
+      await assertFails(updateDoc(doc(as(ALICE), 'events', 'rv-g4'), { groupId: G5, rsvps: { [ALICE]: 'yes' } }));
+      await assertFails(updateDoc(doc(as(ALICE), 'events', 'rv-g4'), { groupId: G5, rsvps: { [ALICE]: 'yes', [BOB]: 'yes' } }));
+      await assertFails(updateDoc(doc(as(ALICE), 'events', 'rv-g4'), { groupId: G5, rsvps: { [ALICE]: 'yes', [BOB]: 'no', [CAROL]: 'yes' } }));
+    });
+
+    it('between groups, the mover may change or take back their own answer on the way', async () => {
+      await assertSucceeds(updateDoc(doc(as(ALICE), 'events', 'rv-g4'), { groupId: G5, rsvps: { [BOB]: 'no' } }));
+    });
+
+    it('out of a group into personal: answers stay as they were', async () => {
+      await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'rv-g4'), { groupId: null }));
+    });
   });
 });

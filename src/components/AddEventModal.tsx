@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, Sparkles, GripVertical, Search, Check } from 'lucide-react';
-import { addDoc, collection, query, where, updateDoc, doc, getDoc } from 'firebase/firestore';
+import { addDoc, collection, query, where, updateDoc, doc, getDoc, getDocs } from 'firebase/firestore';
 import { liveQuery } from '../utils/liveQuery';
 import { mergeAssets, shareFieldsFor } from '../utils/assetSharing';
 import { localZone, timeFieldsFor, timeFieldsKeepingZone, endFieldsFor, spanOf, dayOf, dayPlus, dayOffsetBetween } from '../utils/eventTime';
 import { formSpan, SPAN_MESSAGE_KEY } from '../utils/eventForm';
 import { keepAssignees } from '../utils/eventTargeting';
+import { answersForMove, dropsAnswers, inviteCandidates, moveOf, uidInvite } from '../utils/eventMove';
 import { sharesForAttachments } from '../utils/assetAttach';
 import { groupNameOf } from '../utils/assetSharing';
 // Not imported before: `reportError` here resolved to the DOM global, which takes one argument
@@ -118,6 +119,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [repeat, setRepeat] = useState<RepeatChoice>('none');
   const [editScope, setEditScope] = useState<'this' | 'all' | null>(null);
+  // Moving an event between groups may invite the people on it who are not in the new one: the
+  // mover decides, here (Andrei, 05.10.2026). Off until ticked, and off again on another calendar.
+  const [inviteOnMove, setInviteOnMove] = useState(false);
   // Who is deliberately left OUT. The field used to be `visibleTo` — who may see it,
   // snapshotted when the event was written — and an allow-list cannot tell "excluded" from
   // "was not here yet", so it aged into a lie whenever somebody joined. See eventScope.ts.
@@ -493,6 +497,15 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       // mint an override per typing pause and litter the parent's exception list. Saving is left
       // to handleSubmit, which already asks whether you mean this one or all of them.
       if (editEvent.isRecurringInstance) return;
+      // A move to another calendar waits for Save. What it does to the answers on the event, and
+      // whom it invites along, are said beside the calendar and decided there (eventMove.ts); a
+      // draft-keeper that runs a second after you touch the select must not decide them for you.
+      // Its status is cleared too: a 'saving' left by a run the calendar change cancelled kept the
+      // Done button disabled for good (review), and a 'saved' would claim edits that are not.
+      if (moveOf(editEvent.groupId, selectedGroupId !== 'personal' ? selectedGroupId : null) !== 'none') {
+        setAutoSaveStatus(null);
+        return;
+      }
       
       setAutoSaveStatus('saving');
       const timeoutId = setTimeout(async () => {
@@ -768,6 +781,57 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     ));
   };
 
+  // ── Moving the event to another calendar (eventMove.ts) ─────────────────────────────────────
+  const me = auth.currentUser?.uid || '';
+  const targetGroupId: string | null = selectedGroupId !== 'personal' ? selectedGroupId : null;
+  const membersOf = (gid: unknown): string[] =>
+    (typeof gid === 'string' && gid ? (groups.find(g => g.id === gid)?.members || []) : []);
+  // An occurrence edited as "only this one" keeps its series' calendar (the server writes it), so
+  // only an event or a whole series moves here; an occurrence already stored as an override opens as
+  // an event of its own and moves alone, as it always did.
+  const pendingMove = editEvent && !(occurrenceEdit && editScope !== 'all')
+    ? moveOf(editEvent.groupId, targetGroupId)
+    : 'none';
+  const moveInvitees = editEvent && pendingMove === 'across'
+    ? inviteCandidates(editEvent, membersOf(editEvent.groupId), membersOf(targetGroupId), me)
+    : [];
+  /** What the move writes with it, and whom it invites, judged on the event as it is NOW. */
+  const planMove = (cur: Record<string, any>) => {
+    const move = moveOf(cur.groupId, targetGroupId);
+    const answers = answersForMove(cur.rsvps, move, me, membersOf(targetGroupId));
+    return {
+      fields: answers ? { rsvps: answers } : {},
+      // Only people the tick NAMED: somebody who answered or was assigned after the form opened was
+      // not shown, so is not invited on its say-so (review). And only those still on the event now.
+      invitees: move === 'across' && inviteOnMove
+        ? inviteCandidates(cur, membersOf(cur.groupId), membersOf(targetGroupId), me).filter((u) => moveInvitees.includes(u))
+        : [],
+    };
+  };
+  /**
+   * Invitations by uid alone (uidInvite), skipping anybody this person already invited to that group
+   * and not yet answered. The event has moved by now: a failure here is told, not undone.
+   */
+  const inviteAlong = async (invitees: string[]) => {
+    if (!invitees.length || !targetGroupId || !auth.currentUser) return;
+    try {
+      const pending = await getDocs(query(
+        collection(db, 'group_invites'),
+        where('fromId', '==', me), where('groupId', '==', targetGroupId), where('status', '==', 'pending'),
+      ));
+      const already = new Set(pending.docs.map(d => d.data().toId));
+      const groupName = groupNameOf(groups || [], targetGroupId) || '';
+      for (const uid of invitees) {
+        if (already.has(uid)) continue;
+        await addDoc(collection(db, 'group_invites'),
+          uidInvite(me, auth.currentUser.email?.toLowerCase() || null, uid, targetGroupId, groupName, new Date().toISOString()));
+      }
+    } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'AddEventModal.inviteAlong' });
+      alert(t('moveInviteFailed', language));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth.currentUser || !selectedDate) return;
@@ -908,14 +972,22 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             const nextStart = shiftedSeriesStart(
               parentSnap.data()?.date, editEvent.recurrenceDate, eventDate, parentSnap.data()?.recurrenceRule,
             );
+            const move = planMove(parentSnap.data() || {});
             await updateDoc(parentRef, {
               ...baseEventData,
               ...(nextStart ? { date: nextStart } : {}),
+              ...move.fields,
             });
+            await inviteAlong(move.invitees);
           }
         } else {
-          // Normal (non-recurring) edit
-          await updateDoc(doc(db, 'events', editEvent.id), { ...baseEventData, date: new Date(eventDate).toISOString() });
+          // Normal (non-recurring) edit. A move is planned on the event as it is now, not as this
+          // form loaded it: an answer given meanwhile by somebody in the new group must not be lost
+          // (the rule would refuse that write anyway).
+          const ref = doc(db, 'events', editEvent.id);
+          const move = pendingMove !== 'none' ? planMove((await getDoc(ref)).data() || {}) : { fields: {}, invitees: [] };
+          await updateDoc(ref, { ...baseEventData, date: new Date(eventDate).toISOString(), ...move.fields });
+          await inviteAlong(move.invitees);
         }
         await shareAttachedCards(uploadedChecklistItems);
         onClose();
@@ -1553,6 +1625,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                     : (groups.find(g => g.id === next)?.members || []);
                   const uid = auth.currentUser?.uid || '';
                   setSelectedGroupId(next);
+                  setInviteOnMove(false);
                   setAssigneeIds(prev => keepAssignees(members, uid, prev));
                   // Exclusions do not travel: somebody left out of the old group is a
                   // stranger to the new one, not a decision about it.
@@ -1565,6 +1638,24 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                   <option key={g.id} value={g.id}>{t('groupCalendar', language).replace('{name}', g.name)}</option>
                 ))}
               </select>
+              {editEvent && pendingMove !== 'none' && (
+                <div className="flex flex-col gap-1.5 text-xs text-zinc-600 dark:text-zinc-400" data-testid="move-note">
+                  <p>{t('moveOnSave', language).replace('{button}', t('done', language))}</p>
+                  {dropsAnswers(editEvent.rsvps, pendingMove, me, membersOf(targetGroupId)) && (
+                    <p>{pendingMove === 'in'
+                      ? t('moveAnswersIn', language)
+                      : t('moveAnswersAcross', language).replace('{group}', groupNameOf(groups || [], targetGroupId) || t('group', language))}</p>
+                  )}
+                  {moveInvitees.length > 0 && (
+                    <label className="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                      <input type="checkbox" className="mt-0.5" checked={inviteOnMove} onChange={(e) => setInviteOnMove(e.target.checked)} />
+                      <span>{t('moveInviteThem', language)
+                        .replace('{names}', moveInvitees.map(id => userMap[id]?.name || userMap[id]?.email?.split('@')[0] || t('memberFallback', language)).join(', '))
+                        .replace('{group}', groupNameOf(groups || [], targetGroupId) || t('group', language))}</span>
+                    </label>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col gap-2 border border-zinc-200 dark:border-zinc-700 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800/30">
