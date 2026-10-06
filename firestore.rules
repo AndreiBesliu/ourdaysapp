@@ -780,11 +780,25 @@ service cloud.firestore {
       // Warlord challenges are created ONLY by the createWarlordChallenge callable
       // (Admin SDK) so the challenger's army can be stashed in the Admin-only
       // warlordDeploys doc, out of the opponent's sight until they commit. A client
-      // may still create every other (arcade) game type directly.
+      // creates the arcade's games directly, and nothing else.
       allow create: if isSignedIn() &&
         request.resource.data.createdBy == request.auth.uid &&
-        request.resource.data.gameType != 'warlord-battle' &&
+        // The arcade's four games (ARCADE_GAME_TYPES in src/utils/gameSession.ts; the web offers
+        // all four, the installed APK tic-tac-toe and rummy-45). Until 06.10.2026 the only check
+        // was `!= 'warlord-battle'`, and the server turned `gameType` into the title of the push
+        // sent to every other member: a member could put any words, at any length, on the lock
+        // screens of the whole group — or a number, on which the calendar's game banner crashed.
+        // Measured on live: 18 games, all four kinds, nothing else. Create only: `update` pins
+        // `gameType` below, so a game made before this stays playable whatever it holds.
+        request.resource.data.gameType in ['tic-tac-toe', 'connect-4', 'rummy-45', 'memory-match'] &&
         isMemberOfGroup(request.resource.data.groupId) &&
+        // `state` is a map and its `playerIds`, where there is one, a list: the calendar's banner
+        // in the installed APK runs `state.playerIds.map` on every rummy game of the day, so any
+        // other value crashed the calendar for everybody in the group looking at that day. Judged
+        // on the resulting document; measured on live 06.10.2026: 18 games, every `state` a map,
+        // `playerIds` a list on all six that have one.
+        request.resource.data.get('state', {}) is map &&
+        request.resource.data.get('state', {}).get('playerIds', []) is list &&
         // `players` is the Warlord participant list, and the read rule above grants on it to
         // whoever it names — group or no group. Arcade seats live in `state.players`; no arcade
         // client (web or APK) has ever written the top-level key. Until 25.09.2026 nothing enforced
@@ -814,6 +828,9 @@ service cloud.firestore {
         request.resource.data.createdBy == resource.data.createdBy &&
         request.resource.data.gameType == resource.data.gameType &&
         request.resource.data.groupId == resource.data.groupId &&
+        // The same shape of `state` as at creation (see there).
+        request.resource.data.get('state', {}) is map &&
+        request.resource.data.get('state', {}).get('playerIds', []) is list &&
         // Nor may `players` be ADDED or CHANGED (see create). Judged on the DIFF, not on the
         // resulting document: a game that already carries the key must stay playable, and taking
         // the key away removes a reader, which is allowed.

@@ -17,7 +17,12 @@ import {
   addDoc, collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where,
 } from 'firebase/firestore';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ALICE, BOB, CAROL, DAVE, G1, G2, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
+import { ARCADE_GAME_TYPES } from '../src/utils/gameSession';
+import { buildMemoryBoard } from '../src/components/games/memoryThemes';
+import { finalizeGameUpdate } from '../src/components/games/gameResult';
 
 beforeAll(async () => { await startEnv('demo-ourdays-games'); });
 afterAll(stopEnv);
@@ -261,5 +266,122 @@ describe('the last two server-only collections', () => {
   it('and the error-group state an admin console writes', async () => {
     await assertFails(getDoc(doc(as(ALICE), 'errorGroups', 'grp1')));
     await assertFails(updateDoc(doc(as(ALICE), 'errorGroups', 'grp1'), { status: 'fixed' }));
+  });
+});
+
+// ── 06.10.2026: a game is one of the arcade's games ─────────────────────────────────────────
+// The server made `gameType` the title of the push sent to every other member of the group, and
+// the only check at creation was `!= 'warlord-battle'`: any member could put any words, at any
+// length, on the lock screens of the whole group — or a number, on which the calendar's game
+// banner crashed for everybody looking at that day.
+
+/** The web's `state` for each game, as GamesHubModal's handleCreateGame builds it. */
+const WEB_STATE: Record<string, (uid: string) => Record<string, unknown>> = {
+  'tic-tac-toe': (uid) => ({
+    board: Array(9).fill(null), xIsNext: true, players: { X: uid, O: null }, scores: { X: 0, O: 0 },
+  }),
+  'connect-4': (uid) => ({
+    board: Object.fromEntries(Array.from({ length: 6 }, (_, r) => [String(r), Array(7).fill(null)])),
+    p1IsNext: true, players: { P1: uid, P2: null }, scores: { P1: 0, P2: 0 }, winningCells: null,
+  }),
+  'rummy-45': (uid) => ({
+    players: { [uid]: { uid, hand: [], hasMelded: false, score: 0 } }, playerIds: [uid],
+    turnIndex: 0, turnPhase: 'draw', deck: [], discardPile: [], melds: [], round: 1,
+  }),
+  'memory-match': (uid) => ({
+    board: buildMemoryBoard('animals'), theme: 'animals', flippedIndices: [], p1IsNext: true,
+    players: { P1: uid, P2: null }, scores: { P1: 0, P2: 0 }, roundsWon: { P1: 0, P2: 0 }, moves: 0, streak: 0,
+  }),
+};
+
+/** The web's create, field for field (GamesHubModal.tsx, handleCreateGame). */
+const WEB_GAME = (uid: string, gameType: unknown) => ({
+  groupId: G1, date: '2026-10-06', gameType, status: 'waiting',
+  createdAt: serverTimestamp(), lastMoveAt: serverTimestamp(), createdBy: uid,
+  // Own keys only: `'constructor' in WEB_STATE` is true of every object.
+  state: WEB_STATE[typeof gameType === 'string' && Object.hasOwn(WEB_STATE, gameType) ? gameType : 'tic-tac-toe'](uid),
+  winner: null,
+});
+
+describe('a game is one of the arcade\u2019s games', () => {
+  it('the rule names exactly the list the app keeps', () => {
+    // Both directions: a game the web offers but the rule lacks cannot be created; a value the
+    // rule takes but the server cannot name is created without a push.
+    const rules = readFileSync(join(__dirname, '..', 'firestore.rules'), 'utf8');
+    const m = rules.match(/request\.resource\.data\.gameType in \[([^\]]*)\]/);
+    expect(m, 'the create rule lists the game types').not.toBeNull();
+    const listed = [...m![1].matchAll(/'([^']*)'/g)].map((x) => x[1]);
+    expect([...listed].sort()).toEqual([...ARCADE_GAME_TYPES].sort());
+    expect(Object.keys(WEB_STATE).sort()).toEqual([...ARCADE_GAME_TYPES].sort());
+  });
+
+  it.each([...ARCADE_GAME_TYPES])('the web creates %s', async (gameType) => {
+    await assertSucceeds(addDoc(collection(as(BOB), 'games'), WEB_GAME(BOB, gameType)));
+  });
+
+  it('anything else is refused, whatever it is', async () => {
+    const refused: unknown[] = [
+      'Free pizza \u2014 tap here', 'Tic Tac Toe', 'tictactoe', 'Tic-Tac-Toe', 'tic-tac-toe ', '', 'x'.repeat(5000),
+      'constructor', '__proto__', null, 42, true, {}, ['tic-tac-toe'],
+    ];
+    for (const gameType of refused) {
+      await assertFails(addDoc(collection(as(BOB), 'games'), WEB_GAME(BOB, gameType)));
+    }
+    const { gameType: _gone, ...noType } = WEB_GAME(BOB, 'tic-tac-toe');
+    await assertFails(addDoc(collection(as(BOB), 'games'), noType));
+    // The same payload, the same person, a real game: it is the type that is refused.
+    await assertSucceeds(addDoc(collection(as(BOB), 'games'), WEB_GAME(BOB, 'tic-tac-toe')));
+  });
+
+  it('a Warlord battle is still the server\u2019s alone, with or without its players', async () => {
+    await assertFails(addDoc(collection(as(BOB), 'games'), WEB_GAME(BOB, 'warlord-battle')));
+  });
+
+  it('once made, a game keeps its type', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'games', 'g-ttt'), { ...WEB_GAME(ALICE, 'tic-tac-toe'), createdAt: new Date(), lastMoveAt: new Date() });
+    });
+    const g = doc(as(BOB), 'games', 'g-ttt');
+    await assertFails(updateDoc(g, { gameType: 'rummy-45' }));
+    await assertFails(updateDoc(g, { gameType: 'Free pizza' }));
+    await assertFails(updateDoc(g, { gameType: deleteField() }));
+    await assertSucceeds(updateDoc(g, { 'state.players.O': BOB, status: 'playing' }));
+  });
+
+  it('a game\u2019s state is a map, and a rummy game\u2019s players a list: at creation and on every move', async () => {
+    // The calendar's banner runs `state.playerIds.map` (the installed APK too): anything else
+    // crashed the calendar for the whole group on that day.
+    const rummy = WEB_GAME(BOB, 'rummy-45');
+    for (const state of ['x', 5, ['a'], null]) {
+      await assertFails(addDoc(collection(as(BOB), 'games'), { ...rummy, state }));
+    }
+    for (const playerIds of ['x', 5, { a: BOB }, null]) {
+      await assertFails(addDoc(collection(as(BOB), 'games'), { ...rummy, state: { ...rummy.state, playerIds } }));
+    }
+    const made = await assertSucceeds(addDoc(collection(as(BOB), 'games'), rummy));
+    const g = doc(as(ALICE), 'games', made.id);
+    await assertFails(updateDoc(g, { 'state.playerIds': 'x' }));
+    await assertFails(updateDoc(g, { 'state.playerIds': { 0: ALICE } }));
+    await assertFails(updateDoc(g, { state: 'x' }));
+    // The moves the game really makes.
+    await assertSucceeds(updateDoc(g, { 'state.playerIds': [BOB, ALICE] }));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'games', made.id), {
+      state: { players: {}, playerIds: [BOB, ALICE], turnIndex: 0, turnPhase: 'draw', deck: [], discardPile: [], melds: [] },
+      status: 'playing',
+    }));
+  });
+
+  it('a game made before the rule stays playable, can be ended, and can be deleted', async () => {
+    // `g-arcade` is 'tictactoe', which no client writes. Nothing on live is like either of these
+    // (measured 06.10.2026: 18 games, all four kinds); this is what keeps them working if one is.
+    await seed(async (db) => {
+      await setDoc(doc(db, 'games', 'g-number'), { gameType: 42, createdBy: ALICE, groupId: G1, status: 'playing', state: {} });
+    });
+    for (const id of ['g-arcade', 'g-number']) {
+      const g = doc(as(BOB), 'games', id);
+      await assertSucceeds(updateDoc(g, { 'state.moves': 1 }));
+      await assertSucceeds(updateDoc(g, finalizeGameUpdate({ gameType: id, state: {}, winner: BOB })));
+      await assertSucceeds(deleteDoc(doc(as(ALICE), 'games', id)));
+    }
   });
 });

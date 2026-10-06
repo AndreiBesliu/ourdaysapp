@@ -31,7 +31,11 @@ const admin = require("firebase-admin");
 const firestore_1 = require("firebase-admin/firestore");
 const notifyStrings_1 = require("./notifyStrings");
 Object.defineProperty(exports, "DEFAULT_LANG", { enumerable: true, get: function () { return notifyStrings_1.DEFAULT_LANG; } });
+const pushText_1 = require("./pushText");
+/** The longest title, in the bell AND in the push (pushText.ts says why the push needs one). */
 const CAP = 200;
+/** The longest body, likewise. */
+const BODY_CAP = 500;
 /** Where a tapped push opens. The project is fixed in .firebaserc; there is no runtime lookup for it. */
 const APP_ORIGIN = "https://our-days-2a939.web.app";
 /**
@@ -68,9 +72,7 @@ async function notify(spec) {
     // English line among four Romanian ones.
     const batch = db.batch();
     for (const r of recipients) {
-        batch.set(db.collection("notifications").doc(), Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({ userId: r.uid, createdBy: spec.createdBy, type: spec.type }, (spec.titleText ? {} : { titleKey: spec.titleKey.slice(0, 60) })), (spec.titleParam && !spec.titleText ? { titleParam: spec.titleParam.slice(0, CAP) } : {})), (spec.bodyKey ? { bodyKey: spec.bodyKey.slice(0, 60) } : {})), (spec.param ? { param: spec.param.slice(0, CAP) } : {})), { title: (spec.titleText || (0, notifyStrings_1.renderNotify)(spec.titleKey, r.lang, spec.titleParam)).slice(0, CAP), body: spec.bodyText
-                ? spec.bodyText.slice(0, 500)
-                : spec.bodyKey ? (0, notifyStrings_1.renderNotify)(spec.bodyKey, r.lang, spec.param).slice(0, 500) : "", read: false, createdAt: firestore_1.FieldValue.serverTimestamp() }));
+        batch.set(db.collection("notifications").doc(), Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({ userId: r.uid, createdBy: spec.createdBy, type: spec.type }, (spec.titleText ? {} : { titleKey: spec.titleKey.slice(0, 60) })), (spec.titleParam && !spec.titleText ? { titleParam: (0, pushText_1.clampText)(spec.titleParam, CAP) } : {})), (spec.bodyKey ? { bodyKey: spec.bodyKey.slice(0, 60) } : {})), (spec.param ? { param: (0, pushText_1.clampText)(spec.param, CAP) } : {})), { title: titleFor(spec, r.lang), body: bodyFor(spec, r.lang), read: false, createdAt: firestore_1.FieldValue.serverTimestamp() }));
     }
     await batch.commit();
     if (spec.push === false)
@@ -104,10 +106,7 @@ async function notify(spec) {
         try {
             const res = await admin.messaging().sendEachForMulticast({
                 tokens,
-                notification: {
-                    title: spec.titleText || (0, notifyStrings_1.renderNotify)(spec.titleKey, lang, spec.titleParam),
-                    body: spec.bodyText || (spec.bodyKey ? (0, notifyStrings_1.renderNotify)(spec.bodyKey, lang, spec.param) : ""),
-                },
+                notification: { title: titleFor(spec, lang), body: bodyFor(spec, lang) },
                 // `tag` also rides in data so the page's foreground handler can use the same one.
                 data: Object.assign(Object.assign({}, (spec.data || {})), { tag }),
                 webpush: {
@@ -153,5 +152,15 @@ async function notify(spec) {
         }
     }
     return { rows: recipients.length, pushed, pruned };
+}
+/** The title one reader sees, cut like every title: the same text in the bell and in the push. */
+function titleFor(spec, lang) {
+    return (0, pushText_1.clampText)(spec.titleText || (0, notifyStrings_1.renderNotify)(spec.titleKey, lang, spec.titleParam), CAP);
+}
+/** The body one reader sees, likewise. */
+function bodyFor(spec, lang) {
+    if (spec.bodyText)
+        return (0, pushText_1.clampText)(spec.bodyText, BODY_CAP);
+    return spec.bodyKey ? (0, pushText_1.clampText)((0, notifyStrings_1.renderNotify)(spec.bodyKey, lang, spec.param), BODY_CAP) : "";
 }
 //# sourceMappingURL=notify.js.map

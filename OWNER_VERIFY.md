@@ -118,6 +118,48 @@
 
 ---
 
+## 🆕 Titlul notificării unui joc nu mai e text liber (06.10) — NEPUBLICAT (cere funcțiile, regulile, apoi hosting-ul)
+
+**Fapt:** la crearea unui joc din Arcade, tipul jocului (`gameType`) era text liber, iar serverul îl
+punea în titlul notificării trimise tuturor celorlalți membri ai grupului: „Joc nou: <orice>”. Un
+membru putea deci scrie orice pe ecranele blocate ale grupului, de orice lungime. Un tip care nu era
+text (un număr) făcea bannerul „joc în desfășurare” din calendar să pice pentru toți cei care se uitau
+la ziua aceea.
+
+Reprodus pe emulator. Pe live nu s-a întâmplat: 18 jocuri, toate dintre cele patru (măsurat azi).
+Acum:
+- regula acceptă la creare doar cele patru jocuri;
+- serverul ia numele jocului dintr-o listă fixă, nu din document;
+- numele celui care a pornit jocul (și al celui care scrie în chatul de grup) e pe un rând, de cel
+  mult 40 de caractere;
+- orice notificare e tăiată la 200 de caractere pentru titlu și 500 pentru text, ca rândul din
+  clopoțel, fără să rupă un emoji în două. Până acum doar rândul din clopoțel era tăiat. Un mesaj foarte
+  lung putea face FCM să refuze trimiterea, iar serverul citea refuzul ca „token mort” și ștergea
+  tokenurile tuturor destinatarilor (dedus din cod; FCM nu se poate simula).
+
+Tot în bannerul acela, o listă de jucători care nu era listă (orice membru o putea scrie pe un joc de
+remi) făcea calendarul să pice pentru tot grupul în ziua aceea, și în APK. Acum regula cere ca `state`
+să fie o hartă și `playerIds` o listă (pe live: toate cele 18 jocuri sunt așa), iar bannerul web nu mai
+crede documentul.
+
+**Ce vezi diferit:** bannerul „joc în desfășurare” din calendar scrie acum numele jocului în limba ta,
+ca lista din Arcade (de exemplu „X și 0” în loc de „Tic Tac Toe”). Notificarea unui joc are exact
+textul de până acum.
+
+**Deciziile pe care le-am luat eu, cu implicitul pus** (spune-mi dacă vrei altfel):
+- **Numele jocului din notificare rămâne în engleză, în toate limbile**, exact ca azi. Traducerea lui
+  ar fi arătat cheia goală în clopoțelul versiunilor vechi.
+- **Un joc cu tip necunoscut nu e anunțat deloc.** Serverul scrie o eroare în Health, cu tipul și
+  lungimea, fără textul în sine.
+
+- [ ] **După publicare, cu telefonul cuiva din grup lângă tine:** pornește un X și 0.
+      - **Cum arată bine:** notificarea lui spune „Joc nou: Tic Tac Toe” / „Pornit de <numele tău>”,
+        ca până acum, iar bannerul din calendar scrie „X și 0”.
+      - **Ce e greșit:** nicio notificare, sau „Joc nou: tic-tac-toe”. Asta înseamnă că funcțiile nu
+        s-au publicat; spune-mi.
+
+---
+
 ## 🆕 Un grup șters nu mai poate fi recreat sub același id (06.10) — NEPUBLICAT (cere funcțiile, completarea, apoi regulile)
 
 **Fapt:** oricine știa id-ul unui grup șters îl putea crea din nou, ca singur membru. Poate fi un fost

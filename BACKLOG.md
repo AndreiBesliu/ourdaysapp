@@ -65,10 +65,36 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Storage, apartenența la conversație:** oricine e logat poate încărca un fișier NOU, pe numele
   lui, în folderul oricărei conversații. Închiderea cere regulile cross-service (un grant IAM și o
   citire facturată pe cerere), pe care `storage.rules` le refuză deliberat. Decizia lui Andrei.
-- **Arcade, în interiorul grupului:** `gameType` e text liber la creare și devine titlul push-ului
-  pentru ceilalți membri, deci un membru poate pune orice text pe ecranele blocate ale grupului.
-  Mutările din APK nu scriu `lastMoveAt`, deci un joc jucat doar pe telefon poate fi închis de
-  expirarea de 24h în timp ce e jucat (dedus din cod, nemăsurat).
+- **Arcade, în interiorul grupului:** mutările din APK nu scriu `lastMoveAt`, deci un joc jucat doar
+  pe telefon poate fi închis de expirarea de 24h în timp ce e jucat (dedus din cod, nemăsurat).
+  (Titlul push-ului din `gameType` e închis din 06.10.)
+- **Alte câmpuri ale unui joc, scrise de un membru, pot strica ecranul celorlalți** (recenzia din
+  06.10, citit în cod, nereprodus). Regulile nu verifică `state` decât ca formă de bază (o hartă, iar
+  `playerIds` o listă, din 06.10) și nici `createdAt`. Toate trei cer un membru rău-intenționat al
+  grupului:
+  - **un joc deschis cu date stricate** (de exemplu `state.board` care nu e listă) duce toată aplicația
+    pe ecranul de eroare la apăsarea „Join”. Reîncărcarea o repară. Remediul: o graniță de eroare în
+    jurul panoului de joc din `GamesHubModal.tsx`, cu „datele jocului sunt stricate” și înapoi;
+  - **un `createdAt` care nu e dată** face sortarea listei din Arcade să arunce la fiecare actualizare,
+    iar lista zilei rămâne goală sau veche pentru toți, fără mesaj. Remediul: sortarea prin `activityMs`
+    din `gameSession.ts`;
+  - **un jucător numit `__proto__`** într-un joc terminat strică numerele clasamentului (și „NaNW” în
+    PvP) pentru cine deschide clasamentul, până la reîncărcare. Remediul: `Object.create(null)` pentru
+    harta clasamentului.
+  Implicit: toate trei într-o felie, doar în client. APK-ul rămâne expus la primul.
+- **Un joc nou trimite o notificare tuturor membrilor, fără nicio limită.** Un membru poate crea și
+  șterge jocuri la nesfârșit, iar fiecare trimite un push grupului (rândurile din clopoțel rămân).
+  Cererile de prietenie și provocările Warlord au cotă zilnică (`notif_usage`); `onGameCreated` nu are.
+  De ales limita: implicit aceeași cotă zilnică. Decizia lui Andrei.
+- **`notifyUsers` scrie orice text în clopoțelul altui membru** (fără push): titlu până la 200 de
+  caractere, text până la 500 și orice cheie de titlu, cu cota zilnică de notificări. APK-ul afișează
+  titlul scris. Clientul îl folosește pentru sarcinile atribuite. Închiderea cere o listă de chei și
+  textul compus pe server. De decis dacă merită.
+- **Serverul citește orice `invalid-argument` de la FCM ca token mort** și îl șterge
+  (`functions/src/notify.ts`). Pentru un token chiar invalid e corect. Pentru un mesaj refuzat întreg
+  (prea mare, câmp greșit) ar șterge tokenurile tuturor destinatarilor. Din 06.10, textul membrilor
+  nu mai poate face un mesaj prea mare (tăiat la 200/500). Rămâne ca risc pentru un apel nou care ar
+  trimite un câmp greșit.
 - **Rândurile de eroare scrise de server n-au plafon zilnic** (cele de client au 200 pe cont). TTL-ul
   limitează cât trăiesc, nu câte sunt. (Că se pierdeau pe căile de eșec e reparat din 25.09: toate
   sunt așteptate cu `await`.)

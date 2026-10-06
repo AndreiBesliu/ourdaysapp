@@ -18,6 +18,34 @@ export const IDLE_MS = 24 * 60 * 60 * 1000;
 export const SERVER_OWNED_GAME = 'warlord-battle';
 
 /**
+ * The arcade's games: the only `gameType` a client may create (firestore.rules, `games` create).
+ * The web offers all four, the installed APK the first and the third. Warlord battles are made by
+ * the server alone and are not in the list.
+ */
+export const ARCADE_GAME_TYPES = ['tic-tac-toe', 'connect-4', 'rummy-45', 'memory-match'] as const;
+
+/**
+ * What a push calls each game, after "New game: ". English in every language, and exactly what the
+ * server wrote before 06.10.2026 — when it made the name from the raw `gameType`, which was free
+ * text at creation: any member could put any words on the lock screens of the whole group.
+ */
+const GAME_TITLES: Readonly<Record<string, string>> = {
+  'tic-tac-toe': 'Tic Tac Toe',
+  'connect-4': 'Connect 4',
+  'rummy-45': 'Rummy 45',
+  'memory-match': 'Memory Match',
+  [SERVER_OWNED_GAME]: 'Warlord Battle',
+};
+
+/** The game's name for a push, or null for anything that is not one of the games above. */
+export function gameTitleOf(gameType: unknown): string | null {
+  // Own keys only: `GAME_TITLES['constructor']` is a function inherited from Object.
+  return typeof gameType === 'string' && Object.prototype.hasOwnProperty.call(GAME_TITLES, gameType)
+    ? GAME_TITLES[gameType]
+    : null;
+}
+
+/**
  * The moment moves started being timestamped.
  *
  * Every game made before this has no `lastMoveAt`, so the only date on it is `createdAt` — and

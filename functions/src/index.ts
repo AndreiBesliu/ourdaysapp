@@ -30,6 +30,8 @@ import { readFriendship, authIdentityOf } from "./friendship";
 import { senderStamp, stampedGroupName, trustedEmail } from "./senderIdentity";
 import { overrideRsvps } from "./overrideRsvps";
 import { notify } from "./notify";
+import { pushName } from "./pushText";
+import { gameTitleOf } from "./gameSession";
 import { groupErrors, fingerprint } from "./errorGrouping";
 import { fixFor, fixVerdict } from "./errorFixes";
 import { jobHealthChecks, jobsNeedingMissingStamp, type JobCheck } from "./jobHealthCore";
@@ -478,7 +480,7 @@ export const onMessageCreated = onDocumentCreated("groups/{groupId}/messages/{me
     if (targetUserIds.length === 0) return;
 
     const senderDoc = await admin.firestore().doc(`users/${senderId}`).get();
-    const senderName = senderDoc.data()?.name || senderDoc.data()?.email?.split('@')[0] || "Someone";
+    const senderName = pushName(senderDoc.data());
 
     // The conversation list sorts groups and direct chats together, so a group needs the same
     // preview a chat keeps. Server-written for the same reason: a client-writable preview is a
@@ -658,9 +660,26 @@ export const onGameCreated = onDocumentCreated("games/{gameId}", async (event) =
   const gameData = snapshot.data();
   const creatorId = gameData.createdBy;
   const groupId = gameData.groupId;
-  const gameType = gameData.gameType || "a game";
 
   if (!groupId || !creatorId) return;
+
+  // The game's name comes from a fixed list, never from the document. Until 06.10.2026 it was
+  // `gameType` title-cased, and `gameType` was free text at creation: any member could put any
+  // words on the lock screens of the whole group, at any length. The rule now takes only the
+  // arcade's four; this is for whatever reaches the collection another way (the console, or a
+  // client while the old rule is still the published one). It is not announced, and the log says
+  // what it was without repeating it.
+  const gameTitle = gameTitleOf(gameData.gameType);
+  if (!gameTitle) {
+    const raw = gameData.gameType;
+    await logServerError(
+      `game ${snapshot.id} not announced: its type is not one of the games ` +
+        `(${typeof raw}${typeof raw === "string" ? `, ${raw.length} characters` : ""})`,
+      "games:onGameCreated",
+      { uid: typeof creatorId === "string" ? creatorId : null },
+    );
+    return;
+  }
 
   try {
     const groupDoc = await admin.firestore().doc(`groups/${groupId}`).get();
@@ -674,9 +693,7 @@ export const onGameCreated = onDocumentCreated("games/{gameId}", async (event) =
     if (targetUserIds.length === 0) return;
 
     const creatorDoc = await admin.firestore().doc(`users/${creatorId}`).get();
-    const creatorName = creatorDoc.data()?.name || creatorDoc.data()?.email?.split('@')[0] || "Someone";
-
-    const readableGameType = gameType.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+    const creatorName = pushName(creatorDoc.data());
 
     // The game's NAME is a proper noun and stays as it is; the sentence around it is translated.
     // The group name is dropped from the title deliberately — the renderer appends one parameter
@@ -686,13 +703,15 @@ export const onGameCreated = onDocumentCreated("games/{gameId}", async (event) =
       createdBy: creatorId,
       type: "game",
       titleKey: "notifNewGame",
-      titleParam: readableGameType,
+      titleParam: gameTitle,
       bodyKey: "notifNewGameBody",
       param: creatorName,
       data: { route: "/", groupId: String(groupId || "") },
     });
   } catch (error) {
-    console.error("Error sending Game Invite FCM:", error);
+    await logServerError(`game announcement failed: ${String(error)}`, "games:onGameCreated", {
+      uid: typeof creatorId === "string" ? creatorId : null,
+    });
   }
 });
 

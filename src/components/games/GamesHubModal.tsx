@@ -16,6 +16,7 @@ import { t, getDateLocale } from '../../utils/i18n';
 import { getSessionWinner, finalizeGameUpdate } from './gameResult';
 import { useDialog } from '../../hooks/useDialog';
 import { writeGame } from './gameWrite';
+import { gameTypeName, ownEntry } from './gameTypeName';
 
 
 interface GamesHubModalProps {
@@ -311,18 +312,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
   const { language } = useThemeStore();
   const navigate = useNavigate();
   const gameRules = getGameRules(language);
-
-  // Localized display name for a game type id (used in the active/past games list)
-  const gameTypeName = (gt: string): string => {
-    switch (gt) {
-      case 'tic-tac-toe': return t('gameTicTacToe', language);
-      case 'connect-4': return t('gameConnect4', language);
-      case 'rummy-45': return t('gameRummy45', language);
-      case 'memory-match': return t('gameMemoryMatch', language);
-      case 'warlord-battle': return 'Warlord Battle';
-      default: return gt.replace(/-/g, ' ');
-    }
-  };
+  const shownRules = ownEntry(gameRules, showRulesFor);
 
   // Daily Games Query
   useEffect(() => {
@@ -503,8 +493,8 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
     label: playingGameId ? t('playingGame', language) : `${groupName} ${t('arcade', language)}`,
   });
 
-  const rulesDialog = useDialog(Boolean(showRulesFor && gameRules[showRulesFor]), () => setShowRulesFor(null), {
-    label: showRulesFor && gameRules[showRulesFor] ? gameRules[showRulesFor].title : undefined,
+  const rulesDialog = useDialog(Boolean(shownRules), () => setShowRulesFor(null), {
+    label: shownRules ? shownRules.title : undefined,
   });
 
   const themeDialog = useDialog(showThemePicker, () => setShowThemePicker(false), {
@@ -690,7 +680,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                               </div>
                               <div>
                                 <p className="font-bold text-zinc-900 dark:text-zinc-100">
-                                  {gameTypeName(game.gameType)}
+                                  {gameTypeName(game.gameType, language)}
                                 </p>
                                 <p className="text-xs text-zinc-500 flex items-center gap-1">
                                   {/* An abandoned session says so instead of announcing a
@@ -811,13 +801,13 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
       </div>
 
       {/* Rules Modal Overlay */}
-      {showRulesFor && gameRules[showRulesFor] && (
+      {shownRules && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200" onClick={() => setShowRulesFor(null)}>
           <div ref={rulesDialog.dialogRef} {...rulesDialog.dialogProps} className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-md shadow-2xl flex flex-col border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-zinc-100 dark:border-zinc-800 flex justify-between items-center bg-blue-50 dark:bg-blue-900/20 rounded-t-2xl">
               <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
                 <Info className="w-5 h-5" />
-                <h3 className="font-bold text-lg">{gameRules[showRulesFor].title}</h3>
+                <h3 className="font-bold text-lg">{shownRules.title}</h3>
               </div>
               <button onClick={() => setShowRulesFor(null)} aria-label={t('closeAction', language)} className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-white dark:bg-zinc-800 rounded-full transition-colors shadow-sm">
                 <X className="w-4 h-4" />
@@ -825,7 +815,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
             </div>
             <div className="p-6">
               <ul className="space-y-3">
-                {gameRules[showRulesFor].rules.map((rule, idx) => (
+                {shownRules.rules.map((rule, idx) => (
                   <li key={idx} className="flex gap-3 text-sm text-zinc-600 dark:text-zinc-300">
                     <span className="shrink-0 w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs mt-0.5">{idx + 1}</span>
                     <span>{rule}</span>

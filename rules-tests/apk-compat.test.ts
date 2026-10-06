@@ -199,6 +199,19 @@ describe('what the installed APK writes into a game', () => {
     });
   });
 
+  it('a game the APK made itself: another member joins it, and its creator deletes it', async () => {
+    // The create above and the moves below, on one game a client made rather than one seeded: the
+    // list of game types at creation (06.10.2026) and the pins on every move meet here.
+    const made = await assertSucceeds(addDoc(collection(as(ALICE), 'games'), {
+      groupId: G1, date: '2026-10-06', gameType: 'tic-tac-toe', status: 'waiting',
+      createdAt: serverTimestamp(), createdBy: ALICE,
+      state: { board: Array(9).fill(null), xIsNext: true, players: { X: ALICE, O: null }, scores: { X: 0, O: 0 } },
+      winner: null,
+    }));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'games', made.id), { 'state.players.O': BOB, status: 'playing' }));
+    await assertSucceeds(deleteDoc(doc(as(ALICE), 'games', made.id)));
+  });
+
   it('tic-tac-toe: join, move, reset', async () => {
     const g = doc(as(BOB), 'games', 'apk-ttt');
     await assertSucceeds(updateDoc(g, { 'state.players.O': BOB, status: 'playing' }));

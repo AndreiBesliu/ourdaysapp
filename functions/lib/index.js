@@ -29,6 +29,8 @@ const friendship_1 = require("./friendship");
 const senderIdentity_1 = require("./senderIdentity");
 const overrideRsvps_1 = require("./overrideRsvps");
 const notify_1 = require("./notify");
+const pushText_1 = require("./pushText");
+const gameSession_1 = require("./gameSession");
 const errorGrouping_1 = require("./errorGrouping");
 const errorFixes_1 = require("./errorFixes");
 const jobHealthCore_1 = require("./jobHealthCore");
@@ -415,7 +417,6 @@ exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)(Object.assign(
     }
 });
 exports.onMessageCreated = (0, firestore_1.onDocumentCreated)("groups/{groupId}/messages/{messageId}", async (event) => {
-    var _a, _b, _c;
     const snapshot = event.data;
     if (!snapshot)
         return;
@@ -434,7 +435,7 @@ exports.onMessageCreated = (0, firestore_1.onDocumentCreated)("groups/{groupId}/
         if (targetUserIds.length === 0)
             return;
         const senderDoc = await admin.firestore().doc(`users/${senderId}`).get();
-        const senderName = ((_a = senderDoc.data()) === null || _a === void 0 ? void 0 : _a.name) || ((_c = (_b = senderDoc.data()) === null || _b === void 0 ? void 0 : _b.email) === null || _c === void 0 ? void 0 : _c.split('@')[0]) || "Someone";
+        const senderName = (0, pushText_1.pushName)(senderDoc.data());
         // The conversation list sorts groups and direct chats together, so a group needs the same
         // preview a chat keeps. Server-written for the same reason: a client-writable preview is a
         // way to put words into somebody else's list.
@@ -598,16 +599,27 @@ exports.onGroupInviteCreated = (0, firestore_1.onDocumentCreated)("group_invites
     }
 });
 exports.onGameCreated = (0, firestore_1.onDocumentCreated)("games/{gameId}", async (event) => {
-    var _a, _b, _c;
     const snapshot = event.data;
     if (!snapshot)
         return;
     const gameData = snapshot.data();
     const creatorId = gameData.createdBy;
     const groupId = gameData.groupId;
-    const gameType = gameData.gameType || "a game";
     if (!groupId || !creatorId)
         return;
+    // The game's name comes from a fixed list, never from the document. Until 06.10.2026 it was
+    // `gameType` title-cased, and `gameType` was free text at creation: any member could put any
+    // words on the lock screens of the whole group, at any length. The rule now takes only the
+    // arcade's four; this is for whatever reaches the collection another way (the console, or a
+    // client while the old rule is still the published one). It is not announced, and the log says
+    // what it was without repeating it.
+    const gameTitle = (0, gameSession_1.gameTitleOf)(gameData.gameType);
+    if (!gameTitle) {
+        const raw = gameData.gameType;
+        await (0, errorLog_1.logServerError)(`game ${snapshot.id} not announced: its type is not one of the games ` +
+            `(${typeof raw}${typeof raw === "string" ? `, ${raw.length} characters` : ""})`, "games:onGameCreated", { uid: typeof creatorId === "string" ? creatorId : null });
+        return;
+    }
     try {
         const groupDoc = await admin.firestore().doc(`groups/${groupId}`).get();
         if (!groupDoc.exists)
@@ -620,8 +632,7 @@ exports.onGameCreated = (0, firestore_1.onDocumentCreated)("games/{gameId}", asy
         if (targetUserIds.length === 0)
             return;
         const creatorDoc = await admin.firestore().doc(`users/${creatorId}`).get();
-        const creatorName = ((_a = creatorDoc.data()) === null || _a === void 0 ? void 0 : _a.name) || ((_c = (_b = creatorDoc.data()) === null || _b === void 0 ? void 0 : _b.email) === null || _c === void 0 ? void 0 : _c.split('@')[0]) || "Someone";
-        const readableGameType = gameType.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+        const creatorName = (0, pushText_1.pushName)(creatorDoc.data());
         // The game's NAME is a proper noun and stays as it is; the sentence around it is translated.
         // The group name is dropped from the title deliberately — the renderer appends one parameter
         // at the end, and "which game" is the more useful half on a lock screen than "which group".
@@ -630,14 +641,16 @@ exports.onGameCreated = (0, firestore_1.onDocumentCreated)("games/{gameId}", asy
             createdBy: creatorId,
             type: "game",
             titleKey: "notifNewGame",
-            titleParam: readableGameType,
+            titleParam: gameTitle,
             bodyKey: "notifNewGameBody",
             param: creatorName,
             data: { route: "/", groupId: String(groupId || "") },
         });
     }
     catch (error) {
-        console.error("Error sending Game Invite FCM:", error);
+        await (0, errorLog_1.logServerError)(`game announcement failed: ${String(error)}`, "games:onGameCreated", {
+            uid: typeof creatorId === "string" ? creatorId : null,
+        });
     }
 });
 exports.generateAIChecklist = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (request) => {

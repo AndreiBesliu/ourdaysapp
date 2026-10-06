@@ -21,6 +21,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import process from 'node:process';
 import { seriesStartDay, occurrenceDaysInWindow, isFrequency, horizonEndDay } from '../src/utils/recurrenceCore.ts';
+import { ARCADE_GAME_TYPES } from '../src/utils/gameSession.ts';
 
 const KEY = process.env.OURDAYS_SA_KEY
   || resolve(process.env.USERPROFILE || process.env.HOME || '', '.ourdays', 'service-account.json');
@@ -134,12 +135,19 @@ grp.maxEventsPerGroup = Math.max(0, ...perGroupEvents.values());
 grp.eventsWithDeadGroupId = events.filter((e) => typeof e.groupId === 'string' && !memberSet.has(e.groupId)).length;
 
 // Arcade games carrying a top-level `players` (the read rule grants on it to whoever it names).
-const gm = { games: 0, warlord: 0, arcade: 0, arcadeWithPlayersKey: 0, arcadePlayersNamingNonMember: 0, arcadePlayersNotList: 0 };
+// And, since 06.10.2026, games whose `gameType` is not one of the arcade's: the create rule now
+// refuses them, and the banner shows them as "Arcade". Counted, never printed.
+const gm = {
+  games: 0, warlord: 0, arcade: 0, arcadeWithPlayersKey: 0, arcadePlayersNamingNonMember: 0, arcadePlayersNotList: 0,
+  arcadeTypeNotInList: 0, arcadeTypeNotString: 0,
+};
 for (const d of (await db.collection('games').get()).docs) {
   const x = d.data();
   gm.games++;
   if (x.gameType === 'warlord-battle') { gm.warlord++; continue; }
   gm.arcade++;
+  if (typeof x.gameType !== 'string') gm.arcadeTypeNotString++;
+  else if (!ARCADE_GAME_TYPES.includes(x.gameType)) gm.arcadeTypeNotInList++;
   if (!('players' in x)) continue;
   gm.arcadeWithPlayersKey++;
   if (!Array.isArray(x.players)) { gm.arcadePlayersNotList++; continue; }

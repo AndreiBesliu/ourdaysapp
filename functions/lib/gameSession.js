@@ -12,7 +12,8 @@
 // It therefore imports NOTHING. Not the client SDK, not the Admin SDK, not a date library. Both
 // runtimes hand it plain data and it hands back plain answers.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.STAMPED_FROM_MS = exports.SERVER_OWNED_GAME = exports.IDLE_MS = void 0;
+exports.STAMPED_FROM_MS = exports.ARCADE_GAME_TYPES = exports.SERVER_OWNED_GAME = exports.IDLE_MS = void 0;
+exports.gameTitleOf = gameTitleOf;
 exports.getSessionWinner = getSessionWinner;
 exports.activityMs = activityMs;
 exports.nextRoundsWon = nextRoundsWon;
@@ -24,6 +25,31 @@ exports.closedSessionFields = closedSessionFields;
 exports.IDLE_MS = 24 * 60 * 60 * 1000;
 /** Warlord battles share the `games` collection but are server-owned and have their own forfeit. */
 exports.SERVER_OWNED_GAME = 'warlord-battle';
+/**
+ * The arcade's games: the only `gameType` a client may create (firestore.rules, `games` create).
+ * The web offers all four, the installed APK the first and the third. Warlord battles are made by
+ * the server alone and are not in the list.
+ */
+exports.ARCADE_GAME_TYPES = ['tic-tac-toe', 'connect-4', 'rummy-45', 'memory-match'];
+/**
+ * What a push calls each game, after "New game: ". English in every language, and exactly what the
+ * server wrote before 06.10.2026 — when it made the name from the raw `gameType`, which was free
+ * text at creation: any member could put any words on the lock screens of the whole group.
+ */
+const GAME_TITLES = {
+    'tic-tac-toe': 'Tic Tac Toe',
+    'connect-4': 'Connect 4',
+    'rummy-45': 'Rummy 45',
+    'memory-match': 'Memory Match',
+    [exports.SERVER_OWNED_GAME]: 'Warlord Battle',
+};
+/** The game's name for a push, or null for anything that is not one of the games above. */
+function gameTitleOf(gameType) {
+    // Own keys only: `GAME_TITLES['constructor']` is a function inherited from Object.
+    return typeof gameType === 'string' && Object.prototype.hasOwnProperty.call(GAME_TITLES, gameType)
+        ? GAME_TITLES[gameType]
+        : null;
+}
 /**
  * The moment moves started being timestamped.
  *

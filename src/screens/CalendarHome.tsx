@@ -22,6 +22,7 @@ import VerifyEmailBanner from '../components/VerifyEmailBanner';
 import { useVerifiedEmail } from '../hooks/useVerifiedEmail';
 import GroupChatWidget from '../components/GroupChatWidget';
 import GamesHubModal from '../components/games/GamesHubModal';
+import { bannerPlayerIds, gameTypeName } from '../components/games/gameTypeName';
 import RecurringEventsPanel from '../components/RecurringEventsPanel';
 import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../store';
@@ -967,20 +968,13 @@ export default function CalendarHome() {
               </div>
               <div>
                 <p className="font-bold text-indigo-700 dark:text-indigo-400 text-sm flex items-center gap-2">
-                  {activeGames[0].gameType.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())} 
+                  {gameTypeName(activeGames[0].gameType, language)}
                   {activeGames[0].status === 'waiting' ? t('lobby', language) : t('inProgress', language)}
                   
                   {/* Show who is in the game */}
                   <span className="flex items-center -space-x-1.5 ml-2">
                     {(() => {
-                      const game = activeGames[0];
-                      let playerIds: string[] = [];
-                      if (game.gameType === 'tic-tac-toe') {
-                        playerIds = [game.state?.players?.X, game.state?.players?.O].filter(Boolean);
-                      } else if (game.gameType === 'rummy-45') {
-                        playerIds = game.state?.playerIds || [];
-                      }
-                      
+                      const playerIds = bannerPlayerIds(activeGames[0]);
                       return playerIds.map((uid) => {
                         const u = userMap[uid];
                         if (!u) return null;

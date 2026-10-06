@@ -12121,3 +12121,75 @@ Măsurat pe emulator; nu e o gaură.
 
 **Nepublicat.** Cere funcțiile, completarea (`--apply`, cu cheia de scriere), apoi regulile, fiecare cu
 acordul lui Andrei.
+
+## 2026-10-06 · Titlul notificării unui joc din Arcade nu mai e text liber (Task Started)
+
+**Prompt (Andrei):** „continua” (după ce sarcinile de ieri erau gata și nepublicate; publicarea cere
+acordul lui explicit, deci am luat următorul punct din BACKLOG care nu cere o decizie de-a lui).
+**Model:** Claude Opus 5.5.
+**Ce e** (BACKLOG, secțiunea 2): `gameType` e text liber la crearea unui joc și ajunge în titlul push-ului
+trimis celorlalți membri, deci un membru poate pune orice text pe ecranele blocate ale grupului.
+**Plan:**
+- harta: unde se creează jocuri (web, APK), ce valori trimit, cum construiește serverul titlul, ce
+  verifică regula;
+- reproduc pe emulator;
+- titlul din valori cunoscute, cu regula care refuză un `gameType` necunoscut, fără să stric APK-ul;
+- porțile, mutațiile, o recenzie; funcțiile și regulile se publică doar cu acordul lui Andrei.
+
+## 2026-10-06 · Titlul notificării unui joc din Arcade nu mai e text liber (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Ce era:** la crearea unui joc, regula verifica doar `gameType != 'warlord-battle'`. Serverul
+(`onGameCreated`) făcea din `gameType`, cu majuscule, titlul push-ului trimis tuturor celorlalți
+membri: „Joc nou: <orice>”. Un membru putea pune orice text, de orice lungime, pe ecranele blocate ale
+grupului. Un tip care nu era text (un număr) făcea să pice bannerul „joc în desfășurare” din calendar,
+pentru toți cei care se uitau la ziua aceea, și pe web, și în APK.
+- Push-ul nu era tăiat deloc (doar rândul din clopoțel, la 200/500). FCM refuză un mesaj de peste
+  ~4 KB cu `INVALID_ARGUMENT`, iar `notify()` citește codul ăsta ca token mort: un singur mesaj lung ar
+  fi șters tokenurile tuturor destinatarilor. Dedus din sursa firebase-admin; FCM nu se poate simula.
+- Numele din push-ul unui joc și din cel al chatului de grup venea din `users`, fără nicio formă: orice
+  lungime, mai multe rânduri, iar o hartă arunca și oprea push-urile acelui om.
+
+**Reprodus** prin mutanți: cu regula veche (G1), crearea cu text liber trece; cu titlul luat din
+document (S1, S2), push-ul îl poartă.
+
+**Pe live** (doar citire): 18 jocuri, toate dintre cele patru tipuri; `state` hartă pe toate,
+`playerIds` listă pe toate cele 6 care îl au. E prevenție.
+
+**Reparația:**
+- **Regula:** la creare, `gameType` e unul dintre cele patru jocuri ale Arcade-ului. La mutări, tipul
+  rămâne fixat ca înainte, deci un joc vechi rămâne jucabil orice ar ține.
+- **`gameSession.ts`** (ambele copii): `ARCADE_GAME_TYPES` și `gameTitleOf`, numele fixe, cu exact
+  textul de până acum („Tic Tac Toe”…), căutate doar pe cheile proprii.
+- **`onGameCreated`:** titlul din `gameTitleOf`. Un tip necunoscut nu e anunțat; Health primește tipul
+  și lungimea, fără text. Un eșec ajunge în Health, nu doar în consolă.
+- **`functions/src/pushText.ts`:** `clampText` (taie fără să rupă un emoji) și `pushName` (numele pe
+  un rând, cel mult 40; altfel partea din email, altfel „Someone”). Folosit de joc și de chatul de grup.
+- **`notify()`:** titlul la 200 și textul la 500, pentru TOȚI apelanții, aceleași în push și în
+  clopoțel.
+- **Clientul:** `gameTypeName` dă numele jocului în limba cititorului, în lista din Arcade și în
+  banner (care scria tipul brut, în engleză); un tip necunoscut apare ca „Arcade”. Regulile unui joc se
+  caută cu `ownEntry` (`'constructor'` găsea funcția moștenită și pica foaia).
+- **`scripts/predeploy-measure.mjs`** numără jocurile cu tip în afara listei (azi 0).
+
+**Recenzie adversarială** (3 lentile: atacul, regresiile, testele), cu verificare separată:
+- **Confirmat și reparat aici:** bannerul rula `state.playerIds.map` (și în APK) pe orice joc de remi
+  al zilei. Un membru putea scrie acolo un text și să pice calendarul grupului în ziua aceea. Acum
+  regula cere ca `state` să fie hartă și `playerIds` listă, la creare și la fiecare mutare, iar bannerul
+  web citește prin `bannerPlayerIds`.
+- **Confirmat și reparat:** două goluri în testele noi (bucle fără număr de iterații; `param` și
+  `bodyKey` netestate la tăiere).
+- **Confirmat, mai vechi, trecut în BACKLOG:** un joc deschis cu date stricate, un `createdAt` care nu
+  e dată, un jucător `__proto__` în clasament. Toate cer un membru rău-intenționat.
+- **Infirmat:** tăierea chatului la 500 (intenționat), un grafem rupt în push (nu e defect), numele cu
+  spații Unicode (e contractul), testele de sursă fragile.
+
+**Mutații: 33, toate prinse** (24 + 9 pe remedierile din recenzie). Controalele negative au trecut
+întâi, și pe suitele de a doua șansă. `is map` la mutare e un mutant echivalent (`.get` pe orice altceva
+refuză oricum), deci nu e numărat.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2402), `tsc` și build-ul funcțiilor, `test:rules` (619),
+`npm run build`, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46). Toate verzi.
+
+**Nepublicat.** Cere funcțiile, regulile, apoi hosting-ul, fiecare cu acordul lui Andrei.

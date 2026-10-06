@@ -29,6 +29,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import {
   DEFAULT_LANG, normaliseLang, renderNotify, type NotifyLang,
 } from "./notifyStrings";
+import { clampText } from "./pushText";
 
 export interface NotifySpec {
   /** Who to tell. Deduped; `createdBy` is dropped — nobody is notified of their own action. */
@@ -84,7 +85,10 @@ interface Recipient {
   tokens: string[];
 }
 
+/** The longest title, in the bell AND in the push (pushText.ts says why the push needs one). */
 const CAP = 200;
+/** The longest body, likewise. */
+const BODY_CAP = 500;
 
 /** Where a tapped push opens. The project is fixed in .firebaserc; there is no runtime lookup for it. */
 const APP_ORIGIN = "https://our-days-2a939.web.app";
@@ -126,13 +130,11 @@ export async function notify(spec: NotifySpec): Promise<NotifyResult> {
       createdBy: spec.createdBy,
       type: spec.type,
       ...(spec.titleText ? {} : { titleKey: spec.titleKey.slice(0, 60) }),
-      ...(spec.titleParam && !spec.titleText ? { titleParam: spec.titleParam.slice(0, CAP) } : {}),
+      ...(spec.titleParam && !spec.titleText ? { titleParam: clampText(spec.titleParam, CAP) } : {}),
       ...(spec.bodyKey ? { bodyKey: spec.bodyKey.slice(0, 60) } : {}),
-      ...(spec.param ? { param: spec.param.slice(0, CAP) } : {}),
-      title: (spec.titleText || renderNotify(spec.titleKey, r.lang, spec.titleParam)).slice(0, CAP),
-      body: spec.bodyText
-        ? spec.bodyText.slice(0, 500)
-        : spec.bodyKey ? renderNotify(spec.bodyKey, r.lang, spec.param).slice(0, 500) : "",
+      ...(spec.param ? { param: clampText(spec.param, CAP) } : {}),
+      title: titleFor(spec, r.lang),
+      body: bodyFor(spec, r.lang),
       read: false,
       createdAt: FieldValue.serverTimestamp(),
     });
@@ -176,10 +178,7 @@ export async function notify(spec: NotifySpec): Promise<NotifyResult> {
     try {
       const res = await admin.messaging().sendEachForMulticast({
         tokens,
-        notification: {
-          title: spec.titleText || renderNotify(spec.titleKey, lang, spec.titleParam),
-          body: spec.bodyText || (spec.bodyKey ? renderNotify(spec.bodyKey, lang, spec.param) : ""),
-        },
+        notification: { title: titleFor(spec, lang), body: bodyFor(spec, lang) },
         // `tag` also rides in data so the page's foreground handler can use the same one.
         data: { ...(spec.data || {}), tag },
         webpush: {
@@ -223,6 +222,17 @@ export async function notify(spec: NotifySpec): Promise<NotifyResult> {
   }
 
   return { rows: recipients.length, pushed, pruned };
+}
+
+/** The title one reader sees, cut like every title: the same text in the bell and in the push. */
+function titleFor(spec: NotifySpec, lang: NotifyLang): string {
+  return clampText(spec.titleText || renderNotify(spec.titleKey, lang, spec.titleParam), CAP);
+}
+
+/** The body one reader sees, likewise. */
+function bodyFor(spec: NotifySpec, lang: NotifyLang): string {
+  if (spec.bodyText) return clampText(spec.bodyText, BODY_CAP);
+  return spec.bodyKey ? clampText(renderNotify(spec.bodyKey, lang, spec.param), BODY_CAP) : "";
 }
 
 export { DEFAULT_LANG };
