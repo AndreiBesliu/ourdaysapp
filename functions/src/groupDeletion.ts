@@ -13,6 +13,7 @@ import { HttpsError } from "firebase-functions/v2/https";
 import { GROUP_ID, groupMedia } from "./groupMedia";
 import { logServerError } from "./errorLog";
 import { deleteQueryInBatches } from "./batchDelete";
+import { registerGroupId } from "./groupIds";
 
 export interface GroupDeletion {
   deleted: number;
@@ -31,6 +32,10 @@ export interface GroupDeletion {
 export async function deleteGroupData(groupId: string, ownerUid: string, keep: ReadonlySet<string>): Promise<GroupDeletion> {
   const db = admin.firestore();
   const groupRef = db.doc(`groups/${groupId}`);
+
+  // Its id goes on the list of used ids FIRST, before anything is taken away: from here on nobody
+  // can create the group again under it, even if this run stops half way (groupIds.ts).
+  await registerGroupId(groupId);
 
   let deleted = 0;
   let freed = 0;

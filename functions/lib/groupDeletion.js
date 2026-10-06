@@ -15,6 +15,7 @@ const https_1 = require("firebase-functions/v2/https");
 const groupMedia_1 = require("./groupMedia");
 const errorLog_1 = require("./errorLog");
 const batchDelete_1 = require("./batchDelete");
+const groupIds_1 = require("./groupIds");
 /**
  * Delete `groupId`, owned by `ownerUid`. The owner's own events in it are deleted unless their id is
  * in `keep`; everybody else's become personal. Every step is idempotent, so a call that stops part
@@ -24,6 +25,9 @@ async function deleteGroupData(groupId, ownerUid, keep) {
     var _a;
     const db = admin.firestore();
     const groupRef = db.doc(`groups/${groupId}`);
+    // Its id goes on the list of used ids FIRST, before anything is taken away: from here on nobody
+    // can create the group again under it, even if this run stops half way (groupIds.ts).
+    await (0, groupIds_1.registerGroupId)(groupId);
     let deleted = 0;
     let freed = 0;
     // No cursor is needed: every document this loop touches stops matching `groupId == groupId`

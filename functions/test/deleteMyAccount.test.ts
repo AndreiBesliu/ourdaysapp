@@ -212,6 +212,8 @@ describe('Andrei’s decisions (04.10.2026)', () => {
     expect(await exists(`groups/${G_ALONE}`)).toBe(false);
     expect((await db.collection(`groups/${G_ALONE}/messages`).get()).size).toBe(0);
     expect(await exists('events/e-alone')).toBe(false);
+    // And its id cannot be created again (functions/src/groupIds.ts, 06.10.2026).
+    expect(await exists(`usedGroupIds/${G_ALONE}`)).toBe(true);
   });
 
   it('their events in a group stay with the group’s owner as it is now; their personal ones go', async () => {

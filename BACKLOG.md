@@ -105,6 +105,12 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   - **Alte urme ale plecării, mărunte:** invitațiile trimise de el rămân în așteptare (acceptarea dă
     „nu mai e în grup”), linkurile lui nu sunt revocate (doar refuzate la folosire), iar indicatorul
     „scrie…” rămâne. Ștergerea contului le curăță pe toate.
+- **Un grup șters din APK sau din consolă își lasă resturile (06.10).** APK-ul șterge singur documentul
+  grupului, fără serverul care curăță. Rămân mesajele, indicatorul „scrie…”, linkurile de invitație
+  nerevocate, jocurile, cheltuielile și cardurile încă partajate cu grupul. De la 06.10 nimeni nu le mai
+  poate deschide, fiindcă id-ul nu mai poate fi recreat, dar ocupă loc. Un trigger la ștergere le-ar
+  putea curăța: de decis. Și ștergerea de pe server lasă jocurile, cheltuielile și cardurile, iar
+  invitațiile se șterg doar până la 3.200.
 - **Răspunsurile RSVP (05.10): ce a rămas deliberat.**
   - **Un eveniment PERSONAL poate fi creat cu răspunsurile oricui.** Copia de la ieșirea dintr-un grup
     le are în APK, care nu poate fi schimbat. Le citește doar proprietarul și nu pot ajunge într-un

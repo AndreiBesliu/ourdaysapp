@@ -62,6 +62,8 @@ export { openDirectChat, onDirectMessageCreated } from "./directChat";
 export { deleteMyAccount } from "./accountDeletion";
 // Somebody out of a group comes off its events still to come (05.10.2026).
 export { onGroupMembersChanged } from "./groupLeave";
+// Every group id ever used, so a deleted one cannot be created again (06.10.2026).
+export { onGroupCreated, onGroupDeleted } from "./groupIds";
 export { sendDueReminders } from "./reminders";
 // A daily copy of the health panel into the function logs, which the CLI can read without a
 // key — see functions/src/errorDigest.ts for why that gap was worth closing.
@@ -481,13 +483,22 @@ export const onMessageCreated = onDocumentCreated("groups/{groupId}/messages/{me
     // The conversation list sorts groups and direct chats together, so a group needs the same
     // preview a chat keeps. Server-written for the same reason: a client-writable preview is a
     // way to put words into somebody else's list.
-    await admin.firestore().doc(`groups/${groupId}`).set({
-      lastMessageAt: FieldValue.serverTimestamp(),
-      lastMessageText: typeof msgData.text === "string" && msgData.text
-        ? msgData.text.slice(0, 140)
-        : msgData.imageUrl ? "\u{1F4F7}" : msgData.audioUrl ? "\u{1F3A4}" : "",
-      lastMessageBy: senderId,
-    }, { merge: true });
+    //
+    // `update`, not `set(merge)`: if the group was deleted since the read above, a merge would
+    // create it again — a document with no members holding the start of a message, under an id that
+    // must stay gone (groupIds.ts, 06.10.2026). A group that is gone has nobody to notify either.
+    try {
+      await admin.firestore().doc(`groups/${groupId}`).update({
+        lastMessageAt: FieldValue.serverTimestamp(),
+        lastMessageText: typeof msgData.text === "string" && msgData.text
+          ? msgData.text.slice(0, 140)
+          : msgData.imageUrl ? "\u{1F4F7}" : msgData.audioUrl ? "\u{1F3A4}" : "",
+        lastMessageBy: senderId,
+      });
+    } catch (err) {
+      if ((err as { code?: number })?.code === 5) return; // NOT_FOUND
+      throw err;
+    }
 
     // The message TEXT is passed as `bodyText`, never as a key: it is the sender's own words,
     // and translating them would be worse than leaving them alone. Only the wrapper around it —

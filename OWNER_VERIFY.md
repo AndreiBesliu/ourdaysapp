@@ -118,6 +118,40 @@
 
 ---
 
+## 🆕 Un grup șters nu mai poate fi recreat sub același id (06.10) — NEPUBLICAT (cere funcțiile, completarea, apoi regulile)
+
+**Fapt:** oricine știa id-ul unui grup șters îl putea crea din nou, ca singur membru. Poate fi un fost
+membru, un invitat, cineva numit pe un eveniment al grupului, cineva cu un link de invitație sau cu
+linkul unei poze din chat. Odată recreat grupul, citea tot ce rămăsese sub id:
+- cheltuielile, jocurile și cardurile partajate cu grupul;
+- după o ștergere făcută din APK, și mesajele și evenimentele.
+
+Reprodus pe emulator. Pe live nu s-a întâmplat (măsurat: nimic nu indică spre un grup șters și niciun
+grup nu a fost recreat). Acum serverul ține lista id-urilor folosite, scrisă la crearea și la ștergerea
+fiecărui grup, iar regula refuză crearea unui id de pe listă. În aplicație nu se schimbă nimic.
+
+**Deciziile pe care le-am luat eu, cu implicitul pus** (spune-mi dacă vrei altfel):
+- **Resturile unei ștergeri făcute din APK rămân în bază**, dar nu le mai poate deschide nimeni.
+  Curățarea lor e o decizie separată (în BACKLOG).
+- **Grupurile de azi trebuie puse pe listă o dată, la publicare.** Altfel, unul șters din APK ajunge pe
+  listă abia după câteva secunde, timp în care id-ul lui poate fi recreat. Scriptul doar adaugă intrări
+  în listă, nimic altceva. Simulat pe live azi: 5 grupuri de pus, niciun id ciudat, niciun grup care să
+  pară recreat.
+
+- [ ] **La publicare, în ordinea asta** (fiecare pas cu acordul tău):
+      1. funcțiile;
+      2. completarea listei:
+         `node scripts/backfill-used-group-ids.mjs --apply` (din `OurDaysApp`).
+         Cere cheia cu drept de scriere, în `OURDAYS_SA_KEY`; cheia mea de citire face doar simularea,
+         fără `--apply`.
+         - **Cum arată bine:** `listedNow` e cât `idsToList` (5 azi, plus orice grup creat de atunci), iar
+           `groupsThatLookCreatedAgain` e gol.
+         - **Ce e greșit:** un id în `refused` sau în `groupsThatLookCreatedAgain`. Spune-mi înainte de
+           pasul 3.
+      3. regulile. Fără pasul 2, regula nu strică nimic, dar grupurile de azi rămân descoperite.
+
+---
+
 ## 🆕 Doar proprietarul sau grupul mută un eveniment între calendare (05.10) — NEPUBLICAT (cere funcțiile și regulile)
 
 **Fapt:** cine era doar numit pe un eveniment (responsabil), fără să fie proprietarul lui sau în grupul

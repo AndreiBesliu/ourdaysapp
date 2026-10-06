@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.adminGetAiConfig = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onGroupInviteCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onGroupMembersChanged = exports.deleteMyAccount = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
-exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminSetAiConfig = void 0;
+exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onGroupInviteCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onGroupDeleted = exports.onGroupCreated = exports.onGroupMembersChanged = exports.deleteMyAccount = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
+exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminSetAiConfig = exports.adminGetAiConfig = exports.adminGetAiSpend = void 0;
 // FIRST, before anything that defines a function: the global options apply only to functions
 // defined after them. See globalOptions.ts.
 require("./globalOptions");
@@ -58,6 +58,10 @@ Object.defineProperty(exports, "deleteMyAccount", { enumerable: true, get: funct
 // Somebody out of a group comes off its events still to come (05.10.2026).
 var groupLeave_1 = require("./groupLeave");
 Object.defineProperty(exports, "onGroupMembersChanged", { enumerable: true, get: function () { return groupLeave_1.onGroupMembersChanged; } });
+// Every group id ever used, so a deleted one cannot be created again (06.10.2026).
+var groupIds_1 = require("./groupIds");
+Object.defineProperty(exports, "onGroupCreated", { enumerable: true, get: function () { return groupIds_1.onGroupCreated; } });
+Object.defineProperty(exports, "onGroupDeleted", { enumerable: true, get: function () { return groupIds_1.onGroupDeleted; } });
 var reminders_1 = require("./reminders");
 Object.defineProperty(exports, "sendDueReminders", { enumerable: true, get: function () { return reminders_1.sendDueReminders; } });
 // A daily copy of the health panel into the function logs, which the CLI can read without a
@@ -434,13 +438,24 @@ exports.onMessageCreated = (0, firestore_1.onDocumentCreated)("groups/{groupId}/
         // The conversation list sorts groups and direct chats together, so a group needs the same
         // preview a chat keeps. Server-written for the same reason: a client-writable preview is a
         // way to put words into somebody else's list.
-        await admin.firestore().doc(`groups/${groupId}`).set({
-            lastMessageAt: firestore_2.FieldValue.serverTimestamp(),
-            lastMessageText: typeof msgData.text === "string" && msgData.text
-                ? msgData.text.slice(0, 140)
-                : msgData.imageUrl ? "\u{1F4F7}" : msgData.audioUrl ? "\u{1F3A4}" : "",
-            lastMessageBy: senderId,
-        }, { merge: true });
+        //
+        // `update`, not `set(merge)`: if the group was deleted since the read above, a merge would
+        // create it again — a document with no members holding the start of a message, under an id that
+        // must stay gone (groupIds.ts, 06.10.2026). A group that is gone has nobody to notify either.
+        try {
+            await admin.firestore().doc(`groups/${groupId}`).update({
+                lastMessageAt: firestore_2.FieldValue.serverTimestamp(),
+                lastMessageText: typeof msgData.text === "string" && msgData.text
+                    ? msgData.text.slice(0, 140)
+                    : msgData.imageUrl ? "\u{1F4F7}" : msgData.audioUrl ? "\u{1F3A4}" : "",
+                lastMessageBy: senderId,
+            });
+        }
+        catch (err) {
+            if ((err === null || err === void 0 ? void 0 : err.code) === 5)
+                return; // NOT_FOUND
+            throw err;
+        }
         // The message TEXT is passed as `bodyText`, never as a key: it is the sender's own words,
         // and translating them would be worse than leaving them alone. Only the wrapper around it —
         // "New message from …" — is rendered in the reader's language.

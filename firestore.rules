@@ -323,7 +323,12 @@ service cloud.firestore {
         request.resource.data.ownerId == request.auth.uid &&
         request.resource.data.members.hasOnly([request.auth.uid]) &&
         request.auth.uid in request.resource.data.members &&
-        !('formerMembers' in request.resource.data);
+        !('formerMembers' in request.resource.data) &&
+        // Never an id that was used before (06.10.2026). Membership is "the document exists and I am
+        // in it", so whoever re-created a deleted group's id became its only member, and everything
+        // still filed under that id opened to them. The server lists every id when a group is
+        // created and when it is deleted (functions/src/groupIds.ts).
+        !exists(/databases/$(database)/documents/usedGroupIds/$(groupId));
       // This used to be `update, delete: if uid in members` — which let ANY member eject any
       // other member, the owner included, and delete the whole group with its events. The UI
       // already intended owner-only (`isOwner` guards both the delete path and the remove
@@ -1056,6 +1061,12 @@ service cloud.firestore {
     // are already gone, which keeps a repeated deletion from re-reading a shorter keep list
     // (functions/src/accountDeletion.ts). Admin SDK only.
     match /accountDeletions/{uid} {
+      allow read, write: if false;
+    }
+
+    // Every group id ever used (functions/src/groupIds.ts): the server's alone, read only by the
+    // groups create rule above.
+    match /usedGroupIds/{groupId} {
       allow read, write: if false;
     }
 

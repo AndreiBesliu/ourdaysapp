@@ -52,7 +52,7 @@
 import { beforeAll, afterAll, beforeEach, describe, it } from 'vitest';
 import { assertSucceeds } from '@firebase/rules-unit-testing';
 import {
-  addDoc, arrayUnion, collection, deleteDoc, doc, serverTimestamp, setDoc, updateDoc, writeBatch,
+  addDoc, arrayUnion, collection, deleteDoc, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch,
 } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { ALICE, BOB, G1, EMAIL, as, filesAs, resetBucket, resetWorld, seed, startEnv, stopEnv } from './_harness';
@@ -285,5 +285,25 @@ describe('what the installed APK updates on somebody else’s message', () => {
     await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm1'), {
       reactions: { '👍': [BOB] },
     }));
+  });
+});
+
+describe('the installed app deletes a group itself (06.10.2026)', () => {
+  // Bundle, both delete flows: list the group's events and delete each, list its invitations and
+  // delete each, then `deleteDoc(groups/G)`. It completes only when every event is the owner's (the
+  // events delete rule is owner-only). The id goes on the server's list through a trigger
+  // (functions/src/groupIds.ts); none of these writes may be refused.
+  it('a group holding only its owner’s events: every step passes', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'groups', 'apk-g'), { name: 'Mine', ownerId: BOB, members: [BOB] });
+      await setDoc(doc(db, 'events', 'apk-e'), { ownerId: BOB, groupId: 'apk-g', title: 'x' });
+      await setDoc(doc(db, 'group_invites', 'apk-i'), { fromId: BOB, toEmail: 'someone@example.test', groupId: 'apk-g', status: 'pending' });
+    });
+    const db = as(BOB);
+    const events = await assertSucceeds(getDocs(query(collection(db, 'events'), where('groupId', '==', 'apk-g'))));
+    for (const e of events.docs) await assertSucceeds(deleteDoc(doc(db, 'events', e.id)));
+    const invites = await assertSucceeds(getDocs(query(collection(db, 'group_invites'), where('groupId', '==', 'apk-g'))));
+    for (const i of invites.docs) await assertSucceeds(deleteDoc(doc(db, 'group_invites', i.id)));
+    await assertSucceeds(deleteDoc(doc(db, 'groups', 'apk-g')));
   });
 });

@@ -459,3 +459,53 @@ describe('chat messages inside a group', () => {
   });
 
 });
+
+describe('a deleted group’s id cannot be created again (06.10.2026)', () => {
+  // Membership is "the document exists and I am in it", and the id was the client's to choose. So
+  // whoever created a deleted group's id again became its only member, and everything still filed
+  // under it opened to them. The server lists every id when a group is created and when it is
+  // deleted (functions/src/groupIds.ts); the create rule refuses an id on the list.
+  const GONE = 'gone-group-1';    // deleted, on the list
+  const NEVER = 'never-listed-1'; // leftovers under an id the list does not have
+  beforeEach(async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'usedGroupIds', GONE), { at: 1 });
+      for (const id of [GONE, NEVER]) {
+        // What a group deleted from the installed app or the console leaves under its id.
+        await setDoc(doc(db, 'expenses', `x-${id}`), { ownerId: ALICE, groupId: id, amount: 10, description: 'Rent', paidBy: ALICE, splitAmong: [ALICE] });
+        await setDoc(doc(db, 'games', `g-${id}`), { createdBy: ALICE, groupId: id, gameType: 'tic-tac-toe', status: 'active', state: {} });
+        await setDoc(doc(db, 'assets', `a-${id}`), { ownerId: ALICE, name: 'Card', sharedGroupId: id });
+        await setDoc(doc(db, 'groups', id, 'messages', 'm-left'), { senderId: ALICE, text: 'hello', createdAt: 1 });
+        await setDoc(doc(db, 'events', `e-${id}`), { ownerId: ALICE, groupId: id, title: 'Left behind' });
+      }
+    });
+  });
+
+  const leftovers = (db: ReturnType<typeof as>, id: string) => [
+    getDoc(doc(db, 'expenses', `x-${id}`)), getDoc(doc(db, 'games', `g-${id}`)), getDoc(doc(db, 'assets', `a-${id}`)),
+    getDoc(doc(db, 'groups', id, 'messages', 'm-left')), getDoc(doc(db, 'events', `e-${id}`)),
+  ];
+
+  it('an id on the list cannot be created, so what was left under it stays closed', async () => {
+    await assertFails(setDoc(doc(as(DAVE), 'groups', GONE), { name: 'Mine now', ownerId: DAVE, members: [DAVE] }));
+    for (const read of leftovers(as(DAVE), GONE)) await assertFails(read);
+  });
+
+  it('the hole the list closes, on an id it does not have: whoever creates it reads what was left', async () => {
+    // Why the server lists EVERY id, at creation and at deletion: an id missing from the list is
+    // exactly this. Kept as the control that shows these reads can succeed at all.
+    await assertSucceeds(setDoc(doc(as(DAVE), 'groups', NEVER), { name: 'Mine now', ownerId: DAVE, members: [DAVE] }));
+    for (const read of leftovers(as(DAVE), NEVER)) await assertSucceeds(read);
+  });
+
+  it('nobody reads or writes the list', async () => {
+    await assertFails(getDoc(doc(as(ALICE), 'usedGroupIds', GONE)));
+    await assertFails(setDoc(doc(as(ALICE), 'usedGroupIds', 'g-new-1'), { at: 1 }));
+    await assertFails(deleteDoc(doc(as(ALICE), 'usedGroupIds', GONE)));
+  });
+
+  it('a new id is created as before, and its owner still deletes it', async () => {
+    await assertSucceeds(setDoc(doc(as(DAVE), 'groups', 'g-brand-new'), { name: 'New', ownerId: DAVE, members: [DAVE] }));
+    await assertSucceeds(deleteDoc(doc(as(DAVE), 'groups', 'g-brand-new')));
+  });
+});

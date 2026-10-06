@@ -12019,3 +12019,105 @@ APK (`groupId: null` pe evenimentele păstrate) o face proprietarul grupului, de
 `npm run build`, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46). Toate verzi.
 
 **Nepublicat.** Cere funcțiile și regulile, cu acordul lui Andrei.
+
+## 2026-10-06 · Un grup șters nu mai poate fi recreat sub același id (Task Started)
+
+**Prompt (Andrei):** „Do this task here: “Stop deleted group ids being re-created””.
+**Model:** Claude Opus 5.5.
+**Ce s-a găsit** (recenzia regulii de mutare, din cod, neprobat): crearea unui grup nu fixează id-ul
+documentului și nu verifică nicio urmă a unui grup șters. Deci oricine știe id-ul unui grup șters îl
+poate recrea, singur membru, iar `isMemberOfGroup` nu deosebește grupul nou de cel vechi. Tot ce a
+rămas sub acel id (cheltuieli, jocuri, carduri partajate cu grupul, mesaje sau evenimente rămase) i
+se deschide.
+**Plan:**
+- măsor pe live, doar citire, ce indică azi spre grupuri care nu mai există;
+- reproduc recrearea pe emulatorul de reguli, plus întrebarea despre `/` într-un id de grup;
+- harta tuturor locurilor care țin un id de grup și a căilor de ștergere (web, APK, server);
+- îl întreb pe Andrei forma reparației, dacă schimbă ceva în produs; regulile și funcțiile se publică
+  doar cu acordul lui.
+
+## 2026-10-06 · Un grup șters nu mai poate fi recreat sub același id (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Ce era, reprodus pe emulatorul de reguli:** după ce un grup era șters, oricine îi știa id-ul îl crea
+din nou, ca singur membru. Apoi citea tot ce rămăsese sub id: cheltuiala, jocul, cardul partajat, un
+mesaj și un eveniment rămase. `isMemberOfGroup` înseamnă doar „documentul există și sunt în listă”,
+iar id-ul era la alegerea clientului. Id-ul se poate afla din multe locuri: foștii membri, invitațiile,
+evenimentele pe care ești numit, linkurile de invitație, linkul unei poze din chat.
+
+**Pe live** (doar citire): 5 grupuri, nimic care să indice spre un grup șters, nicio subcolecție rămasă
+de la un grup șters, niciun grup mai nou decât propriile mesaje, jocuri sau invitații (deci niciun
+grup recreat). Toate id-urile sunt automate. E prevenție.
+
+**Întrebarea despre `/` într-un id de grup** (`$(groupId)` dintr-un câmp): un eveniment cu
+`groupId: 'G/typing/<uid>'` e refuzat cu eroare de evaluare și nu ajunge la documentul `typing`.
+Măsurat pe emulator; nu e o gaură.
+
+**Reparația:**
+- **Regula:** crearea unui grup e refuzată dacă id-ul e în `usedGroupIds`. Colecția e închisă oricărui
+  client.
+- **`functions/src/groupIds.ts`:** `registerGroupId` (idempotent, cu `create`), plus două triggere cu
+  reîncercare, `onGroupCreated` și `onGroupDeleted`. Al doilea e plasa pentru ștergerile făcute direct
+  din APK sau din consolă.
+- **`deleteGroupData`** înregistrează id-ul ÎNAINTE de orice altceva, deci și o rulare oprită la
+  jumătate a închis deja id-ul. Asta acoperă ștergerea din web și ștergerea contului unui om singur în
+  grup.
+- **`onMessageCreated`** scrie previzualizarea cu `update`, nu cu `set(merge)`. Un grup șters între
+  citire și scriere nu mai e readus ca document-fantomă, cu începutul mesajului în el.
+- Intrarea din listă ține doar ora: niciun uid, niciun nume.
+- **Completarea, o singură dată, la publicare** (`functions/src/groupIdsBackfill.ts` plus
+  `scripts/backfill-used-group-ids.mjs`; implicit doar simulează).
+  - Pune pe listă grupurile existente, documentele de grup lipsă care au lăsat subcolecții și orice id
+    încă numit de evenimente, cheltuieli, jocuri, invitații, linkuri sau carduri.
+  - Un id care nu e un singur document e raportat, nu scris. Un grup mai nou decât propriile mesaje,
+    jocuri sau invitații e raportat ca posibil recreat.
+  - Simulat pe live (doar citire): 5 id-uri de pus, nimic refuzat, nimic suspect.
+
+**Teste:**
+- **`rules-tests/groups.test.ts`:**
+  - un id de pe listă nu poate fi recreat, iar resturile lui rămân închise;
+  - controlul: pe un id care NU e pe listă, gaura se vede;
+  - lista e închisă;
+  - un id nou merge ca înainte.
+- **`apk-compat.test.ts`:** secvența de ștergere a APK-ului trece în continuare.
+- **`functions/test/groupIds.test.ts`:**
+  - înregistrarea la creare și la ștergere, inclusiv că a doua rulare nu suprascrie;
+  - reîncercarea și jurnalul de erori;
+  - ștergerea oprită la jumătate, cu id-ul deja închis;
+  - previzualizarea care nu readuce grupul.
+- **`deleteMyAccount.test.ts`:** id-ul grupului în care omul era singur ajunge pe listă.
+- **Completarea** (tot în `groupIds.test.ts`):
+  - planul conține exact ce trebuie;
+  - un id cu `/` e refuzat, iar un grup recreat e semnalat;
+  - planul nu scrie nimic;
+  - aplicarea pune totul pe listă o singură dată, iar a doua oară nu adaugă nimic.
+
+**Mutații: 15, toate prinse.** Controalele negative au trecut întâi, și pe suitele de a doua șansă.
+- 9 pe listă: regula care n-o consultă, lista citibilă, ștergerea care nu înregistrează, orice eroare
+  înghițită, a doua rulare care suprascrie, plasa lipsă, fără reîncercare, previzualizarea care readuce
+  grupul, eșecul nescris;
+- 6 pe completare: părinții lipsă, cardurile necitite, id-uri ciudate scrise sau planificate, grupurile
+  recreate nesemnalate, totul numărat ca nou.
+
+**Recenzie adversarială** (2 lentile: atacul; regresiile), cu verificare separată:
+- **Fără altă cale de a recrea un id:** nicio altă scriere de pe server nu poate crea un document de
+  grup, iar regula și lista sunt etanșe.
+- **Fără regresii:** `update` nu schimbă nimic pentru un grup care există, iar triggerele nu pornesc
+  pe subcolecții și nici în teste.
+- **Confirmate:**
+  - grupurile care existau deja ar fi ajuns pe listă abia după o ștergere, prin trigger, deci cu o
+    fereastră de câteva secunde în care puteau fi recreate;
+  - un grup șters între azi și publicare n-ar fi ajuns niciodată pe listă.
+  - Reparat cu completarea de mai sus și cu ordinea la publicare. Antetul din `groupIds.ts`, care
+    promitea mai mult, e corectat.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2386), `tsc` și build-ul funcțiilor, `test:rules` (584),
+`npm run build`, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46). Toate verzi.
+- **Prima rulare a porților a picat pe un test nou al completării**, care trecuse singur: mesajul și
+  grupul „recreat” din fixtură, scrise unul după altul, primeau uneori același `createTime` pe emulator.
+  Comparația e strictă intenționat, deci fixtura are acum o pauză de 10 ms. A trecut de trei ori la rând,
+  apoi toată suita.
+
+**Nepublicat.** Cere funcțiile, completarea (`--apply`, cu cheia de scriere), apoi regulile, fiecare cu
+acordul lui Andrei.
