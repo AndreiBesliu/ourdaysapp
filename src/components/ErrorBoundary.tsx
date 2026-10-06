@@ -10,9 +10,21 @@ interface State { hasError: boolean; reloadFailed: boolean; staleChunk: boolean 
 /** Set before a reload, so a second crash can tell the user that reloading did not help. */
 const TRIED_KEY = 'app_boundary_reloaded';
 
+interface Props {
+  children: React.ReactNode;
+  /**
+   * For a boundary around ONE part of a screen: what that part shows instead, while the rest of
+   * the app keeps working. Without it, the app-wide recovery screen. (06.10.2026: a game opened in
+   * the arcade, whose data any member of the group can write, took the whole app down with it.)
+   */
+  fallback?: React.ReactNode;
+  /** What the crash is reported as. The app-wide boundary is 'ErrorBoundary'. */
+  context?: string;
+}
+
 // Catches render-time crashes anywhere in the tree, reports them, and shows a
 // recovery screen instead of a white page.
-export default class ErrorBoundary extends React.Component<{ children: React.ReactNode }, State> {
+export default class ErrorBoundary extends React.Component<Props, State> {
   state: State = { hasError: false, reloadFailed: false, staleChunk: false };
 
   static getDerivedStateFromError(error: unknown): Partial<State> {
@@ -29,7 +41,8 @@ export default class ErrorBoundary extends React.Component<{ children: React.Rea
    * clearing unconditionally would erase the mark the catch had just read.
    */
   private clearMarkIfHealthy() {
-    if (this.state.hasError) return;
+    // The mark is the app-wide boundary's; a local one neither sets nor clears it.
+    if (this.state.hasError || this.props.fallback !== undefined) return;
     try { sessionStorage.removeItem(TRIED_KEY); } catch { /* private mode */ }
   }
 
@@ -39,18 +52,21 @@ export default class ErrorBoundary extends React.Component<{ children: React.Rea
   };
 
   componentDidCatch(error: unknown, info: React.ErrorInfo) {
-    try { this.setState({ reloadFailed: sessionStorage.getItem(TRIED_KEY) === '1' }); } catch { /* private mode */ }
+    if (this.props.fallback === undefined) {
+      try { this.setState({ reloadFailed: sessionStorage.getItem(TRIED_KEY) === '1' }); } catch { /* private mode */ }
+    }
     // Whatever was thrown, described — not `error.message || 'Render error'`, which logged three
     // crashes on 20.09.2026 as "Render error" with nothing but the component stack. See
     // utils/describeThrown.ts; an Error with a message is reported exactly as before.
     const thrown = describeThrown(error);
     reportError(thrown.message, {
       stack: `${thrown.stack || ''}\n${info?.componentStack || ''}`.slice(0, 4000),
-      context: isStaleChunkError(thrown.message) ? 'StaleChunk' : 'ErrorBoundary',
+      context: isStaleChunkError(thrown.message) ? 'StaleChunk' : (this.props.context ?? 'ErrorBoundary'),
     });
   }
 
   render() {
+    if (this.state.hasError && this.props.fallback !== undefined) return this.props.fallback;
     if (this.state.hasError) {
       // A class component cannot call the hook, and this one has to render while the tree below
       // it is broken — so it reads the store directly rather than depending on a provider that

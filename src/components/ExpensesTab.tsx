@@ -68,7 +68,7 @@ export default function ExpensesTab(
     const unsubs: (() => void)[] = [];
     unsubs.push(onSnapshot(
       query(collection(db, 'expenses'), where('ownerId', '==', uid)),
-      (snap) => { mine.clear(); snap.docs.forEach(d => mine.set(d.id, { id: d.id, ...d.data() })); ok('own'); publish(); },
+      (snap) => { mine.clear(); snap.docs.forEach(d => mine.set(d.id, { ...d.data(), id: d.id })); ok('own'); publish(); },
       fail('own'),
     ));
     // `in` takes at most 30 values; nobody here is in thirty groups, but slicing beats throwing.
@@ -76,7 +76,7 @@ export default function ExpensesTab(
     if (ids.length) {
       unsubs.push(onSnapshot(
         query(collection(db, 'expenses'), where('groupId', 'in', ids)),
-        (snap) => { theirs.clear(); snap.docs.forEach(d => theirs.set(d.id, { id: d.id, ...d.data() })); ok('groups'); publish(); },
+        (snap) => { theirs.clear(); snap.docs.forEach(d => theirs.set(d.id, { ...d.data(), id: d.id })); ok('groups'); publish(); },
         fail('groups'),
       ));
     }

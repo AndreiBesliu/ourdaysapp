@@ -54,3 +54,48 @@ describe('ErrorBoundary.componentDidCatch', () => {
     expect(ErrorBoundary.getDerivedStateFromError('not a chunk')).toEqual({ hasError: true, staleChunk: false });
   });
 });
+
+// ── 06.10.2026: a boundary around one part of a screen ──────────────────────────────────────
+describe('ErrorBoundary with a fallback (the arcade\u2019s game panel)', () => {
+  const FALLBACK = 'the game panel says so';
+
+  it('renders the fallback, not the app-wide recovery screen', () => {
+    const b = new ErrorBoundary({ children: 'the game', fallback: FALLBACK, context: 'GamesHubModal.game' });
+    expect(b.render()).toBe('the game');
+    b.state = { ...b.state, ...ErrorBoundary.getDerivedStateFromError(new Error('board.map is not a function')) };
+    expect(b.render()).toBe(FALLBACK);
+  });
+
+  it('reports under its own context, and a stale chunk is still a stale chunk', () => {
+    const b = new ErrorBoundary({ children: null, fallback: FALLBACK, context: 'GamesHubModal.game' });
+    b.setState = vi.fn() as never;
+    b.componentDidCatch(new TypeError('game.state.board.map is not a function'), INFO as never);
+    expect(reportError.mock.calls[0][1].context).toBe('GamesHubModal.game');
+    b.componentDidCatch(new TypeError('Failed to fetch dynamically imported module: x'), INFO as never);
+    expect(reportError.mock.calls[1][1].context).toBe('StaleChunk');
+  });
+
+  it('leaves the app-wide reload mark alone, both when it catches and when it renders', () => {
+    const storage = { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() };
+    vi.stubGlobal('sessionStorage', storage);
+    try {
+      const b = new ErrorBoundary({ children: null, fallback: FALLBACK });
+      b.setState = vi.fn() as never;
+      b.componentDidMount();
+      b.componentDidCatch(new Error('x'), INFO as never);
+      b.componentDidUpdate();
+      expect(storage.getItem).not.toHaveBeenCalled();
+      expect(storage.removeItem).not.toHaveBeenCalled();
+      expect(b.setState).not.toHaveBeenCalled();
+      // The app-wide one still does both.
+      const app = new ErrorBoundary({ children: null });
+      app.setState = vi.fn() as never;
+      app.componentDidMount();
+      app.componentDidCatch(new Error('x'), INFO as never);
+      expect(storage.removeItem).toHaveBeenCalledWith('app_boundary_reloaded');
+      expect(storage.getItem).toHaveBeenCalledWith('app_boundary_reloaded');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

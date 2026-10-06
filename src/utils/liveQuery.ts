@@ -18,6 +18,21 @@
 //
 // So the error argument is not optional here. `onError` is required, and the failure is reported
 // with a context string that says which screen and which collection it was.
+//
+// ── The document is not trusted to name itself (06.10.2026) ─────────────────────────────────
+//
+// The id is the document's, never a field of it: the data used to be spread AFTER `id`, so any
+// document carrying a field called `id` — which a member can write on most shared collections —
+// replaced its own id, and the screen then wrote, deleted or keyed by the wrong one (a map there
+// crashed every list rendering it). Measured on live that day: no document in 33 collections
+// carries such a field, so nothing reads differently.
+//
+// And a throw inside `onNext` is a failure like any other. The SDK runs the callback in a timer,
+// so an exception there was uncaught: the listener kept throwing on every snapshot, the screen
+// kept its last state, and nothing said why — the arcade's list of the day froze that way on one
+// malformed `createdAt`. It is now reported under the listener's context and handed to `onError`.
+
+import { describeThrown } from './describeThrown';
 
 import {
   onSnapshot, type Query, type QuerySnapshot, type DocumentReference, type DocumentData, type DocumentSnapshot,
@@ -52,8 +67,8 @@ export function liveQuery<T = DocumentData>(
   // `pendingIds` is ours, not the SDK's, and is never passed to onSnapshot.
   options?: { includeMetadataChanges?: boolean; pendingIds?: boolean },
 ): Unsubscribe {
-  const next = (snap: QuerySnapshot<DocumentData>) => onNext(
-    snap.docs.map((d) => ({ id: d.id, ...(d.data() as T) })),
+  const next = (snap: QuerySnapshot<DocumentData>) => guarded(context, onError, () => onNext(
+    snap.docs.map((d) => ({ ...(d.data() as T), id: d.id })),
     {
       fromCache: snap.metadata.fromCache,
       hasPendingWrites: snap.metadata.hasPendingWrites,
@@ -61,7 +76,7 @@ export function liveQuery<T = DocumentData>(
         ? { pendingIds: snap.docs.filter((d) => d.metadata.hasPendingWrites).map((d) => d.id) }
         : {}),
     },
-  );
+  ));
   const error = (err: { message?: string; code?: string }) => {
     // A permission error and a missing index arrive the same way and matter the same amount:
     // both mean the screen below is about to lie about being empty.
@@ -95,10 +110,10 @@ export function liveDoc<T = DocumentData>(
   onError: (err: unknown) => void,
   options?: { includeMetadataChanges?: boolean },
 ): Unsubscribe {
-  const next = (snap: DocumentSnapshot<DocumentData>) => onNext(
-    snap.exists() ? ({ id: snap.id, ...(snap.data() as T) }) : null,
+  const next = (snap: DocumentSnapshot<DocumentData>) => guarded(context, onError, () => onNext(
+    snap.exists() ? ({ ...(snap.data() as T), id: snap.id }) : null,
     { fromCache: snap.metadata.fromCache, hasPendingWrites: snap.metadata.hasPendingWrites },
-  );
+  ));
   const error = (err: { message?: string; code?: string }) => {
     reportError(err?.message || 'document snapshot failed', {
       context,
@@ -109,4 +124,18 @@ export function liveDoc<T = DocumentData>(
   return options?.includeMetadataChanges
     ? onSnapshot(ref, { includeMetadataChanges: true }, next, error)
     : onSnapshot(ref, next, error);
+}
+
+/**
+ * Runs a listener's `onNext`; a throw is reported under the listener's context and handed to
+ * `onError`, so the screen can say it could not show the data instead of freezing on the last one.
+ */
+function guarded(context: string, onError: (err: unknown) => void, run: () => void): void {
+  try {
+    run();
+  } catch (err) {
+    const thrown = describeThrown(err);
+    reportError(thrown.message, { context, stack: thrown.stack ? thrown.stack.slice(0, 4000) : 'thrown in onNext' });
+    onError(err);
+  }
 }

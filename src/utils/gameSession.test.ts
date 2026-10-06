@@ -269,3 +269,43 @@ describe('the session winner, per game', () => {
     }
   });
 });
+
+// ── 06.10.2026: any member can write any of these fields ────────────────────────────────────
+describe('the session winner, whatever a member wrote', () => {
+  const POISON = { toString: 0 };
+  it('never throws, and never names anything but a uid', () => {
+    const odd: unknown[] = [POISON, { a: 1 }, 'x', 5, NaN, Infinity, [], null, undefined, true];
+    for (const gameType of ['tic-tac-toe', 'connect-4', 'memory-match', 'rummy-45', 'warlord-battle', 'other']) {
+      for (const v of odd) {
+        const games = [
+          { gameType, state: v },
+          { gameType, state: { players: v, scores: v, roundsWon: v, playerIds: v } },
+          { gameType, state: { players: { X: v, O: 'o', P1: v, P2: 'p2' }, scores: { X: v, O: 1, P1: v, P2: 1 }, roundsWon: { P1: v, P2: 1 } } },
+          { gameType, state: { players: { X: 'x', O: v, P1: 'p1', P2: v }, scores: { X: 1, O: 0, P1: 1, P2: 0 }, roundsWon: { P1: 1, P2: 0 } } },
+          { gameType, state: { playerIds: ['a', v, 'b'], players: { a: { totalScore: v, score: -3 }, b: { totalScore: -5, score: v } } } },
+          { gameType, winner: v },
+        ];
+        for (const g of games) {
+          let got: unknown;
+          expect(() => { got = getSessionWinner(g); }, `${gameType} ${JSON.stringify(g)}`).not.toThrow();
+          expect(got === null || (typeof got === 'string' && got !== ''), `${gameType} ${JSON.stringify(g)}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('a seat that is not a uid wins nothing; a score that is not a number counts as none', () => {
+    expect(getSessionWinner({ gameType: 'tic-tac-toe', state: { players: { X: POISON, O: 'o' }, scores: { X: 2, O: 1 } } })).toBeNull();
+    expect(getSessionWinner({ gameType: 'tic-tac-toe', state: { players: { X: 'x', O: 'o' }, scores: { X: POISON, O: 1 } } })).toBe('o');
+    expect(getSessionWinner({ gameType: 'connect-4', state: { players: { P1: 'a', P2: 'b' }, scores: { P1: '9', P2: 1 } } })).toBe('b');
+    expect(getSessionWinner({ gameType: 'rummy-45', state: { playerIds: ['a', 'b'], players: { a: { totalScore: POISON, score: 0 }, b: { totalScore: -5, score: 0 } } } })).toBe('a');
+    expect(getSessionWinner({ gameType: 'rummy-45', winner: POISON, state: {} })).toBeNull();
+    // Memory Match with no rounds counted yet falls back to the round's points: the same guards.
+    expect(getSessionWinner({ gameType: 'memory-match', state: { players: { P1: 'a', P2: 'b' }, scores: { P1: POISON, P2: 1 } } })).toBe('b');
+    expect(getSessionWinner({ gameType: 'memory-match', state: { players: { P1: POISON, P2: 'b' }, scores: { P1: 2, P2: 1 } } })).toBeNull();
+    // An id the players map does not hold as its OWN is nobody's entry, even when the map inherits
+    // one under that name.
+    const inherited = Object.create({ ghost: { totalScore: 5, score: 0 } });
+    expect(getSessionWinner({ gameType: 'rummy-45', winner: 'w', state: { playerIds: ['ghost'], players: inherited } })).toBe('w');
+  });
+});

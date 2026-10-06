@@ -68,20 +68,34 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Arcade, în interiorul grupului:** mutările din APK nu scriu `lastMoveAt`, deci un joc jucat doar
   pe telefon poate fi închis de expirarea de 24h în timp ce e jucat (dedus din cod, nemăsurat).
   (Titlul push-ului din `gameType` e închis din 06.10.)
-- **Alte câmpuri ale unui joc, scrise de un membru, pot strica ecranul celorlalți** (recenzia din
-  06.10, citit în cod, nereprodus). Regulile nu verifică `state` decât ca formă de bază (o hartă, iar
-  `playerIds` o listă, din 06.10) și nici `createdAt`. Toate trei cer un membru rău-intenționat al
-  grupului:
-  - **un joc deschis cu date stricate** (de exemplu `state.board` care nu e listă) duce toată aplicația
-    pe ecranul de eroare la apăsarea „Join”. Reîncărcarea o repară. Remediul: o graniță de eroare în
-    jurul panoului de joc din `GamesHubModal.tsx`, cu „datele jocului sunt stricate” și înapoi;
-  - **un `createdAt` care nu e dată** face sortarea listei din Arcade să arunce la fiecare actualizare,
-    iar lista zilei rămâne goală sau veche pentru toți, fără mesaj. Remediul: sortarea prin `activityMs`
-    din `gameSession.ts`;
-  - **un jucător numit `__proto__`** într-un joc terminat strică numerele clasamentului (și „NaNW” în
-    PvP) pentru cine deschide clasamentul, până la reîncărcare. Remediul: `Object.create(null)` pentru
-    harta clasamentului.
-  Implicit: toate trei într-o felie, doar în client. APK-ul rămâne expus la primul.
+- **Numele unui grup poate fi orice, nu doar text** (recenzia din 06.10, citit în cod): orice membru
+  poate scrie `groups/{id}.name` ca hartă, iar calendarul îl afișează pe fiecare încărcare. Aplicația
+  pică atunci pentru TOȚI membrii, la fiecare deschidere, pe web și în APK, și nimeni nu-l mai poate
+  repara din aplicație. Remediul e doar în regulă (numele, un text scurt; judecat pe diferență, ca un
+  grup vechi să poată fi părăsit). Următorul de făcut.
+- **Același fel de problemă, găsit de recenzia din 06.10, în alte colecții** (citit în cod, nereprodus;
+  toate cer un membru rău-intenționat):
+  - **un mesaj de chat cu `createdAt` care nu e dată** pică aplicația pentru cine deschide chatul
+    (`GroupChatWidget.tsx`, `toDate()`), pe web și în APK. Remediul: în regulă, `createdAt ==
+    request.time` la creare și fixat la modificare; în client, citirea doar dintr-un Timestamp;
+  - **o cheltuială cu `description` hartă** pică Wallet → Expenses pentru tot grupul. Remediul: în
+    regulă, `description` text.
+- **Expirarea automată a jocurilor și statisticile din Admin citesc primele 2000 de jocuri, după id**
+  (`functions/src/games.ts`): cine creează multe jocuri cu id-uri alese (de exemplu care încep cu `!`),
+  într-un grup al lui, ocupă toată fereastra, iar jocurile celorlalte grupuri nu mai expiră. Remediul:
+  citirea pe pagini, cu cursor, a întregii colecții; eventual o limită de jocuri pe om.
+- **Același fel de problemă, încă neverificat, pe evenimente:** regula de creare a evenimentelor nu
+  verifică tipul câmpurilor; un eveniment de grup cu `title` hartă probabil pică calendarul pentru tot
+  grupul. De urmărit cum se randează, apoi aceeași reparație.
+- **Ce rămâne expus pe APK în Arcade după 06.10:** un joc deschis cu date stricate (tabla, mâinile,
+  combinațiile) pică aplicația pentru cine îl deschide, până la repornire. Regula acoperă doar ce se
+  citește în afara jocului (bannerul, lista, clasamentul). Se rezolvă cu reconstruirea APK-ului.
+- **Statisticile din Admin și graficul de creștere** cad dacă un membru scrie `status` sau `createdAt`
+  de tip greșit pe un joc (`inc` și `tsOf` în `functions/src/index.ts`). Doar adminul vede. Remediul e
+  mic (cheia doar text, data prin `activityMs`).
+- **Istoricul clasamentului se poate rescrie:** un joc terminat (`finalized`) se poate modifica în
+  continuare de orice membru. Blocarea lui ar refuza în tăcere „Next Round” în APK, care nu știe de
+  `finalized`. Decizia lui Andrei; implicit nimic până la reconstruirea APK-ului.
 - **Un joc nou trimite o notificare tuturor membrilor, fără nicio limită.** Un membru poate crea și
   șterge jocuri la nesfârșit, iar fiecare trimite un push grupului (rândurile din clopoțel rămân).
   Cererile de prietenie și provocările Warlord au cotă zilnică (`notif_usage`); `onGameCreated` nu are.

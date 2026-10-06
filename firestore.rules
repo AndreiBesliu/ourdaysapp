@@ -764,6 +764,43 @@ service cloud.firestore {
     //    every server-owned field is fenced from client writes; all mutations go
     //    through the Warlord callables (Admin SDK bypasses these rules).
     match /games/{gameId} {
+      // What the installed APK reads of a game OUTSIDE the game itself — the calendar's banner,
+      // the arcade's list, the leaderboard — has the shape the games write: `state` a map, its
+      // `playerIds` a list of at most four uids (both clients stop at four), every seat (X, O, P1,
+      // P2) a uid or empty, and `winner` a uid or nothing. Any other value there crashed the APK's
+      // calendar or arcade for everybody in the group on that day (06.10.2026), and the APK cannot
+      // be repaired from here; the web guards its own screens (bannerPlayerIds, leaderboard.ts,
+      // the game panel's boundary). Judged on the resulting document. Measured on live that day:
+      // all 18 games are like this.
+      //
+      // A rummy game's `players` is keyed by uid, and the APK's leaderboard adds up `.score` and
+      // keys by `.uid` on every row of every finished game of the group: a row that was null, a
+      // uid that cannot become a key or a score that is not a number froze it for everybody. So
+      // its keys are among `playerIds` (where each can be reached by index — rules cannot loop),
+      // and each row is a map whose `uid`, if any, is text and whose `score`, if any, a number.
+      // Every rummy write of both clients keeps both; on live, all 6 rummy games do.
+      function rummyRowOk(seats, k) {
+        let row = seats.get(k, {});
+        return row is map && row.get('uid', k) is string && row.get('score', 0) is number;
+      }
+
+      function arcadeFieldsOk(d) {
+        let s = d.get('state', {});
+        let seats = s.get('players', {});
+        let ids = s.get('playerIds', []);
+        return s is map && seats is map && ids is list && ids.size() <= 4 &&
+          (ids.size() < 1 || ids[0] is string) && (ids.size() < 2 || ids[1] is string) &&
+          (ids.size() < 3 || ids[2] is string) && (ids.size() < 4 || ids[3] is string) &&
+          (seats.get('X', null) == null || seats.get('X', null) is string) &&
+          (seats.get('O', null) == null || seats.get('O', null) is string) &&
+          (seats.get('P1', null) == null || seats.get('P1', null) is string) &&
+          (seats.get('P2', null) == null || seats.get('P2', null) is string) &&
+          (d.get('winner', null) == null || d.get('winner', null) is string) &&
+          (d.get('gameType', '') != 'rummy-45' || (seats.keys().hasOnly(ids) &&
+            (ids.size() < 1 || rummyRowOk(seats, ids[0])) && (ids.size() < 2 || rummyRowOk(seats, ids[1])) &&
+            (ids.size() < 3 || rummyRowOk(seats, ids[2])) && (ids.size() < 4 || rummyRowOk(seats, ids[3]))));
+      }
+
       // Group branch stays FIRST so the existing arcade queries evaluate exactly as
       // they did before (where groupId == X ...). It is now null-guarded because a
       // GLOBAL Warlord battle has groupId == null, and isMemberOfGroup(null) would
@@ -792,13 +829,17 @@ service cloud.firestore {
         // `gameType` below, so a game made before this stays playable whatever it holds.
         request.resource.data.gameType in ['tic-tac-toe', 'connect-4', 'rummy-45', 'memory-match'] &&
         isMemberOfGroup(request.resource.data.groupId) &&
-        // `state` is a map and its `playerIds`, where there is one, a list: the calendar's banner
-        // in the installed APK runs `state.playerIds.map` on every rummy game of the day, so any
-        // other value crashed the calendar for everybody in the group looking at that day. Judged
-        // on the resulting document; measured on live 06.10.2026: 18 games, every `state` a map,
-        // `playerIds` a list on all six that have one.
-        request.resource.data.get('state', {}) is map &&
-        request.resource.data.get('state', {}).get('playerIds', []) is list &&
+        // The fields the APK reads outside the game (see arcadeFieldsOk). The first of them came
+        // in earlier the same day: the calendar's banner ran `state.playerIds.map` on every rummy
+        // game of the day, so a `playerIds` that was not a list crashed it for the whole group.
+        arcadeFieldsOk(request.resource.data) &&
+        // Both clients write `serverTimestamp()`, and the arcade's list sorts on it: one that was
+        // not a Timestamp froze the APK's list of the day for everybody.
+        request.resource.data.createdAt is timestamp &&
+        // The id is the document's: a field called `id` replaced it in every list (the APK spreads
+        // the data over the id) — writes and deletes then went to another game, and a map there
+        // crashed the list. No client writes one; on live, no document of any collection has it.
+        !('id' in request.resource.data) &&
         // `players` is the Warlord participant list, and the read rule above grants on it to
         // whoever it names — group or no group. Arcade seats live in `state.players`; no arcade
         // client (web or APK) has ever written the top-level key. Until 25.09.2026 nothing enforced
@@ -828,9 +869,11 @@ service cloud.firestore {
         request.resource.data.createdBy == resource.data.createdBy &&
         request.resource.data.gameType == resource.data.gameType &&
         request.resource.data.groupId == resource.data.groupId &&
-        // The same shape of `state` as at creation (see there).
-        request.resource.data.get('state', {}) is map &&
-        request.resource.data.get('state', {}).get('playerIds', []) is list &&
+        // The same shape as at creation, and the same `createdAt` and no `id` (see there). Nothing
+        // a game writes on a move touches either of the two.
+        arcadeFieldsOk(request.resource.data) &&
+        request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['id']) &&
         // Nor may `players` be ADDED or CHANGED (see create). Judged on the DIFF, not on the
         // resulting document: a game that already carries the key must stay playable, and taking
         // the key away removes a reader, which is allowed.

@@ -13,10 +13,13 @@ import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../../store';
 import { t, getDateLocale } from '../../utils/i18n';
-import { getSessionWinner, finalizeGameUpdate } from './gameResult';
+import { finalizeGameUpdate } from './gameResult';
 import { useDialog } from '../../hooks/useDialog';
 import { writeGame } from './gameWrite';
 import { gameTypeName, ownEntry } from './gameTypeName';
+import { leaderboardFrom } from './leaderboard';
+import { activityMs } from '../../utils/gameSession';
+import ErrorBoundary from '../ErrorBoundary';
 
 
 interface GamesHubModalProps {
@@ -326,7 +329,9 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
     );
 
     const unsubscribe = liveQuery<any>(q, 'GamesHubModal.activeGames',
-      (games) => { setActiveGamesError(false); setActiveGames(games.sort((a: any, b: any) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0))); },
+      // `activityMs`, not the Timestamp's own `toMillis()`: any member can write `createdAt`, and one that was
+      // not a Timestamp threw here, so the day's list froze for everybody (06.10.2026).
+      (games) => { setActiveGamesError(false); setActiveGames(games.sort((a: any, b: any) => (activityMs(b.createdAt) ?? 0) - (activityMs(a.createdAt) ?? 0))); },
       () => setActiveGamesError(true));
 
     return () => unsubscribe();
@@ -340,38 +345,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
     
     const unsubscribe = liveQuery<any>(q, 'GamesHubModal.leaderboard', (games) => {
       setLeaderboardError(false);
-      const statsMap: Record<string, { wins: number; points: number }> = {};
-      
-      games.forEach(g => {
-        // Credit the SESSION winner (leader across all rounds), not just the
-        // last round's `winner` field.
-        const sessionWinner = getSessionWinner(g);
-        // A session the clock closed with nobody ahead has nothing to contribute to
-        // anyone's record. Without this, an unjoined lobby that timed out put its creator
-        // in the standings on a row of zeros — a player who never played a hand.
-        if (g.abandoned && !sessionWinner) return;
-        if (sessionWinner) {
-          if (!statsMap[sessionWinner]) statsMap[sessionWinner] = { wins: 0, points: 0 };
-          statsMap[sessionWinner].wins += 1;
-        }
-
-        if (g.gameType === 'rummy-45' && g.state && g.state.players) {
-          Object.values(g.state.players).forEach((p: any) => {
-             if (p && p.uid) {
-               if (!statsMap[p.uid]) statsMap[p.uid] = { wins: 0, points: 0 };
-               // Cumulative penalty across the whole session (totalScore banks
-               // prior hands; score is the current hand). Penalties are negative.
-               statsMap[p.uid].points += (p.totalScore || 0) + (p.score || 0);
-             }
-          });
-        }
-      });
-
-      const sortedLeaderboard = Object.entries(statsMap)
-        .map(([uid, stats]) => ({ uid, ...stats }))
-        .sort((a, b) => b.wins - a.wins);
-
-      setLeaderboard(sortedLeaderboard);
+      setLeaderboard(leaderboardFrom(games));
     }, () => setLeaderboardError(true));
 
     return () => unsubscribe();
@@ -547,6 +521,21 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col relative bg-zinc-50 dark:bg-zinc-950">
           {playingGameId && activeGame ? (
+            // Any member of the group can write any field of a game, and the four games read their
+            // documents as the games themselves wrote them. A malformed one used to take the whole
+            // app down with it (06.10.2026); now only this panel says so, and the way back is here.
+            // Keyed by the game, so the next game opened starts clean.
+            <ErrorBoundary key={playingGameId} context="GamesHubModal.game" fallback={
+              <div role="alert" className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
+                <p className="text-sm text-zinc-600 dark:text-zinc-300">{t('gameCouldNotShow', language)}</p>
+                <button
+                  onClick={() => setPlayingGameId(null)}
+                  className="px-4 py-2 bg-primary/10 text-primary hover:bg-primary/20 rounded-lg text-sm font-semibold"
+                >
+                  {t('backToArcade', language)}
+                </button>
+              </div>
+            }>
             <div className="flex-1 flex flex-col">
               {activeGame.gameType === 'tic-tac-toe' && (
                 <TicTacToe game={activeGame} userMap={userMap} onBack={() => setPlayingGameId(null)} />
@@ -576,6 +565,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                 </div>
               )}
             </div>
+            </ErrorBoundary>
           ) : (
             <div className="flex flex-col gap-8">
               
@@ -687,9 +677,9 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                                       “winner” nobody played for: after a day of silence the
                                       sweep banks whoever was ahead, which is often nobody. */}
                                   {game.abandoned ? (
-                                    <><Clock className="w-3 h-3" /> {t('gameClosedIdle', language)}{game.winner ? ` · ${userMap[game.winner]?.name}` : ''}</>
+                                    <><Clock className="w-3 h-3" /> {t('gameClosedIdle', language)}{game.winner ? ` · ${ownEntry(userMap, game.winner)?.name}` : ''}</>
                                   ) : game.status === 'finished' ? (
-                                    <>{t('winnerLabel', language)}: {game.winner ? userMap[game.winner]?.name : t('draw', language)}</>
+                                    <>{t('winnerLabel', language)}: {game.winner ? ownEntry(userMap, game.winner)?.name : t('draw', language)}</>
                                   ) : (
                                     <><Clock className="w-3 h-3" /> {game.status === 'waiting' ? t('waitingForOpponent', language) : t('inProgressLabel', language)}</>
                                   )}
@@ -758,7 +748,7 @@ export default function GamesHubModal({ isOpen, onClose, groupId, groupName, use
                   ) : (
                     <div className="flex flex-col gap-3">
                       {leaderboard.map((entry, index) => {
-                        const user = userMap[entry.uid] || { name: t('unknownPerson', language) };
+                        const user = ownEntry(userMap, entry.uid) || { name: t('unknownPerson', language) };
                         return (
                           <div key={entry.uid} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex items-center justify-between shadow-sm">
                             <div className="flex items-center gap-4">

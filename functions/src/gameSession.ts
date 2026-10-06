@@ -65,34 +65,41 @@ export const STAMPED_FROM_MS = Date.parse('2026-09-16T00:00:00.000Z');
  * Connect 4, Memory Match) accumulate per-round wins in `state.scores`, so the session leader is
  * whoever has the higher score — the `winner` field on the doc only reflects the most recent
  * round. Rummy is a single hand, so its `winner` is already the session result.
+ *
+ * Any member of the group can write any of these fields (06.10.2026). So a score counts only as a
+ * finite number, a winner only as a non-empty string, and a player only through its own key: a
+ * map where a number belonged threw — in the leaderboard every member opens, in the End button,
+ * and in the server's sweep on every run — and a map in a seat was banked as the winner.
+ * For every document the games themselves write, the answer is the one it always was.
  */
 export function getSessionWinner(game: any): string | null {
-  const s = game?.state || {};
-  const players = s.players || {};
-  const scores = s.scores || {};
+  const s = mapOf(game?.state);
+  const players = mapOf(s.players);
+  const scores = mapOf(s.scores);
+  const seat = (key: string) => uidOf(players[key]);
 
   switch (game?.gameType) {
     case 'tic-tac-toe': {
-      const x = scores.X || 0, o = scores.O || 0;
+      const x = num(scores.X), o = num(scores.O);
       if (x === o) return null; // tie or no rounds won
-      return (x > o ? players.X : players.O) || null;
+      return x > o ? seat('X') : seat('O');
     }
     case 'connect-4': {
       // `scores` here ARE rounds won: Connect4 increments them once per round and never resets.
-      const p1 = scores.P1 || 0, p2 = scores.P2 || 0;
+      const p1 = num(scores.P1), p2 = num(scores.P2);
       if (p1 === p2) return null;
-      return (p1 > p2 ? players.P1 : players.P2) || null;
+      return p1 > p2 ? seat('P1') : seat('P2');
     }
     case 'memory-match': {
       // Memory Match is the exception, and it needed a field of its own. Its `scores` are PAIRS
       // AND STREAK BONUSES for the current round — `handleNextRound` resets both to zero — so
       // reading them as a session result credited whoever led the LAST round, however the rest
       // had gone. Andrei asked for the counter, 16.09.2026.
-      const won = s.roundsWon || {};
-      const r1 = won.P1 || 0, r2 = won.P2 || 0;
+      const won = mapOf(s.roundsWon);
+      const r1 = num(won.P1), r2 = num(won.P2);
       if (r1 + r2 > 0) {
         if (r1 === r2) return null;
-        return (r1 > r2 ? players.P1 : players.P2) || null;
+        return r1 > r2 ? seat('P1') : seat('P2');
       }
       // Nothing counted yet, so fall back to the per-round points — which is what this function
       // has always returned for this game. Deliberate, and not merely for old documents: a
@@ -100,31 +107,47 @@ export function getSessionWinner(game: any): string | null {
       // and reporting "nobody won" for a game with two rounds behind it would be a worse answer
       // than the imprecise one it gave yesterday. Every session started from here counts properly
       // from its first round.
-      const p1 = scores.P1 || 0, p2 = scores.P2 || 0;
+      const p1 = num(scores.P1), p2 = num(scores.P2);
       if (p1 === p2) return null;
-      return (p1 > p2 ? players.P1 : players.P2) || null;
+      return p1 > p2 ? seat('P1') : seat('P2');
     }
     case 'rummy-45': {
       // Multi-round: the session winner is the LEAST-penalised player. Penalties are stored
       // NEGATIVE (calculatePenaltyPoints), so the least penalty is the HIGHEST cumulative
       // (closest to 0) → pick the max. If no multi-round totals exist (single hand), fall back to
       // the hand winner.
-      const ids: string[] = s.playerIds || [];
-      const multiRound = ids.some((id) => players[id]?.totalScore !== undefined);
+      const ids = (Array.isArray(s.playerIds) ? s.playerIds : []).filter((id: unknown): id is string => uidOf(id) !== null);
+      const entry = (id: string) => mapOf(Object.prototype.hasOwnProperty.call(players, id) ? players[id] : null);
+      const multiRound = ids.some((id) => entry(id).totalScore !== undefined);
       if (multiRound && ids.length > 0) {
         let best: string | null = null;
         let bestTotal = -Infinity;
         ids.forEach((id) => {
-          const total = (players[id]?.totalScore || 0) + (players[id]?.score || 0);
+          const total = num(entry(id).totalScore) + num(entry(id).score);
           if (total > bestTotal) { bestTotal = total; best = id; }
         });
         return best;
       }
-      return game?.winner || null;
+      return uidOf(game?.winner);
     }
     default:
-      return game?.winner || null;
+      return uidOf(game?.winner);
   }
+}
+
+/** A map as the games store one, or an empty one for anything else. */
+function mapOf(v: unknown): Record<string, any> {
+  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, any>) : {};
+}
+
+/** A score: a finite number, or 0. */
+function num(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0;
+}
+
+/** A player: a non-empty string, or nobody. */
+function uidOf(v: unknown): string | null {
+  return typeof v === 'string' && v !== '' ? v : null;
 }
 
 /**

@@ -12193,3 +12193,80 @@ refuză oricum), deci nu e numărat.
 `npm run build`, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46). Toate verzi.
 
 **Nepublicat.** Cere funcțiile, regulile, apoi hosting-ul, fiecare cu acordul lui Andrei.
+
+## 2026-10-06 · Datele unui joc scrise de un membru nu mai strică ecranul celorlalți (Task Started)
+
+**Prompt (Andrei):** „continua” (după titlul notificării de joc, `3af621d`; publicarea cere în
+continuare acordul lui explicit).
+**Model:** Claude Opus 5.5.
+**Ce e** (BACKLOG, secțiunea 2, găsit de recenzia de la `3af621d`): regulile nu verifică forma lui
+`state` (în afară de hartă și `playerIds`) și nici `createdAt`, iar ecranele Arcade-ului citesc
+documentul fără gardă. Un membru rău-intenționat poate:
+- duce toată aplicația pe ecranul de eroare când altcineva deschide jocul;
+- îngheța lista de jocuri a zilei pentru toți (sortarea după `createdAt` aruncă);
+- strica numerele clasamentului cu un jucător numit `__proto__`.
+**Plan:**
+- harta tuturor citirilor din documentul unui joc, pe web și în APK, și măsurarea pe live;
+- reproducerea pe banc (aplicația reală, emulatoare);
+- reparația în client, cu decizia pe regulă doar unde APK-ul o cere;
+- recenzie, mutații, porți; publicarea doar cu acordul lui Andrei.
+
+## 2026-10-06 · Datele unui joc scrise de un membru nu mai strică ecranul celorlalți (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Reprodus pe banc** (aplicația reală, pe emulatoare, intrat ca Ana):
+- un joc X și 0 cu `state.board` text, deschis de Ana: toată aplicația pe „Something went wrong”;
+- un joc cu `createdAt` număr: sortarea arunca (`a.createdAt?.toMillis is not a function`), lista
+  zilei rămânea goală pentru toți, fără mesaj;
+- un joc terminat câștigat de un „jucător” `__proto__`: după deschiderea clasamentului, `({}).wins`
+  era `NaN` în toată pagina.
+
+**Pe live** (doar citire): 18 jocuri, toate terminate și bine formate; niciun document din 33 de
+colecții nu are un câmp `id`. E prevenție.
+
+**Reparația:**
+- **Granița de eroare a jocului deschis:** `ErrorBoundary` are un mod local (`fallback`, `context`)
+  care nu atinge marcajul de reîncărcare al celei din toată aplicația. Arcade-ul pune jocul deschis în
+  ea, cheiată pe joc, cu „Jocul nu a putut fi afișat” și „Înapoi la Arcade” (`gameCouldNotShow`, șase
+  limbi); eroarea ajunge în Health ca `GamesHubModal.game`.
+- **Lista zilei** se sortează prin `activityMs`, care nu aruncă.
+- **Clasamentul** (`leaderboard.ts`): hartă fără prototip, jucătorul doar text, punctele doar numere;
+  pentru jocurile reale dă exact ce dădea (comparat cu vechiul algoritm).
+- **`getSessionWinner`** (ambele copii): doar hărți, numere finite și id-uri text. Îl folosesc butonul
+  End, clasamentul și expirarea automată de pe server, care arunca la fiecare rulare pe un astfel de joc.
+- **Orice listă din aplicație:** id-ul e al documentului (`{ ...data, id }` în `liveQuery`/`liveDoc` și
+  în cele cinci locuri care construiesc obiecte singure), iar o aruncare în `onNext` e raportată și
+  trimisă la `onError` în loc să înghețe lista în tăcere.
+- **Regula, pentru APK-ul care nu se poate repara de aici** (`arcadeFieldsOk`): locurile jucătorilor,
+  `playerIds` (cel mult patru) și câștigătorul sunt id-uri; la remi, rândurile jucătorilor sunt hărți cu
+  `uid` text și `score` număr, iar cheile lor sunt printre `playerIds`; `createdAt` e o dată, fixată;
+  niciun câmp `id`. Pe live, toate jocurile o respectă (`predeploy-measure` le numără).
+
+**Verificat pe banc după reparație:** lista cu toate cele 9 jocuri, sortată; cele patru jocuri stricate
+(câte unul din fiecare tip) rămân în panoul lor, iar jocurile sănătoase deschise după ele merg;
+clasamentul lasă `({}).wins` nedefinit; patru rânduri în `errorLogs` sub `GamesHubModal.game`.
+
+**Recenzie adversarială** (4 lentile: ascultătorii, compatibilitatea regulii, atacul, testele), cu
+verificare separată:
+- **Fără regresii** pe cele 34 de ascultători și pe granița din toată aplicația.
+- **Confirmat și reparat:** clasamentul din APK se bloca pe un rând de remi stricat (regula pe
+  rânduri); `ExpensesTab`, `EventDetailsModal` și `LeaveGroupModal` lăsau un câmp `id` să înlocuiască
+  id-ul (aceeași reparație, plus un test pe tot `src/`); patru goluri în teste (lobby abandonat,
+  `playerIds` pe pozițiile 3–4, ramura Memory fără runde, testul de chei proprii care nu deosebea nimic).
+- **Confirmat, mai vechi, în BACKLOG:** chatul cu `createdAt` greșit, cheltuiala cu `description`
+  hartă, expirarea jocurilor orbită de 2000 de jocuri cu id-uri alese, câmpurile din interiorul jocului
+  pe APK (doar reconstruirea îl repară).
+
+**Mutații:** 46, toate prinse. Controalele negative au trecut întâi, și pe suitele de a doua șansă.
+- Prima rulare a lăsat 4 supraviețuitori (A7–A10, câte un loc din `playerIds`): cazurile de test erau
+  toate pe jocuri de remi, unde verificarea rândurilor le refuza oricum. Adăugate cazuri pe X și 0;
+  reluați, toți patru prinși.
+- `mapOf` (W3) e prins doar de testul care ține copiile identice: e un mutant echivalent (o proprietate
+  citită de pe un text sau un număr nu aruncă), deci n-are cum să aibă un test de comportament.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2420), `tsc` și build-ul funcțiilor (copiile `gameSession`
+identice), `test:rules` (624), `npm run build`, `check-split`, `check-offline`, `check-bundle`,
+`test:tz` (46). Toate verzi.
+
+**Nepublicat.** Cere funcțiile (expirarea), regulile și hosting-ul, fiecare cu acordul lui Andrei.

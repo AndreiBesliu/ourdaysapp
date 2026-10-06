@@ -385,3 +385,124 @@ describe('a game is one of the arcade\u2019s games', () => {
     }
   });
 });
+
+// ── 06.10.2026: what the installed APK reads of a game outside the game ─────────────────────
+// The APK's calendar banner, arcade list and leaderboard read seats, `playerIds`, `winner`,
+// `createdAt` and the id, and it cannot be repaired from here: a value of the wrong kind in any of
+// them crashed its calendar or arcade for everybody in the group on that day.
+
+/** A map with an own `toString`: it cannot become text, a key, or a number. */
+const POISON = { toString: 0 };
+
+describe('what the APK reads of a game outside it has the shape the games write', () => {
+  const ttt = WEB_GAME(BOB, 'tic-tac-toe');
+  const c4 = WEB_GAME(BOB, 'connect-4');
+  const rummy = WEB_GAME(BOB, 'rummy-45');
+  const withState = (g: typeof ttt, extra: Record<string, unknown>) => ({ ...g, state: { ...g.state, ...extra } });
+
+  it('at creation: every seat a uid or empty, playerIds at most four uids, winner a uid or nothing', async () => {
+    const refused: Record<string, unknown>[] = [
+      withState(ttt, { players: { X: POISON, O: null } }),
+      withState(ttt, { players: { X: BOB, O: 5 } }),
+      withState(ttt, { players: { X: { uid: BOB }, O: null } }),
+      withState(ttt, { players: 'x' }),
+      withState(c4, { players: { P1: BOB, P2: POISON } }),
+      withState(c4, { players: { P1: 7, P2: null } }),
+      withState(rummy, { playerIds: [POISON] }),
+      withState(rummy, { playerIds: [BOB, 5] }),
+      withState(rummy, { playerIds: [BOB, ALICE, 'c', 'd', 'e'] }),
+      withState(rummy, { playerIds: [BOB, ALICE, 5] }),
+      withState(rummy, { playerIds: [BOB, ALICE, 'c', POISON] }),
+      // On a game that is not rummy, where no player row stands in for the list: each place on its own.
+      withState(ttt, { playerIds: [POISON] }),
+      withState(ttt, { playerIds: [BOB, 5] }),
+      withState(ttt, { playerIds: [BOB, ALICE, { a: 1 }] }),
+      withState(ttt, { playerIds: [BOB, ALICE, 'c', 7] }),
+      { ...ttt, winner: POISON },
+      { ...ttt, winner: { a: 1 } },
+      { ...ttt, winner: 5 },
+      { ...ttt, winner: ['x'] },
+    ];
+    for (const g of refused) await assertFails(addDoc(collection(as(BOB), 'games'), g));
+    // Controls: the games as the web writes them, and the most a rummy game ever holds.
+    for (const g of [ttt, c4, rummy, withState(rummy, { playerIds: [BOB, ALICE, 'c', 'd'] }), withState(ttt, { playerIds: [BOB, ALICE, 'c', 'd'] }), { ...ttt, winner: BOB }]) {
+      await assertSucceeds(addDoc(collection(as(BOB), 'games'), g));
+    }
+  });
+
+  it('at creation: `createdAt` is the server\u2019s time, and there is no `id`', async () => {
+    const { createdAt: _gone, ...noTime } = ttt;
+    for (const g of [{ ...ttt, createdAt: 0 }, { ...ttt, createdAt: 'x' }, { ...ttt, createdAt: { toMillis: 1 } }, noTime]) {
+      await assertFails(addDoc(collection(as(BOB), 'games'), g));
+    }
+    for (const id of ['another-game', POISON, '']) {
+      await assertFails(addDoc(collection(as(BOB), 'games'), { ...ttt, id }));
+    }
+  });
+
+  it('on a move: the same shapes, the same `createdAt`, still no `id`', async () => {
+    const made = await assertSucceeds(addDoc(collection(as(BOB), 'games'), ttt));
+    const madeRummy = await assertSucceeds(addDoc(collection(as(BOB), 'games'), rummy));
+    const g = doc(as(ALICE), 'games', made.id);
+    for (const change of [
+      { 'state.players.O': POISON }, { 'state.players.O': 5 }, { 'state.players.X': { a: 1 } },
+      { winner: POISON }, { winner: 5 },
+      { createdAt: serverTimestamp() }, { createdAt: 0 }, { createdAt: deleteField() },
+      { id: made.id }, { id: 'another-game' },
+    ]) {
+      await assertFails(updateDoc(g, change));
+    }
+    await assertFails(updateDoc(doc(as(ALICE), 'games', madeRummy.id), { 'state.playerIds': [BOB, 5] }));
+    await assertFails(updateDoc(doc(as(ALICE), 'games', madeRummy.id), { 'state.playerIds': [BOB, ALICE, 'c', 'd', 'e'] }));
+    // The moves the games really make, on the same two games.
+    await assertSucceeds(updateDoc(g, { 'state.players.O': ALICE, status: 'playing' }));
+    await assertSucceeds(updateDoc(g, { 'state.board': ['X', null, null, null, null, null, null, null, null], status: 'finished', winner: BOB }));
+    await assertSucceeds(updateDoc(g, { 'state.board': Array(9).fill(null), status: 'playing', winner: null }));
+    await assertSucceeds(updateDoc(g, finalizeGameUpdate({ gameType: 'tic-tac-toe', state: { players: { X: BOB, O: ALICE }, scores: { X: 1, O: 0 } } })));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'games', madeRummy.id), { 'state.playerIds': [BOB, ALICE] }));
+  });
+
+  it('a rummy game\u2019s player rows: keys among playerIds, each a map, its uid text and its score a number', async () => {
+    // The APK's leaderboard reads `.uid` and `.score` off every row of every finished rummy game.
+    const row = (extra: Record<string, unknown>) => ({ uid: BOB, hand: [], hasMelded: false, score: 0, ...extra });
+    for (const players of [
+      { [BOB]: null }, { [BOB]: 5 }, { [BOB]: row({ uid: POISON }) }, { [BOB]: row({ uid: 7 }) },
+      { [BOB]: row({ score: POISON }) }, { [BOB]: row({ score: '3' }) }, { [BOB]: row({}), zz: row({ uid: 'zz' }) },
+    ]) {
+      await assertFails(addDoc(collection(as(BOB), 'games'), withState(rummy, { players })));
+    }
+    // Every one of the four places is checked, not only the first.
+    const four = [BOB, ALICE, 'c', 'd'];
+    const rows = Object.fromEntries(four.map((u) => [u, row({ uid: u })]));
+    for (let i = 1; i < 4; i++) {
+      await assertFails(addDoc(collection(as(BOB), 'games'), withState(rummy, { playerIds: four, players: { ...rows, [four[i]]: null } })));
+      await assertFails(addDoc(collection(as(BOB), 'games'), withState(rummy, { playerIds: four, players: { ...rows, [four[i]]: row({ score: POISON }) } })));
+    }
+    await assertSucceeds(addDoc(collection(as(BOB), 'games'), withState(rummy, { playerIds: four, players: rows })));
+    const made = await assertSucceeds(addDoc(collection(as(BOB), 'games'), rummy));
+    const g = doc(as(ALICE), 'games', made.id);
+    for (const change of [
+      { 'state.players.zz': null }, { [`state.players.${BOB}`]: null }, { [`state.players.${BOB}.uid`]: POISON },
+      { [`state.players.${BOB}.score`]: POISON }, { [`state.players.${BOB}.score`]: 'x' },
+    ]) {
+      await assertFails(updateDoc(g, change));
+    }
+    // What the game really writes: a join, a hand's penalty, a row the deal has not written yet.
+    await assertSucceeds(updateDoc(g, {
+      'state.playerIds': [BOB, ALICE],
+      'state.players': { [BOB]: row({}), [ALICE]: row({ uid: ALICE }) },
+    }));
+    await assertSucceeds(updateDoc(g, { [`state.players.${BOB}.score`]: -12, [`state.players.${ALICE}.score`]: 0 }));
+    await assertSucceeds(updateDoc(g, { 'state.players': {} }));
+  });
+
+  it('a game made before, with an older `createdAt` or none, stays playable', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'games', 'g-dated'), { ...ttt, createdAt: new Date('2026-05-10T10:00:00Z') });
+      await setDoc(doc(db, 'games', 'g-undated'), { gameType: 'tic-tac-toe', createdBy: ALICE, groupId: G1, status: 'waiting', state: {} });
+    });
+    for (const id of ['g-dated', 'g-undated', 'g-arcade']) {
+      await assertSucceeds(updateDoc(doc(as(BOB), 'games', id), { status: 'playing' }));
+    }
+  });
+});

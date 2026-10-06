@@ -88,7 +88,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           const docSnap = await getDoc(docRef);
           if (startedFor !== event?.id) return;
           if (docSnap.exists()) {
-            setLinkedAsset({ id: docSnap.id, ...docSnap.data() });
+            setLinkedAsset({ ...docSnap.data(), id: docSnap.id });
           } else {
             setMainAssetDenied(true);
           }
@@ -123,7 +123,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
             try {
               const docSnap = await getDoc(doc(db, 'assets', item.assetId));
               if (docSnap.exists()) {
-                newMap[item.assetId] = { id: docSnap.id, ...docSnap.data() };
+                newMap[item.assetId] = { ...docSnap.data(), id: docSnap.id };
               }
             } catch (e) {
               (isOfflineError(e) ? offline : refused).add(item.assetId);

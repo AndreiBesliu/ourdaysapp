@@ -137,10 +137,16 @@ grp.eventsWithDeadGroupId = events.filter((e) => typeof e.groupId === 'string' &
 // Arcade games carrying a top-level `players` (the read rule grants on it to whoever it names).
 // And, since 06.10.2026, games whose `gameType` is not one of the arcade's: the create rule now
 // refuses them, and the banner shows them as "Arcade". Counted, never printed.
+// And what the rule `arcadeFieldsOk` (same day) wants of every arcade game a move touches: any
+// game counted here would refuse every move until fixed. All must be 0 before the rules go out.
 const gm = {
   games: 0, warlord: 0, arcade: 0, arcadeWithPlayersKey: 0, arcadePlayersNamingNonMember: 0, arcadePlayersNotList: 0,
   arcadeTypeNotInList: 0, arcadeTypeNotString: 0,
+  arcadeStateNotMap: 0, arcadeSeatNotUid: 0, arcadePlayerIdsBad: 0, arcadeWinnerNotUid: 0, arcadeCreatedAtNotTimestamp: 0, withIdField: 0,
+  arcadeRummyRowsBad: 0,
 };
+const isMap = (v) => v !== null && typeof v === 'object' && !Array.isArray(v) && typeof v.toMillis !== 'function';
+const uidOrEmpty = (v) => v === undefined || v === null || typeof v === 'string';
 for (const d of (await db.collection('games').get()).docs) {
   const x = d.data();
   gm.games++;
@@ -148,6 +154,21 @@ for (const d of (await db.collection('games').get()).docs) {
   gm.arcade++;
   if (typeof x.gameType !== 'string') gm.arcadeTypeNotString++;
   else if (!ARCADE_GAME_TYPES.includes(x.gameType)) gm.arcadeTypeNotInList++;
+  if ('id' in x) gm.withIdField++;
+  const st = x.state === undefined ? {} : x.state;
+  if (!isMap(st)) gm.arcadeStateNotMap++;
+  else {
+    const seats = st.players === undefined ? {} : st.players;
+    if (!isMap(seats) || !['X', 'O', 'P1', 'P2'].every((k) => uidOrEmpty(seats[k]))) gm.arcadeSeatNotUid++;
+    const ids = st.playerIds === undefined ? [] : st.playerIds;
+    if (!Array.isArray(ids) || ids.length > 4 || ids.some((u) => typeof u !== 'string')) gm.arcadePlayerIdsBad++;
+    else if (x.gameType === 'rummy-45' && isMap(seats) && (
+      Object.keys(seats).some((k) => !ids.includes(k))
+      || Object.values(seats).some((r) => !isMap(r) || ('uid' in r && typeof r.uid !== 'string') || ('score' in r && typeof r.score !== 'number'))
+    )) gm.arcadeRummyRowsBad++;
+  }
+  if (!uidOrEmpty(x.winner)) gm.arcadeWinnerNotUid++;
+  if (x.createdAt !== undefined && x.createdAt !== null && typeof x.createdAt?.toMillis !== 'function') gm.arcadeCreatedAtNotTimestamp++;
   if (!('players' in x)) continue;
   gm.arcadeWithPlayersKey++;
   if (!Array.isArray(x.players)) { gm.arcadePlayersNotList++; continue; }

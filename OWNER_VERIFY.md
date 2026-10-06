@@ -118,6 +118,36 @@
 
 ---
 
+## 🆕 Datele unui joc scrise de un membru nu mai strică ecranul celorlalți (06.10) — NEPUBLICAT (cere regulile și hosting-ul; funcțiile pentru expirarea jocurilor)
+
+**Fapt:** orice membru al unui grup poate scrie orice câmp al unui joc din Arcade, iar ecranele îl
+citeau fără gardă. Reprodus pe aplicația reală, pe emulatoare:
+- **un joc cu tabla stricată**, deschis de altcineva, ducea toată aplicația pe „Something went wrong”;
+- **un `createdAt` care nu e dată** golea lista jocurilor zilei pentru toți, fără niciun mesaj;
+- **un jucător numit `__proto__`** strica, după deschiderea clasamentului, numerele din toată
+  aplicația (și „NaNW” în lista PvP din Warlord), până la reîncărcare.
+
+Pe live nu s-a întâmplat: toate cele 18 jocuri sunt bine formate (măsurat azi). Acum:
+- **jocul deschis are granița lui:** dacă nu se poate afișa, panoul spune „Jocul nu a putut fi
+  afișat” și are „Înapoi la Arcade”; restul aplicației merge, iar eroarea ajunge în Health
+  (`GamesHubModal.game`);
+- **lista se sortează fără să arunce**, iar **clasamentul** nu mai poate atinge nimic din afara lui;
+- **oricare listă din aplicație:** id-ul unui document e al documentului, nu un câmp din el, iar o
+  eroare în prelucrarea datelor e raportată și spusă pe ecran în loc să înghețe lista în tăcere;
+- **regula** cere ca locurile jucătorilor, lista lor și câștigătorul să fie id-uri, `createdAt` o dată
+  care nu se mai schimbă și niciun câmp `id`. Asta apără și APK-ul, care nu se poate repara de aici,
+  pentru ce citește în afara jocului (bannerul, lista, clasamentul). Un joc stricat deschis în APK îl
+  pică în continuare până la repornire (în BACKLOG).
+
+**Ce vezi diferit:** nimic, pentru jocurile normale.
+
+- [ ] **După publicare:** deschide un joc din Arcade și fă o mutare.
+      - **Cum arată bine:** jocul merge ca înainte.
+      - **Ce e greșit:** mesajul „Jocul nu a putut fi afișat” pe un joc normal, sau o mutare refuzată.
+        Spune-mi; Health arată eroarea sub `GamesHubModal.game`.
+
+---
+
 ## 🆕 Titlul notificării unui joc nu mai e text liber (06.10) — NEPUBLICAT (cere funcțiile, regulile, apoi hosting-ul)
 
 **Fapt:** la crearea unui joc din Arcade, tipul jocului (`gameType`) era text liber, iar serverul îl

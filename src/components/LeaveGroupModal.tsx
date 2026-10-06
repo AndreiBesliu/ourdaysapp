@@ -54,7 +54,7 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
     try {
       const q = query(collection(db, 'events'), where('groupId', '==', groupId));
       const snapshot = await getDocs(q);
-      const allGroupEvents = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const allGroupEvents = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
 
       // Filter events the user is a part of
       const involved = allGroupEvents.filter((ev: any) => {
