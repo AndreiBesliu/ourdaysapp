@@ -13,6 +13,7 @@ import { type DeployCombatantClaim, sanitizeDeploy } from '@warlord/logic/combat
 import { fieldedStrength } from '@warlord/logic/combat/army';
 import { createWarlordChallenge, forfeitWarlordBattle } from '../serverActions';
 import { saveWarlordDomain } from '../warlordCloud';
+import { groupNameText } from '../utils/groupName';
 
 export const WARLORD_GAME_TYPE = 'warlord-battle';
 // Keep in sync with WARLORD_TURN_TIMEOUT_HOURS in functions/src/index.ts — the server
@@ -176,7 +177,7 @@ export function subscribeMyGroups(
 ): () => void {
   const q = query(collection(db, 'groups'), where('members', 'array-contains', uid));
   return liveQuery<any>(q, 'pvpApi.myGroups', (docs) => {
-    cb(docs.map((d) => ({ id: d.id, name: d.name || 'Group', members: d.members || [] })));
+    cb(docs.map((d) => ({ id: d.id, name: groupNameText(d.name) || 'Group', members: d.members || [] })));
   }, onError);
 }
 

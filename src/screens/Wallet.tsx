@@ -22,6 +22,7 @@ import OfflineCardsStatus from '../components/OfflineCardsStatus';
 import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
 import { transferAssetCopy } from '../serverActions';
+import { groupNameText } from '../utils/groupName';
 import {
   canEdit, groupNameOf, mergeAssets, shareFieldsFor, shareKindOf, shareListenerGroupIds,
   shareTargetOf,
@@ -248,7 +249,7 @@ export default function Wallet() {
 
     const qGroups = query(collection(db, 'groups'), where('members', 'array-contains', auth.currentUser.uid));
     const unsubGroups = liveQuery<any>(qGroups, 'Wallet.groups', async (fetchedGroups) => {
-      setMyGroups(fetchedGroups.map(g => ({ id: g.id, name: g.name || t('group', language), members: Array.isArray(g.members) ? g.members : [] })));
+      setMyGroups(fetchedGroups.map(g => ({ id: g.id, name: groupNameText(g.name) || t('group', language), members: Array.isArray(g.members) ? g.members : [] })));
       const memberIds = new Set<string>();
       fetchedGroups.forEach((g: any) => g.members?.forEach((id: string) => memberIds.add(id)));
       

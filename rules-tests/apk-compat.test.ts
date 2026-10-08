@@ -52,10 +52,10 @@
 import { beforeAll, afterAll, beforeEach, describe, it } from 'vitest';
 import { assertSucceeds } from '@firebase/rules-unit-testing';
 import {
-  addDoc, arrayUnion, collection, deleteDoc, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch,
+  addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch,
 } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import { ALICE, BOB, G1, EMAIL, as, filesAs, resetBucket, resetWorld, seed, startEnv, stopEnv } from './_harness';
+import { ALICE, BOB, CAROL, G1, EMAIL, as, filesAs, resetBucket, resetWorld, seed, startEnv, stopEnv } from './_harness';
 
 beforeAll(() => startEnv('demo-apk-compat'));
 afterAll(stopEnv);
@@ -318,5 +318,34 @@ describe('the installed app deletes a group itself (06.10.2026)', () => {
     const invites = await assertSucceeds(getDocs(query(collection(db, 'group_invites'), where('groupId', '==', 'apk-g'))));
     for (const i of invites.docs) await assertSucceeds(deleteDoc(doc(db, 'group_invites', i.id)));
     await assertSucceeds(deleteDoc(doc(db, 'groups', 'apk-g')));
+  });
+});
+
+describe('what the installed APK changes on a group', () => {
+  // The bundle's group updates, field for field: a rename `{name: f.trim()}`, a removal and a leave
+  // `{members: arrayRemove(uid)}`. Since 08.10.2026 a client may change only those two keys, and the
+  // name only to text of 1 to 60 characters; every one of these must stay allowed — also on a group
+  // whose stored name is already odd, which the rule judges only when a write changes it.
+  beforeEach(async () => {
+    await seed(async (db) => {
+      for (const [id, name] of [['apk-g', 'Family'], ['apk-g-odd', { a: 1 }]] as const) {
+        await setDoc(doc(db, 'groups', id), {
+          name, ownerId: ALICE, createdAt: '2026-09-01T00:00:00.000Z', members: [ALICE, BOB, CAROL],
+          lastMessageAt: new Date('2026-10-01T10:00:00Z'), lastMessageBy: ALICE, lastMessageText: 'hi',
+        });
+      }
+    });
+  });
+
+  it('the owner renames it, removes a member; a member leaves', async () => {
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', 'apk-g'), { name: 'Renamed' }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', 'apk-g'), { members: arrayRemove(CAROL) }));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', 'apk-g'), { members: arrayRemove(BOB) }));
+  });
+
+  it('the same removal and leave on a group whose name is already odd', async () => {
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', 'apk-g-odd'), { members: arrayRemove(CAROL) }));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', 'apk-g-odd'), { members: arrayRemove(BOB) }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', 'apk-g-odd'), { name: 'Fixed' }));
   });
 });

@@ -23,6 +23,7 @@ import { useVerifiedEmail } from '../hooks/useVerifiedEmail';
 import GroupChatWidget from '../components/GroupChatWidget';
 import GamesHubModal from '../components/games/GamesHubModal';
 import { bannerPlayerIds, gameTypeName } from '../components/games/gameTypeName';
+import { withGroupName } from '../utils/groupName';
 import RecurringEventsPanel from '../components/RecurringEventsPanel';
 import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../store';
@@ -228,7 +229,9 @@ export default function CalendarHome() {
     const qGroups = query(collection(db, 'groups'), where('members', 'array-contains', auth.currentUser.uid));
     const unsubscribeGroups = liveQuery<any>(qGroups, 'CalendarHome.groups', async (fetchedGroups) => {
       setGroupsLoadError(false);
-      setGroups(fetchedGroups);
+      // Names as text only: a pill, a title or a label built from a name that was not text crashed
+      // the app for the whole group on every load (08.10.2026, src/utils/groupName.ts).
+      setGroups(fetchedGroups.map(withGroupName));
       // A group deleted, or one this person was removed from, used to stay selected — an empty
       // calendar under a tab that no longer exists for them.
       setActiveGroupId((current) => reconciledActiveGroup(current, fetchedGroups));
@@ -903,7 +906,7 @@ export default function CalendarHome() {
                     : 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-primary/50'
                 }`}
               >
-                <Users className="w-4 h-4" /> {group.name}
+                <Users className="w-4 h-4" /> {group.name || t('group', language)}
               </button>
             ))}
 

@@ -299,6 +299,19 @@ service cloud.firestore {
 
     // ── Groups ──
     match /groups/{groupId} {
+      // A group's name is what every member's calendar shows on every load, on the web and in the
+      // installed APK. Until 08.10.2026 nothing checked it: a member could write it as a map, and the
+      // app crashed for the whole group at every launch — on the web onto the recovery screen, in
+      // the APK onto a white one — with no way to repair it from inside the app (reproduced on the
+      // emulators). Text, 1 to 60 characters: 60 is the server's GROUP_NAME_MAX
+      // (functions/src/senderIdentity.ts), which already cuts the invitation stamp, and the web's
+      // inputs stop there (src/utils/groupName.ts). Measured on live that day: 5 groups, the longest
+      // name 10 characters. `is string` says what is meant; `trim()` alone would also refuse
+      // anything else, by an error.
+      function groupNameOk(d) {
+        return d.get('name', null) is string && d.name.size() <= 60 && d.name.trim().size() > 0;
+      }
+
       allow read: if isSignedIn() && request.auth.uid in resource.data.members;
       // Creator must own the group and be its ONLY member.
       //
@@ -320,6 +333,12 @@ service cloud.firestore {
       // the Admin SDK, which these rules do not constrain. The only client-created group is a
       // group of one — `CreateGroupModal` already writes `members: [auth.currentUser.uid]`.
       allow create: if isSignedIn() &&
+        // Exactly what both clients write (CreateGroupModal; the APK's the same four keys): every
+        // other key is the server's (`lastMessage*`, `formerMembers`) or nobody's — an `id`, for
+        // one, which the APK spreads over the group's real id.
+        request.resource.data.keys().hasOnly(['name', 'ownerId', 'members', 'createdAt']) &&
+        groupNameOk(request.resource.data) &&
+        request.resource.data.get('createdAt', '') is string &&
         request.resource.data.ownerId == request.auth.uid &&
         request.resource.data.members.hasOnly([request.auth.uid]) &&
         request.auth.uid in request.resource.data.members &&
@@ -383,10 +402,20 @@ service cloud.firestore {
         // who could write it could mark somebody who simply LEFT as deleted, under any name.
         && request.resource.data.get('formerMembers', null)
              == resource.data.get('formerMembers', null)
+        // A member changes the NAME and the MEMBER LIST, nothing else (08.10.2026): the only two
+        // things either client writes. Judged on the keys this write changes, so a group is never
+        // re-judged on what it already holds. It covers the pins above, and keeps out what they did
+        // not: `lastMessageAt` (a member could put their group at the top of everybody's chat list),
+        // `createdAt`, and any key no client writes — an `id` the APK would take for the group's own.
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'members'])
+        // The name is judged only when this write changes it: an odd name already stored never
+        // stops anybody leaving, and a rename is how it gets repaired.
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['name'])
+            || groupNameOk(request.resource.data))
         && (
-          // the owner may change anything else, and may remove members
+          // the owner may rename the group and remove members
           resource.data.ownerId == request.auth.uid ||
-          // anyone else may edit the group as long as they do not touch who is in it…
+          // anyone else may rename it as long as they do not touch who is in it…
           request.resource.data.members == resource.data.members ||
           // …except to remove THEMSELVES, which is leaving.
           request.resource.data.members == resource.data.members.removeAll([request.auth.uid])
@@ -497,7 +526,18 @@ service cloud.firestore {
         // recipient by uid, and uids are not secret; a personal one, accepted, makes a friendship.
         (request.resource.data.get('toEmail', null) != null || request.resource.data.get('groupId', null) != null) &&
         (request.resource.data.groupId == null ||
-         isMemberOfGroup(request.resource.data.groupId));
+         isMemberOfGroup(request.resource.data.groupId)) &&
+        // What the installed APK prints on the invitation, at every launch, for whoever it is
+        // addressed to: "<fromEmail> invited you to <groupName>". A map in either crashed it onto a
+        // white screen it could not leave — and an invitation needs no group, so anybody signed in
+        // could do it to any address (08.10.2026). Both clients write text or null there; on live,
+        // all 13 invitations do. The same 60 as a group's name, and an address's 254.
+        (request.resource.data.get('groupName', null) == null ||
+         (request.resource.data.groupName is string && request.resource.data.groupName.size() <= 60)) &&
+        (request.resource.data.get('fromEmail', null) == null ||
+         (request.resource.data.fromEmail is string && request.resource.data.fromEmail.size() <= 254)) &&
+        // The APK spreads an invitation over its id too (see the groups' key list).
+        !('id' in request.resource.data);
       // Only `status` may change — SEVENTH instance of a rule that decides on `resource` while
       // letting the writer rewrite what `resource` says.
       //

@@ -7,6 +7,7 @@ import { liveDoc } from '../utils/liveQuery';
 import { useDialog } from '../hooks/useDialog';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
+import { GROUP_NAME_MAX } from '../utils/groupName';
 
 
 interface GroupSettingsModalProps {
@@ -143,6 +144,7 @@ export default function GroupSettingsModal({
                   <input
                     autoFocus
                     value={editedName}
+                    maxLength={GROUP_NAME_MAX}
                     onChange={e => setEditedName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') { e.stopPropagation(); setIsEditingName(false); setEditedName(groupName); } }}
                     className="flex-1 px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 outline-none focus:border-primary"

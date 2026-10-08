@@ -28,6 +28,7 @@ import {
   type Conversation, type People,
 } from '../utils/conversations';
 import { deletedName, formerMembersOf, withFormerMembers } from '../utils/formerMembers';
+import { withGroupName } from '../utils/groupName';
 
 export default function Chat() {
   const navigate = useNavigate();
@@ -50,7 +51,7 @@ export default function Chat() {
     const unsubGroups = liveQuery<any>(
       query(collection(db, 'groups'), where('members', 'array-contains', uid)),
       'Chat.groups',
-      (docs) => { setLoadError(false); setGroups(docs); },
+      (docs) => { setLoadError(false); setGroups(docs.map(withGroupName)); },
       () => setLoadError(true),
     );
 

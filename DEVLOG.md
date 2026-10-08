@@ -12270,3 +12270,71 @@ identice), `test:rules` (624), `npm run build`, `check-split`, `check-offline`, 
 `test:tz` (46). Toate verzi.
 
 **Nepublicat.** Cere funcțiile (expirarea), regulile și hosting-ul, fiecare cu acordul lui Andrei.
+
+## 2026-10-08 · Numele unui grup nu mai poate pica aplicația pentru tot grupul (Task Started)
+
+**Prompt (Andrei):** „continua” (după pauză; `8a2d11a` era gata și nepublicat, iar publicarea cere în
+continuare acordul lui explicit).
+**Model:** Claude Opus 5.5.
+**Ce e** (BACKLOG, secțiunea 2, găsit de harta din 06.10): regula grupurilor nu verifică `name`. Orice
+membru îl poate scrie ca hartă, iar calendarul îl afișează la fiecare încărcare: aplicația pică pentru
+toți membrii, la fiecare deschidere, pe web și în APK, și nimeni nu-l mai poate repara din aplicație.
+**Plan:** harta citirilor și scrierilor numelui (și a celorlalte câmpuri ale grupului scrise de
+clienți), pe web și în APK; reproducerea; regula (numele, text scurt, judecat pe diferență ca un grup
+vechi să poată fi părăsit); recenzie, mutații, porți; publicarea doar cu acordul lui Andrei.
+
+## 2026-10-08 · Numele unui grup nu mai poate pica aplicația pentru tot grupul (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Reprodus pe banc** (aplicația reală, pe emulatoare, intrat ca Ana): un grup al ei cu `name: {a: 1}`
+ducea aplicația pe „Something went wrong” la pornire, fără niciun clic („Objects are not valid as a
+React child”), iar „Reload” nu ajuta. Setările grupului se deschid tot din calendarul căzut, deci din
+aplicație nu se mai putea repara.
+
+**Găsit de hartă, mai grav:** APK-ul afișează „<fromEmail> invited you to <groupName>” la fiecare
+pornire, pentru oricine e invitat, iar o invitație nu cere niciun grup. Oricine are cont putea deci pica
+APK-ul oricui, după adresă.
+
+**Pe live** (doar citire): 5 grupuri, toate cu cheile pe care le scriu clienții și serverul, numele text
+de cel mult 10 caractere, `createdAt` text; 13 invitații, `groupName` și `fromEmail` text, niciun `id`.
+E prevenție.
+
+**Reparația:**
+- **Regula grupurilor:** numele e text de 1–60 de caractere (`groupNameOk`; 60 e `GROUP_NAME_MAX` al
+  serverului). La creare, doar cele patru chei pe care le scriu clienții. La modificare, un client
+  schimbă doar numele și membrii, iar numele e judecat doar când se schimbă: un grup cu numele deja
+  ciudat se poate părăsi, goli, redenumi și șterge. Lista de chei ține afară și `lastMessageAt` (un
+  membru își putea urca grupul în capul listei de chat a tuturor) și un `id` pe care APK-ul l-ar lua
+  drept id-ul grupului.
+- **Regula invitațiilor:** `groupName` text de cel mult 60 sau nimic, `fromEmail` text de cel mult 254
+  sau nimic, niciun `id`.
+- **Clientul web**, ca apărare în plus: ascultătorii de grupuri (calendar, Chat, Wallet, PvP) și cele
+  două ecrane Admin trec numele prin `groupNameText`/`withGroupName` (`src/utils/groupName.ts`), deci un
+  nume care nu e text ajunge pe ecran ca „Group”; `groupNameOf` verifică tipul; cele două câmpuri de nume
+  se opresc la 60.
+- **`predeploy-measure`** numără numele și invitațiile care ar încălca regula (azi 0).
+
+**Verificat pe banc după reparație:** cu numele `{a: 1}` și apoi `{toString: 0}`: calendarul, tab-ul
+grupului, Arcade, Invite, Wallet și Chat merg; pastila arată „Group”; nicio eroare în `errorLogs`.
+
+**Măsurat pe emulator:** `trim()` există în reguli; lungimea se numără în caractere, nu în octeți (60 de
+„ă” și 30 de emoji trec).
+
+**Recenzie adversarială** (3 lentile: compatibilitatea, atacul, testele), cu verificare separată:
+- **Fără regresii:** fiecare scriere a web-ului și a APK-ului pe grupuri și invitații trece.
+- **Confirmat și reparat:** ecranele Admin afișau numele primite de la server fără gardă (latent pe
+  live); două teste slabe (redenumirea membrului nu schimba nimic; limita de 254 nu era ținută din
+  ambele părți).
+- **Confirmat, altă colecție, în BACKLOG:** mesajele de chat (`text`, `reactions`, `createdAt`, `id`).
+
+**Mutații:** 36, toate prinse. Controalele negative au trecut întâi, și pe suitele de a doua șansă.
+Lăsat afară, ca echivalent: `is string` din `groupNameOk` (`trim()` și `size()` refuză oricum, prin
+eroare, orice nu e text).
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2431), `tsc` și build-ul funcțiilor, `test:rules` (636),
+`npm run build`, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46). Toate verzi.
+
+**Nepublicat.** Cere regulile, apoi hosting-ul, fiecare cu acordul lui Andrei. Decizia lui (implicitul
+pus): numele de grup au cel mult 60 de caractere, iar APK-ul refuză unul mai lung cu „Failed to create
+group”.

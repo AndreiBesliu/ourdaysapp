@@ -118,6 +118,37 @@
 
 ---
 
+## 🆕 Numele unui grup și al unei invitații nu mai pot pica aplicația (08.10) — NEPUBLICAT (cere regulile, apoi hosting-ul)
+
+**Fapt:** numele unui grup apare în calendarul fiecărui membru, la fiecare pornire, pe web și în APK.
+Nimic nu-l verifica, iar orice membru îl putea scrie altfel decât ca text. Reprodus pe aplicația
+reală, pe emulatoare: aplicația pica pentru tot grupul la fiecare deschidere, iar „Reload” nu ajuta.
+Din aplicație nu se mai putea repara, fiindcă setările grupului se deschid tot din calendarul căzut.
+
+Mai rău, la invitații: APK-ul afișează „<adresa> invited you to <grup>” la fiecare pornire, pentru
+oricine e invitat. Oricine are cont, chiar fără niciun grup, putea trimite pe adresa cuiva o invitație
+care îi pica APK-ul de fiecare dată.
+
+Pe live nu s-a întâmplat: 5 grupuri și 13 invitații, toate cu text normal (cel mai lung nume are 10
+caractere). Acum:
+- **regula** cere numelui text de 1–60 de caractere, iar la o invitație ca numele grupului și adresa
+  expeditorului să fie text. Un client poate schimba la un grup doar numele și membrii; nimic altceva,
+  nici ce scrie doar serverul;
+- **un grup cu un nume deja ciudat** poate fi părăsit, golit, redenumit și șters ca înainte;
+- **aplicația web** afișează oricum doar text: un nume care nu e text apare ca „Group”. Câmpurile de
+  nume se opresc la 60 de caractere.
+
+**Decizia pe care am luat-o eu, cu implicitul pus** (spune-mi dacă vrei altfel):
+- **Un nume de grup are cel mult 60 de caractere**, cât taie deja serverul în invitații. Pe web nu
+  poți scrie mai mult. APK-ul nu știe de limită: un nume mai lung e refuzat cu „Failed to create group”
+  / „Failed to rename group”. Pe live cel mai lung are 10.
+
+- [ ] **După publicare:** redenumește un grup al tău și creează unul nou.
+      - **Cum arată bine:** merg ca înainte; numele nu trece de 60 de caractere.
+      - **Ce e greșit:** „Failed to rename group” pe un nume scurt. Spune-mi.
+
+---
+
 ## 🆕 Datele unui joc scrise de un membru nu mai strică ecranul celorlalți (06.10) — NEPUBLICAT (cere regulile și hosting-ul; funcțiile pentru expirarea jocurilor)
 
 **Fapt:** orice membru al unui grup poate scrie orice câmp al unui joc din Arcade, iar ecranele îl

@@ -19,6 +19,7 @@ import {
   adminBackfillExpenses, adminGetAiSpend, adminGetAiConfig, adminSetAiConfig,
   type AiSpend, type AiConfig,
 } from '../serverActions';
+import { withGroupName } from '../utils/groupName';
 
 type Tab = 'overview' | 'profiles' | 'groups' | 'admins' | 'ai' | 'health' | 'broadcast';
 
@@ -284,7 +285,8 @@ export default function Admin() {
     if (p.status === 'fulfilled') setProfiles(p.value.profiles || []);
     if (a.status === 'fulfilled') setAdmins(a.value.admins || []);
     if (h.status === 'fulfilled') setHealth(h.value);
-    if (g.status === 'fulfilled') setGroups(g.value.groups || []);
+    // Names as text only (08.10.2026, src/utils/groupName.ts): the server hands them back raw.
+    if (g.status === 'fulfilled') setGroups((g.value.groups || []).map(withGroupName));
     if (gr.status === 'fulfilled') setGrowth(gr.value);
     if (results.some(r => r.status === 'rejected')) { setLoadError(true); console.error('Some admin data failed to load'); }
     setLoading(false);
@@ -387,7 +389,10 @@ export default function Admin() {
 
   const openUser = async (uid: string) => {
     setDetail({ uid }); setDetailLoading(true);
-    try { setDetail(await adminGetUser(uid)); }
+    try {
+      const u = await adminGetUser(uid);
+      setDetail({ ...u, groups: Array.isArray(u?.groups) ? u.groups.map(withGroupName) : u?.groups });
+    }
     catch (e) {
       reportError(e instanceof Error ? e.message : String(e), { context: 'Admin.openUser' });
       console.error('User detail failed', e); setDetail(null);

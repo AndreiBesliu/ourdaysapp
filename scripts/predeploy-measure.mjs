@@ -97,13 +97,23 @@ const chatIds = new Set((await db.collection('chats').get()).docs.map((d) => d.i
 
 // Invitations: a status other than pending/accepted/declined becomes unanswerable under the new
 // rule; accepted-but-not-a-member counts who could have walked back in (D2, D1).
-const inv = { total: 0, byStatus: {}, acceptedNoToId: 0, acceptedToIdNotMemberInviterMember: 0 };
+// Since 08.10.2026 the rules want an invitation's groupName and fromEmail to be text (or nothing) and
+// no `id` field: the installed APK prints the first two at every launch. Counted, never printed.
+const inv = {
+  total: 0, byStatus: {}, acceptedNoToId: 0, acceptedToIdNotMemberInviterMember: 0,
+  groupNameNotText: 0, groupNameOver60: 0, fromEmailNotText: 0, fromEmailOver254: 0, withIdField: 0,
+};
 for (const d of (await db.collection('group_invites').get()).docs) {
   const x = d.data();
   inv.total++;
   const s = x.status === undefined ? '(missing)' : ['pending', 'accepted', 'declined'].includes(x.status) ? x.status : '(other)';
   inv.byStatus[s] = (inv.byStatus[s] || 0) + 1;
   if (x.status === 'accepted' && !x.toId) inv.acceptedNoToId++;
+  if (x.groupName != null && typeof x.groupName !== 'string') inv.groupNameNotText++;
+  else if (typeof x.groupName === 'string' && x.groupName.length > 60) inv.groupNameOver60++;
+  if (x.fromEmail != null && typeof x.fromEmail !== 'string') inv.fromEmailNotText++;
+  else if (typeof x.fromEmail === 'string' && x.fromEmail.length > 254) inv.fromEmailOver254++;
+  if ('id' in x) inv.withIdField++;
   const ms = typeof x.groupId === 'string' ? memberSet.get(x.groupId) : null;
   if (x.status === 'accepted' && x.toId && ms && !ms.has(x.toId) && ms.has(x.fromId)) inv.acceptedToIdNotMemberInviterMember++;
 }
@@ -119,12 +129,22 @@ for (const d of (await db.collection('invite_links').get()).docs) {
 }
 
 // Groups: the cascade's sweep guard assumes auto-ids; caps assume no group near them.
-const grp = { groups: groupsSnap.size, idNotAutoShape: 0, idLikeDirectChat: 0, idEqualsAChat: 0, noOwnerId: 0, maxMessages: 0, groupsOver3000Messages: 0 };
+// Since 08.10.2026 a group's name is text of 1 to 60 characters and a client changes nothing but the
+// name and the members. A group counted in the last three would show as "Group" on the web.
+const GROUP_KEYS = ['name', 'ownerId', 'members', 'createdAt', 'lastMessageAt', 'lastMessageText', 'lastMessageBy', 'formerMembers'];
+const grp = {
+  groups: groupsSnap.size, idNotAutoShape: 0, idLikeDirectChat: 0, idEqualsAChat: 0, noOwnerId: 0, maxMessages: 0, groupsOver3000Messages: 0,
+  nameNotText: 0, nameBlankOrOver60: 0, keysNoClientWrites: 0,
+};
 for (const d of groupsSnap.docs) {
   if (!/^[A-Za-z0-9]{20}$/.test(d.id)) grp.idNotAutoShape++;
   if (d.id.includes('__')) grp.idLikeDirectChat++;
   if (chatIds.has(d.id)) grp.idEqualsAChat++;
   if (typeof d.data().ownerId !== 'string') grp.noOwnerId++;
+  const gname = d.data().name;
+  if (typeof gname !== 'string') grp.nameNotText++;
+  else if (!gname.trim() || gname.length > 60) grp.nameBlankOrOver60++;
+  if (Object.keys(d.data()).some((k) => !GROUP_KEYS.includes(k))) grp.keysNoClientWrites++;
   const n = (await d.ref.collection('messages').count().get()).data().count;
   grp.maxMessages = Math.max(grp.maxMessages, n);
   if (n > 3000) grp.groupsOver3000Messages++;

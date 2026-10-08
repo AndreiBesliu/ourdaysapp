@@ -68,25 +68,29 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Arcade, în interiorul grupului:** mutările din APK nu scriu `lastMoveAt`, deci un joc jucat doar
   pe telefon poate fi închis de expirarea de 24h în timp ce e jucat (dedus din cod, nemăsurat).
   (Titlul push-ului din `gameType` e închis din 06.10.)
-- **Numele unui grup poate fi orice, nu doar text** (recenzia din 06.10, citit în cod): orice membru
-  poate scrie `groups/{id}.name` ca hartă, iar calendarul îl afișează pe fiecare încărcare. Aplicația
-  pică atunci pentru TOȚI membrii, la fiecare deschidere, pe web și în APK, și nimeni nu-l mai poate
-  repara din aplicație. Remediul e doar în regulă (numele, un text scurt; judecat pe diferență, ca un
-  grup vechi să poată fi părăsit). Următorul de făcut.
 - **Același fel de problemă, găsit de recenzia din 06.10, în alte colecții** (citit în cod, nereprodus;
   toate cer un membru rău-intenționat):
-  - **un mesaj de chat cu `createdAt` care nu e dată** pică aplicația pentru cine deschide chatul
-    (`GroupChatWidget.tsx`, `toDate()`), pe web și în APK. Remediul: în regulă, `createdAt ==
-    request.time` la creare și fixat la modificare; în client, citirea doar dintr-un Timestamp;
+  - **un mesaj de chat** (de grup sau privat) cu `text` hartă, `createdAt` care nu e dată, `reactions`
+    care nu sunt liste sau un câmp `id` pică chatul pentru ceilalți la fiecare deschidere, pe web și în
+    APK (`GroupChatWidget.tsx`), iar mesajele nu se pot șterge. Orice membru poate pune `reactions` și
+    `isPinned` pe mesajul oricui (recenzia din 08.10). Remediul: în regulă, tipul lui `text` și al
+    reacțiilor, `createdAt == request.time` la creare și fixat, fără `id`; în client, citirea doar a
+    tipurilor bune. Măsurat întâi pe live;
   - **o cheltuială cu `description` hartă** pică Wallet → Expenses pentru tot grupul. Remediul: în
     regulă, `description` text.
 - **Expirarea automată a jocurilor și statisticile din Admin citesc primele 2000 de jocuri, după id**
   (`functions/src/games.ts`): cine creează multe jocuri cu id-uri alese (de exemplu care încep cu `!`),
   într-un grup al lui, ocupă toată fereastra, iar jocurile celorlalte grupuri nu mai expiră. Remediul:
   citirea pe pagini, cu cursor, a întregii colecții; eventual o limită de jocuri pe om.
-- **Același fel de problemă, încă neverificat, pe evenimente:** regula de creare a evenimentelor nu
-  verifică tipul câmpurilor; un eveniment de grup cu `title` hartă probabil pică calendarul pentru tot
-  grupul. De urmărit cum se randează, apoi aceeași reparație.
+- **Același fel de problemă pe evenimente și pe cardurile partajate** (harta din 08.10, citit în cod):
+  - un eveniment de grup cu `title` sau `emoji` hartă pică aplicația web pentru cine deschide tab-ul
+    grupului (`CalendarGrid.tsx`); calendarul APK e deja gol;
+  - un card partajat cu `name` hartă pică Wallet-ul web al fiecărui membru, la încărcare.
+  Remediul: tipul câmpurilor afișate, în regulă, ca la grupuri.
+- **Serverul citește numele grupului fără gardă** în rezumatul AI (`generateGroupDigest`), în Admin
+  (`adminListGroups`, `adminGetUser`) și în linkurile de invitație. Din 08.10 regula nu mai lasă un nume
+  care nu e text, iar pe live nu există; remediul (prin `stampedGroupName`) merge la următorul deploy
+  de funcții.
 - **Ce rămâne expus pe APK în Arcade după 06.10:** un joc deschis cu date stricate (tabla, mâinile,
   combinațiile) pică aplicația pentru cine îl deschide, până la repornire. Regula acoperă doar ce se
   citește în afara jocului (bannerul, lista, clasamentul). Se rezolvă cu reconstruirea APK-ului.

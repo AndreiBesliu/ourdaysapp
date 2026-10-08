@@ -6,6 +6,7 @@ import { collection, addDoc } from 'firebase/firestore';
 import { useDialog } from '../hooks/useDialog';
 import { t } from '../utils/i18n';
 import { useThemeStore } from '../store';
+import { GROUP_NAME_MAX } from '../utils/groupName';
 
 interface CreateGroupModalProps {
   isOpen: boolean;
@@ -71,6 +72,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t('createGroupPlaceholder', language)}
+              maxLength={GROUP_NAME_MAX}
               required
               className="w-full px-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none"
             />

@@ -11,7 +11,7 @@
 
 import { beforeAll, afterAll, beforeEach, describe, it } from 'vitest';
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { arrayRemove, arrayUnion, deleteDoc, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, deleteDoc, deleteField, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { ALICE, BOB, CAROL, DAVE, G1, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
 
 beforeAll(async () => { await startEnv('demo-ourdays-groups'); });
@@ -46,11 +46,11 @@ describe('creating a group', () => {
 });
 
 describe('updating a group — the three branches', () => {
-  it('the owner may change anything, including the member list', async () => {
+  it('the owner may remove members', async () => {
     await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', G1), { members: [ALICE] }));
   });
 
-  it('a plain member may edit the group while leaving membership alone', async () => {
+  it('a plain member may rename the group while leaving membership alone', async () => {
     await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1), { name: 'The Family' }));
   });
 
@@ -507,5 +507,105 @@ describe('a deleted group’s id cannot be created again (06.10.2026)', () => {
   it('a new id is created as before, and its owner still deletes it', async () => {
     await assertSucceeds(setDoc(doc(as(DAVE), 'groups', 'g-brand-new'), { name: 'New', ownerId: DAVE, members: [DAVE] }));
     await assertSucceeds(deleteDoc(doc(as(DAVE), 'groups', 'g-brand-new')));
+  });
+});
+
+// ── 08.10.2026: a group's name is short text, and a group holds only what the clients write ───
+// Every member's calendar shows every group's name on every load, on the web and in the installed
+// APK. Nothing checked it: a member could write it as a map, and the app crashed for the whole
+// group at every launch, with no way back inside the app (reproduced on the emulators).
+
+/** A map with an own `toString`: it cannot become text, a key, or a number. */
+const POISON = { toString: 0 };
+
+describe('a group\u2019s name, and what else a client may put on a group', () => {
+  const mine = (extra: Record<string, unknown>) => ({
+    name: 'Mine', ownerId: DAVE, members: [DAVE], createdAt: '2026-10-08T09:00:00.000Z', ...extra,
+  });
+  let n = 0;
+  const create = (extra: Record<string, unknown>) => setDoc(doc(as(DAVE), 'groups', `g-name-${++n}`), mine(extra));
+
+  it('at creation: text of 1 to 60 characters', async () => {
+    for (const name of [{ a: 1 }, POISON, ['x'], 123, true, null, '', '   ', 'x'.repeat(61)]) {
+      await assertFails(create({ name }));
+    }
+    const { name: _gone, ...noName } = mine({});
+    await assertFails(setDoc(doc(as(DAVE), 'groups', 'g-no-name'), noName));
+    // What the rules count: 60 letters with diacritics, and 30 emoji (60 UTF-16 units).
+    for (const name of ['Mine', 'x'.repeat(60), '\u0103'.repeat(60), '\u{1F600}'.repeat(30)]) {
+      await assertSucceeds(create({ name }));
+    }
+  });
+
+  it('at creation: only the four keys the clients write', async () => {
+    for (const extra of [
+      { id: 'g2' }, { id: POISON }, { color: { a: 1 } },
+      { lastMessageText: 'x' }, { lastMessageBy: DAVE }, { lastMessageAt: 1 }, { formerMembers: {} },
+      { createdAt: { a: 1 } }, { createdAt: 5 },
+    ]) {
+      await assertFails(create(extra));
+    }
+    const { createdAt: _gone, ...noTime } = mine({});
+    await assertSucceeds(setDoc(doc(as(DAVE), 'groups', 'g-no-time'), noTime));
+  });
+
+  it('a rename: text of 1 to 60, by the owner or by a member', async () => {
+    for (const who of [ALICE, BOB]) {
+      const g = doc(as(who), 'groups', G1);
+      for (const name of [{ a: 1 }, POISON, ['x'], 123, '', '  ', 'x'.repeat(61)]) {
+        await assertFails(updateDoc(g, { name }));
+      }
+      await assertFails(updateDoc(g, { 'name.toString': 0 }));
+      await assertFails(updateDoc(g, { name: deleteField() }));
+      // A different name for each, so the member's write really changes it and is judged.
+      await assertSucceeds(updateDoc(g, { name: (who === ALICE ? 'y' : 'z').repeat(60) }));
+    }
+  });
+
+  it('the owner cannot slip a bad name into a removal', async () => {
+    await assertFails(updateDoc(doc(as(ALICE), 'groups', G1), { name: { a: 1 }, members: [ALICE] }));
+  });
+
+  it('a group whose name is already odd can still be left, emptied, renamed and deleted', async () => {
+    const odd: [string, Record<string, unknown>][] = [['g-odd-map', { name: { a: 1 } }], ['g-odd-number', { name: 123 }], ['g-odd-none', {}]];
+    await seed(async (db) => {
+      for (const [id, extra] of odd) await setDoc(doc(db, 'groups', id), { ownerId: ALICE, members: [ALICE, BOB, CAROL], ...extra });
+    });
+    for (const [id] of odd) {
+      await assertFails(updateDoc(doc(as(BOB), 'groups', id), { name: { b: 2 } }));
+      await assertSucceeds(updateDoc(doc(as(BOB), 'groups', id), { members: arrayRemove(BOB) }));
+      await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', id), { members: arrayRemove(CAROL) }));
+      await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', id), { name: 'Fixed' }));
+      await assertSucceeds(deleteDoc(doc(as(ALICE), 'groups', id)));
+    }
+  });
+
+  it('on a group as live holds it, a member changes the name and the members, nothing else', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'groups', 'g-live'), {
+        name: 'Family', ownerId: ALICE, createdAt: '2026-09-01T00:00:00.000Z', members: [ALICE, BOB, CAROL],
+        lastMessageAt: new Date('2026-10-01T10:00:00Z'), lastMessageBy: ALICE, lastMessageText: 'hi',
+      });
+    });
+    for (const who of [ALICE, BOB]) {
+      for (const change of [
+        { createdAt: 'x' }, { lastMessageAt: new Date() }, { lastMessageText: 'x' },
+        { color: 'red' }, { id: 'group-two' }, { id: POISON },
+      ]) {
+        await assertFails(updateDoc(doc(as(who), 'groups', 'g-live'), change));
+      }
+    }
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', 'g-live'), { name: 'Renamed' }));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', 'g-live'), { name: 'Renamed again' }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', 'g-live'), { members: arrayRemove(CAROL) }));
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', 'g-live'), { members: arrayRemove(BOB) }));
+  });
+
+  it('a group that already holds a key no client writes can still be left and renamed', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'groups', 'g-extra'), { name: 'Family', ownerId: ALICE, members: [ALICE, BOB], color: { a: 1 }, id: 'x' });
+    });
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', 'g-extra'), { members: arrayRemove(BOB) }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', 'g-extra'), { name: 'Renamed' }));
   });
 });

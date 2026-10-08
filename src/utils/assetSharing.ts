@@ -88,7 +88,7 @@ export function shareKindOf(asset: AssetLike | null | undefined, uid: string | n
 export function groupNameOf(groups: GroupLike[], groupId: string | null): string | null {
   if (!groupId) return null;
   const g = groups.find((x) => x.id === groupId);
-  return (g?.name && g.name.trim()) || null;
+  return (typeof g?.name === 'string' && g.name.trim()) || null;
 }
 
 /**
