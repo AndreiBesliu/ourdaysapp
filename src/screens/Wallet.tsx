@@ -23,6 +23,8 @@ import { useThemeStore } from '../store';
 import { t } from '../utils/i18n';
 import { transferAssetCopy } from '../serverActions';
 import { groupNameText } from '../utils/groupName';
+import { ASSET_CATEGORY_MAX, ASSET_NAME_MAX, assetImageSrc, normaliseAsset } from '../utils/walletAsset';
+import ErrorBoundary from '../components/ErrorBoundary';
 import {
   canEdit, groupNameOf, mergeAssets, shareFieldsFor, shareKindOf, shareListenerGroupIds,
   shareTargetOf,
@@ -226,7 +228,7 @@ export default function Wallet() {
     const unsubscribe = liveQuery<any>(q, 'Wallet.assets',
       (docs, meta) => {
         setAssetsLoadError(false);
-        setOwnedAssets(docs);
+        setOwnedAssets(docs.map(normaliseAsset));
         setPendingIds(meta.pendingIds ?? []);
         // Judge unconfirmed changes only on the SERVER's answer with nothing pending: a cached answer,
         // or one still carrying a local write, says nothing about what the server holds. Any later
@@ -309,7 +311,9 @@ export default function Wallet() {
       liveQuery<any>(
         query(collection(db, 'assets'), where('sharedGroupId', '==', groupId)),
         `Wallet.sharedAssets.${groupId}`,
-        (docs) => setSharedAssets((prev) => ({ ...prev, [groupId]: docs })),
+        // Other members' cards, through normaliseAsset: until 08.10.2026 one whose name was not text
+        // crashed this screen for the whole group (walletAsset.ts).
+        (docs) => setSharedAssets((prev) => ({ ...prev, [groupId]: docs.map(normaliseAsset) })),
         // No clearing on failure, for the same reason as the owned listener: a denied or dropped
         // read must not be rendered as "nobody shared anything with you".
         () => {},
@@ -903,13 +907,16 @@ export default function Wallet() {
       })
     : [];
 
-  const groupedAssets = activeFilters.length === 0 ? assets.reduce((acc: any, asset: any) => {
+  // On an object with no prototype: on a plain `{}`, a card whose first category was "constructor"
+  // (a word in Romanian too) or "toString" found a function already there, and `.push` on it crashed
+  // the Wallet of everybody the card was shared with (08.10.2026).
+  const groupedAssets: Record<string, any[]> = activeFilters.length === 0 ? assets.reduce((acc: Record<string, any[]>, asset: any) => {
     const primaryCat = categoriesOf(asset)[0] || UNCATEGORIZED;
       
     if (!acc[primaryCat]) acc[primaryCat] = [];
     acc[primaryCat].push(asset);
     return acc;
-  }, {}) : {};
+  }, Object.create(null)) : {};
 
   /**
    * What the card says about who can see this.
@@ -959,6 +966,7 @@ export default function Wallet() {
 
   const renderAssetCard = (asset: any) => {
     const isOwner = canEdit(asset, auth.currentUser?.uid);
+    const photo = assetImageSrc(asset);
     const handleCardClick = () => {
       if (isOwner) openEditModal(asset);
     };
@@ -970,17 +978,17 @@ export default function Wallet() {
         className={`bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden shadow-sm group flex flex-col ${isOwner ? 'cursor-pointer hover:border-emerald-500/50 hover:shadow-md transition-all' : ''}`}
       >
         <div 
-          className={`h-32 bg-zinc-100 dark:bg-zinc-800 relative flex items-center justify-center group/img ${asset.imageUrl ? 'cursor-pointer' : ''}`} 
+          className={`h-32 bg-zinc-100 dark:bg-zinc-800 relative flex items-center justify-center group/img ${photo ? 'cursor-pointer' : ''}`}
           onClick={(e) => {
-            if (asset.imageUrl) {
+            if (photo) {
               e.stopPropagation();
-              setViewingImage(asset.imageUrl);
+              setViewingImage(photo);
             }
           }}
         >
-          {asset.imageUrl ? (
+          {photo ? (
             <>
-              <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover transition-all group-hover/img:scale-105" />
+              <img src={photo} alt={asset.name}className="w-full h-full object-cover transition-all group-hover/img:scale-105" />
               <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-colors flex items-center justify-center">
                 <span className="opacity-0 group-hover/img:opacity-100 text-white font-medium text-sm drop-shadow-md">{t('walletView', language)}</span>
               </div>
@@ -1004,7 +1012,7 @@ export default function Wallet() {
           )}
         </div>
         <div className="p-3 flex-1 flex flex-col relative">
-          {asset.barcodeValue && asset.imageUrl && (
+          {asset.barcodeValue && photo && (
             <button
               aria-label={t('showCode', language)}
               onClick={(e) => {
@@ -1059,6 +1067,20 @@ export default function Wallet() {
     );
   };
 
+  const cardInBoundary = (asset: any) => (
+    <ErrorBoundary
+      key={asset.id}
+      context="Wallet.card"
+      fallback={
+        <div role="alert" className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 text-xs text-zinc-500">
+          {t('cardCouldNotShow', language)}
+        </div>
+      }
+    >
+      {renderAssetCard(asset)}
+    </ErrorBoundary>
+  );
+
   return (
     <div className="min-h-screen bg-transparent flex flex-col pb-24 pt-[60px]">
       {/* Header */}
@@ -1105,7 +1127,13 @@ export default function Wallet() {
       <main className="flex-1 max-w-5xl w-full mx-auto p-4 flex flex-col gap-8">
         
         {activeTab === 'expenses' ? (
-          <ExpensesTab sharedUsers={sharedUsers} myGroups={myGroups} />
+          // Its own boundary: a row the tab cannot draw costs the tab, not the app (08.10.2026).
+          <ErrorBoundary
+            context="ExpensesTab"
+            fallback={<p role="alert" className="text-sm text-rose-700 dark:text-rose-300">{t('expensesCouldNotShow', language)}</p>}
+          >
+            <ExpensesTab sharedUsers={sharedUsers} myGroups={myGroups} />
+          </ErrorBoundary>
         ) : (
           <>
         <div className="flex flex-col gap-2">
@@ -1186,7 +1214,7 @@ export default function Wallet() {
               <p className="text-zinc-500 italic">{t('walletNoMatch', language)}</p>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {filteredAssets.map(asset => renderAssetCard(asset))}
+                {filteredAssets.map(asset => cardInBoundary(asset))}
               </div>
             )}
           </div>
@@ -1197,7 +1225,7 @@ export default function Wallet() {
                 <h2 className="text-lg font-bold text-zinc-800 dark:text-zinc-200 pl-2">{catName === UNCATEGORIZED ? t('uncategorized', language) : catName}</h2>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {groupedAssets[catName].map((asset: any) => renderAssetCard(asset))}
+                {groupedAssets[catName].map((asset: any) => cardInBoundary(asset))}
               </div>
             </div>
           ))
@@ -1219,7 +1247,7 @@ export default function Wallet() {
             <form onSubmit={handleUpload} className="space-y-4">
               <div>
                 <label className="text-xs font-medium text-zinc-500 uppercase">{t('nameLabel', language)}</label>
-                <input required value={name} onChange={e => setName(e.target.value)} type="text" placeholder={t('assetNamePlaceholder', language)} className="w-full mt-1 px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 outline-none" />
+                <input required maxLength={ASSET_NAME_MAX} value={name} onChange={e => setName(e.target.value)} type="text" placeholder={t('assetNamePlaceholder', language)}className="w-full mt-1 px-3 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 outline-none" />
               </div>
               
               <div className="space-y-2">
@@ -1262,7 +1290,7 @@ export default function Wallet() {
                   {(file || selectedPastImageUrl || (editingAsset && editingAsset.imageUrl)) ? (
                     <>
                       <img 
-                        src={file ? URL.createObjectURL(file) : (selectedPastImageUrl || editingAsset?.imageUrl)} 
+                        src={file ? URL.createObjectURL(file) : (selectedPastImageUrl || assetImageSrc(editingAsset) || undefined)} 
                         alt={t('altPreview', language)} 
                         className="w-full h-full object-cover" 
                       />
@@ -1422,8 +1450,9 @@ export default function Wallet() {
                     <div className="flex-1 flex items-center gap-2">
                       <input 
                         type="text" 
-                        value={editFilterValue} 
-                        onChange={e => setEditFilterValue(e.target.value)} 
+                        value={editFilterValue}
+                        onChange={e => setEditFilterValue(e.target.value)}
+                        maxLength={ASSET_CATEGORY_MAX}
                         className="flex-1 px-2 py-1 text-sm border rounded bg-white dark:bg-zinc-800 dark:border-zinc-600 outline-none focus:border-emerald-500"
                         autoFocus
                       />
@@ -1463,8 +1492,9 @@ export default function Wallet() {
             <form onSubmit={handleCreateCategory} className="p-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 rounded-b-2xl flex gap-2">
               <input 
                 required 
-                value={newFilterValue} 
-                onChange={e => setNewFilterValue(e.target.value)} 
+                value={newFilterValue}
+                onChange={e => setNewFilterValue(e.target.value)}
+                maxLength={ASSET_CATEGORY_MAX}
                 type="text" 
                 placeholder={t('newCategoryPlaceholder', language)}
                 className="flex-1 px-3 py-2 text-sm border rounded-lg bg-white dark:bg-zinc-800 dark:border-zinc-700 outline-none focus:border-emerald-500" 
@@ -1536,7 +1566,16 @@ export default function Wallet() {
 
       {/* Generated Barcode Viewer Modal */}
       {viewingAssetCode && (
-        <div onClick={() => setViewingAssetCode(null)} className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <ErrorBoundary
+          key={viewingAssetCode.id}
+          context="Wallet.codeViewer"
+          fallback={
+            <div onClick={() => setViewingAssetCode(null)} className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4">
+              <p role="alert" className="bg-white rounded-2xl p-6 text-sm text-zinc-700">{t('cardCouldNotShow', language)}</p>
+            </div>
+          }
+        >
+        <div onClick={() => setViewingAssetCode(null)}className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div onClick={(e) => e.stopPropagation()} ref={codeDialog.dialogRef} {...codeDialog.dialogProps} className="bg-white rounded-2xl p-8 max-w-sm w-full flex flex-col items-center shadow-2xl relative">
             <button onClick={() => setViewingAssetCode(null)} aria-label={t('closeAction', language)} className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-zinc-900 bg-zinc-100 rounded-full transition-colors">
               <X className="w-5 h-5" />
@@ -1558,6 +1597,7 @@ export default function Wallet() {
             </p>
           </div>
         </div>
+        </ErrorBoundary>
       )}
 
       {/* Fullscreen Image Viewer Modal */}

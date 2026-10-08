@@ -68,19 +68,21 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Arcade, în interiorul grupului:** mutările din APK nu scriu `lastMoveAt`, deci un joc jucat doar
   pe telefon poate fi închis de expirarea de 24h în timp ce e jucat (dedus din cod, nemăsurat).
   (Titlul push-ului din `gameType` e închis din 06.10.)
-- **Același fel de problemă, găsit de recenzia din 06.10, în alte colecții** (citit în cod, nereprodus;
-  toate cer un membru rău-intenționat):
-  - **o cheltuială cu `description` hartă** pică Wallet → Expenses pentru tot grupul. Remediul: în
-    regulă, `description` text.
 - **Expirarea automată a jocurilor și statisticile din Admin citesc primele 2000 de jocuri, după id**
   (`functions/src/games.ts`): cine creează multe jocuri cu id-uri alese (de exemplu care încep cu `!`),
   într-un grup al lui, ocupă toată fereastra, iar jocurile celorlalte grupuri nu mai expiră. Remediul:
   citirea pe pagini, cu cursor, a întregii colecții; eventual o limită de jocuri pe om.
-- **Același fel de problemă pe evenimente și pe cardurile partajate** (harta din 08.10, citit în cod):
-  - un eveniment de grup cu `title` sau `emoji` hartă pică aplicația web pentru cine deschide tab-ul
-    grupului (`CalendarGrid.tsx`); calendarul APK e deja gol;
-  - un card partajat cu `name` hartă pică Wallet-ul web al fiecărui membru, la încărcare.
-  Remediul: tipul câmpurilor afișate, în regulă, ca la grupuri.
+- **Ce a rămas după evenimente, carduri și cheltuieli (08.10; tipul câmpurilor afișate e închis):**
+  - **Elementele unui checklist și zilele de excepție nu sunt judecate de reguli** (regulile n-au bucle).
+    Web-ul le citește prin normalizare. Un element vechi cu `id` care nu e text primește pe ecran un id
+    inventat, iar bifarea lui nu găsește nimic pe server până la o salvare din formular (pe live: 0).
+  - **Legăturile pozelor (evenimente, carduri) nu sunt legate în reguli de bucket-ul nostru:** APK-ul își
+    alege pozele „din trecut” și din alte dosare. Web-ul arată doar linkuri din Storage. APK-ul arată orice
+    link, dar nu poate citi cardurile și evenimentele altora (interogările lui sunt refuzate).
+  - **`generateAIChecklist` și `suggestEventCategory` primesc titlul și nota de orice lungime** de la cel
+    care cheamă (cost, nu cădere; pe bugetul lui).
+  - **O notă AI scrisă pe un eveniment personal** (crearea personală e deschisă) rămâne pe el; nu mai
+    poate intra într-un grup. Doar proprietarul o vede.
 - **Textul unui mesaj șters rămâne în copiile serverului** (harta din 08.10): previzualizarea din lista
   de conversații (`lastMessageText`) până la mesajul următor, și rândurile din clopoțel pentru totdeauna.
   Niciun trigger nu rulează la modificarea unui mesaj. Remediul: un trigger la ștergere care curăță
@@ -100,7 +102,8 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   citește în afara jocului (bannerul, lista, clasamentul). Se rezolvă cu reconstruirea APK-ului.
 - **Statisticile din Admin și graficul de creștere** cad dacă un membru scrie `status` sau `createdAt`
   de tip greșit pe un joc (`inc` și `tsOf` în `functions/src/index.ts`). Doar adminul vede. Remediul e
-  mic (cheia doar text, data prin `activityMs`).
+  mic (cheia doar text, data prin `activityMs`). Tot acolo, `inc` numără pe un `{}` simplu: o categorie
+  de eveniment sau de card numită „constructor” dă o bară de lățime NaN (nu cade).
 - **Istoricul clasamentului se poate rescrie:** un joc terminat (`finalized`) se poate modifica în
   continuare de orice membru. Blocarea lui ar refuza în tăcere „Next Round” în APK, care nu știe de
   `finalized`. Decizia lui Andrei; implicit nimic până la reconstruirea APK-ului.

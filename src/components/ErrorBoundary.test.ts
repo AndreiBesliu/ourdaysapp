@@ -99,3 +99,30 @@ describe('ErrorBoundary with a fallback (the arcade\u2019s game panel)', () => {
     }
   });
 });
+
+// ── 08.10.2026: a boundary around a window that stays mounted while shut ────────────────────
+describe('ErrorBoundary with resetOn (the event windows)', () => {
+  const FALLBACK = 'the window says so';
+  const crashed = (resetOn: unknown) => {
+    const b = new ErrorBoundary({ children: 'the window', fallback: FALLBACK, resetOn });
+    b.state = { ...b.state, hasError: true };
+    b.setState = vi.fn() as never;
+    return b;
+  };
+
+  it('tries its children again when the value changes, and only then', () => {
+    const b = crashed('e1');
+    b.componentDidUpdate({ children: 'the window', fallback: FALLBACK, resetOn: 'e1' });
+    expect(b.setState).not.toHaveBeenCalled();
+    b.componentDidUpdate({ children: 'the window', fallback: FALLBACK, resetOn: 'e2' });
+    expect(b.setState).toHaveBeenCalledWith({ hasError: false });
+  });
+
+  it('the app-wide boundary, which has no fallback, never resets itself', () => {
+    const b = new ErrorBoundary({ children: null, resetOn: 'e1' });
+    b.state = { ...b.state, hasError: true };
+    b.setState = vi.fn() as never;
+    b.componentDidUpdate({ children: null, resetOn: 'e2' });
+    expect(b.setState).not.toHaveBeenCalled();
+  });
+});

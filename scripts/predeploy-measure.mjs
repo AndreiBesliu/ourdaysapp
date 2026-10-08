@@ -22,6 +22,7 @@ import { resolve, sep } from 'node:path';
 import process from 'node:process';
 import { seriesStartDay, occurrenceDaysInWindow, isFrequency, horizonEndDay } from '../src/utils/recurrenceCore.ts';
 import { ARCADE_GAME_TYPES } from '../src/utils/gameSession.ts';
+import { eventFieldProblem } from '../src/utils/eventShape.ts';
 
 const KEY = process.env.OURDAYS_SA_KEY
   || resolve(process.env.USERPROFILE || process.env.HOME || '', '.ourdays', 'service-account.json');
@@ -184,6 +185,35 @@ for (const e of events) if (typeof e.groupId === 'string') perGroupEvents.set(e.
 grp.maxEventsPerGroup = Math.max(0, ...perGroupEvents.values());
 grp.eventsWithDeadGroupId = events.filter((e) => typeof e.groupId === 'string' && !memberSet.has(e.groupId)).length;
 
+// Since 08.10.2026 the rules type the shown fields of events, wallet cards and expenses
+// (`eventFieldsOk`, `assetFieldsOk`, `expenseDescriptionOk`), judged on the keys a write changes. A row
+// counted here is shown blank by the web (the normalisers), and an edit that touches the field repairs
+// it; a group event counted here would also refuse a move into another group until fixed. All 0 on
+// 08.10.2026.
+const shown = {
+  groupEventsBadField: 0, personalEventsBadField: 0, eventsAiNoteNotShowable: 0,
+  cardsBadField: 0, sharedCardsBadField: 0, expensesDescriptionNotText: 0, expensesDescriptionOver200: 0,
+};
+for (const e of events) {
+  if (eventFieldProblem(e)) { if (typeof e.groupId === 'string') shown.groupEventsBadField++; else shown.personalEventsBadField++; }
+  if ('aiChecklist' in e && !(e.aiChecklist && typeof e.aiChecklist.status === 'string')) shown.eventsAiNoteNotShowable++;
+}
+const textUpTo = (v, n) => typeof v === 'string' && v.length <= n;
+const orNull = (v, n) => v === null || v === undefined || textUpTo(v, n);
+for (const d of (await db.collection('assets').get()).docs) {
+  const a = d.data();
+  const ok = (!('name' in a) || textUpTo(a.name, 1000)) && (!('category' in a) || textUpTo(a.category, 100))
+    && (!('categories' in a) || (Array.isArray(a.categories) && a.categories.length <= 100))
+    && orNull(a.imageUrl, 4096) && orNull(a.barcodeValue, 7089) && orNull(a.barcodeFormat, 64)
+    && (!('sharedWithFamily' in a) || typeof a.sharedWithFamily === 'boolean');
+  if (!ok) { shown.cardsBadField++; if (typeof a.sharedGroupId === 'string') shown.sharedCardsBadField++; }
+}
+for (const d of (await db.collection('expenses').get()).docs) {
+  const x = d.data().description;
+  if (x !== undefined && typeof x !== 'string') shown.expensesDescriptionNotText++;
+  else if (typeof x === 'string' && x.length > 200) shown.expensesDescriptionOver200++;
+}
+
 // Arcade games carrying a top-level `players` (the read rule grants on it to whoever it names).
 // And, since 06.10.2026, games whose `gameType` is not one of the arcade's: the create rule now
 // refuses them, and the banner shows them as "Arcade". Counted, never printed.
@@ -288,4 +318,4 @@ try {
   st.error = String(e?.code || e?.message || e).slice(0, 80);
 }
 
-console.log(JSON.stringify({ recurrence: r, messages: m, admins: a, invites: inv, inviteLinks: links, groups: grp, games: gm, errorLogs: errs, storage: st }, null, 2));
+console.log(JSON.stringify({ recurrence: r, messages: m, admins: a, invites: inv, inviteLinks: links, groups: grp, shownFields: shown, games: gm, errorLogs: errs, storage: st }, null, 2));

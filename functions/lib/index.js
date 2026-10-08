@@ -38,6 +38,7 @@ const errorState_1 = require("./errorState");
 const aiProviderError_1 = require("./aiProviderError");
 const aiChecklistOutcome_1 = require("./aiChecklistOutcome");
 const eventTime_1 = require("./eventTime");
+const eventShape_1 = require("./eventShape");
 const digestEvents_1 = require("./digestEvents");
 const assetTransfer_1 = require("./assetTransfer");
 // Invite links live in their own module — index.ts is already long, and these four are a
@@ -334,8 +335,10 @@ function checklistItemsOf(result) {
  * here is a throw carrying a reason, so the one catch in the caller is the only ending there is.
  */
 async function runAutoChecklist(snapshot, data, ownerId) {
-    const title = data.title;
-    const description = data.description || "";
+    // Text only: a personal event's fields are not typed by the rules, and anything else went into the
+    // prompt as "[object Object]", paid for (08.10.2026).
+    const title = typeof data.title === "string" ? data.title : "";
+    const description = typeof data.description === "string" ? data.description : "";
     if (!(0, claude_1.claudeConfigured)())
         throw (0, aiChecklistOutcome_1.checklistFailure)(aiChecklistOutcome_1.CHECKLIST_UNCONFIGURED);
     const result = await paidGenerate("auto-checklist", ownerId || "system", checklistRequest(title, description, null));
@@ -1176,6 +1179,14 @@ exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
         // Firestore rejects `undefined` outright and would fail the whole batch over one absent field.
         if (v !== undefined)
             safe[key] = v;
+    }
+    // The shown fields, of the kind the app writes (eventShape.ts, 08.10.2026). This callable writes on
+    // the Admin SDK, so the rules' `eventFieldsOk` never sees what it copies: without this, any member
+    // could put a title that is not text on an occurrence of a group's series, and the calendar fell
+    // over for the whole group. The client sends events through the same normaliser first.
+    const shapeProblem = (0, eventShape_1.eventFieldProblem)(safe);
+    if (shapeProblem) {
+        throw new https_1.HttpsError("invalid-argument", `Invalid event field: ${shapeProblem}.`);
     }
     // The span is checked with the SAME rule the form applies before writing, so the two cannot
     // drift into accepting different things. `safe.time` rather than the parent's: an override is a
@@ -2260,7 +2271,14 @@ exports.adminGetUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK 
         counts: { groups: groupsSnap.size, events: eventsSnap.size, games: gamesSnap.size, assets: assetsSnap.size },
         recentEvents: eventsSnap.docs.slice(0, 10).map((d) => {
             const e = d.data();
-            return { id: d.id, title: e.title || "(untitled)", date: e.date || null, isTask: !!e.isTask, taskStatus: e.taskStatus || null };
+            // Text only, as the Admin screen renders them: a member's event could hold anything until 08.10.2026.
+            return {
+                id: d.id,
+                title: typeof e.title === "string" && e.title ? e.title : "(untitled)",
+                date: typeof e.date === "string" ? e.date : null,
+                isTask: !!e.isTask,
+                taskStatus: typeof e.taskStatus === "string" && e.taskStatus ? e.taskStatus : null,
+            };
         }),
     };
 });

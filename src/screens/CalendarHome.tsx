@@ -26,6 +26,8 @@ import { bannerPlayerIds, gameTypeName } from '../components/games/gameTypeName'
 import { withGroupName } from '../utils/groupName';
 import ErrorBoundary from '../components/ErrorBoundary';
 import RecurringEventsPanel from '../components/RecurringEventsPanel';
+import CouldNotShow from '../components/CouldNotShow';
+import { normaliseEvent } from '../utils/eventDoc';
 import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../store';
 import { shownSender, shownGroupName } from '../utils/requestSender';
@@ -499,7 +501,9 @@ export default function CalendarHome() {
       eventBuckets.main = {};
       // No tab filtering here either — this listener used to be the only one that did any, which
       // is precisely why the other two leaked.
-      docs.forEach(ev => { eventBuckets.main[ev.id] = ev; });
+      // Every event through normaliseEvent: they are shown to the whole group, and until 08.10.2026 a
+      // title that was not text crashed the app for everybody who opened the tab (eventDoc.ts).
+      docs.forEach(ev => { eventBuckets.main[ev.id] = normaliseEvent(ev); });
       mergeAndSet();
     }, () => setEventsLoadError(loadFlags.fail('main'))));
 
@@ -508,7 +512,7 @@ export default function CalendarHome() {
     unsubs.push(liveQuery<any>(assignedQuery, 'CalendarHome.events.assigned', (docs) => {
       setEventsLoadError(loadFlags.ok('assigned'));
       eventBuckets.assigned = {};
-      docs.forEach(ev => { eventBuckets.assigned[ev.id] = ev; });
+      docs.forEach(ev => { eventBuckets.assigned[ev.id] = normaliseEvent(ev); });
       mergeAndSet();
     }, () => setEventsLoadError(loadFlags.fail('assigned'))));
 
@@ -1013,7 +1017,11 @@ export default function CalendarHome() {
           </p>
         )}
 
-        {/* Calendar Area */}
+        {/* Calendar Area — in a boundary of its own (08.10.2026): an event the grid cannot draw costs
+            the grid, with the tabs, the chat and the buttons still working. */}
+        <ErrorBoundary context="CalendarGrid" resetOn={activeGroupId} fallback={
+          <p role="alert" className="px-3 py-6 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm text-zinc-600 dark:text-zinc-300">{t('calendarCouldNotShow', language)}</p>
+        }>
         <CalendarGrid 
           currentDate={currentDate} 
           setCurrentDate={setCurrentDate} 
@@ -1040,6 +1048,7 @@ export default function CalendarHome() {
             />
           </div>
         )}
+        </ErrorBoundary>
 
       </main>
 
@@ -1135,7 +1144,15 @@ export default function CalendarHome() {
         </ErrorBoundary>
       )}
 
-      {/* Add Event Modal */}
+      {/* Add Event Modal — the windows stay mounted while shut, so their boundaries try again on the
+          next open instead of remounting (which would drop the form's state). */}
+      <ErrorBoundary
+        context="AddEventModal"
+        resetOn={`${isAddModalOpen}-${eventToEdit?.id ?? 'new'}`}
+        fallback={isAddModalOpen
+          ? <CouldNotShow messageKey="eventCouldNotShow" onClose={() => { setIsAddModalOpen(false); setEventToEdit(null); setInitialTemplate(null); }} />
+          : null}
+      >
       <AddEventModal 
         isOpen={isAddModalOpen} 
         onClose={() => { setIsAddModalOpen(false); setEventToEdit(null); setInitialTemplate(null); }} 
@@ -1146,6 +1163,7 @@ export default function CalendarHome() {
         activeGroupId={activeGroupId}
         groups={groups}
       />
+      </ErrorBoundary>
 
       {/* Overview Modal */}
       {overviewModalType && (
@@ -1162,8 +1180,11 @@ export default function CalendarHome() {
               </button>
             </div>
             <div className="p-4 overflow-y-auto flex-1 flex flex-col gap-3">
+              <ErrorBoundary context="CalendarHome.overview" resetOn={overviewModalType} fallback={
+                <p role="alert" className="text-sm text-zinc-500 text-center py-6">{t('eventCouldNotShow', language)}</p>
+              }>
               {(() => {
-                const todayEvents = allCalendarEvents.filter(ev => occursOn(ev, localDayKey(new Date())));
+                const todayEvents= allCalendarEvents.filter(ev => occursOn(ev, localDayKey(new Date())));
                 let filtered = todayEvents;
                 if (overviewModalType === 'pending') {
                   filtered = todayEvents.filter(ev => ev.isTask && ev.taskStatus !== 'completed');
@@ -1201,7 +1222,7 @@ export default function CalendarHome() {
                         </p>
                         <div className="flex items-center gap-3 mt-1 flex-wrap">
                           {ev.time && (
-                            <span className="text-xs text-zinc-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {displayTime(ev, timezone || localZone())?.text ?? ev.time}</span>
+                            <span className="text-xs text-zinc-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {displayTime(ev, timezone || localZone())?.text ?? (typeof ev.time === 'string' ? ev.time : '')}</span>
                           )}
                           {activeGroupId !== 'personal' && eventUserMap && (
                             <div className="flex items-center gap-1">
@@ -1235,12 +1256,20 @@ export default function CalendarHome() {
                   );
                 });
               })()}
+              </ErrorBoundary>
             </div>
           </div>
         </div>
       )}
 
       {/* Event Details Modal */}
+      <ErrorBoundary
+        context="EventDetailsModal"
+        resetOn={selectedEvent?.id ?? null}
+        fallback={selectedEvent
+          ? <CouldNotShow messageKey="eventCouldNotShow" onClose={() => setSelectedEvent(null)} />
+          : null}
+      >
       <EventDetailsModal
         isOpen={selectedEvent !== null}
         onClose={() => setSelectedEvent(null)}
@@ -1252,6 +1281,7 @@ export default function CalendarHome() {
           setIsAddModalOpen(true);
         }}
       />
+      </ErrorBoundary>
 
       {/* Invite Group Modal */}
       <InviteFamilyModal
@@ -1267,6 +1297,13 @@ export default function CalendarHome() {
         onClose={() => setIsCreateGroupModalOpen(false)}
       />
 
+      <ErrorBoundary
+        context="LeaveGroupModal"
+        resetOn={isLeaveGroupModalOpen}
+        fallback={isLeaveGroupModalOpen
+          ? <CouldNotShow messageKey="eventCouldNotShow" onClose={() => setIsLeaveGroupModalOpen(false)} />
+          : null}
+      >
       <LeaveGroupModal
         isOpen={isLeaveGroupModalOpen}
         onClose={() => setIsLeaveGroupModalOpen(false)}
@@ -1275,6 +1312,7 @@ export default function CalendarHome() {
         isOwner={groups.find(g => g.id === activeGroupId)?.ownerId === auth.currentUser?.uid}
         onSuccess={() => setActiveGroupId('personal')}
       />
+      </ErrorBoundary>
 
       <GroupSettingsModal
         isOpen={isGroupSettingsOpen}
@@ -1303,6 +1341,13 @@ export default function CalendarHome() {
         selectedDate={selectedDate}
       />
 
+      <ErrorBoundary
+        context="RecurringEventsPanel"
+        resetOn={isRecurringPanelOpen}
+        fallback={isRecurringPanelOpen
+          ? <CouldNotShow messageKey="eventCouldNotShow" onClose={() => setIsRecurringPanelOpen(false)} />
+          : null}
+      >
       <RecurringEventsPanel
         isOpen={isRecurringPanelOpen}
         onClose={() => setIsRecurringPanelOpen(false)}
@@ -1313,6 +1358,7 @@ export default function CalendarHome() {
           setIsAddModalOpen(true);
         }}
       />
+      </ErrorBoundary>
 
     </div>
   );

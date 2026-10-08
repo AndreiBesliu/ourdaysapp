@@ -7,6 +7,7 @@ import { parseExpenseAmount, formatAmount } from '../utils/expenseAmount';
 import { t } from '../utils/i18n';
 import { reportError } from '../reportError';
 import { ledgerFor, displayedBalances, isSettled, usableSplit, splitForGroup } from '../utils/ledger';
+import { EXPENSE_DESCRIPTION_MAX, normaliseExpense } from '../utils/expenseDoc';
 
 export default function ExpensesTab(
   { sharedUsers, myGroups = [] }: { sharedUsers: any[]; myGroups?: { id: string; name: string; members: string[] }[] },
@@ -68,7 +69,9 @@ export default function ExpensesTab(
     const unsubs: (() => void)[] = [];
     unsubs.push(onSnapshot(
       query(collection(db, 'expenses'), where('ownerId', '==', uid)),
-      (snap) => { mine.clear(); snap.docs.forEach(d => mine.set(d.id, { ...d.data(), id: d.id })); ok('own'); publish(); },
+      // Every row through normaliseExpense: other members' rows are rendered here, and until 08.10.2026
+      // a description that was not text crashed the whole app for the group (expenseDoc.ts).
+      (snap) => { mine.clear(); snap.docs.forEach(d => mine.set(d.id, normaliseExpense({ ...d.data(), id: d.id }))); ok('own'); publish(); },
       fail('own'),
     ));
     // `in` takes at most 30 values; nobody here is in thirty groups, but slicing beats throwing.
@@ -76,7 +79,7 @@ export default function ExpensesTab(
     if (ids.length) {
       unsubs.push(onSnapshot(
         query(collection(db, 'expenses'), where('groupId', 'in', ids)),
-        (snap) => { theirs.clear(); snap.docs.forEach(d => theirs.set(d.id, { ...d.data(), id: d.id })); ok('groups'); publish(); },
+        (snap) => { theirs.clear(); snap.docs.forEach(d => theirs.set(d.id, normaliseExpense({ ...d.data(), id: d.id }))); ok('groups'); publish(); },
         fail('groups'),
       ));
     }
@@ -247,8 +250,9 @@ export default function ExpensesTab(
           type="text" 
           placeholder={t('expenseWhatFor', language)} 
           value={description} 
-          onChange={e => setDescription(e.target.value)} 
-          required 
+          onChange={e => setDescription(e.target.value)}
+          required
+          maxLength={EXPENSE_DESCRIPTION_MAX}
           className="flex-1 px-3 py-2 border rounded-lg bg-white dark:bg-zinc-900 dark:border-zinc-800 outline-none focus:border-emerald-500" 
         />
         <input 
@@ -331,7 +335,7 @@ export default function ExpensesTab(
                   <Receipt className="w-4 h-4"/>
                 </div>
                 <div>
-                  <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100">{exp.description}</p>
+                  <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100 break-words">{exp.description || t('logUntitled', language)}</p>
                   <p className="text-xs text-zinc-500">
                   {t('expensePaidBy', language)} {getUserName(exp.paidBy)}
                   {/* Personal rows sit in the same list but in no balance, so they have to say

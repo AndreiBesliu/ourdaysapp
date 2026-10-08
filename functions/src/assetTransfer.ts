@@ -44,6 +44,17 @@ export const PRIVATE_ON_TRANSFER = {
   sharedWithFamily: false,
 } as const;
 
+const isTextOrNull = (v: unknown): boolean => v === null || typeof v === "string";
+/** The fields the wallet shows, and what each may hold. */
+const SHOWN_FIELD_OK: Readonly<Record<string, (v: unknown) => boolean>> = {
+  name: (v) => typeof v === "string",
+  category: (v) => typeof v === "string",
+  categories: (v) => Array.isArray(v),
+  imageUrl: isTextOrNull,
+  barcodeValue: isTextOrNull,
+  barcodeFormat: isTextOrNull,
+};
+
 /**
  * The document the recipient's copy should be.
  *
@@ -63,6 +74,15 @@ export function transferredCopy(
   void createdAt;
   void sharedGroupId;
   void sharedWithFamily;
+
+  // What the wallet shows of a card, only of the kind the app writes there. The copy is written on the
+  // Admin SDK, past the rules (`assetFieldsOk`, 08.10.2026), into the recipient's own wallet, so a card
+  // stored before those rules with a name that was a map would have been handed on as it was. A shown
+  // field of the wrong kind is left off (the screens show a card without it); categories keep their text.
+  for (const [field, ok] of Object.entries(SHOWN_FIELD_OK)) {
+    if (field in rest && !ok(rest[field])) delete rest[field];
+  }
+  if (Array.isArray(rest.categories)) rest.categories = rest.categories.filter((c) => typeof c === "string");
 
   return {
     ...rest,

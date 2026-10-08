@@ -12472,3 +12472,96 @@ sunt liste: conversația se deschide, nimic nu pică; o reacție prin dublu-clic
 **Nepublicat.** Cere funcțiile, regulile, apoi hosting-ul, fiecare cu acordul lui Andrei. Deciziile lui
 (implicitul pus): mesajul are cel mult 4000 de caractere (APK-ul nu știe; unul mai lung nu pleacă);
 oricine din conversație poate fixa un mesaj, ca până acum.
+
+## 2026-10-08 · Evenimentele, cardurile partajate și cheltuielile: un câmp care nu e text nu mai pică ecranul (Task Started)
+
+**Prompt (Andrei):** „continua” (după mesajele de chat, `1bd1f9c` + `1ad9f49`; publicarea cere în continuare
+acordul lui explicit).
+**Model:** Claude Opus 5.5.
+**Ce e** (BACKLOG, secțiunea 2, harta din 08.10 și recenzia din 06.10): un membru poate scrie pe un eveniment
+de grup `title` sau `emoji` hartă, pe un card partajat `name` hartă, pe o cheltuială `description` hartă.
+Calendarul grupului, Wallet-ul și lista de cheltuieli pică pentru toți membrii la deschidere.
+**Plan:** harta scrierilor și afișărilor celor trei (web, APK, server), măsurarea pe live, reproducerea pe banc,
+regula pe câmpurile afișate (judecată doar când scrierea le schimbă), garda în client; recenzie, mutații,
+porți; publicarea doar cu acordul lui Andrei.
+
+## 2026-10-08 · Evenimentele, cardurile partajate și cheltuielile: un câmp care nu e text nu mai pică ecranul (Task Completed)
+
+**Prompt (Andrei):** „continua” (apoi, la final, „sa faci pauza cand poti”).
+**Model:** Claude Opus 5.5.
+
+**Reprodus pe banc** (aplicația reală, pe emulatoare, cu regulile de dinainte): un eveniment de grup cu titlul și
+emoji-ul hartă, un card partajat cu numele hartă, o cheltuială cu descrierea hartă. Tab-ul grupului, Wallet-ul la
+încărcare și Wallet → Expenses duceau fiecare toată aplicația pe „Something went wrong” („Objects are not valid as
+a React child”).
+
+**Măsurat pe live (doar citire, doar numere):** 34 de evenimente, 18 carduri, 3 cheltuieli, toate de tipul scris de
+aplicație. Toate datele și orele au forma aplicației, toate cele 8 poze de card sunt din Storage-ul nostru, nicio
+categorie numită ca un membru al lui `Object.prototype`. `predeploy-measure` numără acum încălcările (toate 0).
+
+**Harta** (Workflow: trei cartografi și un critic) a mai găsit, pe aceleași date:
+- o listă de excepții care nu e listă pica calculul calendarului, fără nicio graniță care s-o prindă;
+- o dată stricată pica panoul de evenimente recurente (`format` pe o dată invalidă);
+- o frecvență sau o categorie numită „constructor” pica gruparea pe `{}` (panoul de serii, Wallet-ul);
+- un cod QR peste 2953 de octeți pica detaliile evenimentului și pagina de carduri offline;
+- o notă „checklist AI” falsă, cu un motiv care nu se poate transforma în text, pica fereastra evenimentului;
+- `createEventOverride` (Admin SDK) copia câmpurile afișate fără nicio verificare;
+- `transferAssetCopy` ducea mai departe orice tip.
+
+**Ce s-a schimbat:**
+- **Regulile.** `eventFieldsOk` cere tipul la titlu, emoji, notă, loc, ore, dată, checklist, excepții,
+  repetare, etichete și memento:
+  - pe crearea unui eveniment de grup se judecă toate cheile;
+  - pe o modificare, doar cele schimbate, sau toate când evenimentul intră într-un grup în care nu era;
+  - crearea personală rămâne deschisă (copiile la ieșirea din grup).
+
+  Nota AI e a serverului: un client o poate doar șterge, nu intră într-un grup la creare și nici cu o mutare
+  (formularul o șterge la mutare). `assetFieldsOk` face același lucru la carduri, iar la partajarea într-un grup
+  se judecă tot. `expenseDescriptionOk` cere text de cel mult 200 de caractere.
+- **Fără limită de lungime pe textul liber pe care îl scrie APK-ul** (titlu, notă, loc, nume de card, categorie).
+  Prima variantă avea limite; recenzia a confirmat că ar fi refuzat scrieri ale APK-ului, care n-are niciun
+  `maxLength`, iar un card refuzat la „salvează poza” pierde tot evenimentul. Căderea vine din tip. Limitele
+  rămân doar în formularul web.
+- **Serverul.** `createEventOverride` refuză prin `eventFieldProblem` (`eventShape.ts`, copie identică în funcții).
+  `transferAssetCopy` lasă deoparte un câmp afișat de tip greșit. Promptul checklist-ului automat și `adminGetUser`
+  citesc textul doar ca text.
+- **Clientul.** Normalizare la fiecare ascultător și citire: `normaliseEvent`, `normaliseAsset`,
+  `normaliseExpense`.
+  - Rămân neschimbate răspunsurile RSVP, linkul pozei, un `assigneeIds` lipsă (formularul cade pe `assigneeId`)
+    și textul lung.
+  - Elementele de checklist păstrează doar cele cinci câmpuri stocate.
+  - Expandarea seriilor ia doar o listă de zile; panoul de serii nu formatează o dată invalidă și grupează pe un
+    obiect fără prototip, la fel ca Wallet-ul.
+  - Pozele se arată doar din Storage. Un QR prea lung apare ca text.
+  - Granițe de eroare locale: grila și ziua, prezentarea, detaliile, formularul, panoul de serii, dialogul de
+    ieșire, fiecare card, vizualizatorul de cod, lista de cheltuieli. `ErrorBoundary` are acum `resetOn`, pentru
+    ferestrele care rămân montate.
+  - Patru texte noi de eroare, în 6 limbi. Formularele primesc `maxLength`, iar o ciornă veche e tăiată la
+    restaurare.
+
+**Recenzie adversarială** (3 lentile, 13 constatări, fiecare verificată separat): 10 confirmate, toate reparate,
+plus testele cerute; 3 infirmate. Între cele confirmate:
+- limitele care refuzau APK-ul;
+- responsabilul unic scos de autosalvare;
+- câmpurile locale de formular plantate în checklist;
+- nota AI adusă într-un grup prin mutare;
+- locul necitit din ciornă;
+- opt goluri în teste: mutarea grup→grup, repartajarea unui card, memento-ul numeric, copia personală cu notă,
+  valorile de la limită ale cardurilor, câmpurile transferului, `resetOn` pe două ferestre, textul lung.
+
+**Teste noi:**
+- `rules-tests/shown-fields.test.ts`: 129, fiecare refuz verificat că nu vine din plafonul de 1000 de expresii;
+- `eventShape`, copia identică, `eventDoc`, `walletAsset`, `expenseDoc`, limita QR pe codorul real, `resetOn`;
+- trei cazuri pe `createEventOverride`.
+
+Reparat și `chatMessage.test.ts` (sursa citită cu CRLF). Alte trei teste fragile la CRLF sunt propuse ca sarcină
+separată.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2586), build-ul funcțiilor, `npm run build`, `check-split`,
+`check-offline`, `check-bundle`, `test:tz` (46) și `test:rules` complet (805, 34 de fișiere).
+
+**Mutații: NERULATE încă.** Lista are 136 de mutanți. Toate controalele negative au trecut, pe suitele proprii și
+pe cele complete, într-un worktree din afara Drive-ului. Rularea a fost oprită la cererea de pauză, înainte de
+primul verdict. Nimic nu a rămas aplicat în repo; worktree-ul e șters. Se reiau la întoarcere.
+
+**Nepublicat.** Cere funcțiile, regulile, apoi hosting-ul, fiecare cu acordul lui Andrei.

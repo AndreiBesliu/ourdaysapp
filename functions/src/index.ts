@@ -44,6 +44,7 @@ import {
   CHECKLIST_QUOTA, CHECKLIST_UNCONFIGURED, CHECKLIST_BAD_OUTPUT, CHECKLIST_ERROR,
 } from "./aiChecklistOutcome";
 import { spanProblem } from "./eventTime";
+import { eventFieldProblem } from "./eventShape";
 import type { EventDoc } from "./recurrenceServer";
 import {
   digestWindow, digestEventLines, DIGEST_EVENT_SCAN, DIGEST_RECURRING_SCAN,
@@ -362,8 +363,10 @@ async function runAutoChecklist(
   data: FirebaseFirestore.DocumentData,
   ownerId: string | undefined,
 ): Promise<void> {
-  const title = data.title;
-  const description = data.description || "";
+  // Text only: a personal event's fields are not typed by the rules, and anything else went into the
+  // prompt as "[object Object]", paid for (08.10.2026).
+  const title = typeof data.title === "string" ? data.title : "";
+  const description = typeof data.description === "string" ? data.description : "";
 
   if (!claudeConfigured()) throw checklistFailure(CHECKLIST_UNCONFIGURED);
 
@@ -1268,6 +1271,15 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
     const v = (data as Record<string, unknown>)[key];
     // Firestore rejects `undefined` outright and would fail the whole batch over one absent field.
     if (v !== undefined) safe[key] = v;
+  }
+
+  // The shown fields, of the kind the app writes (eventShape.ts, 08.10.2026). This callable writes on
+  // the Admin SDK, so the rules' `eventFieldsOk` never sees what it copies: without this, any member
+  // could put a title that is not text on an occurrence of a group's series, and the calendar fell
+  // over for the whole group. The client sends events through the same normaliser first.
+  const shapeProblem = eventFieldProblem(safe);
+  if (shapeProblem) {
+    throw new HttpsError("invalid-argument", `Invalid event field: ${shapeProblem}.`);
   }
 
   // The span is checked with the SAME rule the form applies before writing, so the two cannot
@@ -2375,7 +2387,14 @@ export const adminGetUser = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async
     counts: { groups: groupsSnap.size, events: eventsSnap.size, games: gamesSnap.size, assets: assetsSnap.size },
     recentEvents: eventsSnap.docs.slice(0, 10).map((d) => {
       const e = d.data();
-      return { id: d.id, title: e.title || "(untitled)", date: e.date || null, isTask: !!e.isTask, taskStatus: e.taskStatus || null };
+      // Text only, as the Admin screen renders them: a member's event could hold anything until 08.10.2026.
+      return {
+        id: d.id,
+        title: typeof e.title === "string" && e.title ? e.title : "(untitled)",
+        date: typeof e.date === "string" ? e.date : null,
+        isTask: !!e.isTask,
+        taskStatus: typeof e.taskStatus === "string" && e.taskStatus ? e.taskStatus : null,
+      };
     }),
   };
 });

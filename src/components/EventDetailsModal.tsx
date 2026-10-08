@@ -8,6 +8,9 @@ import { shareFieldsFor, groupNameOf } from '../utils/assetSharing';
 import { createEventOverride } from '../serverActions';
 import { db, auth } from '../firebase';
 import AssetBarcode from './AssetBarcode';
+import { normaliseAsset } from '../utils/walletAsset';
+import { eventImageSrc } from '../utils/eventDoc';
+import { storageUrlOrNull } from '../utils/chatMessage';
 import { Wallet } from 'lucide-react';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { format } from 'date-fns';
@@ -88,7 +91,8 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           const docSnap = await getDoc(docRef);
           if (startedFor !== event?.id) return;
           if (docSnap.exists()) {
-            setLinkedAsset({ ...docSnap.data(), id: docSnap.id });
+            // A card can be another member's, shared with the group: its name is shown here (walletAsset.ts).
+            setLinkedAsset(normaliseAsset({ ...docSnap.data(), id: docSnap.id }));
           } else {
             setMainAssetDenied(true);
           }
@@ -123,7 +127,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
             try {
               const docSnap = await getDoc(doc(db, 'assets', item.assetId));
               if (docSnap.exists()) {
-                newMap[item.assetId] = { ...docSnap.data(), id: docSnap.id };
+                newMap[item.assetId] = normaliseAsset({ ...docSnap.data(), id: docSnap.id });
               }
             } catch (e) {
               (isOfflineError(e) ? offline : refused).add(item.assetId);
@@ -1104,9 +1108,9 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                                   className={`text-sm flex-1 pt-0.5 bg-transparent border-none focus:ring-0 outline-none min-w-0 resize-none overflow-hidden ${item.isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-700 dark:text-zinc-300'}`}
                                 />
                               </div>
-                              {item.assetUrl && !item.isCompleted && (
-                                <div className="ml-8 mt-1 rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 self-start max-w-[200px] cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullScreenImage(item.assetUrl)}>
-                                  <img src={item.assetUrl} alt={item.text} className="w-full h-auto" />
+                              {storageUrlOrNull(item.assetUrl) && !item.isCompleted && (
+                                <div className="ml-8 mt-1 rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 self-start max-w-[200px] cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullScreenImage(storageUrlOrNull(item.assetUrl))}>
+                                  <img src={storageUrlOrNull(item.assetUrl)!} alt={item.text} className="w-full h-auto" />
                                 </div>
                               )}
                               {item.assetId && !item.isCompleted && (deniedChecklistAssets.has(item.assetId) || offlineChecklistAssets.has(item.assetId)) && (
@@ -1271,13 +1275,13 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           )}
 
           {/* Image Attachment */}
-          {event.imageUrl && (
+          {eventImageSrc(event) && (
             <div>
               <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-1.5">
                 <ImageIcon className="w-4 h-4" /> {t('attachedAsset', language)}
               </p>
-              <div className="rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullScreenImage(event.imageUrl)}>
-                <img src={event.imageUrl} alt={t('altEventAttachment', language)} className="w-full h-auto max-h-48 object-contain" />
+              <div className="rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-100 dark:bg-zinc-800 cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullScreenImage(eventImageSrc(event))}>
+                <img src={eventImageSrc(event)!} alt={t('altEventAttachment', language)} className="w-full h-auto max-h-48 object-contain" />
               </div>
             </div>
           )}

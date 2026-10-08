@@ -145,7 +145,12 @@ export function expandRecurringEvents(
       continue;
     }
 
-    const exceptions: string[] = event.recurrenceExceptions || [];
+    // Only a list of days. This runs inside the calendar's own computation, where no boundary below
+    // it can catch a throw: a list of exceptions that was not a list (any member could write one
+    // until 08.10.2026) took the whole app down for the group. The server reads it the same way.
+    const exceptions: string[] = Array.isArray(event.recurrenceExceptions)
+      ? event.recurrenceExceptions.filter((x: unknown): x is string => typeof x === 'string')
+      : [];
     // Relative span: every occurrence inherits it verbatim through `...event`.
     const spanDays = isValidDayOffset(event.endDayOffset) ? event.endDayOffset : 0;
 

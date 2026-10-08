@@ -84,7 +84,8 @@ describe('what the app, the rules and the installed APK agree on', () => {
 });
 
 describe('the conversation uses all of it', () => {
-  const w = readFileSync('src/components/GroupChatWidget.tsx', 'utf8');
+  // Line endings normalised: a Windows checkout writes CRLF, and two cases below span lines.
+  const w = readFileSync('src/components/GroupChatWidget.tsx', 'utf8').replace(/\r\n/g, '\n');
   it.each([
     ['messages through the normaliser', 'const fetchedMessages = normaliseMessages(docs);'],
     ['pinned ones too', 'setPinnedDocs(normaliseMessages(docs))'],

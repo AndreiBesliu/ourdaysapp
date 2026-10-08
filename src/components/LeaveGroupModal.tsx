@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, LogOut, AlertTriangle, CheckSquare, Square, Trash2 } from 'lucide-react';
 import { db, auth } from '../firebase';
 import { doc, updateDoc, arrayRemove, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { normaliseEvent } from '../utils/eventDoc';
 import { deleteGroupCascade } from '../serverActions';
 import { reportError } from '../reportError';
 import { useDialog } from '../hooks/useDialog';
@@ -54,7 +55,9 @@ export default function LeaveGroupModal({ isOpen, onClose, groupId, groupName, i
     try {
       const q = query(collection(db, 'events'), where('groupId', '==', groupId));
       const snapshot = await getDocs(q);
-      const allGroupEvents = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+      // Through normaliseEvent: the list shows the group's titles and dates, which any member could
+      // write as anything until 08.10.2026; the copies kept are made from the normalised event too.
+      const allGroupEvents = snapshot.docs.map(d => normaliseEvent({ ...d.data(), id: d.id }));
 
       // Filter events the user is a part of
       const involved = allGroupEvents.filter((ev: any) => {

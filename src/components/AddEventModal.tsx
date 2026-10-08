@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar as CalendarIcon, Image as ImageIcon, Wallet, Trash2, CheckCircle2, Sparkles, GripVertical, Search, Check } from 'lucide-react';
-import { addDoc, collection, query, where, updateDoc, doc, getDoc, getDocs } from 'firebase/firestore';
+import { addDoc, collection, query, where, updateDoc, doc, getDoc, getDocs, deleteField } from 'firebase/firestore';
 import { liveQuery } from '../utils/liveQuery';
+import { assetImageSrc, assetNameFrom, normaliseAsset } from '../utils/walletAsset';
+import { eventImageSrc } from '../utils/eventDoc';
+import { EVENT_DESCRIPTION_MAX, EVENT_LOCATION_MAX, EVENT_TITLE_MAX, clampText } from '../utils/eventShape';
+import { storageUrlOrNull } from '../utils/chatMessage';
 import { mergeAssets, shareFieldsFor } from '../utils/assetSharing';
 import { localZone, timeFieldsFor, timeFieldsKeepingZone, endFieldsFor, spanOf, dayOf, dayPlus, dayOffsetBetween } from '../utils/eventTime';
 import { formSpan, SPAN_MESSAGE_KEY } from '../utils/eventForm';
@@ -254,7 +258,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     const uid = auth.currentUser.uid;
     const assetsQuery = query(collection(db, 'assets'), where('ownerId', '==', uid));
     const unsubAssets = liveQuery<any>(assetsQuery, 'AddEventModal.assets',
-      (docs) => { setAssetsLoadError(false); setOwnedAssets(docs); },
+      (docs) => { setAssetsLoadError(false); setOwnedAssets(docs.map(normaliseAsset)); },
       // Deliberately does NOT clear `assets`: emptying the list on failure turned a denied read
       // into "you own nothing", and threw away a picker that was already populated when a late
       // failure arrived. Same query and same collection as the Wallet screen, which says so.
@@ -273,7 +277,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     const unsub = liveQuery<any>(
       query(collection(db, 'assets'), where('sharedGroupId', '==', selectedGroupId)),
       'AddEventModal.sharedAssets',
-      (docs) => setGroupSharedAssets(docs),
+      // Other members' cards, through normaliseAsset: the picker searches their names, and a name
+      // that was not text crashed it for the whole group until 08.10.2026 (walletAsset.ts).
+      (docs) => setGroupSharedAssets(docs.map(normaliseAsset)),
       // Same rule as the owned list: a denied read must not be shown as "nothing is shared".
       () => {},
     );
@@ -348,11 +354,11 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
         try {
           const parsed = JSON.parse(draftJSON);
           if (window.confirm(t('draftRestorePrompt', language))) {
-            setTitle(parsed.title || '');
+            setTitle(typeof parsed.title === 'string' ? clampText(parsed.title, EVENT_TITLE_MAX) : '');
             if (parsed.eventDate) setEventDate(parsed.eventDate);
             // The draft's own lock, never the one left by the event opened before it.
             dateChosenByHand.current = restoredDateLock(parsed);
-            setDescription(parsed.description || '');
+            setDescription(typeof parsed.description === 'string' ? clampText(parsed.description, EVENT_DESCRIPTION_MAX) : '');
             if (parsed.checklistItems) setChecklistItems(parsed.checklistItems);
             if (parsed.categoryId) {
               const cat = CATEGORIES.find(c => c.id === parsed.categoryId);
@@ -368,7 +374,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
             // An unknown value is "does not repeat", not whatever the previous add session left.
             setRepeat(repeatFromDraft(parsed) ?? 'none');
             if (parsed.rsvpEnabled !== undefined) setRsvpEnabled(parsed.rsvpEnabled);
-            if (parsed.location !== undefined) setLocation(parsed.location);
+            if (parsed.location !== undefined) setLocation(typeof parsed.location === 'string' ? clampText(parsed.location, EVENT_LOCATION_MAX) : '');
             if (parsed.reminderMinutes !== undefined) applyReminder(parsed.reminderMinutes);
             if (typeof parsed.eventTime === 'string') setEventTime(parsed.eventTime);
             if (typeof parsed.endDate === 'string') setEndDate(parsed.endDate);
@@ -745,7 +751,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
           text,
           isCompleted: false,
           assetId: bestAssetMatch && highestScore > 0 ? bestAssetMatch.id : null,
-          selectedAssetUrl: bestAssetMatch && highestScore > 0 ? (bestAssetMatch.imageUrl || null) : null
+          selectedAssetUrl: bestAssetMatch && highestScore > 0 ? assetImageSrc(bestAssetMatch) : null
         };
       });
       
@@ -800,7 +806,12 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
     const move = moveOf(cur.groupId, targetGroupId);
     const answers = answersForMove(cur.rsvps, move, me, membersOf(targetGroupId));
     return {
-      fields: answers ? { rsvps: answers } : {},
+      fields: {
+        ...(answers ? { rsvps: answers } : {}),
+        // The AI checklist's note is the server's, about this calendar; the rules let it into a group
+        // only from the server, so a move into one takes it off (08.10.2026).
+        ...((move === 'in' || move === 'across') && 'aiChecklist' in cur ? { aiChecklist: deleteField() } : {}),
+      },
       // Only people the tick NAMED: somebody who answered or was assigned after the form opened was
       // not shown, so is not invited on its say-so (review). And only those still on the event now.
       invitees: move === 'across' && inviteOnMove
@@ -849,7 +860,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
         if (saveUploadsToWallet) {
           await addDoc(collection(db, 'assets'), {
-            name: title || 'Event Image',
+            // Cut to what a card's name may hold: the title has its own, equal limit, but the
+            // installed APK and older rows do not.
+            name: assetNameFrom(title, 'Event Image'),
             category: 'Uncategorized',
             categories: ['Uncategorized'],
             imageUrl: imageUrl,
@@ -873,7 +886,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
 
           if (saveUploadsToWallet) {
             await addDoc(collection(db, 'assets'), {
-              name: item.text || 'Checklist Item',
+              name: assetNameFrom(item.text, 'Checklist Item'),
               category: 'Uncategorized',
               categories: ['Uncategorized'],
               imageUrl: finalItemUrl,
@@ -1225,6 +1238,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               onBlur={handleTitleBlur}
               placeholder={t('eventTitlePh', language)}
               required
+              maxLength={EVENT_TITLE_MAX}
               className="w-full px-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none"
             />
           </div>
@@ -1236,6 +1250,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={t('descNotesPh', language)}
+              maxLength={EVENT_DESCRIPTION_MAX}
               rows={1}
               className="w-full px-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none resize-none overflow-hidden min-h-[42px]"
             />
@@ -1249,6 +1264,7 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder={t('locationPh', language)}
+                maxLength={EVENT_LOCATION_MAX}
                 className="w-full px-4 py-2 border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none text-sm"
               />
             </div>
@@ -1448,9 +1464,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                               </div>
                               {!item.isCompleted && (item.assetFile || item.selectedAssetUrl || item.assetUrl || item.assetId) && (
                                 <div className="ml-8 mt-2 rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 self-start max-w-[120px]">
-                                  {(item.assetFile || item.selectedAssetUrl || item.assetUrl || (item.assetId && assets.find(a => a.id === item.assetId)?.imageUrl)) ? (
+                                  {(item.assetFile || item.selectedAssetUrl || storageUrlOrNull(item.assetUrl) || (item.assetId && assetImageSrc(assets.find(a => a.id === item.assetId)))) ? (
                                     <img 
-                                      src={item.assetFile ? URL.createObjectURL(item.assetFile) : (item.selectedAssetUrl || item.assetUrl || assets.find(a => a.id === item.assetId)?.imageUrl || '')} 
+                                      src={item.assetFile ? URL.createObjectURL(item.assetFile) : (item.selectedAssetUrl || storageUrlOrNull(item.assetUrl) || assetImageSrc(assets.find(a => a.id === item.assetId)) || '')}
                                       alt={t('altPreview', language)} 
                                       className="w-full h-auto object-contain" 
                                     />
@@ -1864,11 +1880,11 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
               </div>
             </div>
             
-            {(imageFile || selectedAssetUrl || (editEvent?.imageUrl && !removeMainImage)) && (
+            {(imageFile || selectedAssetUrl || (eventImageSrc(editEvent) && !removeMainImage)) && (
                <div className="flex flex-col gap-2 mt-3 p-2 bg-zinc-50 dark:bg-zinc-800/50 rounded-lg border border-zinc-200 dark:border-zinc-700">
                  <div className="w-full flex justify-center bg-zinc-100 dark:bg-zinc-900 rounded-md overflow-hidden">
                    <img 
-                     src={imageFile ? URL.createObjectURL(imageFile) : (selectedAssetUrl || editEvent?.imageUrl || '')}
+                     src={imageFile ? URL.createObjectURL(imageFile) : (selectedAssetUrl || eventImageSrc(editEvent) || '')}
                      alt={t('altMainAsset', language)}
                      className="max-w-full max-h-48 object-contain"
                    />
@@ -1977,13 +1993,13 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                         key={asset.id}
                         onClick={() => {
                           if (showAssetPicker === 'main') {
-                            setSelectedAssetUrl(asset.imageUrl || null);
+                            setSelectedAssetUrl(assetImageSrc(asset));
                             setSelectedAssetId(asset.id);
                             setImageFile(null);
                             setRemoveMainImage(false);
                           } else {
                             setChecklistItems(checklistItems.map(item => 
-                              item.id === showAssetPicker ? { ...item, selectedAssetUrl: asset.imageUrl || null, assetId: asset.id, assetFile: undefined } : item
+                              item.id === showAssetPicker ? { ...item, selectedAssetUrl: assetImageSrc(asset), assetId: asset.id, assetFile: undefined } : item
                             ));
                           }
                           setShowAssetPicker(null);
@@ -1992,8 +2008,8 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
                         className="group cursor-pointer bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden hover:border-emerald-500 hover:shadow-md transition-all relative"
                       >
                         <div className="aspect-square bg-zinc-100 dark:bg-zinc-900 relative flex items-center justify-center">
-                          {asset.imageUrl ? (
-                            <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300" />
+                          {assetImageSrc(asset) ? (
+                            <img src={assetImageSrc(asset)!} alt={asset.name}className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300" />
                           ) : (
                             <Wallet className="w-10 h-10 text-zinc-400 opacity-50 group-hover:scale-110 transition-all duration-300" />
                           )}

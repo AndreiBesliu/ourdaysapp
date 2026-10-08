@@ -262,3 +262,32 @@ describe('05.10.2026 — being named on a group event is not being in the group'
     expect((await db.doc(`events/${id}`).get()).data()).toMatchObject({ title: 'Walk, Carol', groupId: null });
   });
 });
+
+describe('08.10.2026 — the shown fields, of the app’s kind, on the Admin SDK’s door too', () => {
+  it('an occurrence with a title, an emoji or a day that is not of the app’s kind is refused, nothing written', async () => {
+    for (const data of [{ title: { a: 1 } }, { title: 'Walk', emoji: { a: 1 } }, { title: 'Walk', date: 'garbage' }, { title: 'Walk', time: '9:00' }]) {
+      await expect(call(BOB, { parentId: PARENT, overrideDate: '2026-09-22', data }))
+        .rejects.toMatchObject({ code: 'invalid-argument' });
+    }
+    expect(await overridesOf(PARENT)).toHaveLength(0);
+    expect((await db.doc(`events/${PARENT}`).get()).data()?.recurrenceExceptions).toBeUndefined();
+  });
+
+  it('and so is an edit applied to one that exists', async () => {
+    const { id } = await call(BOB, { parentId: PARENT, overrideDate: '2026-09-22', data: { title: 'Walk' } });
+    await expect(call(BOB, { parentId: PARENT, overrideDate: '2026-09-22', apply: true, data: { title: 'Walk', description: ['x'] } }))
+      .rejects.toMatchObject({ code: 'invalid-argument' });
+    expect((await db.doc(`events/${id}`).get()).data()?.description).toBeUndefined();
+  });
+
+  it('what the details window sends — the whole occurrence, normalised, with its day — passes', async () => {
+    const { id } = await call(BOB, {
+      parentId: PARENT, overrideDate: '2026-09-22',
+      data: {
+        title: 'Walk', emoji: null, description: '', location: '', time: null, endTime: null, date: '2026-09-22',
+        checklistItems: [], taskStatus: null, color: null, categoryId: null, timezone: null, isTask: false,
+      },
+    });
+    expect((await db.doc(`events/${id}`).get()).data()).toMatchObject({ title: 'Walk', date: '2026-09-22' });
+  });
+});

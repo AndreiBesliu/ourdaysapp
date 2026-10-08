@@ -101,6 +101,74 @@ service cloud.firestore {
                   && myAnswerOk(request.resource.data.rsvps)));
     }
 
+    // ── What the shown fields of an event and of a wallet card may hold (08.10.2026) ──
+    //
+    // Every member of a group can edit every event of the group, and a card shared with a group is
+    // shown to every member — and until that day nothing typed what they wrote. A title or an emoji
+    // that was a map put the whole app on the recovery screen for everybody who opened the group's
+    // tab, with no way back inside the app; a list of exceptions that was not a list did the same from
+    // inside the calendar's own computation; a card whose name was a map did it to everybody's Wallet.
+    //
+    // The KIND of each field the screens show — the crash came from the kind, never from the length —
+    // judged on the keys a write sets, so a row stored before this never blocks an edit that does not
+    // touch it, and an edit that does touch it is how it gets repaired. A length only where no installed
+    // APK writes free text (emoji, labels, codes, links): the APK has no limit on a title, a note, a
+    // place, a card's name or a category, and what it writes today must not be refused. The web form
+    // limits those itself. The numbers are the app's own (src/utils/eventShape.ts), held equal by
+    // eventShape.test.ts; the server's own door for events (`createEventOverride`) applies the same
+    // module.Not judged: an item of a checklist or a day of the exceptions (rules have no loops; the
+    // screens read those through the normaliser), and every field the screens only compare.
+    function evText(v, max) {
+      return v is string && v.size() <= max;
+    }
+    function evOptText(v, max) {
+      return v == null || evText(v, max);
+    }
+    function evTime(v) {
+      return v == null || (v is string && v.matches('([01][0-9]|2[0-3]):[0-5][0-9]'));
+    }
+    function eventFieldsOk(d, keys) {
+      return (!keys.hasAny(['title']) || d.get('title', null) is string)
+        && (!keys.hasAny(['emoji']) || evOptText(d.get('emoji', null), 16))
+        && (!keys.hasAny(['description']) || d.get('description', null) == null || d.description is string)
+        && (!keys.hasAny(['location']) || d.get('location', null) == null || d.location is string)
+        && (!keys.hasAny(['time']) || evTime(d.get('time', null)))
+        && (!keys.hasAny(['endTime']) || evTime(d.get('endTime', null)))
+        && (!keys.hasAny(['date']) || (d.get('date', null) is string
+            && d.date.matches('[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]([.][0-9]{1,3})?Z)?')))
+        && (!keys.hasAny(['checklistItems']) || d.get('checklistItems', null) == null || d.checklistItems is list)
+        && (!keys.hasAny(['recurrenceExceptions']) || d.get('recurrenceExceptions', null) == null || d.recurrenceExceptions is list)
+        && (!keys.hasAny(['recurrenceRule']) || d.get('recurrenceRule', null) == null || d.recurrenceRule is map)
+        && (!keys.hasAny(['taskStatus']) || evOptText(d.get('taskStatus', null), 64))
+        && (!keys.hasAny(['color']) || evOptText(d.get('color', null), 64))
+        && (!keys.hasAny(['categoryId']) || evOptText(d.get('categoryId', null), 64))
+        && (!keys.hasAny(['timezone']) || evOptText(d.get('timezone', null), 64))
+        && (!keys.hasAny(['reminderMinutes']) || d.get('reminderMinutes', null) == null || d.reminderMinutes is number);
+    }
+    // The note the AI checklist trigger leaves on an event is the SERVER's: the details window renders
+    // it, and a member could write one whose reason could not be shown. Clients only ever delete it, so
+    // that is all a client write may do to it, and a group event is not created with one.
+    // A personal event's create is open, so a note could be born there; it does not go into a group
+    // with the event (the edit form deletes it on such a move).
+    function aiNoteUntouched() {
+      return (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['aiChecklist'])
+          || !('aiChecklist' in request.resource.data))
+        && (request.resource.data.get('groupId', null) == null
+          || request.resource.data.get('groupId', null) == resource.data.get('groupId', null)
+          || !('aiChecklist' in request.resource.data));
+    }
+    // A card. Outside `match /assets` on purpose: assetQueryRules.test.ts reads every field named in
+    // that block as one a wallet query may filter on.
+    function assetFieldsOk(d, keys) {
+      return (!keys.hasAny(['name']) || d.get('name', null) is string)
+        && (!keys.hasAny(['category']) || d.get('category', null) is string)
+        && (!keys.hasAny(['categories']) || d.get('categories', null) is list)
+        && (!keys.hasAny(['imageUrl']) || evOptText(d.get('imageUrl', null), 4096))
+        && (!keys.hasAny(['barcodeValue']) || evOptText(d.get('barcodeValue', null), 7089))
+        && (!keys.hasAny(['barcodeFormat']) || evOptText(d.get('barcodeFormat', null), 64))
+        && (!keys.hasAny(['sharedWithFamily']) || d.get('sharedWithFamily', null) is bool);
+    }
+
     // Is this document addressed to an email address the caller has PROVED is theirs?
     //
     // Used by group invitations and friend requests, which can be addressed either to a uid
@@ -831,7 +899,14 @@ service cloud.firestore {
         ) && (
           !('inviteeId' in request.resource.data) ||
           request.resource.data.inviteeId == null
-        ) && rsvpsOkOnCreate() && (
+        ) && rsvpsOkOnCreate()
+        // A personal create stays open, for the same reason as its answers: leaving a group copies the
+        // event as stored, on the web and in the installed APK. Only its owner reads it, and moving it
+        // into a group is judged in full below.
+        && (request.resource.data.get('groupId', null) == null
+            || (eventFieldsOk(request.resource.data, request.resource.data.keys())
+                && !('aiChecklist' in request.resource.data)))
+        && (
           (request.resource.data.groupId != null &&
             isMemberOfGroup(request.resource.data.groupId) &&
             namedAreInGroup(request.resource.data.groupId)) ||
@@ -915,6 +990,14 @@ service cloud.firestore {
         request.resource.data.inviteeId == null
       )
       && rsvpsOkOnUpdate()
+      // The shown fields: the keys this write sets — or every key, when the event lands in a group it
+      // was not in, so a personal event cannot carry into a group what the group could not write.
+      && eventFieldsOk(request.resource.data,
+           (request.resource.data.get('groupId', null) != null
+              && request.resource.data.get('groupId', null) != resource.data.get('groupId', null))
+             ? request.resource.data.keys()
+             : request.resource.data.diff(resource.data).affectedKeys())
+      && aiNoteUntouched()
       // What makes a document an override. The server now accepts one only if it also carries the
       // parent's owner and group, but these two keys still must not be WRITTEN onto an existing
       // event by an update. Create stays open on purpose: leaving a group copies them into a
@@ -1175,6 +1258,15 @@ service cloud.firestore {
           && request.resource.data.amount > 0
           && request.resource.data.amount < 10000000;
       }
+      // The row's label, rendered as text on every member's Expenses tab. Until 08.10.2026 nothing
+      // checked it, and one row whose description was a map put the whole app on the recovery screen
+      // for the whole group, for good. Text of at most 200 characters (the form's maxLength, held equal
+      // by src/utils/expenseDoc.test.ts). Absent stays allowed: a row with no label shows "(no title)".
+      // On an update it is judged only when the write changes it, so an old row never blocks a repair.
+      function expenseDescriptionOk() {
+        return request.resource.data.get('description', '') is string
+          && request.resource.data.get('description', '').size() <= 200;
+      }
       function splitIsHonest(groupId) {
         return !('splitAmong' in request.resource.data) || (
           request.resource.data.splitAmong is list &&
@@ -1191,7 +1283,8 @@ service cloud.firestore {
         && request.resource.data.paidBy == request.auth.uid
         && (request.resource.data.groupId == null || isMemberOfGroup(request.resource.data.groupId))
         && splitIsHonest(request.resource.data.groupId)
-        && amountOk();
+        && amountOk()
+        && expenseDescriptionOk();
       // Only the owner edits or removes it — being in the group lets you SEE the ledger, not
       // rewrite what someone else recorded.
       //
@@ -1215,7 +1308,9 @@ service cloud.firestore {
         && splitIsHonest(request.resource.data.groupId)
         // On the RESULTING document, deliberately: nothing in the client updates an expense, so the
         // only update is a repair, and a repair must leave a valid amount behind.
-        && amountOk();
+        && amountOk()
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['description'])
+            || expenseDescriptionOk());
       allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
 
@@ -1254,7 +1349,8 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && request.resource.data.ownerId == request.auth.uid
         && shareTargetOk(request.resource.data)
-        && !('transferredFrom' in request.resource.data);
+        && !('transferredFrom' in request.resource.data)
+        && assetFieldsOk(request.resource.data, request.resource.data.keys());
       allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
       // An update may not CHANGE the owner.
       //
@@ -1272,7 +1368,14 @@ service cloud.firestore {
         && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == resource.data.ownerId
         && shareTargetOk(request.resource.data)
-        && request.resource.data.get('transferredFrom', null) == resource.data.get('transferredFrom', null);
+        && request.resource.data.get('transferredFrom', null) == resource.data.get('transferredFrom', null)
+        // Every key when the card is shared into a group it was not shared with: a card made before
+        // the rule must not reach a group with what the group could not have written.
+        && assetFieldsOk(request.resource.data,
+             (request.resource.data.get('sharedGroupId', null) != null
+                && request.resource.data.get('sharedGroupId', null) != resource.data.get('sharedGroupId', null))
+               ? request.resource.data.keys()
+               : request.resource.data.diff(resource.data).affectedKeys());
     }
 
     // ── AI cost ledger, spend rollups, and budget counters ──

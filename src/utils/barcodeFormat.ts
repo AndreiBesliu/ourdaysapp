@@ -60,6 +60,15 @@ const DRAWABLE: Record<string, string> = {
 const MATRIX = new Set(['QR_CODE']);
 
 /**
+ * The most a QR code can hold: 2953 bytes, at version 40 with the lowest error correction, which is
+ * what react-qr-code draws by default. One byte more and its encoder THROWS while rendering, and that
+ * took down whatever was showing the card: the event a member opened, the wallet's code view, the
+ * offline Cards page (08.10.2026; a shared card's code is anybody's to write). Pinned against the
+ * real encoder in barcodeFormat.test.ts. Such a code is shown as its text instead.
+ */
+export const QR_MAX_BYTES = 2953;
+
+/**
  * Codes that are neither drawable by JsBarcode nor QR. AZTEC, DATA_MATRIX, PDF_417 and MAXICODE
  * are 2D and cannot be a row of bars at all; RSS_14 and RSS_EXPANDED (GS1 DataBar) have no
  * JsBarcode encoder; UPC_EAN_EXTENSION is a 2- or 5-digit ADD-ON printed beside another code, never
@@ -91,7 +100,11 @@ export function renderFor(format: unknown, value: unknown): BarcodeRender {
 
   const name = typeof format === 'string' ? format.trim().toUpperCase() : '';
 
-  if (MATRIX.has(name) || name.includes('QR')) return { kind: 'qr' };
+  if (MATRIX.has(name) || name.includes('QR')) {
+    // The value the QR is drawn from, untrimmed: that is what the component encodes.
+    const bytes = new TextEncoder().encode(typeof value === 'string' ? value : '').length;
+    return bytes > QR_MAX_BYTES ? { kind: 'text', reason: 'not-drawable' } : { kind: 'qr' };
+  }
   if (NOT_DRAWABLE.has(name)) return { kind: 'text', reason: 'not-drawable' };
 
   // No format, or one nobody recognises: CODE128 encodes any ASCII, so it is the honest default

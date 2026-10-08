@@ -118,6 +118,54 @@
 
 ---
 
+## 🆕 Evenimentele, cardurile partajate și cheltuielile: un câmp care nu e text nu mai pică ecranul (08.10) — NEPUBLICAT (cere funcțiile, regulile, apoi hosting-ul)
+
+**Fapt:** orice membru al unui grup putea scrie pe un eveniment al grupului un titlu sau un emoji care nu
+e text, pe un card partajat cu grupul un nume care nu e text, pe o cheltuială a grupului o descriere care
+nu e text. Reprodus pe aplicația reală, pe emulatoare: cine deschidea tab-ul grupului, Wallet-ul sau
+cheltuielile ducea toată aplicația pe „Something went wrong”, și din aplicație nu se mai putea repara.
+Harta a mai găsit, pe aceleași date:
+- o listă de excepții a unei serii care nu e listă pica tot calendarul grupului;
+- o dată stricată pica panoul de evenimente recurente;
+- o categorie de card numită „constructor” pica Wallet-ul celor cu care e partajat cardul;
+- un cod QR prea lung pica detaliile evenimentului;
+- o notă „checklist AI” falsă pica fereastra evenimentului.
+Funcția de server care creează o apariție modificată a unei serii copia câmpurile fără nicio verificare.
+
+Pe live nu s-a întâmplat: 34 de evenimente, 18 carduri și 3 cheltuieli, toate cum le scrie aplicația;
+toate pozele cardurilor sunt din Storage-ul nostru. Acum:
+- **regula** cere câmpurilor afișate tipul pe care îl scrie aplicația, la crearea unui eveniment de grup,
+  a unui card, a unei cheltuieli. La o modificare judecă doar ce schimbă scrierea, deci un eveniment vechi
+  se editează ca înainte. La mutarea într-un grup, sau la partajarea unui card cu un grup, judecă tot.
+  Nota „checklist AI” e doar a serverului: un client o poate doar șterge;
+- **serverul:** crearea unei apariții dintr-o serie refuză același lucru. Un card dat altcuiva nu mai duce
+  mai departe un câmp de tip greșit;
+- **aplicația web** citește totul printr-o gardă: un titlu care nu e text apare „(no title)”. Grila
+  calendarului, ferestrele de eveniment, fiecare card și lista de cheltuieli au granița lor de eroare.
+  Ce nu se poate afișa spune asta în locul lui, fără să ia aplicația cu el. Pozele se arată doar din
+  Storage: un link din afară ar fi fost încărcat de browserul fiecărui membru. Un cod QR prea lung apare
+  ca text.
+
+**Ce vezi diferit:** nimic la datele normale. Câmpurile din formulare se opresc la o lungime: titlul la
+500, nota la 5000, locul la 300, numele cardului la 1000, categoria la 100, descrierea cheltuielii la 200.
+
+**Ce am hotărât eu** (spune-mi dacă vrei altfel):
+- **Regula nu pune limită de lungime pe titlu, notă, loc, numele cardului sau categorie**, doar pe tip.
+  APK-ul instalat n-are nicio limită, iar ce scrie el azi nu trebuie refuzat. Căderea venea din tip, nu
+  din lungime. Limitele de mai sus sunt doar ale formularului web.
+- **Descrierea cheltuielii are cel mult 200 de caractere** și în regulă. APK-ul nu poate adăuga
+  cheltuieli oricum (scrierea lui e refuzată din 24.09, n-are `ownerId`). Pe live cea mai lungă are 15.
+- **Un eveniment personal se creează în continuare fără verificare**, cum e deja cu răspunsurile. La
+  ieșirea dintr-un grup, copia se face cu ce era pe eveniment, pe web și în APK. Doar proprietarul îl
+  vede, iar la mutarea într-un grup e judecat tot.
+
+- [ ] **După publicare:** creează un eveniment de grup cu emoji, un memento și un checklist, editează-l,
+      mută-l în alt calendar; adaugă un card cu poză și partajează-l cu grupul; adaugă o cheltuială.
+      - **Cum arată bine:** toate merg ca înainte.
+      - **Ce e greșit:** un eveniment, un card sau o cheltuială care nu se mai salvează. Spune-mi.
+
+---
+
 ## 🆕 Un mesaj de chat nu mai poate pica conversația pentru ceilalți (08.10) — NEPUBLICAT (cere funcțiile, regulile, apoi hosting-ul)
 
 **Fapt:** orice membru putea scrie un mesaj de chat (de grup sau privat) cu orice în el: un text care

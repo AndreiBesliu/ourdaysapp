@@ -38,12 +38,15 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
   if (!isOpen) return null;
 
   // Filter to only recurring master events the user owns or can see
+  // Only the four frequencies the app writes: the calendar shows any other as a plain event, and as a
+  // key on a plain `{}`, "constructor" or "toString" found a function there and `.push` crashed the
+  // app for whoever opened this panel (08.10.2026). And on an object with no prototype, to be sure.
   const recurringEvents = events.filter(
-    (ev: any) => ev.recurrenceRule && ev.recurrenceRule.frequency
+    (ev: any) => ev.recurrenceRule && isFrequency(ev.recurrenceRule.frequency)
   );
 
   // Group by frequency
-  const grouped: Record<string, any[]> = {};
+  const grouped: Record<string, any[]> = Object.create(null);
   for (const ev of recurringEvents) {
     const freq = ev.recurrenceRule.frequency;
     if (!grouped[freq]) grouped[freq] = [];
@@ -161,7 +164,9 @@ export default function RecurringEventsPanel({ isOpen, onClose, events, onEditEv
                             <div className="flex items-center gap-2 mt-1 flex-wrap">
                               <span className="text-xs text-zinc-500 flex items-center gap-1">
                                 <CalendarIcon className="w-3 h-3" />
-                                {format(startDate, 'd MMM yyyy', { locale: getDateLocale(language) })}
+                                {/* An unreadable start is shown as unknown: `format` throws on an invalid
+                                    date, and that put the whole app down for the group (08.10.2026). */}
+                                {Number.isNaN(startDate.getTime()) ? '…' : format(startDate, 'd MMM yyyy', { locale: getDateLocale(language) })}
                               </span>
                               <span className="text-xs text-zinc-400">→</span>
                               <span className="text-xs text-zinc-500">

@@ -46,9 +46,9 @@ const STORED_NOT_SHOWN = new Set([
   // entry went on 19.09: the public mirror stopped inventing a name from the e-mail, so there
   // is no literal left there to exempt. The honesty test below is what noticed.
   'screens/Login.tsx::User',
-  // Written as the stored `name` of a card created from an event's image or checklist item.
-  'components/AddEventModal.tsx::Event Image',
-  'components/AddEventModal.tsx::Checklist Item',
+  // (The stored names of a card made from an event's image or checklist item, 'Event Image' and
+  // 'Checklist Item', were exempted here until 08.10.2026, when they became arguments of
+  // `assetNameFrom`, which the scanner does not read as a fallback.)
   // A symbology name compared against by code (EAN_13, UPC_A …), never shown.
   'components/BarcodeScanner.tsx::UNKNOWN',
   // What the error log says about a thrown value, which I read in English. (ErrorBoundary's

@@ -20,6 +20,12 @@ interface Props {
   fallback?: React.ReactNode;
   /** What the crash is reported as. The app-wide boundary is 'ErrorBoundary'. */
   context?: string;
+  /**
+   * For a boundary around something that stays mounted while it is closed (the event windows, which
+   * return null when shut): when this value changes, the boundary tries its children again. A `key`
+   * would do the same by remounting them, which would also throw away a form's state on every open.
+   */
+  resetOn?: unknown;
 }
 
 // Catches render-time crashes anywhere in the tree, reports them, and shows a
@@ -33,7 +39,13 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidMount() { this.clearMarkIfHealthy(); }
-  componentDidUpdate() { this.clearMarkIfHealthy(); }
+  componentDidUpdate(prev?: Partial<Props>) {
+    if (this.state.hasError && this.props.fallback !== undefined && prev && !Object.is(prev.resetOn, this.props.resetOn)) {
+      this.setState({ hasError: false });
+      return;
+    }
+    this.clearMarkIfHealthy();
+  }
 
   /**
    * Cleared only once the app has ACTUALLY rendered. componentDidMount fires even when this
