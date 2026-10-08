@@ -70,12 +70,6 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   (Titlul push-ului din `gameType` e închis din 06.10.)
 - **Același fel de problemă, găsit de recenzia din 06.10, în alte colecții** (citit în cod, nereprodus;
   toate cer un membru rău-intenționat):
-  - **un mesaj de chat** (de grup sau privat) cu `text` hartă, `createdAt` care nu e dată, `reactions`
-    care nu sunt liste sau un câmp `id` pică chatul pentru ceilalți la fiecare deschidere, pe web și în
-    APK (`GroupChatWidget.tsx`), iar mesajele nu se pot șterge. Orice membru poate pune `reactions` și
-    `isPinned` pe mesajul oricui (recenzia din 08.10). Remediul: în regulă, tipul lui `text` și al
-    reacțiilor, `createdAt == request.time` la creare și fixat, fără `id`; în client, citirea doar a
-    tipurilor bune. Măsurat întâi pe live;
   - **o cheltuială cu `description` hartă** pică Wallet → Expenses pentru tot grupul. Remediul: în
     regulă, `description` text.
 - **Expirarea automată a jocurilor și statisticile din Admin citesc primele 2000 de jocuri, după id**
@@ -87,6 +81,16 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     grupului (`CalendarGrid.tsx`); calendarul APK e deja gol;
   - un card partajat cu `name` hartă pică Wallet-ul web al fiecărui membru, la încărcare.
   Remediul: tipul câmpurilor afișate, în regulă, ca la grupuri.
+- **Textul unui mesaj șters rămâne în copiile serverului** (harta din 08.10): previzualizarea din lista
+  de conversații (`lastMessageText`) până la mesajul următor, și rândurile din clopoțel pentru totdeauna.
+  Niciun trigger nu rulează la modificarea unui mesaj. Remediul: un trigger la ștergere care curăță
+  previzualizarea dacă era a lui. De decis cât merită (rândurile din clopoțel sunt ale fiecăruia).
+- **Reacția, fixarea și ștergerea unui mesaj nu spun nimic când sunt refuzate** (`GroupChatWidget.tsx`):
+  refuzul ajunge doar în jurnalul de erori. Remediul: un mesaj scurt pe ecran.
+- **Rezumatul AI al grupului include mesajele șterse** (ca „[Image]”/„[Audio]”) și citește textul fără
+  verificarea tipului (`generateGroupDigest`). Din 08.10 regula nu mai lasă text care nu e text.
+- **`userInGroup` (server) nu verifică id-ul grupului** (un `/` în el ar citi alt document). Regulile
+  din 08.10 închid efectul pentru mesaje și „scrie...”; rădăcina e pe server.
 - **Serverul citește numele grupului fără gardă** în rezumatul AI (`generateGroupDigest`), în Admin
   (`adminListGroups`, `adminGetUser`) și în linkurile de invitație. Din 08.10 regula nu mai lasă un nume
   care nu e text, iar pe live nu există; remediul (prin `stampedGroupName`) merge la următorul deploy

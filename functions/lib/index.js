@@ -460,8 +460,8 @@ exports.onMessageCreated = (0, firestore_1.onDocumentCreated)("groups/{groupId}/
         // The message TEXT is passed as `bodyText`, never as a key: it is the sender's own words,
         // and translating them would be worse than leaving them alone. Only the wrapper around it —
         // "New message from …" — is rendered in the reader's language.
-        await (0, notify_1.notify)(Object.assign(Object.assign({ userIds: targetUserIds, createdBy: senderId, type: "chat", titleKey: "notifNewMessage", titleParam: senderName }, (msgData.text
-            ? { bodyText: String(msgData.text) }
+        await (0, notify_1.notify)(Object.assign(Object.assign({ userIds: targetUserIds, createdBy: senderId, type: "chat", titleKey: "notifNewMessage", titleParam: senderName }, (typeof msgData.text === "string" && msgData.text
+            ? { bodyText: msgData.text }
             : { bodyKey: msgData.imageUrl ? "notifSentImage" : "notifSentMessage" })), { data: { route: "/", groupId: String(groupId || "") } }));
     }
     catch (error) {

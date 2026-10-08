@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Send, Image as ImageIcon, Check, CheckCheck, Reply, Pencil, Trash2, Ban, Pin, Search, Mic, ChevronUp, ChevronDown, Play, Pause, Sparkles } from 'lucide-react';
 import { format, isSameDay, isToday, isYesterday } from 'date-fns';
-import { collection, query, orderBy, limitToLast, where, getCountFromServer, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limitToLast, where, getCountFromServer, addDoc, serverTimestamp, writeBatch, doc, arrayUnion, arrayRemove, setDoc, deleteDoc, updateDoc, deleteField, FieldPath } from 'firebase/firestore';
 import { liveQuery } from '../utils/liveQuery';
 import {
   CHAT_PAGE, TYPING_FRESH_MS, mayHaveOlder, typingWriteDue, pinnedInOrder, windowToReach, anchorStep,
   type ScrollAnchor,
 } from '../utils/chatWindow';
 import { reportError } from '../reportError';
+import { CHAT_TEXT_MAX, REACTION_PALETTE, isTimestamp, normaliseMessages } from '../utils/chatMessage';
 import { uploadFile, UploadRefused } from '../utils/uploadFile';
 import { checkChatImage, refusalKey, refusalDetail } from '../utils/uploadLimits';
 import { db, auth } from '../firebase';
@@ -48,6 +49,9 @@ interface GroupChatWidgetProps {
    */
   closedNote?: string;
 }
+
+/** How many messages one mark-as-seen batch covers (see markSeen). */
+const SEEN_CHUNK = 25;
 
 // Audio Player sub-component for voice messages
 function AudioPlayer({ src, isMe }: { src: string; isMe: boolean }) {
@@ -191,7 +195,7 @@ export default function GroupChatWidget({
   // distinguishes “you are over your daily budget” from “something went wrong”.
   const [digestError, setDigestError] = useState<string | null>(null);
 
-  const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+  const EMOJIS = REACTION_PALETTE;
 
   /**
    * Escape peels one layer off the composer. Returns whether it found one — the caller decides
@@ -259,7 +263,10 @@ export default function GroupChatWidget({
 
     // An unreadable conversation and an empty one look the same, and in a chat that is the
     // difference between "nobody has written" and "you are not seeing what they wrote".
-    const unsubscribe = liveQuery<any>(q, 'GroupChatWidget.messages', (fetchedMessages) => {
+    const unsubscribe = liveQuery<any>(q, 'GroupChatWidget.messages', (docs) => {
+      // Every field of the kind the app writes (08.10.2026, utils/chatMessage.ts): any member could
+      // write any of them as anything, and the conversation crashed for the others.
+      const fetchedMessages = normaliseMessages(docs);
       setChatLoadError(false);
       setMessages(fetchedMessages);
 
@@ -279,7 +286,7 @@ export default function GroupChatWidget({
     // Pinned ones on their own, whatever their age. Losing it only empties the bar.
     const pinnedQuery = query(collection(db, `${basePath}/messages`), where('isPinned', '==', true));
     const unsubPinned = liveQuery<any>(pinnedQuery, 'GroupChatWidget.pinned',
-      (docs) => setPinnedDocs(docs), () => setPinnedDocs([]));
+      (docs) => setPinnedDocs(normaliseMessages(docs)), () => setPinnedDocs([]));
 
     // Listen to typing status
     const typingQuery = query(collection(db, `${basePath}/typing`));
@@ -289,7 +296,7 @@ export default function GroupChatWidget({
     const unsubTyping = liveQuery<any>(typingQuery, 'GroupChatWidget.typing', (docs) => {
       const now = Date.now();
       setTypingUsers(docs
-        .filter((d: any) => d.id !== auth.currentUser?.uid && d.updatedAt && (now - d.updatedAt.toMillis()) < TYPING_FRESH_MS)
+        .filter((d: any) => d.id !== auth.currentUser?.uid && isTimestamp(d.updatedAt) && (now - d.updatedAt.toMillis()) < TYPING_FRESH_MS)
         .map((d: any) => d.id));
     }, () => setTypingUsers([]));
 
@@ -327,15 +334,7 @@ export default function GroupChatWidget({
       (!m.seenBy || !m.seenBy.includes(myUid))
     );
 
-    if (unseen.length > 0) {
-      const batch = writeBatch(db);
-      unseen.forEach(m => {
-        batch.update(doc(db, `${basePath}/messages`, m.id), {
-          seenBy: arrayUnion(myUid)
-        });
-      });
-      batch.commit().catch(console.error);
-    }
+    markSeen(unseen.map(m => m.id), myUid);
   }, [messages, open]);
 
   // ESC key, EMBEDDED only: cancel editing or replying. The floating pane gets the same thing
@@ -462,20 +461,14 @@ export default function GroupChatWidget({
       m.senderId !== myUid &&
       (!m.seenBy || !m.seenBy.includes(myUid))
     );
-    if (unseenByMe.length > 0) {
-      const batch = writeBatch(db);
-      unseenByMe.forEach(m => {
-        batch.update(doc(db, `${basePath}/messages`, m.id), {
-          seenBy: arrayUnion(myUid)
-        });
-      });
-      batch.commit().catch(console.error);
-    }
+    markSeen(unseenByMe.map(m => m.id), myUid);
 
       if (editingMsg) {
+        // The picture only when a new one was attached: the one on screen has been through
+        // normaliseMessage, and sending it back could change what is stored (08.10.2026).
         await updateDoc(doc(db, `${basePath}/messages`, editingMsg.id), {
           text: newMessage.trim() || null,
-          imageUrl: imageUrl || editingMsg.imageUrl || null,
+          ...(imageUrl ? { imageUrl } : {}),
           isEdited: true
         });
         setEditingMsg(null);
@@ -525,12 +518,28 @@ export default function GroupChatWidget({
     }
   };
 
+  /**
+   * Mark these messages seen, SEEN_CHUNK at a time. A batch is all or nothing, so one message the
+   * rules refused took every other receipt with it; and every write in it is weighed by the rules.
+   */
+  const markSeen = (ids: string[], uid: string) => {
+    for (let i = 0; i < ids.length; i += SEEN_CHUNK) {
+      const batch = writeBatch(db);
+      for (const id of ids.slice(i, i + SEEN_CHUNK)) {
+        batch.update(doc(db, `${basePath}/messages`, id), { seenBy: arrayUnion(uid) });
+      }
+      batch.commit().catch(console.error);
+    }
+  };
+
   const handleDelete = async (msgId: string) => {
     if (confirm(t('deleteMessageConfirm', language))) {
       await updateDoc(doc(db, `${basePath}/messages`, msgId), {
         isDeleted: true,
         text: null,
-        imageUrl: null
+        imageUrl: null,
+        // A deleted voice note kept its link until 08.10.2026, so it could still be fetched.
+        audioUrl: null
       });
     }
   };
@@ -577,26 +586,21 @@ export default function GroupChatWidget({
     const msg = messages.find(m => m.id === msgId);
     if (!msg || !auth.currentUser) return;
     
-    const currentReactions = msg.reactions || {};
-    let usersForEmoji = currentReactions[emoji] || [];
-    
     const uid = auth.currentUser.uid;
-    if (usersForEmoji.includes(uid)) {
-      usersForEmoji = usersForEmoji.filter((id: string) => id !== uid);
-    } else {
-      usersForEmoji = [...usersForEmoji, uid];
+    const current: string[] = (msg.reactions || {})[emoji] || [];
+
+    // Only the emoji touched, and as a change rather than a list (08.10.2026). The whole map used to
+    // be written back from what this screen held — normalised, and possibly a moment old — so two
+    // people reacting at once dropped one of them; the rules now refuse a write that removes anyone
+    // but the writer, and arrayUnion/arrayRemove cannot collide. An emptied emoji is removed, never [].
+    const change = !current.includes(uid) ? arrayUnion(uid)
+      : current.length === 1 ? deleteField()
+      : arrayRemove(uid);
+    try {
+      await updateDoc(doc(db, `${basePath}/messages`, msgId), new FieldPath('reactions', emoji), change);
+    } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'GroupChatWidget.reaction' });
     }
-    
-    const newReactions = { ...currentReactions };
-    if (usersForEmoji.length === 0) {
-      delete newReactions[emoji];
-    } else {
-      newReactions[emoji] = usersForEmoji;
-    }
-    
-    await updateDoc(doc(db, `${basePath}/messages`, msgId), {
-      reactions: newReactions
-    });
     setActiveReactionMsg(null);
   };
 
@@ -1140,7 +1144,7 @@ export default function GroupChatWidget({
                                 src={msg.imageUrl}
                                 alt={t('altSharedImage', language)}
                                 className={`max-w-full object-cover max-h-48 w-full ${!parentMsg && 'rounded-t-2xl'}`}
-                                onClick={() => window.open(msg.imageUrl, '_blank')}
+                                onClick={() => window.open(msg.imageUrl, '_blank', 'noopener')}
                                 style={{ cursor: 'pointer' }}
                               />
                             )}
@@ -1431,6 +1435,7 @@ export default function GroupChatWidget({
                 value={newMessage}
                 onChange={handleTyping}
                 onPaste={handlePaste}
+                maxLength={CHAT_TEXT_MAX}
                 placeholder={t('typeAMessage', language)}
                 className="flex-1 px-3 py-2 bg-zinc-100 dark:bg-zinc-800 border-none rounded-full text-sm outline-none focus:ring-2 focus:ring-primary/50"
               />

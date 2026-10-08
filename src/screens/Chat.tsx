@@ -29,6 +29,7 @@ import {
 } from '../utils/conversations';
 import { deletedName, formerMembersOf, withFormerMembers } from '../utils/formerMembers';
 import { withGroupName } from '../utils/groupName';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 export default function Chat() {
   const navigate = useNavigate();
@@ -207,6 +208,13 @@ export default function Chat() {
         {/* ── the conversation ───────────────────────────────────────────── */}
         <main className={`${showPane ? 'flex' : 'hidden'} md:flex flex-1 min-w-0 flex-col bg-white dark:bg-zinc-900`}>
           {active ? (
+            // A conversation that cannot be shown says so in its own pane; the rest of the screen,
+            // and the other conversations, keep working (08.10.2026: a message any member could
+            // write crashed the whole app for the others). Keyed like the widget, so the next
+            // conversation starts clean.
+            <ErrorBoundary key={conversationKey(active)} context="GroupChatWidget" fallback={
+              <p role="alert" className="m-auto p-6 text-sm text-center text-zinc-600 dark:text-zinc-300">{t('chatCouldNotShow', language)}</p>
+            }>
             <GroupChatWidget
               // Remounted per conversation on purpose: the pane holds a message list, a draft, a
               // scroll position and a read marker, and carrying any of those across a switch
@@ -221,6 +229,7 @@ export default function Chat() {
               embedded
               onClose={() => setSelected(null)}
             />
+            </ErrorBoundary>
           ) : (
             <div className="hidden md:flex flex-1 items-center justify-center">
               <p className="text-sm text-zinc-400">{t('chatPickOne', language)}</p>

@@ -118,6 +118,38 @@
 
 ---
 
+## 🆕 Un mesaj de chat nu mai poate pica conversația pentru ceilalți (08.10) — NEPUBLICAT (cere funcțiile, regulile, apoi hosting-ul)
+
+**Fapt:** orice membru putea scrie un mesaj de chat (de grup sau privat) cu orice în el: un text care
+nu e text, o dată care nu e dată, reacții care nu sunt liste. Reprodus pe aplicația reală: cine
+deschidea conversația ducea toată aplicația pe „Something went wrong”, pe web și în APK, iar mesajele
+nu se pot șterge. Mai grav: linkul pozei se deschidea cu `window.open`, iar un link `javascript:` scris
+de un membru ar fi putut rula cod în aplicație, cu sesiunea celui care apăsa pe poză.
+
+Pe live nu s-a întâmplat: 175 de mesaje, toate cum le scrie aplicația; toate cele 11 linkuri de poze și
+voce sunt din Storage-ul nostru. Acum:
+- **regula** primește la un mesaj nou doar ce scriu aplicațiile, de tipul pe care îl scriu ele (textul
+  până la 4000 de caractere, data serverului, linkuri doar din Storage-ul nostru și din conversația lui);
+  la o modificare, fiecare își poate schimba doar propria reacție, pe cele șase emoji ale aplicației,
+  iar autorul doar ce face aplicația (editarea, ștergerea);
+- **aplicația web** arată un mesaj stricat ca balon gol (sau deloc, dacă data lui nu e dată), deschide
+  o poză doar dacă linkul e din Storage, scrie o reacție doar pe emoji-ul atins și golește și vocea
+  când ștergi un mesaj vocal. O conversație care tot n-ar putea fi afișată spune asta în locul ei, fără
+  să ia aplicația cu ea.
+
+**Ce vezi diferit:** nimic, la mesajele normale. Câmpul de mesaj se oprește la 4000 de caractere.
+
+**Deciziile pe care le-am luat eu, cu implicitul pus** (spune-mi dacă vrei altfel):
+- **Un mesaj are cel mult 4000 de caractere.** Pe live cel mai lung are 154. APK-ul nu știe de limită:
+  un mesaj mai lung pur și simplu nu pleacă, fără mesaj de eroare.
+- **Oricine din conversație poate fixa un mesaj**, ca până acum (doar tipul e verificat).
+
+- [ ] **După publicare:** trimite un mesaj, o poză și un vocal, reacționează și șterge unul.
+      - **Cum arată bine:** toate merg ca înainte.
+      - **Ce e greșit:** o reacție sau o poză care nu se mai salvează. Spune-mi.
+
+---
+
 ## 🆕 Numele unui grup și al unei invitații nu mai pot pica aplicația (08.10) — NEPUBLICAT (cere regulile, apoi hosting-ul)
 
 **Fapt:** numele unui grup apare în calendarul fiecărui membru, la fiecare pornire, pe web și în APK.

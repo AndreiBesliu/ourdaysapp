@@ -9,8 +9,9 @@
 
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { ALICE, BOB, CAROL, DAVE, anon, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
+import { webMessage } from './_chat';
 
 /** The id `openDirectChat` derives: sorted and joined, so both people compute the same one. */
 const AB = [ALICE, BOB].sort().join('__');
@@ -73,10 +74,10 @@ describe('a client cannot conjure a conversation', () => {
       text: 'I owe you nothing', senderId: BOB,
     }));
     // Editing your own text is untouched.
-    await assertSucceeds(updateDoc(doc(as(ALICE), 'chats', AB, 'messages', 'm1'), { text: 'hi' }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'chats', AB, 'messages', 'm1'), { text: 'hi', isEdited: true }));
     // And so is the reaction path, which the other person needs.
     await assertSucceeds(updateDoc(doc(as(BOB), 'chats', AB, 'messages', 'm1'), {
-      reactions: { up: [BOB] },
+      reactions: { '\u{1F44D}': [BOB] },
     }));
   });
 
@@ -119,20 +120,16 @@ describe('messages inside it', () => {
 
   it('an outsider reads nothing, and cannot post', async () => {
     await assertFails(getDoc(doc(as(CAROL), 'chats', AB, 'messages', 'm1')));
-    await assertFails(setDoc(doc(as(CAROL), 'chats', AB, 'messages', 'm2'), {
-      senderId: CAROL, text: 'let me in',
-    }));
+    await assertFails(setDoc(doc(as(CAROL), 'chats', AB, 'messages', 'm2'), webMessage(CAROL, { text: 'let me in' })));
   });
 
   it('a member posts as themselves', async () => {
-    await assertSucceeds(setDoc(doc(as(BOB), 'chats', AB, 'messages', 'm2'), {
-      senderId: BOB, text: 'hi',
-    }));
+    await assertSucceeds(setDoc(doc(as(BOB), 'chats', AB, 'messages', 'm2'), webMessage(BOB, { text: 'hi' })));
   });
 
   it('but not as the other person', async () => {
     await assertFails(setDoc(doc(as(BOB), 'chats', AB, 'messages', 'm3'), {
-      senderId: ALICE, text: 'a thing Alice never said',
+      ...webMessage(BOB, { text: 'a thing Alice never said' }), senderId: ALICE,
     }));
   });
 
@@ -146,7 +143,7 @@ describe('messages inside it', () => {
   });
 
   it('the author may edit their own', async () => {
-    await assertSucceeds(updateDoc(doc(as(ALICE), 'chats', AB, 'messages', 'm1'), { text: 'hello (edited)' }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'chats', AB, 'messages', 'm1'), { text: 'hello (edited)', isEdited: true }));
   });
 
   it('nobody deletes a message — soft-delete only, as in a group', async () => {
@@ -157,9 +154,7 @@ describe('messages inside it', () => {
     // `inChat()` checks existence before membership. Without it, the `get` on a missing document
     // returns null and `uid in null.data.members` would be an evaluation error rather than a
     // clean denial — and an erroring rule is one nobody can reason about.
-    await assertFails(setDoc(doc(as(ALICE), 'chats', 'no-such-chat', 'messages', 'm1'), {
-      senderId: ALICE, text: 'hello?',
-    }));
+    await assertFails(setDoc(doc(as(ALICE), 'chats', 'no-such-chat', 'messages', 'm1'), webMessage(ALICE, { text: 'hello?' })));
   });
 
   // ── Read receipts, as in a group ───────────────────────────────────────────────────────
@@ -197,26 +192,22 @@ describe('messages inside it', () => {
     await assertFails(updateDoc(doc(as(BOB), 'chats', AB, 'messages', 'm1'), {
       seenBy: [...Array(200).fill(ALICE), BOB],
     }));
-    await assertFails(setDoc(doc(as(BOB), 'chats', AB, 'messages', 'm11'), {
-      senderId: BOB, text: 'x', seenBy: 'not-a-list',
-    }));
+    await assertFails(setDoc(doc(as(BOB), 'chats', AB, 'messages', 'm11'), webMessage(BOB, { text: 'x', seenBy: 'not-a-list' })));
   });
 
   it('but an ordinary send, which carries seenBy of just the sender, still works', async () => {
-    await assertSucceeds(setDoc(doc(as(BOB), 'chats', AB, 'messages', 'm12'), {
-      senderId: BOB, text: 'hello', seenBy: [BOB], reactions: {}, isPinned: false,
-    }));
+    await assertSucceeds(setDoc(doc(as(BOB), 'chats', AB, 'messages', 'm12'), webMessage(BOB, { text: 'hello' })));
   });
 
 });
 
 describe('typing indicators', () => {
   it('a member may say THEY are typing', async () => {
-    await assertSucceeds(setDoc(doc(as(BOB), 'chats', AB, 'typing', BOB), { at: Date.now() }));
+    await assertSucceeds(setDoc(doc(as(BOB), 'chats', AB, 'typing', BOB), { updatedAt: serverTimestamp() }));
   });
 
   it('but not that somebody else is', async () => {
-    await assertFails(setDoc(doc(as(BOB), 'chats', AB, 'typing', ALICE), { at: Date.now() }));
+    await assertFails(setDoc(doc(as(BOB), 'chats', AB, 'typing', ALICE), { updatedAt: serverTimestamp() }));
   });
 
   it('an outsider may not read them', async () => {

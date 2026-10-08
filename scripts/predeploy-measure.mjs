@@ -76,13 +76,43 @@ for (const e of events) {
 
 // ── seenBy duplicates, every chat ──
 const msgs = await db.collectionGroup('messages').get();
-const m = { messages: msgs.size, seenByDuplicated: 0, seenByNotAList: 0 };
+// Since 08.10.2026 the rules type every field of a message; the screens hide or blank what is not
+// of the kind the app writes. Every count below should be 0: a message counted here shows blank,
+// or not at all, and one with a stored link outside the pattern cannot have its picture edited.
+const MSG_KEYS = ['text', 'imageUrl', 'audioUrl', 'senderId', 'createdAt', 'seenBy', 'replyToId', 'isDeleted', 'isEdited', 'reactions', 'isPinned'];
+const PALETTE = ['\u{1F44D}', '\u2764\uFE0F', '\u{1F602}', '\u{1F62E}', '\u{1F622}', '\u{1F64F}'];
+const linkOk = (u, folder, conv) => typeof u === 'string'
+  && new RegExp(`^https://firebasestorage[.]googleapis[.]com/v0/b/our-days-2a939[.]firebasestorage[.]app/o/${folder}%2F[^/?#]+%2F[^/?#]+[?]alt=media&token=[-0-9A-Za-z]+$`).test(u)
+  && u.split('%2F').length === 3 && u.split('%2F')[1] === conv;
+const m = {
+  messages: msgs.size, seenByDuplicated: 0, seenByNotAList: 0,
+  keysNoClientWrites: 0, withIdField: 0, textNotTextOrOver4000: 0, createdAtNotTimestamp: 0,
+  reactionsNotMap: 0, reactionKeyOutsideSix: 0, reactionValueBad: 0, linkOutsidePattern: 0, flagNotBoolean: 0,
+};
 for (const d of msgs.docs) {
-  const v = d.data().seenBy;
+  const x = d.data();
+  const conv = d.ref.parent.parent?.id;
+  const v = x.seenBy;
+  if (Object.keys(x).some((k) => !MSG_KEYS.includes(k))) m.keysNoClientWrites++;
+  if ('id' in x) m.withIdField++;
+  if (x.text != null && (typeof x.text !== 'string' || x.text.length > 4000)) m.textNotTextOrOver4000++;
+  if (x.createdAt != null && typeof x.createdAt?.toMillis !== 'function') m.createdAtNotTimestamp++;
+  if (x.reactions !== undefined) {
+    if (!x.reactions || typeof x.reactions !== 'object' || Array.isArray(x.reactions)) m.reactionsNotMap++;
+    else for (const [e, us] of Object.entries(x.reactions)) {
+      if (!PALETTE.includes(e)) m.reactionKeyOutsideSix++;
+      if (!Array.isArray(us) || us.length === 0 || us.some((u) => typeof u !== 'string') || new Set(us).size !== us.length) m.reactionValueBad++;
+    }
+  }
+  if ((x.imageUrl != null && !linkOk(x.imageUrl, 'chat-images', conv)) || (x.audioUrl != null && !linkOk(x.audioUrl, 'chat-audio', conv))) m.linkOutsidePattern++;
+  if (['isPinned', 'isDeleted', 'isEdited'].some((f) => x[f] !== undefined && typeof x[f] !== 'boolean')) m.flagNotBoolean++;
   if (v === undefined) continue;
   if (!Array.isArray(v)) { m.seenByNotAList++; continue; }
   if (new Set(v).size !== v.length) m.seenByDuplicated++;
 }
+const typingDocs = await db.collectionGroup('typing').get();
+m.typing = typingDocs.size;
+m.typingNotJustATime = typingDocs.docs.filter((d) => Object.keys(d.data()).some((k) => k !== 'updatedAt') || typeof d.data().updatedAt?.toMillis !== 'function').length;
 
 // ── admins ──
 const admins = await db.collection('admins').get();

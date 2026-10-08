@@ -11,8 +11,9 @@
 
 import { beforeAll, afterAll, beforeEach, describe, it } from 'vitest';
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { arrayRemove, arrayUnion, deleteDoc, deleteField, doc, getDoc, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, deleteDoc, deleteField, doc, getDoc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { ALICE, BOB, CAROL, DAVE, G1, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
+import { webMessage } from './_chat';
 
 beforeAll(async () => { await startEnv('demo-ourdays-groups'); });
 afterAll(stopEnv);
@@ -237,8 +238,8 @@ describe('chat messages inside a group', () => {
     // The write rule proved only that the writer owned the document id, never that they belonged
     // here — unlike the read one line above. So a stranger could make every member's screen say
     // somebody was typing, in a group they have nothing to do with.
-    await assertFails(setDoc(doc(as(DAVE), 'groups', G1, 'typing', DAVE), { at: 1 }));
-    await assertSucceeds(setDoc(doc(as(BOB), 'groups', G1, 'typing', BOB), { at: 1 }));
+    await assertFails(setDoc(doc(as(DAVE), 'groups', G1, 'typing', DAVE), { updatedAt: serverTimestamp() }));
+    await assertSucceeds(setDoc(doc(as(BOB), 'groups', G1, 'typing', BOB), { updatedAt: serverTimestamp() }));
   });
 
   it('members read them, outsiders do not', async () => {
@@ -247,14 +248,12 @@ describe('chat messages inside a group', () => {
   });
 
   it('a member may post as themselves', async () => {
-    await assertSucceeds(setDoc(doc(as(BOB), 'groups', G1, 'messages', 'm2'), {
-      senderId: BOB, text: 'hi',
-    }));
+    await assertSucceeds(setDoc(doc(as(BOB), 'groups', G1, 'messages', 'm2'), webMessage(BOB, { text: 'hi' })));
   });
 
   it('a member may NOT post as somebody else', async () => {
     await assertFails(setDoc(doc(as(BOB), 'groups', G1, 'messages', 'm3'), {
-      senderId: ALICE, text: 'a thing Alice never said',
+      ...webMessage(BOB, { text: 'a thing Alice never said' }), senderId: ALICE,
     }));
   });
 
@@ -274,16 +273,14 @@ describe('chat messages inside a group', () => {
 
   it('but may still edit their own text, and others may still react', async () => {
     // The two paths that must not break.
-    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', G1, 'messages', 'm1'), { text: 'hi' }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', G1, 'messages', 'm1'), { text: 'hi', isEdited: true }));
     await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm1'), {
-      reactions: { up: [BOB] },
+      reactions: { '\u{1F44D}': [BOB] },
     }));
   });
 
   it('an outsider may not post at all', async () => {
-    await assertFails(setDoc(doc(as(DAVE), 'groups', G1, 'messages', 'm4'), {
-      senderId: DAVE, text: 'x',
-    }));
+    await assertFails(setDoc(doc(as(DAVE), 'groups', G1, 'messages', 'm4'), webMessage(DAVE, { text: 'x' })));
   });
 
   it('a member may mark somebody else’s message seen, react, or pin it', async () => {
@@ -305,7 +302,7 @@ describe('chat messages inside a group', () => {
 
   it('editing your own message is fine', async () => {
     await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', G1, 'messages', 'm1'), {
-      text: 'hello (edited)',
+      text: 'hello (edited)', isEdited: true,
     }));
   });
 
@@ -410,7 +407,7 @@ describe('chat messages inside a group', () => {
     });
     // Its author can still edit and still soft-delete it: the guard asks FIRST whether seenBy
     // changed, so an untouched bad value is no longer re-judged on every unrelated write.
-    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', G1, 'messages', 'm11'), { text: 'edit' }));
+    await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', G1, 'messages', 'm11'), { text: 'edit', isEdited: true }));
     await assertSucceeds(updateDoc(doc(as(ALICE), 'groups', G1, 'messages', 'm11'), { isDeleted: true }));
     // And it can be repaired — but only into a claim about yourself.
     await assertFails(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm11'), { seenBy: [ALICE, BOB] }));

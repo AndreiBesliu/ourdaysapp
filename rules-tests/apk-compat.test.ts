@@ -56,6 +56,7 @@ import {
 } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { ALICE, BOB, CAROL, G1, EMAIL, as, filesAs, resetBucket, resetWorld, seed, startEnv, stopEnv } from './_harness';
+import { chatUrl } from './_chat';
 
 beforeAll(() => startEnv('demo-apk-compat'));
 afterAll(stopEnv);
@@ -76,6 +77,20 @@ describe('what the installed APK creates', () => {
       text: 'hi', imageUrl: null, senderId: BOB, createdAt: serverTimestamp(),
       seenBy: [BOB], replyToId: null,
     }));
+  });
+
+  it('a photo in a group chat, named as the APK names it: the time and the raw file name', async () => {
+    // Since 08.10.2026 a picture link must be our bucket and this conversation's folder.
+    await assertSucceeds(addDoc(collection(as(BOB), `groups/${G1}/messages`), {
+      text: null, imageUrl: chatUrl('chat-images', G1, '1759900000000_IMG 2026 (1)\u00e9.jpg'), senderId: BOB,
+      createdAt: serverTimestamp(), seenBy: [BOB], replyToId: null,
+    }));
+  });
+
+  it('"is typing": set, then cleared', async () => {
+    const mine = doc(as(BOB), 'groups', G1, 'typing', BOB);
+    await assertSucceeds(setDoc(mine, { updatedAt: serverTimestamp() }));
+    await assertSucceeds(deleteDoc(mine));
   });
 
   it('a group invite, as the APK would write it — which, on the phones, it never gets to', async () => {
@@ -277,6 +292,16 @@ describe('what the installed APK updates on somebody else’s message', () => {
       await setDoc(doc(db, 'groups', G1, 'messages', 'm2'), {
         senderId: ALICE, text: 'again', seenBy: [ALICE],
       });
+      await setDoc(doc(db, 'groups', G1, 'messages', 'm3'), {
+        senderId: ALICE, text: 'liked', seenBy: [ALICE], reactions: { '\u{1F44D}': [ALICE], '\u2764\uFE0F': [ALICE] },
+      });
+      // What a member could plant until 08.10.2026: still marked seen in the same batch.
+      await setDoc(doc(db, 'groups', G1, 'messages', 'm4'), {
+        senderId: ALICE, text: { a: 1 }, createdAt: 'x', seenBy: [ALICE], reactions: 'x', id: { toString: 0 },
+      });
+      await setDoc(doc(db, 'groups', G1, 'messages', 'mine'), {
+        senderId: BOB, text: 'mine', seenBy: [BOB], reactions: {},
+      });
     });
   });
 
@@ -288,16 +313,28 @@ describe('what the installed APK updates on somebody else’s message', () => {
     const batch = writeBatch(bob);
     batch.update(doc(bob, 'groups', G1, 'messages', 'm1'), { seenBy: arrayUnion(BOB) });
     batch.update(doc(bob, 'groups', G1, 'messages', 'm2'), { seenBy: arrayUnion(BOB) });
+    batch.update(doc(bob, 'groups', G1, 'messages', 'm4'), { seenBy: arrayUnion(BOB) });
     await assertSucceeds(batch.commit());
   });
 
   it('reacts — by rewriting the WHOLE map, keyed by emoji', async () => {
-    // Why the reactions fix waits for the rebuild: both known ways of securing reactions (re-key by
-    // uid, or a palette rule on this shape) refuse this write. When one ships, this test is meant
-    // to go red, and the APK must already be rebuilt when it does.
+    // Since 08.10.2026 a reaction is judged on the one emoji a write changes, under the six both
+    // clients offer, and must move only the writer: this whole-map write still passes, and so does
+    // every variant the APK sends below.
     await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'm1'), {
-      reactions: { '👍': [BOB] },
+      reactions: { '\u{1F44D}': [BOB] },
     }));
+  });
+
+  it('reacts beside somebody else, takes it back, and the double-tap heart', async () => {
+    const m3 = doc(as(BOB), 'groups', G1, 'messages', 'm3');
+    await assertSucceeds(updateDoc(m3, { reactions: { '\u{1F44D}': [ALICE, BOB], '\u2764\uFE0F': [ALICE] } }));
+    await assertSucceeds(updateDoc(m3, { reactions: { '\u{1F44D}': [ALICE], '\u2764\uFE0F': [ALICE] } }));
+    await assertSucceeds(updateDoc(m3, { reactions: { '\u{1F44D}': [ALICE], '\u2764\uFE0F': [ALICE, BOB] } }));
+  });
+
+  it('reacts on its own message', async () => {
+    await assertSucceeds(updateDoc(doc(as(BOB), 'groups', G1, 'messages', 'mine'), { reactions: { '\u{1F602}': [BOB] } }));
   });
 });
 

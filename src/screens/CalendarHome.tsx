@@ -24,6 +24,7 @@ import GroupChatWidget from '../components/GroupChatWidget';
 import GamesHubModal from '../components/games/GamesHubModal';
 import { bannerPlayerIds, gameTypeName } from '../components/games/gameTypeName';
 import { withGroupName } from '../utils/groupName';
+import ErrorBoundary from '../components/ErrorBoundary';
 import RecurringEventsPanel from '../components/RecurringEventsPanel';
 import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../store';
@@ -1101,6 +1102,12 @@ export default function CalendarHome() {
 
       {/* Group Chat Widget */}
       {activeGroupId !== 'personal' && (
+        // The floating chat in its own boundary (08.10.2026): a conversation that cannot be shown
+        // says so in a small note instead of taking the calendar down. The boundary carries the
+        // namespaced key now — it is the sibling — so a group switch still starts the pane clean.
+        <ErrorBoundary key={`chat-${activeGroupId}`} context="GroupChatWidget" fallback={
+          <p role="alert" className="fixed bottom-20 right-4 z-40 max-w-xs rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-lg p-3 text-xs text-zinc-600 dark:text-zinc-300">{t('chatCouldNotShow', language)}</p>
+        }>
         <GroupChatWidget
           // Remounted per group, for the same reason Chat.tsx does it: the pane holds a message
           // list, an AI digest, a draft and a reply target, and without a key a tab switch points
@@ -1125,6 +1132,7 @@ export default function CalendarHome() {
           userMap={chatUserMap}
           members={groups.find(g => g.id === activeGroupId)?.members || []}
         />
+        </ErrorBoundary>
       )}
 
       {/* Add Event Modal */}

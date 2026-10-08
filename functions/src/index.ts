@@ -511,8 +511,9 @@ export const onMessageCreated = onDocumentCreated("groups/{groupId}/messages/{me
       type: "chat",
       titleKey: "notifNewMessage",
       titleParam: senderName,
-      ...(msgData.text
-        ? { bodyText: String(msgData.text) }
+      // Text only as text (08.10.2026): `String()` of a map a member planted read "[object Object]".
+      ...(typeof msgData.text === "string" && msgData.text
+        ? { bodyText: msgData.text }
         : { bodyKey: msgData.imageUrl ? "notifSentImage" : "notifSentMessage" }),
       data: { route: "/", groupId: String(groupId || "") },
     });

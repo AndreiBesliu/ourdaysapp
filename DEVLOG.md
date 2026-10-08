@@ -12339,6 +12339,20 @@ eroare, orice nu e text).
 pus): numele de grup au cel mult 60 de caractere, iar APK-ul refuză unul mai lung cu „Failed to create
 group”.
 
+## 2026-10-08 · Un mesaj de chat nu mai poate pica conversația pentru ceilalți (Task Started)
+
+**Prompt (Andrei):** „continua” (după numele grupului, `353108f`; publicarea cere în continuare acordul
+lui explicit).
+**Model:** Claude Opus 5.5.
+**Ce e** (BACKLOG, secțiunea 2, găsit de recenzia din 08.10): regulile mesajelor (de grup și private)
+verifică doar expeditorul și `seenBy`. Un membru poate scrie `text` hartă, `createdAt` care nu e dată,
+reacții care nu sunt liste sau un câmp `id`, iar orice membru poate pune reacții și „fixat” pe mesajul
+oricui. Conversația pică pentru ceilalți la fiecare deschidere, pe web și în APK, iar mesajele nu se pot
+șterge.
+**Plan:** harta scrierilor și afișărilor mesajelor (web, APK, server), măsurarea pe live, reproducerea pe
+banc, regula pe câmpurile afișate (judecată pe ce schimbă scrierea), garda în client; recenzie, mutații,
+porți; publicarea doar cu acordul lui Andrei.
+
 ## 2026-10-08 · Gardianul de deploy: golurile prin care o comandă publica pe live fără întrebare (Task Started)
 
 **Prompt (Andrei):** „Do this task here: “Close deploy-guard gaps for live hosting commands””
@@ -12390,3 +12404,71 @@ testelor aplicației). Porțile ei sunt cele două suite ale gardianului, verzi.
 
 **Fișiere:** `tools/claude/deploy-guard.py`, `test_deploy_guard.py`, `test_deploy_guard_vanatoare.py`,
 `README.md`.
+
+## 2026-10-08 · Un mesaj de chat nu mai poate pica conversația pentru ceilalți (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+**Reprodus pe banc** (aplicația reală, pe emulatoare, intrat ca Ana): un mesaj al lui Bob cu
+`text: {a: 1}` ducea toată aplicația pe „Something went wrong” la deschiderea conversației.
+
+**Găsit de hartă, mai grav:** linkul pozei se deschidea cu `window.open(url)`; un `imageUrl` de
+`javascript:` scris de un membru ar fi putut rula cod în aplicație, cu sesiunea celui care apăsa pe poză
+(nereprodus). Și: reacțiile erau scrise ca hartă întreagă, din ce ținea ecranul, deci două reacții
+simultane o pierdeau pe una.
+
+**Pe live** (doar citire): 175 de mesaje, toate cum le scriu aplicațiile; cele 11 linkuri de poze și voce
+se potrivesc formei; reacțiile, toate pe cele șase emoji, liste fără dubluri; 0 documente „scrie...”.
+E prevenție.
+
+**Reparația:**
+- **Regula, la un mesaj nou** (`messageCreateOk`): doar cheile pe care le scriu clienții; `senderId` cel
+  care scrie, `createdAt` ora serverului, `seenBy` doar el; textul nimic sau 1–4000 de caractere; poza și
+  vocea doar linkuri din bucket-ul nostru, din folderul `chat-images`/`chat-audio` al ACESTEI conversații
+  (id-ul comparat, niciodată pus în tipar); un răspuns cu id text; ceva în mesaj; nu deja șters sau editat.
+- **Regula, la o modificare** (`messageUpdateOk`, judecată pe cheile schimbate): oricine marchează văzut,
+  reacționează și fixează; autorul și editează și șterge. O reacție schimbă un singur emoji, dintre cele
+  șase, și mută doar pe cel care scrie; fixarea e adevărat/fals, nu pe un mesaj șters; un mesaj șters
+  rămâne șters; vocea doar se golește; textul sau poza schimbate se văd ca „editat”.
+- **„Scrie...”:** doar ora serverului; fiecare își șterge doar al lui.
+- **Măsurat pe emulator:** Firestore se oprește la 1000 de expresii pe cerere, iar un refuz e cântărit
+  întreg. Verificarea reacțiilor scrisă pentru fiecare din cele șase emoji depășea limita la ORICE refuz
+  al unui mesaj (trei încăpeau, șase nu). Acum emoji-ul schimbat e găsit cu constante și judecat o dată;
+  testele cer ca niciun refuz să nu fie din cauza limitei.
+- **Clientul:** `src/utils/chatMessage.ts` normalizează fiecare mesaj în ascultători (text doar text, oră
+  doar oră — altfel mesajul e ascuns, linkuri doar din Storage, reacții doar pe cele șase, liste curate);
+  reacția se scrie pe un singur emoji, cu `arrayUnion`/`arrayRemove`/`deleteField`; editarea trimite poza
+  doar dacă e nouă; ștergerea golește și vocea; poza se deschide cu `noopener`; câmpul de text se oprește
+  la 4000; „văzut” în loturi de 25; conversația are granița ei de eroare, pe ecranul Chat și în fereastra
+  din calendar (`chatCouldNotShow`, șase limbi).
+- **Serverul:** push-ul de grup trimite textul mesajului doar dacă e text.
+- **`predeploy-measure`** numără mesajele și „scrie...” care ar încălca regula (azi 0).
+
+**Verificat pe banc după reparație:** text-hartă (balon gol), oră greșită (mesaj ascuns), reacții care nu
+sunt liste: conversația se deschide, nimic nu pică; o reacție prin dublu-clic se scrie ca `{❤️: [Ana]}`.
+
+**Recenzie adversarială** (3 lentile: compatibilitatea, atacul, testele), cu verificare separată:
+- **Fără regresii** pe scrierile web și APK.
+- **Confirmat și reparat:** o reacție pe un mesaj vechi cu reacții stricate era refuzată pentru totdeauna
+  (regula citea valoarea veche fără gardă); cursa a două reacții simultane (acum transformări);
+  autorul își putea schimba mesajul fără semnul „editat”, după ce altcineva îi răspunsese; opt goluri în
+  teste (ramurile 2–6 ale emoji-urilor, plafonul de 2048, filtrul normalizării, ancora tiparului de link,
+  ștergerea „scrie...” al altcuiva, loturile, plafonul răspunsului, ștergerea așa cum o scrie web-ul).
+- **Confirmat, în BACKLOG:** textul unui mesaj șters rămâne în previzualizare și în clopoțel; refuzurile
+  de reacție/fixare/ștergere nu spun nimic pe ecran; rezumatul AI ia și mesajele șterse; `userInGroup`
+  nu verifică id-ul grupului.
+
+**Mutații:** 70, prinse 69, plus unul echivalent. Controalele negative au trecut întâi, și pe suitele de a doua
+șansă.
+- Prima rulare a lăsat 5: patru refuzuri din teste treceau prin clauza „editat”, nu prin cea pe care o
+  numeau (testele le cer acum cu `isEdited: true`; pentru textul altcuiva, pe un mesaj deja editat).
+  Reluate, toate prinse.
+- Echivalent: verificarea „exact un emoji” (`keys.size() != 1`). Fără ea, ramurile `hasOnly([e])`
+  refuză oricum o scriere pe două emoji; rămâne pentru că spune ce face clientul.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2452), `tsc` și build-ul funcțiilor, `test:rules` (682),
+`npm run build`, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46). Toate verzi.
+
+**Nepublicat.** Cere funcțiile, regulile, apoi hosting-ul, fiecare cu acordul lui Andrei. Deciziile lui
+(implicitul pus): mesajul are cel mult 4000 de caractere (APK-ul nu știe; unul mai lung nu pleacă);
+oricine din conversație poate fixa un mesaj, ca până acum.

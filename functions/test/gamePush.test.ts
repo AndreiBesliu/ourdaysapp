@@ -177,6 +177,21 @@ describe('the name of whoever started it, or sent the message', () => {
   });
 });
 
+describe('a group message whose text is not text', () => {
+  it('is announced as a message, never as "[object Object]" (08.10.2026)', async () => {
+    const msg = db.doc(`groups/${G}/messages/m-map`);
+    await msg.set({ senderId: ALICE, text: { a: 1 }, imageUrl: null });
+    await fn.onMessageCreated.run({ data: await msg.get(), params: { groupId: G, messageId: 'm-map' } });
+    const got = await rows();
+    expect(got).toHaveLength(2);
+    for (const r of got) {
+      expect(r.bodyKey).toBe('notifSentMessage');
+      expect(r.body).not.toContain('[object Object]');
+    }
+    for (const s of sent) expect(s.notification.body).not.toContain('[object Object]');
+  });
+});
+
 describe('every push is cut like its bell row, and never through a character', () => {
   const send = (spec: Partial<import('../src/notify').NotifySpec>) => notifyMod.notify({
     userIds: [BOB, CAROL], createdBy: ALICE, type: 'test', titleKey: 'notifNewMessage', ...spec,

@@ -235,6 +235,143 @@ service cloud.firestore {
       return v is list && old is list
         && v.size() - v.toSet().size() <= old.size() - old.toSet().size();
     }
+    // ── Chat messages, in a group and in a direct chat (08.10.2026) ─────────────────────────────
+    //
+    // Every field of a message is shown to the other people in the conversation, on the web and in
+    // the installed APK, and until this day the rules typed none but `senderId` and `seenBy`: a
+    // member could write `text` as a map, a `createdAt` that was not a time, reactions that were not
+    // lists, or an `id`, and the conversation crashed for the others each time they opened it — on
+    // the web the whole app, in the APK a white screen — with nothing anybody could delete
+    // (reproduced on the emulators). An `imageUrl` of `javascript:` went to `window.open` on a tap.
+    // So a message is born with exactly what the clients write, typed; a change is judged only on
+    // the keys it changes, so nothing already stored is judged again. Measured on live that day:
+    // 171 messages, every one like this; the 11 picture and voice links all match the pattern.
+
+    /** A message's text: none, or 1 to 4000 characters (CHAT_TEXT_MAX in src/utils/chatMessage.ts). */
+    function chatTextOk(v) {
+      return v == null || (v is string && v.size() > 0 && v.size() <= 4000);
+    }
+
+    // A picture or a voice note: OUR bucket, THIS conversation's folder, as getDownloadURL returns
+    // it. The conversation is COMPARED, never spliced into the pattern — a group's id is its
+    // creator's to choose, and `a|javascript:.*` spliced in would be an alternative of its own.
+    // The bucket is the live project's; a test instance will need its own added here.
+    function chatUploadOk(url, folder, convId) {
+      return url is string && url.size() <= 2048
+        && url.matches('https://firebasestorage[.]googleapis[.]com/v0/b/our-days-2a939[.]firebasestorage[.]app/o/'
+             + folder + '%2F[^/?#]+%2F[^/?#]+[?]alt=media&token=[-0-9A-Za-z]+')
+        && url.split('%2F').size() == 3
+        && url.split('%2F')[1] == convId;
+    }
+
+    /** A new message: exactly the keys the web and the APK write, each of the kind they write. */
+    function messageCreateOk(convId) {
+      return request.resource.data.keys().hasOnly(['text', 'imageUrl', 'audioUrl', 'senderId', 'createdAt',
+                                                    'seenBy', 'replyToId', 'isDeleted', 'isEdited'])
+        && request.resource.data.get('senderId', null) == request.auth.uid
+        && request.resource.data.get('createdAt', null) == request.time
+        && request.resource.data.get('seenBy', null) == [request.auth.uid]
+        && chatTextOk(request.resource.data.get('text', null))
+        && (request.resource.data.get('imageUrl', null) == null
+            || chatUploadOk(request.resource.data.imageUrl, 'chat-images', convId))
+        && (request.resource.data.get('audioUrl', null) == null
+            || chatUploadOk(request.resource.data.audioUrl, 'chat-audio', convId))
+        && (request.resource.data.get('text', null) != null || request.resource.data.get('imageUrl', null) != null
+            || request.resource.data.get('audioUrl', null) != null)
+        && (request.resource.data.get('replyToId', null) == null
+            || (request.resource.data.replyToId is string && request.resource.data.replyToId.size() > 0
+                && request.resource.data.replyToId.size() <= 1500))
+        && request.resource.data.get('isDeleted', false) == false
+        && request.resource.data.get('isEdited', false) == false;
+    }
+
+    function reactionsOf(d) { return d.get('reactions', null) is map ? d.get('reactions', null) : {}; }
+    function listOr(v) { return v is list ? v : []; }
+
+    // Under the one emoji a write changes, the writer added or removed THEMSELVES, and nobody else;
+    // an emptied emoji is removed, never left as [], and nobody is in it twice. Both clients change
+    // exactly one emoji per write (GroupChatWidget's handleReaction, the APK's).
+    function reactionUnderOk(e) {
+      let r = request.resource.data.reactions;
+      let after = r.get(e, []);
+      // What an old document holds is read as kindly as reactionsMineOnly reads it: not a map, or
+      // not a list under this emoji, counts as nobody there.
+      let before = listOr(reactionsOf(resource.data).get(e, []));
+      return after is list && (after.size() > 0 || !(e in r))
+        && after.toSet().size() == after.size()
+        && after.toSet().difference(before.toSet()).hasOnly([request.auth.uid])
+        && before.toSet().difference(after.toSet()).hasOnly([request.auth.uid]);
+    }
+
+    // Everybody's own reaction, the author's too: on their own message the author may not add or
+    // take away anybody else's. Whatever an old document holds under an emoji this write does not
+    // touch is not judged.
+    function reactionsChangeOk(changed) {
+      return !changed.hasAny(['reactions']) || reactionsMineOnly();
+    }
+    // Which of the six this write changes — the reactions both clients offer, byte for byte
+    // (GroupChatWidget's EMOJIS, the APK's) — found with constants only, and then judged once.
+    // Firestore stops at 1000 expressions per request, and a refused write is weighed in full: with
+    // the check written out for each of the six, every refusal of any message went past it
+    // (measured on the emulator, 08.10.2026; three fitted, six did not).
+    function reactionsMineOnly() {
+      let after = request.resource.data.get('reactions', null);
+      let keys = after is map ? after.diff(reactionsOf(resource.data)).affectedKeys() : ['-'].toSet();
+      let changedEmoji = keys.size() != 1 ? ''
+        : keys.hasOnly(['👍']) ? '👍'
+        : keys.hasOnly(['❤️']) ? '❤️'
+        : keys.hasOnly(['😂']) ? '😂'
+        : keys.hasOnly(['😮']) ? '😮'
+        : keys.hasOnly(['😢']) ? '😢'
+        : keys.hasOnly(['🙏']) ? '🙏'
+        : '';
+      return after is map && changedEmoji != '' && reactionUnderOk(changedEmoji);
+    }
+
+    /** A pin is true or false, and a deleted message is not pinned. */
+    function pinChangeOk(changed) {
+      return !changed.hasAny(['isPinned'])
+        || request.resource.data.get('isPinned', null) == false
+        || (request.resource.data.get('isPinned', null) == true && request.resource.data.get('isDeleted', false) != true);
+    }
+
+    // The author's edit and soft delete. A deleted message stays deleted, and its content never
+    // returns; a voice note's link may only be cleared.
+    function authorChangeOk(convId, changed) {
+      return (!changed.hasAny(['text']) || chatTextOk(request.resource.data.get('text', null)))
+        && (!changed.hasAny(['imageUrl']) || request.resource.data.get('imageUrl', null) == null
+            || chatUploadOk(request.resource.data.imageUrl, 'chat-images', convId))
+        && (!changed.hasAny(['audioUrl']) || request.resource.data.get('audioUrl', null) == null)
+        && (!changed.hasAny(['isEdited']) || request.resource.data.get('isEdited', null) == true)
+        // Words or a picture changed show as edited, unless the message is being deleted: a
+        // silent rewrite put words under somebody's reply that they never answered.
+        && (!changed.hasAny(['text', 'imageUrl']) || request.resource.data.get('isDeleted', false) == true
+            || request.resource.data.get('isEdited', null) == true)
+        && (!changed.hasAny(['isDeleted']) || request.resource.data.get('isDeleted', null) == true)
+        && (!changed.hasAny(['text', 'imageUrl', 'audioUrl']) || request.resource.data.get('isDeleted', false) == true
+            || request.resource.data.get('text', null) != null || request.resource.data.get('imageUrl', null) != null
+            || request.resource.data.get('audioUrl', null) != null)
+        && (resource.data.get('isDeleted', false) != true
+            || (!changed.hasAny(['isEdited'])
+                && (!changed.hasAny(['text']) || request.resource.data.get('text', null) == null)
+                && (!changed.hasAny(['imageUrl']) || request.resource.data.get('imageUrl', null) == null)));
+    }
+
+    // Anybody may mark it seen, react and pin; the author may also edit and delete it. Nothing
+    // else changes — not `createdAt`, not `replyToId`, not an added `id`.
+    function messageUpdateOk(convId, changed) {
+      return (changed.hasOnly(['seenBy', 'reactions', 'isPinned'])
+              || (request.auth.uid == resource.data.get('senderId', null)
+                  && changed.hasOnly(['seenBy', 'reactions', 'isPinned', 'text', 'imageUrl', 'audioUrl', 'isEdited', 'isDeleted'])))
+        && reactionsChangeOk(changed) && pinChangeOk(changed) && authorChangeOk(convId, changed);
+    }
+
+    /** "Is typing": the time, the server's, and nothing else (both clients write exactly that). */
+    function typingMarkOk() {
+      return request.resource.data.keys().hasOnly(['updatedAt'])
+        && request.resource.data.get('updatedAt', null) == request.time;
+    }
+
     function onlySelfJoinsSeenBy() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['seenBy'])
         || (
@@ -436,7 +573,9 @@ service cloud.firestore {
         allow create: if isMemberOfGroup(groupId) &&
           request.resource.data.senderId == request.auth.uid &&
           seenByShapeOk(request.resource.data.get('seenBy', [])) &&
-          request.resource.data.get('seenBy', []).toSet().hasOnly([request.auth.uid]);
+          request.resource.data.get('seenBy', []).toSet().hasOnly([request.auth.uid]) &&
+          // Born with exactly what the clients write, typed (08.10.2026; see messageCreateOk).
+          messageCreateOk(groupId);
         // `senderId` is PINNED, and without that line "sender pinned to the caller" on create
         // bought nothing: send a message, then edit it and rewrite `senderId` to another member.
         // The read rule shows the whole conversation to the group, so what everybody then sees is
@@ -450,8 +589,9 @@ service cloud.firestore {
         allow update: if isMemberOfGroup(groupId)
           && request.resource.data.senderId == resource.data.senderId
           && onlySelfJoinsSeenBy()
-          && (request.auth.uid == resource.data.senderId ||
-              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy', 'reactions', 'isPinned']));
+          // Who may change what, and to what (08.10.2026; see messageUpdateOk). The author's own
+          // branch used to let them change anything but `senderId`.
+          && messageUpdateOk(groupId, request.resource.data.diff(resource.data).affectedKeys());
         allow delete: if false; // soft-delete only (isDeleted flag)
       }
 
@@ -462,7 +602,8 @@ service cloud.firestore {
       // nothing to do with.
       match /typing/{userId} {
         allow read: if isMemberOfGroup(groupId);
-        allow write: if isMemberOfGroup(groupId) && request.auth.uid == userId;
+        allow create, update: if isMemberOfGroup(groupId) && request.auth.uid == userId && typingMarkOk();
+        allow delete: if isMemberOfGroup(groupId) && request.auth.uid == userId;
       }
     }
 
@@ -608,7 +749,8 @@ service cloud.firestore {
         // `seenBy` pinned at create, for the same reason as the group's.
         allow create: if inChat() && request.resource.data.senderId == request.auth.uid &&
           seenByShapeOk(request.resource.data.get('seenBy', [])) &&
-          request.resource.data.get('seenBy', []).toSet().hasOnly([request.auth.uid]);
+          request.resource.data.get('seenBy', []).toSet().hasOnly([request.auth.uid]) &&
+          messageCreateOk(chatId);
         // Pinned for the same reason as the group's, and it matters more here: a direct chat has
         // exactly two people in it, so a forged author is unambiguously the other one.
         // Same `seenBy` constraint as the group's, and it reads worse here: a direct chat has
@@ -617,8 +759,7 @@ service cloud.firestore {
         allow update: if inChat()
           && request.resource.data.senderId == resource.data.senderId
           && onlySelfJoinsSeenBy()
-          && (request.auth.uid == resource.data.senderId ||
-              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy', 'reactions', 'isPinned']));
+          && messageUpdateOk(chatId, request.resource.data.diff(resource.data).affectedKeys());
         allow delete: if false; // soft-delete only, like a group's
       }
 
@@ -626,7 +767,8 @@ service cloud.firestore {
       // so a stranger needs nothing but a uid from the public roster to find the path.
       match /typing/{userId} {
         allow read: if inChat();
-        allow write: if inChat() && request.auth.uid == userId;
+        allow create, update: if inChat() && request.auth.uid == userId && typingMarkOk();
+        allow delete: if inChat() && request.auth.uid == userId;
       }
     }
 
