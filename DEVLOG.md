@@ -12338,3 +12338,55 @@ eroare, orice nu e text).
 **Nepublicat.** Cere regulile, apoi hosting-ul, fiecare cu acordul lui Andrei. Decizia lui (implicitul
 pus): numele de grup au cel mult 60 de caractere, iar APK-ul refuză unul mai lung cu „Failed to create
 group”.
+
+## 2026-10-08 · Gardianul de deploy: golurile prin care o comandă publica pe live fără întrebare (Task Started)
+
+**Prompt (Andrei):** „Do this task here: “Close deploy-guard gaps for live hosting commands””
+**Model:** Claude Opus 5.5.
+**Ce e:** gardianul (`Apps/.claude/hooks/deploy-guard.py`, copia canonică aici, în `tools/claude/`) cerea
+confirmare doar pe `firebase deploy` / `npm run deploy` scrise în formele pe care le știa. Treceau fără
+întrebare: `hosting:clone` (publică direct pe live), `hosting:channel:deploy`, flagurile puse înaintea
+comenzii, `npx -y firebase-tools@latest`, `npm --prefix X run deploy` și tot ce rula prin unealta PowerShell.
+**Plan:** tabel de cazuri, rescriere, vânătoare adversarială, sabotaje; niciun deploy real în timpul probelor.
+
+## 2026-10-08 · Gardianul de deploy: golurile prin care o comandă publica pe live fără întrebare (Task Completed)
+
+**Unde rulează acum:** în setările de utilizator (`~/.claude/settings.json`), cu matcherul `Bash|PowerShell`.
+Setările de proiect se citesc doar din directorul în care pornește sesiunea, deci o sesiune deschisă direct
+în `cncvs2` sau `DataRead` n-avea gardian. Unealta PowerShell nu era păzită deloc.
+
+**Cum judecă acum (logica inversată):**
+- **Detectarea e pe cuvinte:** CLI-ul Firebase undeva și o scriere undeva, în comandă și în tot ce poate
+  porni: scripturile npm (cu pre / post, `run-s`, `concurrently`), fișierele `.sh` / `.ps1` / `.bat` / `.js` /
+  `.ts` / `.py`, importurile relative și comenzile lansate din cod. Comenzile Firebase sunt o listă de
+  citiri; orice altă comandă Firebase contează ca scriere.
+- **Trecerea cere dovadă:** fiecare pomenire e o invocare citibilă cu `--project` / `--site` / ținta unui
+  clone de test, fără `--config` și fără argumente trimise mai departe (`npm run x -- -Plive`).
+- **A doua vânătoare**, pe gardianul rescris, a găsit 3 forme: `execSync('CI=1 npm run deploy')` era luat
+  drept mesaj, un workspace npm selectat după nume (`-w @acme/deployer`) nu era citit, iar `cat <<EOF | sh`
+  arunca corpul ca date. Le-am închis cu o singură regulă de decojire (aceeași în dovadă, în filtrul de
+  proză și în lansările din cod), cu citirea pachetelor din monorepo și cu regulile pentru heredoc.
+
+**Capcane plătite:**
+- **Ieșirea cu diacritice:** un `ă` scris pe consola cp1252 arunca. Hook-ul ieșea cu 1, iar Claude Code
+  tratează o eroare de hook ca neblocantă, deci comanda live trecea. Acum ieșirea e doar ASCII, iar testul
+  de stdin rulează fără `PYTHONIOENCODING`.
+- **Timpul:** pe Drive-ul rece, `npm run deploy` dura 35 s (timeout-ul hook-ului e 10 s, deci trecea
+  nejudecată). Acum are buget de 5 s, peste care cere; procesul real ia sub o secundă.
+
+**Probe:**
+- Gardianul vechi lăsa să treacă 24 de rânduri din tabelul nou. Prima rescriere lăsa 121 din 161 de
+  încercări ale vânătorii. Acum trec 0, pe proiectele reale și pe fixturi, în afara a două limite fixate
+  de teste: ofuscarea deliberată (`F=fire; ${F}base deploy`) și un înveliș necunoscut într-un șir din cod
+  (`execSync('xvfb-run firebase deploy')`), care arată exact ca un mesaj.
+- **Sabotaje: 45 din 45 prinse**, cu controlul verde întâi și restaurarea verificată octet cu octet.
+- Comenzile zilnice (`npm test` în cinci proiecte, `npm run build`, `npm run build:site`) trec fără
+  întrebare, fiecare în sub o secundă.
+- Pe tot codul din Apps, regula nouă de decojire doar adaugă lansări față de cea veche (9 șiruri), nu
+  scoate niciuna.
+
+**Porțile aplicației nu s-au rulat:** schimbarea e doar în `tools/claude/` (Python, în afara build-ului și a
+testelor aplicației). Porțile ei sunt cele două suite ale gardianului, verzi.
+
+**Fișiere:** `tools/claude/deploy-guard.py`, `test_deploy_guard.py`, `test_deploy_guard_vanatoare.py`,
+`README.md`.
