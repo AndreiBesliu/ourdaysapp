@@ -3,11 +3,20 @@
 // A chat message as the screens may use it, and the few facts the app, the rules and the installed
 // APK must agree on (08.10.2026).
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { CHAT_TEXT_MAX, REACTION_PALETTE, isTimestamp, normaliseMessage, normaliseMessages, storageUrlOrNull } from './chatMessage';
 
 const POISON = { toString: 0 };
+
+/**
+ * The installed APK's palette, copied byte for byte from its bundle (`ne=[...]` in
+ * android/app/src/main/assets/public/assets/index-DTbgbzyX.js), as apk-compat.test.ts records its
+ * payloads: the bundle is build output and not in the repository, so CI never sees it. Where it is on
+ * disk, the test below also reads it.
+ */
+const APK_BUNDLE = 'android/app/src/main/assets/public/assets/index-DTbgbzyX.js';
+const APK_PALETTE = ['\u{1F44D}', '\u2764\uFE0F', '\u{1F602}', '\u{1F62E}', '\u{1F622}', '\u{1F64F}'];
 const ts = (ms: number) => ({ toMillis: () => ms, toDate: () => new Date(ms) });
 const URL_OK = 'https://firebasestorage.googleapis.com/v0/b/our-days-2a939.firebasestorage.app/o/chat-images%2Fg%2Fa_1_x.jpg?alt=media&token=0b1c2d3e-4f50';
 
@@ -59,10 +68,13 @@ describe('what the app, the rules and the installed APK agree on', () => {
     for (const m of hits) expect(m[2], m[1]).toBe(m[1]);
     const inRules = hits.map((m) => m[1]);
     expect(inRules).toEqual([...REACTION_PALETTE]);
-    const apk = readFileSync('android/app/src/main/assets/public/assets/index-DTbgbzyX.js', 'utf8');
-    const m = apk.match(/ne=\[`([^`]+)`,`([^`]+)`,`([^`]+)`,`([^`]+)`,`([^`]+)`,`([^`]+)`\]/);
+    expect(APK_PALETTE).toEqual([...REACTION_PALETTE]);
+  });
+
+  it.skipIf(!existsSync(APK_BUNDLE))('and the APK\u2019s own bundle still says so, where it is on disk', () => {
+    const m = readFileSync(APK_BUNDLE, 'utf8').match(/ne=\[`([^`]+)`,`([^`]+)`,`([^`]+)`,`([^`]+)`,`([^`]+)`,`([^`]+)`\]/);
     expect(m, 'the APK palette').not.toBeNull();
-    expect(m!.slice(1)).toEqual([...REACTION_PALETTE]);
+    expect(m!.slice(1)).toEqual(APK_PALETTE);
   });
 
   it('the longest message', () => {
