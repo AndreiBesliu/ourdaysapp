@@ -31,6 +31,7 @@
 // briefly show the checklist without the newer change, until its own write lands.
 
 import { doc, runTransaction, updateDoc, type Firestore } from 'firebase/firestore';
+import { checklistItemIdAt } from './eventDoc';
 
 export type ChecklistOp =
   /** Set, not toggle: two people ticking the same item must agree, not cancel each other out. */
@@ -43,9 +44,19 @@ export type ChecklistOp =
 
 type Item = { id?: unknown; [k: string]: unknown };
 
-/** The array after `op`, from the array as it stands. Never throws; an unknown item is a no-op. */
+/**
+ * The array after `op`, from the array as it stands. Never throws; an unknown item is a no-op.
+ *
+ * Items are matched by the id the screens show (`checklistItemIdAt`, eventDoc.ts), not by the stored
+ * one alone: an item whose stored id was not text is shown as `item-<its place>`, and a tick on it used
+ * to match nothing (09.10.2026). The array written back carries those ids, so the first change repairs
+ * the list for every client.
+ */
 export function applyChecklistOp(items: unknown, op: ChecklistOp): Item[] {
-  const list: Item[] = Array.isArray(items) ? items.filter((x) => x && typeof x === 'object') : [];
+  const list: Item[] = Array.isArray(items)
+    // Plain objects only, as the screens show them: a list inside the list is not an item.
+    ? items.flatMap((x, i) => (x && typeof x === 'object' && !Array.isArray(x) ? [{ ...(x as Item), id: checklistItemIdAt(x, i) }] : []))
+    : [];
 
   if (op.kind === 'append') {
     // By id, so a retried write (Firestore retries a raced transaction) cannot add a batch twice.

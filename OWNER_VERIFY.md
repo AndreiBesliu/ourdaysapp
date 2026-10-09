@@ -149,6 +149,11 @@ toate pozele cardurilor sunt din Storage-ul nostru. Acum:
 **Ce vezi diferit:** nimic la datele normale. Câmpurile din formulare se opresc la o lungime: titlul la
 500, nota la 5000, locul la 300, numele cardului la 1000, categoria la 100, descrierea cheltuielii la 200.
 
+**Găsit după, la verificarea testelor (09.10), tot nepublicat:** un memento „At time of event” se ștergea doar
+deschizând evenimentul în editare. Formularul îl citea drept „fără memento”, iar salvarea lui automată, la o
+secundă după deschidere, scria asta înapoi, pentru toată lumea. Defectul e vechi. Pe live niciun eveniment nu are
+acum un astfel de memento; nu se poate ști dacă vreunul l-a pierdut deja. Reparat și probat pe aplicația reală.
+
 **Ce am hotărât eu** (spune-mi dacă vrei altfel):
 - **Regula nu pune limită de lungime pe titlu, notă, loc, numele cardului sau categorie**, doar pe tip.
   APK-ul instalat n-are nicio limită, iar ce scrie el azi nu trebuie refuzat. Căderea venea din tip, nu

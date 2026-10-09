@@ -24,6 +24,18 @@ const label = (v: unknown): string | null => (typeof v === 'string' && v.length 
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 const isPlainMap = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 
+/**
+ * A checklist item's id as the screens use it: its own, when that is non-empty text, or one from its
+ * place in the STORED list (`rawIndex`, counting items that are not objects too). React keys and drag
+ * ids need text. The one rule for both sides: `applyChecklistOp` (checklistOps.ts) finds the item a
+ * tick names by this same id on the server's array — with the stored id alone, a tick on an item whose
+ * id was not text matched nothing and was lost without a word (09.10.2026).
+ */
+export function checklistItemIdAt(item: unknown, rawIndex: number): string {
+  const id = isPlainMap(item) ? item.id : undefined;
+  return typeof id === 'string' && id ? id : `item-${rawIndex}`;
+}
+
 /** One checklist item with an id and text the screens can use. An item that is not an object is left
  *  out; an id that is not text gets one from its place, so React keys and drag ids stay text. */
 function normaliseItems(v: unknown): Record<string, any>[] {
@@ -35,7 +47,7 @@ function normaliseItems(v: unknown): Record<string, any>[] {
     // and a picked card's link on the item as LOCAL state (`assetFile`, `selectedAssetUrl`), and one
     // planted in the stored list was taken for that (a file it could not read; a link it showed).
     out.push({
-      id: typeof item.id === 'string' && item.id ? item.id : `item-${i}`,
+      id: checklistItemIdAt(item, i),
       text: text(item.text),
       isCompleted: item.isCompleted === true,
       assetUrl: typeof item.assetUrl === 'string' && item.assetUrl ? item.assetUrl : null,

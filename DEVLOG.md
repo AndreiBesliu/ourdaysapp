@@ -12612,3 +12612,53 @@ Aserțiunile sunt aceleași.
 **Porți în repo:** `tsc -b`, `lint-gate`, `npm test` (2586), `npm run build`, `check-split`, `check-offline`,
 `check-bundle`, `test:tz` (46). `test:rules` a rulat pe checkout-ul CRLF (805); în repo nu s-a schimbat nimic din ce
 rulează el.
+
+## 2026-10-09 · Mutațiile pentru evenimente, carduri și cheltuieli (`de2aa2d`) (Task Started)
+
+**Prompt (Andrei):** „continua” (după pauză; sarcina din 08.10 s-a încheiat cu mutațiile nerulate).
+**Model:** Claude Opus 5.5.
+**Ce e:** lista de 136 de mutanți scrisă pe 08.10 (regulile `eventFieldsOk`/`assetFieldsOk`/`expenseDescriptionOk` și nota
+AI, modulul comun `eventShape`, normalizările, ușa `createEventOverride`, transferul cardurilor, legăturile din ecrane), cu
+controalele negative pe suitele proprii și pe cele complete. Rularea s-a oprit pe 08.10 la cererea de pauză, înainte de
+primul verdict.
+**Plan:** worktree din afara Drive-ului, la HEAD, cu octeții copiați din repo; ancorajele verificate; rularea detașată, cu
+jurnal și Monitor; pentru fiecare supraviețuitor, testul care lipsește (sau echivalența, scrisă). Nimic de publicat.
+
+## 2026-10-10 · Mutațiile pentru evenimente, carduri și cheltuieli (`de2aa2d`) (Task Completed)
+
+**Prompt (Andrei):** „continua” (de două ori, după pauze), apoi „o sa facem pauza cand se poate”.
+**Model:** Claude Opus 5.5.
+
+**Mutații: 136 din 136 prinse,** fiecare de suita ei proprie. Nicio supraviețuitoare, niciun VOID, nicio înviere.
+- Controalele negative au trecut pe suitele proprii și pe cele complete (unitate, funcții, reguli).
+- Rularea s-a făcut într-un worktree din afara Drive-ului, cu octeții copiați din repo.
+- Sesiunea s-a închis în timpul rulării, dar harnașamentul apucase să termine. Am verificat la reluare: jurnalul
+  are toate cele 136 de verdicte și „restored and verified”, iar worktree-ul și repo-ul sunt identice cu
+  instantaneul.
+
+**Criticul pe forma fixturilor** (Workflow, două lentile plus verificare separată). Un 100% la mutații nu spune ce
+nu ating fixturile. Pe reguli n-a găsit nimic. Pe client a găsit trei lucruri, confirmate:
+- **Un memento „At time of event” (0) dispărea doar deschizând evenimentul în editare** (defect vechi, mai vechi
+  decât `de2aa2d`). Formularul îl citea cu `|| null`, iar autosalvarea, la o secundă după ce se umple formularul,
+  scria `null` înapoi, pentru toată lumea. Acum se citește după tip. Probat pe bancă, în aplicația reală: după
+  deschiderea formularului și autosalvare, valoarea stocată rămâne 0, iar selectorul arată „At time of event”.
+  Pe live: niciun eveniment cu memento 0 acum; nu se poate ști dacă vreunul l-a pierdut deja.
+- **O bifă pe un element de checklist al cărui id nu e text se pierdea fără niciun mesaj** (regresie din
+  `de2aa2d`, doar pe date scrise de un membru rău-intenționat; pe live: 0).
+  - Ecranul arată un astfel de element ca `item-<poziție>`, dar `applyChecklistOp` căuta id-ul brut.
+  - Acum ambele folosesc `checklistItemIdAt` (`eventDoc.ts`), iar prima scriere repară lista. Listele din
+    interiorul listei nu mai sunt luate drept elemente.
+  - Probat pe bancă: bifa pe al doilea element (id numeric) a ajuns pe server, iar lista a revenit cu id-uri text.
+- **APK-ul nu poate muta într-un grup un eveniment cu notă AI** (regula cere ca nota să plece). Confirmat ca
+  refuz, dar drumul e de neatins azi: calendarul APK e gol, fiindcă interogarea lui e refuzată. Las regula
+  strictă, ca să nu redeschid falsificarea notei prin mutare. Trecut în BACKLOG, cu varianta pentru o
+  reconstruire.
+
+**Controale inverse pe reparații** (worktree de unică folosință): toate patru pică testele noi. Cele patru stricăciuni:
+potrivirea pe id-ul brut, un id inventat altfel decât pe ecran, listele luate din nou drept elemente, vechiul
+`|| null`.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2592), `npm run build`, `check-split`, `check-offline`,
+`check-bundle`, `test:tz` (46), `test:rules` (805).
+
+**Nepublicat.** Reparațiile merg cu hosting-ul, după funcții și reguli, cu acordul lui Andrei.

@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { applyChecklistOp, writeChecklistOpWith, type ChecklistWriter } from './checklistOps';
+import { normaliseEvent } from './eventDoc';
 
 const BASE = [
   { id: 'a', text: 'Bread', isCompleted: false },
@@ -65,9 +66,42 @@ describe('what it must not do', () => {
   });
 
   it('throw on a checklist that is not one', () => {
-    for (const bad of [undefined, null, 'x', {}, [null, 3, 'y']]) {
+    for (const bad of [undefined, null, 'x', {}, [null, 3, 'y'], [['a']]]) {
       expect(applyChecklistOp(bad, { kind: 'set-completed', id: 'a', value: true })).toEqual([]);
     }
+  });
+});
+
+// ── 09.10.2026: an item whose stored id is not text ────────────────────────────────────────────
+// The screens show such an item as `item-<its place>` (normaliseEvent). A tick names that id, and
+// matching on the stored id alone found nothing: the tick was lost without a word.
+describe('an item is found by the id the screen shows', () => {
+  const shownIds = (stored: unknown) => normaliseEvent({ id: 'e', checklistItems: stored }).checklistItems.map((x) => x.id);
+
+  it.each([
+    ['numbers', [{ id: 5, text: 'Bread', isCompleted: false }, { id: 6, text: 'Milk', isCompleted: false }]],
+    ['no id at all', [{ text: 'Bread', isCompleted: false }, { text: 'Milk', isCompleted: false }]],
+    ['an empty id', [{ id: '', text: 'Bread', isCompleted: false }, { id: 'm', text: 'Milk', isCompleted: false }]],
+    ['something that is not an item before it', [null, { id: 7, text: 'Bread', isCompleted: false }, { id: 8, text: 'Milk', isCompleted: false }]],
+  ])('ids that are %s: a tick, an edit and a move land, and the list comes back with the shown ids', (_label, stored) => {
+    const ids = shownIds(stored);
+    const second = ids[ids.length - 1];
+    const ticked = applyChecklistOp(stored, { kind: 'set-completed', id: second, value: true });
+    expect(ticked.map((x) => x.id)).toEqual(ids);
+    expect(ticked.map((x) => x.isCompleted)).toEqual([false, true]);
+    expect(applyChecklistOp(stored, { kind: 'set-text', id: second, text: 'Oat milk' })[1].text).toBe('Oat milk');
+    expect(applyChecklistOp(stored, { kind: 'move', id: second, beforeId: ids[0] }).map((x) => x.text)).toEqual(['Milk', 'Bread']);
+    // Repaired: the next client finds the same item by the id now stored.
+    expect(shownIds(ticked)).toEqual(ids);
+  });
+
+  it('a text id is kept as it is, and an append is still added once', () => {
+    expect(applyChecklistOp(BASE, { kind: 'set-completed', id: 'b', value: true })).toEqual(
+      BASE.map((x) => (x.id === 'b' ? { ...x, isCompleted: true } : x)),
+    );
+    const stored = [{ text: 'Bread', isCompleted: false }];
+    const add = { kind: 'append', items: [{ id: 'item-0', text: 'dup', isCompleted: false }, { id: 'n1', text: 'Eggs', isCompleted: false }] } as const;
+    expect(applyChecklistOp(stored, add).map((x) => x.id)).toEqual(['item-0', 'n1']);
   });
 });
 

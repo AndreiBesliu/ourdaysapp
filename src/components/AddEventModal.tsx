@@ -326,7 +326,9 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       setSelectedGroupId(editEvent.groupId || 'personal');
       setRsvpEnabled(!!editEvent.rsvpEnabled);
       setLocation(editEvent.location || '');
-      applyReminder(editEvent.reminderMinutes || null);
+      // By its type, not `||`: 0 is "at the time of the event", a real reminder. With `||` it became "none", and the
+      // autosave a second after the form fills wrote that back: opening the event removed its reminder (09.10.2026).
+      applyReminder(typeof editEvent.reminderMinutes === 'number' ? editEvent.reminderMinutes : null);
       setEventTime(typeof editEvent.time === 'string' ? editEvent.time : '');
       // Loaded from the OCCURRENCE, which for a series carries the parent's offset applied to its
       // own day — so editing one occurrence of a two-day series shows that occurrence's two days,

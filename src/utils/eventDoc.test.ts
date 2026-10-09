@@ -140,6 +140,15 @@ describe('every place that reads events uses it', () => {
     expect(details).not.toMatch(/src=\{item\.assetUrl\}/);
   });
 
+  it('a reminder "at the time of the event" (0) survives the normaliser and the edit form', () => {
+    expect(normaliseEvent({ id: 'e', reminderMinutes: 0 }).reminderMinutes).toBe(0);
+    // With `|| null` the form turned 0 into "no reminder", and its autosave, a second after the form
+    // fills, wrote that back: opening the event removed its reminder for everybody (09.10.2026).
+    const form = readFileSync('src/components/AddEventModal.tsx', 'utf8');
+    expect(form).toContain("applyReminder(typeof editEvent.reminderMinutes === 'number' ? editEvent.reminderMinutes : null);");
+    expect(form).not.toMatch(/applyReminder\([^)]*reminderMinutes \|\| null\)/);
+  });
+
   it('a draft saved before the limits is cut to them when restored (maxLength does not apply to code)', () => {
     const form = readFileSync('src/components/AddEventModal.tsx', 'utf8');
     expect(form).toContain("setTitle(typeof parsed.title === 'string' ? clampText(parsed.title, EVENT_TITLE_MAX) : '');");

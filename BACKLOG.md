@@ -83,6 +83,10 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     care cheamă (cost, nu cădere; pe bugetul lui).
   - **O notă AI scrisă pe un eveniment personal** (crearea personală e deschisă) rămâne pe el; nu mai
     poate intra într-un grup. Doar proprietarul o vede.
+  - **APK-ul nu poate muta într-un grup un eveniment care are o notă AI** (09.10, criticul fixturilor): regula
+    cere ca nota să plece la mutare, iar APK-ul nu o știe șterge. Azi drumul e de neatins, calendarul APK fiind
+    gol (interogarea lui e refuzată). Dacă reconstruirea APK-ului îl readuce, varianta e o notă în forma
+    serverului (`status`, `reason`, `at`, text) acceptată la mutare; lărgirea redeschide falsificarea ei.
 - **Textul unui mesaj șters rămâne în copiile serverului** (harta din 08.10): previzualizarea din lista
   de conversații (`lastMessageText`) până la mesajul următor, și rândurile din clopoțel pentru totdeauna.
   Niciun trigger nu rulează la modificarea unui mesaj. Remediul: un trigger la ștergere care curăță
