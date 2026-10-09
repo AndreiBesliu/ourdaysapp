@@ -75,7 +75,14 @@ describe('distProblems (check-offline)', () => {
     expect(distProblems({ ...off, killSwitch: true })).toEqual([]);
     expect(distProblems({ ...good, killSwitch: true }).length).toBeGreaterThan(0);
   });
-  it('line endings do not count (public/sw.js re-checked-out as CRLF)', () => {
-    expect(distProblems({ ...good, publicSw: PUBLIC_SW.replace(/\n/g, '\r\n') })).toEqual([]);
+  it('line endings do not count (public/sw.js re-checked-out as CRLF, or the worker built from a CRLF one)', () => {
+    // Both variants from an LF base. On a Windows checkout PUBLIC_SW is CRLF already, and turning every
+    // `\n` into `\r\n` again made `\r\r\n`, which no checkout writes: the test failed, not the check (09.10.2026).
+    const lfSw = PUBLIC_SW.replace(/\r\n/g, '\n');
+    const crlfSw = lfSw.replace(/\n/g, '\r\n');
+    expect(lfSw).not.toContain('\r');
+    expect(crlfSw).toContain('\r\n');
+    expect(distProblems({ ...good, sw: stampSw(lfSw, rev), publicSw: crlfSw })).toEqual([]);
+    expect(distProblems({ ...good, sw: stampSw(crlfSw, rev), publicSw: lfSw })).toEqual([]);
   });
 });

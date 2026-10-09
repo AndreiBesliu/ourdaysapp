@@ -12565,3 +12565,50 @@ pe cele complete, într-un worktree din afara Drive-ului. Rularea a fost oprită
 primul verdict. Nimic nu a rămas aplicat în repo; worktree-ul e șters. Se reiau la întoarcere.
 
 **Nepublicat.** Cere funcțiile, regulile, apoi hosting-ul, fiecare cu acordul lui Andrei.
+
+## 2026-10-09 · Trei teste care citesc surse trec și pe un checkout Windows proaspăt (CRLF) (Task Started)
+
+**Prompt (Andrei):** „Do this task here: “Make three source-reading tests pass on CRLF checkouts”” (sarcina propusă
+pe 08.10, la rularea mutațiilor).
+**Model:** Claude Opus 5.5.
+**Ce e:** pe un `git worktree add` proaspăt pe Windows (`core.autocrlf=true`, deci toate fișierele CRLF) pică trei teste
+care pe checkout-ul principal (fișiere în parte LF) și pe CI (Linux) trec: `chatWindow.test.ts` și `passwordReset.test.ts`
+(un regex peste sursă nu se potrivește pe CRLF) și `offlineStamp.test.mjs` (cazul „line endings do not count” raportează o
+problemă). Controlul negativ al mutațiilor din 08.10 s-a oprit în ele.
+**Plan:** reproducerea într-un worktree din afara Drive-ului, cauza fiecăruia, testul care normalizează terminatorii (sau
+verificatorul, dacă testul are dreptate), aceleași aserțiuni; porți, commit, push. Nimic de publicat.
+
+## 2026-10-09 · Trei teste care citesc surse trec și pe un checkout Windows proaspăt (CRLF) (Task Completed)
+
+**Prompt (Andrei):** „Do this task here: “Make three source-reading tests pass on CRLF checkouts””.
+**Model:** Claude Opus 5.5.
+
+**Reprodus** într-un worktree din afara Drive-ului (`core.autocrlf=true`, toate fișierele CRLF): exact cele trei pică,
+pe checkout-ul principal și pe CI trec.
+
+**Cauzele:**
+- `chatWindow.test.ts` și `passwordReset.test.ts` taie corpul funcției cu un regex ancorat pe `\n  };\n`, care nu se
+  potrivește pe `\r\n` (`null[0]`).
+- `offlineStamp.test.mjs`, „line endings do not count”: verificatorul (`distProblems`) era corect, normalizează ambele
+  părți. Testul greșea: făcea `\n` → `\r\n` dintr-un `public/sw.js` deja CRLF, deci `\r\r\n`, pe care nu-l scrie
+  niciun checkout.
+
+**Reparat:**
+- primele două normalizează sursa citită (`replace(/\r\n/g, '\n')`), ca `chatMessage.test.ts` pe 08.10;
+- al treilea construiește variantele LF și CRLF dintr-o bază LF, cere ca ele chiar să difere, și verifică ambele
+  direcții (lucrătorul din LF față de sursa CRLF și invers).
+
+Aserțiunile sunt aceleași.
+
+**Probat:**
+- cele trei trec pe ambele checkout-uri;
+- controalele inverse pe surse CRLF pică toate trei: verificatorul care nu mai ignoră terminatorii, throttle-ul
+  „scrie...” care nu se mai resetează, limba e-mailului setată după trimitere;
+- pe checkout-ul CRLF trec toată suita de unitate (2585, unul sărit: bundle-ul APK, absent din git) și `test:rules`
+  (805);
+- recenzie adversarială (Workflow): nicio problemă. Fișierele sunt stocate LF în git, deci normalizarea dă înapoi
+  exact textul de pe CI.
+
+**Porți în repo:** `tsc -b`, `lint-gate`, `npm test` (2586), `npm run build`, `check-split`, `check-offline`,
+`check-bundle`, `test:tz` (46). `test:rules` a rulat pe checkout-ul CRLF (805); în repo nu s-a schimbat nimic din ce
+rulează el.

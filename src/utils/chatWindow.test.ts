@@ -95,7 +95,8 @@ describe('pinnedInOrder', () => {
 
 describe('GroupChatWidget uses them', () => {
   // No DOM in this suite and the widget needs Firestore, so the wiring is held on the source.
-  const src = readFileSync(resolve(process.cwd(), 'src/components/GroupChatWidget.tsx'), 'utf8');
+  // Line endings normalised: a fresh Windows checkout writes CRLF, and the patterns below anchor on `\n`.
+  const src = readFileSync(resolve(process.cwd(), 'src/components/GroupChatWidget.tsx'), 'utf8').replace(/\r\n/g, '\n');
   const effect = /const q = query\([\s\S]*?\}, \[convId, basePath, windowSize\]\);/.exec(src);
 
   it('listens to the newest window only', () => {

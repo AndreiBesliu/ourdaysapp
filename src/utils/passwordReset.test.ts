@@ -68,7 +68,8 @@ describe('emailLanguage', () => {
 
 describe('Login uses them', () => {
   // No DOM in this suite and the screen needs Firebase Auth, so the wiring is held on the source.
-  const src = readFileSync(resolve(process.cwd(), 'src/screens/Login.tsx'), 'utf8');
+  // Line endings normalised: a fresh Windows checkout writes CRLF, and the patterns below anchor on `\n`.
+  const src = readFileSync(resolve(process.cwd(), 'src/screens/Login.tsx'), 'utf8').replace(/\r\n/g, '\n');
 
   it('asks Firebase for the email, in the app language, with the typed address trimmed', () => {
     const body = /const handleReset = async[\s\S]*?\n  };\n/.exec(src)![0];
