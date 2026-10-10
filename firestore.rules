@@ -1066,6 +1066,23 @@ service cloud.firestore {
             (ids.size() < 3 || rummyRowOk(seats, ids[2])) && (ids.size() < 4 || rummyRowOk(seats, ids[3]))));
       }
 
+      // What the hourly idle sweep reads of every game (functions/src/games.ts, with `gameType` and
+      // `createdAt`, typed below). Until 10.10.2026 nothing typed these three, so a member could
+      // make each a megabyte of text, and a page of such games could run the sweep out of memory.
+      // Each is now what the clients write: `lastMoveAt` the moment of the write (the web's every
+      // write stamps `serverTimestamp()`; the installed APK never writes it), `date` a day (both
+      // clients write `format(day, 'yyyy-MM-dd')` at creation, and nothing after), `finalized` a
+      // bool (the web's End writes `true`; the APK never writes it). `keys` is every key at
+      // creation and the changed ones on a move, so a game holding something older stays playable.
+      // Measured on live that day: 18 games, none with `lastMoveAt`, 14 days and 4 without a
+      // date, `finalized` true on all 18.
+      function sweepFieldsOk(d, keys) {
+        return (!keys.hasAny(['lastMoveAt']) || d.get('lastMoveAt', null) == request.time) &&
+          (!keys.hasAny(['date']) || (d.get('date', null) is string &&
+            d.date.matches('[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])'))) &&
+          (!keys.hasAny(['finalized']) || d.get('finalized', null) is bool);
+      }
+
       // Group branch stays FIRST so the existing arcade queries evaluate exactly as
       // they did before (where groupId == X ...). It is now null-guarded because a
       // GLOBAL Warlord battle has groupId == null, and isMemberOfGroup(null) would
@@ -1101,6 +1118,7 @@ service cloud.firestore {
         // Both clients write `serverTimestamp()`, and the arcade's list sorts on it: one that was
         // not a Timestamp froze the APK's list of the day for everybody.
         request.resource.data.createdAt is timestamp &&
+        sweepFieldsOk(request.resource.data, request.resource.data.keys()) &&
         // The id is the document's: a field called `id` replaced it in every list (the APK spreads
         // the data over the id) — writes and deletes then went to another game, and a map there
         // crashed the list. No client writes one; on live, no document of any collection has it.
@@ -1139,6 +1157,7 @@ service cloud.firestore {
         arcadeFieldsOk(request.resource.data) &&
         request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null) &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['id']) &&
+        sweepFieldsOk(request.resource.data, request.resource.data.diff(resource.data).affectedKeys()) &&
         // Nor may `players` be ADDED or CHANGED (see create). Judged on the DIFF, not on the
         // resulting document: a game that already carries the key must stay playable, and taking
         // the key away removes a reader, which is allowed.

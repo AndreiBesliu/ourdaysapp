@@ -5,7 +5,7 @@
 // silently ignores any other type, so "a string that looks like a date" would mean rows for ever.
 // Until 25.09.2026 no row had one. See functions/src/errorRetention.ts.
 
-import { beforeAll, beforeEach, describe, it, expect } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import * as admin from 'firebase-admin';
 import type { CallableRequest } from 'firebase-functions/v2/https';
 
@@ -16,6 +16,7 @@ const DAY = 86_400_000;
 
 let logClientError: { run: (req: CallableRequest<unknown>) => Promise<any> };
 let logServerError: (m: string, w: string, x?: unknown) => Promise<void>;
+let addServerError: (m: string, w: string, x?: unknown) => Promise<void>;
 let db: admin.firestore.Firestore;
 
 const rows = async () => (await db.collection('errorLogs').get()).docs.map((d) => d.data());
@@ -24,9 +25,11 @@ beforeAll(async () => {
   expect(FS, 'run through `npm run test:rules`').not.toBe('');
   expect(PROJECT.startsWith('demo-'), `project "${PROJECT}" is not a demo project`).toBe(true);
   logClientError = ((await import('../src/index')) as any).logClientError;
-  logServerError = (await import('../src/errorLog')).logServerError;
+  ({ logServerError, addServerError } = await import('../src/errorLog'));
   db = admin.firestore();
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 beforeEach(async () => {
   expect((await fetch(`http://${FS}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: 'DELETE' })).ok).toBe(true);
@@ -80,5 +83,23 @@ describe('a server error row', () => {
     expect(all).toHaveLength(1);
     expectExpiry(all[0], before, after);
     expect(all[0]).toMatchObject({ message: 'server boom', context: 'ai:test', source: 'server', uid: 'uid-a' });
+  });
+
+  it('the throwing writer leaves the same row', async () => {
+    await addServerError('server boom', 'ai:test', { uid: 'uid-a', stack: 's' });
+    const all = await rows();
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({ message: 'server boom', stack: 's', context: 'ai:test', source: 'server', uid: 'uid-a' });
+  });
+
+  it('when the row cannot be written, one throws and the other never does', async () => {
+    // logServerError's callers rely on it never throwing; the idle-game sweep (games.ts) must know.
+    const real = db.collection.bind(db);
+    vi.spyOn(db, 'collection').mockImplementation(((p: string) => {
+      if (p !== 'errorLogs') return real(p);
+      return { add: () => Promise.reject(new Error('injected: errorLogs unwritable')) };
+    }) as never);
+    await expect(addServerError('server boom', 'ai:test')).rejects.toThrow('injected');
+    await expect(logServerError('server boom', 'ai:test')).resolves.toBeUndefined();
   });
 });

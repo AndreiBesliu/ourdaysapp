@@ -68,15 +68,16 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Arcade, în interiorul grupului:** mutările din APK nu scriu `lastMoveAt`, deci un joc jucat doar
   pe telefon poate fi închis de expirarea de 24h în timp ce e jucat (dedus din cod, nemăsurat).
   (Titlul push-ului din `gameType` e închis din 06.10.)
-- **Expirarea jocurilor: ce a rămas după fereastra care se mută (10.10).** Fereastra, cursorul, oprirea la
-  cotă și la timp, citirea doar a câmpurilor verdictului, tura lentă și statisticile Admin sunt reparate.
-  Rămân (a doua recenzie, confirmate):
-  - **`lastMoveAt`, `date` și `finalized` nu sunt tipate în regulile jocurilor.** Un membru le poate umfla
-    (un text de 1 MiB), iar `select` le citește întregi. Plasa din cod: pagini de 50 și timpul verificat
-    între pagini. Remediul întreg e regula: timp, text scurt, bool (verificat întâi pe live).
-  - **Un joc umflat aproape de 1 MiB nu mai poate fi închis** (scrierea depășește limita documentului), iar
-    fiecare rulare care îl întâlnește iese cu eșec: jobul rămâne roșu. Defect vechi. Remediul: un astfel de
-    refuz (`INVALID_ARGUMENT`) pus deoparte, raportat o dată, nu numărat ca eșec la fiecare rulare.
+- **Jocurile, după expirarea reparată (10.10): ce a rămas, mărunt.**
+  - **`date` nu e fixat după creare.** Un membru poate muta ziua unui joc departe în viitor, iar expirarea nu-l
+    mai închide. La fel poate scrie `finalized: true`. E jocul propriului grup, iar golul e mai vechi decât
+    regula din 10.10. Niciun client nu rescrie `date` după creare, deci fixarea lui nu refuză nimic.
+  - **`status` nu e tipat** (îl citesc listele și statisticile Admin). Clienții scriu doar `waiting`, `playing`
+    și `finished`.
+- **Statisticile din Admin citesc documente întregi:** până la 5000 de jocuri, 8000 de evenimente, 5000 de
+  carduri și 8000 de notificări, la fiecare deschidere a panoului. Un membru care umflă documente (fiecare
+  până la 1 MiB) poate face panoul să cadă din lipsă de memorie. Doar adminul vede. Remediul: `select` pe
+  câmpurile numărate și `count()` pentru totaluri.
 - **Ce a rămas după evenimente, carduri și cheltuieli (08.10; tipul câmpurilor afișate e închis):**
   - **Elementele unui checklist și zilele de excepție nu sunt judecate de reguli** (regulile n-au bucle).
     Web-ul le citește prin normalizare. Un element vechi cu `id` care nu e text primește pe ecran un id

@@ -9,6 +9,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as admin from 'firebase-admin';
 import { expiryRefusal } from '../src/gameSession';
+import { fingerprint } from '../src/errorGrouping';
 
 const PROJECT = process.env.GCLOUD_PROJECT || '';
 const HOST = process.env.FIRESTORE_EMULATOR_HOST || '';
@@ -20,7 +21,7 @@ let mod: typeof import('../src/games');
 
 const fresh = () => ({ gameType: 'tic-tac-toe', groupId: 'g1', lastMoveAt: admin.firestore.Timestamp.fromMillis(Date.now()) });
 const idle = () => ({ gameType: 'tic-tac-toe', groupId: 'g2', lastMoveAt: admin.firestore.Timestamp.fromMillis(Date.now() - 3 * DAY) });
-const counts = () => ({ scanned: 0, due: 0, closed: 0, raced: 0, failed: 0, slowLap: 0, cut: 0 });
+const counts = () => ({ scanned: 0, due: 0, closed: 0, raced: 0, failed: 0, unclosable: 0, slowLap: 0, cut: 0 });
 type Opts = Parameters<typeof import('../src/games').sweepIdleGames>[4];
 const run = async (opts: Opts = {}) => {
   const c = counts();
@@ -224,6 +225,222 @@ describe('the turn, for the health panel', () => {
     ];
     expect(new Set(lines.map(shape)).size).toBe(1);
     expect(lines[0].length).toBeLessThanOrEqual(200);
+  });
+});
+
+describe('a game nobody can write any more', () => {
+  // A member can pad a game to just under the 1 MiB a document may hold (the board, the hands — the
+  // rules type the fields the panels read, not how much a game holds). Closing it adds a few fields,
+  // and the server refuses the write: INVALID_ARGUMENT, "maximum entity size". Until 10.10.2026 that
+  // counted as a failure on every run that met it, and the job stayed red for good.
+  // The pad that fits under the limit with these fields and this id, on the emulator (measured the
+  // same day: 1 048 455 is the most it takes); the few bytes closing adds do not.
+  const fat = () => ({ ...idle(), state: { pad: 'x'.repeat(1_048_440) } });
+
+  it('is counted as unclosable, not as a failure, and the run goes on to the next', async () => {
+    await seed({ fat: fat(), g01: idle() });
+    const r = await run({ window: 10 });
+    expect(r.counts).toMatchObject({ scanned: 2, due: 2, closed: 1, failed: 0, unclosable: 1 });
+    expect(await isClosed('g01')).toBe(true);
+    expect(await isClosed('fat')).toBe(false);
+  });
+
+  it('and the health marker stays ok, with the game in the line', async () => {
+    await seed({ fat: fat() });
+    await (mod.expireIdleGames as unknown as { run: (e: unknown) => Promise<void> }).run(EVENT);
+    const m = (await db.doc('jobRuns/expireIdleGames').get()).data();
+    expect(m).toMatchObject({ ok: true });
+    expect(m!.detail).toContain('failed 0, unclosable 1');
+  });
+
+  // Every gRPC code but INVALID_ARGUMENT, and an error with none (the SDK's own checks): the retryable
+  // ones the SDK gives up on, and the refusals that say nothing about the document. A classifier wider
+  // than "3" would hide one of these.
+  it.each([
+    [1, 'CANCELLED'], [2, 'UNKNOWN'], [4, 'DEADLINE_EXCEEDED'], [5, 'NOT_FOUND'], [6, 'ALREADY_EXISTS'],
+    [7, 'PERMISSION_DENIED'], [8, 'RESOURCE_EXHAUSTED'], [9, 'FAILED_PRECONDITION'], [10, 'ABORTED'],
+    [11, 'OUT_OF_RANGE'], [12, 'UNIMPLEMENTED'], [13, 'INTERNAL'], [14, 'UNAVAILABLE'], [15, 'DATA_LOSS'],
+    [16, 'UNAUTHENTICATED'], [undefined, 'no code'],
+  ])('a close that fails with code %s (%s) is still a failure', async (code, name) => {
+    await seed({ g01: idle() });
+    vi.spyOn(db, 'runTransaction').mockRejectedValue(Object.assign(new Error(`${code} ${name}: injected`), code === undefined ? {} : { code }));
+    const r = await run({ window: 10 });
+    expect(r.counts).toMatchObject({ due: 1, closed: 0, failed: 1, unclosable: 0 });
+  });
+
+  // Counted in the line is not reported: a green line that changes every hour reaches nobody. A run
+  // that meets such a game for the first time leaves ONE row in errorLogs (the Health panel's
+  // problems, the digest), and the ids go where the row says, so the next runs do not repeat it.
+  const reports = async () => (await db.collection('errorLogs').where('context', '==', 'job:expireIdleGames:unclosable').get()).docs;
+  const WEEK = 7 * 86_400_000;
+  /** Small, fresh games that sort after the padded ones and keep a turn from ending in one run. */
+  const others = (n: number) => many('old', n, fresh);
+
+  it('is reported once, in errorLogs, with the ids kept in the sweep’s state', async () => {
+    await seed({ fat: fat(), g01: idle() });
+    await run({ window: 10 });
+    expect(await reports()).toHaveLength(1);
+    expect((await state())?.unclosable).toEqual(['fat']);
+    // The next turn meets it again, and says nothing new.
+    await run({ window: 10 });
+    expect(await reports()).toHaveLength(1);
+    // A second one is news: one row more.
+    await seed({ fat2: fat() });
+    await run({ window: 10 });
+    expect(await reports()).toHaveLength(2);
+    expect((await state())?.unclosable).toEqual(['fat', 'fat2']);
+  });
+
+  it('one row a run, however many are new, and the same problem every time', async () => {
+    await seed({ fat: fat(), fat2: fat(), fat3: fat() });
+    await run({ window: 10 });
+    const rows = await reports();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].data().message).toContain('3 idle game(s) cannot be closed');
+    expect((await state())?.unclosable).toEqual(['fat', 'fat2', 'fat3']);
+    await seed({ fat4: fat() });
+    await run({ window: 10 });
+    const again = await reports();
+    expect(again).toHaveLength(2);
+    const prints = new Set(again.map((d) => fingerprint(d.data().message, d.data().context)));
+    expect(prints.size).toBe(1);
+  });
+
+  it('a game met for the first time is remembered only once its row is written: a run that dies after it reports it next time', async () => {
+    await seed({ fat: fat(), g01: idle(), g02: idle() });
+    const real = db.collection.bind(db);
+    let pages = 0;
+    vi.spyOn(db, 'collection').mockImplementation(((p: string) => {
+      if (p === 'games' && ++pages === 2) throw new Error('injected: page 2 unreadable');
+      return real(p);
+    }) as never);
+    await expect(run({ window: 10, page: 2 })).rejects.toThrow('injected');
+    expect(await reports()).toHaveLength(0);
+    expect((await state())?.unclosable ?? []).toEqual([]);
+    vi.restoreAllMocks();
+    await run({ window: 10 });
+    expect(await reports()).toHaveLength(1);
+    expect((await state())?.unclosable).toEqual(['fat']);
+  });
+
+  it('a row that cannot be written is a failure of the run, and the game is news the next time', async () => {
+    await seed({ fat: fat() });
+    const real = db.collection.bind(db);
+    vi.spyOn(db, 'collection').mockImplementation(((p: string) => {
+      if (p !== 'errorLogs') return real(p);
+      return { add: () => Promise.reject(Object.assign(new Error('14 UNAVAILABLE: injected'), { code: 14 })) };
+    }) as never);
+    const r = await run({ window: 10 });
+    expect(r.counts).toMatchObject({ unclosable: 1, failed: 1 });
+    vi.restoreAllMocks();
+    expect((await state())?.unclosable).toEqual([]);
+    await run({ window: 10 });
+    expect(await reports()).toHaveLength(1);
+    expect((await state())?.unclosable).toEqual(['fat']);
+  });
+
+  it('reported again a week after the last row while it is still met, and not sooner', async () => {
+    await seed({ fat: fat() });
+    await db.doc(mod.SWEEP_STATE_DOC).set({ after: null, lapRuns: 0, lastLapRuns: null, unclosable: ['fat'], unclosableReportedAt: Date.now() - WEEK + 3_600_000 });
+    await run({ window: 10 });
+    expect(await reports()).toHaveLength(0);
+    await db.doc(mod.SWEEP_STATE_DOC).set({ after: null, lapRuns: 0, lastLapRuns: null, unclosable: ['fat'], unclosableReportedAt: Date.now() - WEEK - 1000 });
+    await run({ window: 10 });
+    const rows = await reports();
+    expect(rows).toHaveLength(1);
+    // The games met in the run, not only the new ones: here one, and none of it news.
+    expect(rows[0].data().message).toContain('1 idle game(s) cannot be closed');
+    expect((await state())?.unclosableReportedAt).toBeGreaterThan(Date.now() - 60_000);
+    // A week has to pass again.
+    await run({ window: 10 });
+    expect(await reports()).toHaveLength(1);
+    expect(mod.UNCLOSABLE_REPORT_EVERY_MS).toBe(WEEK);
+  });
+
+  it('is tried again each turn, and closed once it can be; it then leaves the list', async () => {
+    await seed({ fat: fat() });
+    await run({ window: 10 });
+    expect((await state())?.unclosable).toEqual(['fat']);
+    // Somebody makes it small again.
+    await db.doc('games/fat').update({ state: {} });
+    const r = await run({ window: 10 });
+    expect(r.counts).toMatchObject({ closed: 1, unclosable: 0 });
+    expect((await state())?.unclosable).toEqual([]);
+  });
+
+  it('a game played again leaves the list too', async () => {
+    await seed({ fat: fat() });
+    await run({ window: 10 });
+    await db.doc('games/fat').update({ lastMoveAt: admin.firestore.Timestamp.fromMillis(Date.now()) });
+    const r = await run({ window: 10 });
+    expect(r.counts).toMatchObject({ due: 0, unclosable: 0 });
+    expect((await state())?.unclosable).toEqual([]);
+  });
+
+  it('and a game deleted since leaves it when a turn ends', async () => {
+    await seed({ fat: fat() });
+    await run({ window: 10 });
+    expect((await state())?.unclosable).toEqual(['fat']);
+    await db.doc('games/fat').delete();
+    await run({ window: 10 });
+    expect((await state())?.unclosable).toEqual([]);
+  });
+
+  it('but not before the turn ends', async () => {
+    await seed({ fat: fat() });
+    await run({ window: 10 });
+    await db.doc('games/fat').delete();
+    await seed(others(12));
+    await run({ window: 5 });
+    expect((await state())?.unclosable).toEqual(['fat']);
+  });
+
+  it('one met again moves to the end of the list, so it is not the first to go', async () => {
+    // The listed games exist and this run reads only the two padded ones, so the turn does not end
+    // and no listed game is met: only the cap shortens the list.
+    await seed(others(mod.UNCLOSABLE_KEPT - 1));
+    await seed({ fat: fat(), fat2: fat() });
+    await db.doc(mod.SWEEP_STATE_DOC).set({
+      after: null, lapRuns: 0, lastLapRuns: null, unclosableReportedAt: Date.now(),
+      unclosable: ['fat', ...ids('old', mod.UNCLOSABLE_KEPT - 1)],
+    });
+    await run({ window: 2 });
+    const kept = (await state())?.unclosable as string[];
+    expect(kept).toHaveLength(mod.UNCLOSABLE_KEPT);
+    expect(kept.slice(-2)).toEqual(['fat', 'fat2']);
+    expect(kept).not.toContain('old00');
+    expect(await reports()).toHaveLength(1);
+  });
+
+  it('the list is bounded, and keeps the latest', async () => {
+    await seed(others(mod.UNCLOSABLE_KEPT));
+    await seed({ fat: fat() });
+    await db.doc(mod.SWEEP_STATE_DOC).set({
+      after: null, lapRuns: 0, lastLapRuns: null, unclosableReportedAt: Date.now(), unclosable: ids('old', mod.UNCLOSABLE_KEPT),
+    });
+    await run({ window: 1 });
+    const kept = (await state())?.unclosable as string[];
+    expect(kept).toHaveLength(mod.UNCLOSABLE_KEPT);
+    expect(kept[kept.length - 1]).toBe('fat');
+    expect(kept).not.toContain('old00');
+  });
+
+  it('a list of anything else is read as an empty one', async () => {
+    await seed({ fat: fat() });
+    await db.doc(mod.SWEEP_STATE_DOC).set({ after: null, lapRuns: 0, lastLapRuns: null, unclosableReportedAt: Date.now(), unclosable: [5, { a: 1 }, 'fat', ''] });
+    await run({ window: 10 });
+    expect(await reports()).toHaveLength(0);
+    expect((await state())?.unclosable).toEqual(['fat']);
+    await db.doc(mod.SWEEP_STATE_DOC).set({ after: null, lapRuns: 0, lastLapRuns: null, unclosableReportedAt: Date.now(), unclosable: 'fat' });
+    await run({ window: 10 });
+    expect(await reports()).toHaveLength(1);
+  });
+
+  it('a report time that is not one is read as never', async () => {
+    await seed({ fat: fat() });
+    await db.doc(mod.SWEEP_STATE_DOC).set({ after: null, lapRuns: 0, lastLapRuns: null, unclosable: ['fat'], unclosableReportedAt: 'yesterday' });
+    await run({ window: 10 });
+    expect(await reports()).toHaveLength(1);
   });
 });
 

@@ -12758,3 +12758,80 @@ compartimentele de rezervă. Rulează într-un worktree din afara Drive-ului, cu
 **Porți:** `tsc -b`, `lint-gate`, `npm test` (2609), `npm run build`, `test:rules` (826).
 
 **Nepublicat.** S-au schimbat doar teste. Codul din `a618017` pleacă cu funcțiile, cu acordul lui Andrei.
+
+## 2026-10-10 · Jocurile umflate: câmpurile verdictului tipate, iar un joc care nu se poate închide nu mai ține jobul roșu (Task Started)
+
+**Prompt (Andrei):** „Continua”.
+**Model:** Claude Opus 5.5.
+**Ce e** (BACKLOG, secțiunea 2, ce a rămas după fereastra care se mută):
+- `lastMoveAt`, `date` și `finalized` nu au tipul verificat de regulile jocurilor. Un membru le poate umfla până la
+  1 MiB, iar fereastra expirării le citește întregi.
+- Un joc umflat aproape de limita documentului nu mai poate fi închis. Fiecare rulare care îl întâlnește iese cu
+  eșec, deci jobul rămâne roșu.
+
+**Plan:**
+- Reguli: `lastMoveAt` doar ora cererii (web-ul scrie `serverTimestamp()`, APK-ul deloc), `date` o zi `yyyy-MM-dd`
+  (ambele clienturi o scriu prin `format`), `finalized` un bool. Pe creare se judecă toate cheile, pe modificare
+  doar ce se schimbă.
+- Expirarea: un joc pe care serverul refuză să-l scrie (`INVALID_ARGUMENT`) e numărat separat, ca „de neînchis”,
+  nu ca eșec.
+- Pași: întâi măsurătoare pe live, apoi probă pe emulator, recenzie, mutații și porți.
+
+## 2026-10-10 · Jocurile umflate: câmpurile verdictului tipate, iar un joc care nu se poate închide nu mai ține jobul roșu (Task Completed)
+
+**Prompt (Andrei):** „Continua”.
+**Model:** Claude Opus 5.5.
+
+**Măsurat pe live (doar numărători):** 18 jocuri. Niciunul nu are `lastMoveAt`. `date` e o zi validă la 14 și
+lipsește la 4. `finalized` e `true` la toate 18. Toate au sub 10 kB. Regula nouă nu refuză nimic din ce există.
+
+**Reprodus pe emulator:** un joc umflat până la 1 048 455 de octeți se scrie, dar închiderea lui e refuzată cu
+codul 3 (`INVALID_ARGUMENT: maximum entity size`). Rularea număra asta ca `failed 1`, deci jobul devenea roșu la
+fiecare rulare care îl întâlnea.
+
+**Regulile jocurilor (`sweepFieldsOk`).**
+- `lastMoveAt` poate fi doar ora cererii: pe web, fiecare scriere pune `serverTimestamp()`, iar APK-ul nu îl
+  scrie deloc.
+- `date` e o zi `yyyy-MM-dd`, cu luna și ziua în interval. Ambii clienți o scriu prin `format`, doar la creare.
+- `finalized` e un bool: îl scriu doar butonul End și expirarea.
+- La creare se judecă toate cheile, la modificare doar cele schimbate. Un joc care ține ceva mai vechi rămâne
+  jucabil și poate fi încheiat.
+- Am verificat în bundle-ul APK-ului ce scrie pe jocuri. Testele refuzului verifică și că nu vine din plafonul
+  de 1000 de expresii.
+
+**Expirarea (`functions/src/games.ts`).**
+- O închidere refuzată cu codul 3 se numără ca „de neînchis”, nu ca eșec. Apare în linia panoului
+  (`unclosable N`), iar marcajul rămâne ok. Orice alt cod, sau o eroare fără cod, rămâne eșec.
+- **Raportarea:** prima rulare care întâlnește un astfel de joc lasă UN rând în `errorLogs` (problemele din
+  Health și rezumatul). Id-urile stau în `jobState/expireIdleGames`, câmpul `unclosable`, maximum 500, cele mai
+  recente. Rulările următoare nu repetă rândul. Îl repetă abia după o săptămână, dacă jocul e încă acolo,
+  fiindcă rândul expiră după 90 de zile.
+- Un joc intră în listă abia după ce rândul lui s-a scris. Dacă rularea moare înainte, sau rândul nu se poate
+  scrie, jocul e raportat data viitoare. Un rând nescris e eșec al rulării.
+- Jocul e încercat din nou la fiecare tură, deci unul micșorat între timp se închide.
+- Ieșirea din listă: când jocul e închis, când e jucat din nou, sau, la sfârșitul turei, când a fost șters.
+- `errorLog.ts` are acum `addServerError`, care aruncă la eșec. `logServerError` e aceeași scriere, fără să
+  arunce; rândul se construiește într-un singur loc.
+
+**Recenzii (Workflow).**
+- **Prima** (9 agenți): 5 constatări, 4 confirmate, toate mici.
+  - Jocul de neînchis nu ajungea la nimeni: nici rând de eroare, nici badge, nici rezumat.
+  - Testele pentru `date` nu treceau prin toate ramurile expresiei.
+  - Clasificarea era testată pe un singur alt cod.
+  - Respinsă: o zi foarte îndepărtată în viitor. Golul e mai vechi decât schimbarea; trecut în BACKLOG.
+- **A doua**, pe remediere (10 agenți): 6 confirmate (două găsite de câte două lentile), toate mici.
+  - Un id nou se salva înaintea rândului lui, deci o rulare moartă îl pierdea pentru totdeauna.
+  - Un rând unic dispare după 90 de zile.
+  - Un joc șters rămânea în listă.
+  - Testele nu fixau lungimea anului, nici „un rând pe rulare”.
+  - Toate sunt reparate, cu teste.
+
+**Mutații: 39 din 39 prinse,** în worktree în afara Drive-ului, cu controale negative pe suitele proprii și pe
+cele complete.
+- Prima rulare: 38 prinse. A supraviețuit E1: că `logServerError` nu aruncă nu era fixat de niciun test.
+- Test nou în `errorLogExpiry.test.ts`, apoi E1 reluat: prins.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2609), `npm run build`, `check-split`, `check-offline`,
+`check-bundle`, `test:tz`, `test:rules` (862). `functions/lib` reconstruit.
+
+**Nepublicat.** Pleacă cu funcțiile și cu regulile, în ordinea obișnuită, cu acordul lui Andrei.

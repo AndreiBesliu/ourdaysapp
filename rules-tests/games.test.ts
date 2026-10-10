@@ -14,7 +14,7 @@
 
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import {
-  addDoc, collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where,
+  addDoc, collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, serverTimestamp, setDoc, Timestamp, updateDoc, where,
 } from 'firebase/firestore';
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -513,5 +513,80 @@ describe('what the APK reads of a game outside it has the shape the games write'
     for (const id of ['g-dated', 'g-undated', 'g-arcade']) {
       await assertSucceeds(updateDoc(doc(as(BOB), 'games', id), { status: 'playing' }));
     }
+  });
+});
+
+// ── 10.10.2026: what the idle sweep reads of a game ─────────────────────────────────────────────
+// The hourly sweep reads `lastMoveAt`, `date` and `finalized` of every game (with `gameType` and
+// `createdAt`, typed above), and nothing typed them: a member could make each a megabyte of text,
+// and a page of such games could run the sweep out of memory. Each is now what the clients write:
+// `lastMoveAt` the moment of the write (the web's `serverTimestamp()`; the installed APK never
+// writes it), `date` a day `yyyy-MM-dd` (both clients, through `format`), `finalized` a bool (the
+// web's End and the sweep write `true`; the APK never). Judged on every key at creation and on the
+// keys a write changes, so a game holding something older stays playable. Measured on live that
+// day: 18 games, no `lastMoveAt`, 14 dates all days, 4 without, `finalized` true on all 18.
+
+async function refused(write: Promise<unknown>) {
+  const err = await assertFails(write);
+  expect(String((err as { message?: string })?.message ?? err)).not.toMatch(/maximum of 1000 expressions/);
+}
+
+describe('what the idle sweep reads of a game has the shape the clients write', () => {
+  const ttt = WEB_GAME(BOB, 'tic-tac-toe');
+  const HUGE = 'x'.repeat(200_000);
+  const past = () => Timestamp.fromMillis(Date.now() - 3 * 86_400_000);
+  const future = () => Timestamp.fromMillis(Date.now() + 3 * 86_400_000);
+
+  it('at creation', async () => {
+    for (const lastMoveAt of [HUGE, '2026-10-10T00:00:00.000Z', 0, null, POISON, past(), future()]) {
+      await refused(addDoc(collection(as(BOB), 'games'), { ...ttt, lastMoveAt }));
+    }
+    for (const date of [
+      HUGE, HUGE + '2026-10-06', 'x2026-10-06', '9'.repeat(200_000) + '-10-06', '12026-10-06', '026-10-06',
+      '2026-10-6', '2026-13-01', '2026-00-15', '2026-10-32', '2026-10-00',
+      '2026-10-06T10:00:00Z', '', 20261006, null, POISON,
+    ]) {
+      await refused(addDoc(collection(as(BOB), 'games'), { ...ttt, date }));
+    }
+    for (const finalized of [HUGE, 'true', 1, null, POISON]) {
+      await refused(addDoc(collection(as(BOB), 'games'), { ...ttt, finalized }));
+    }
+    // Controls: the web's create, the installed APK's (no `lastMoveAt`), no `date` at all, and a bool.
+    const { date: _noDate, ...undated } = ttt;
+    for (const g of [ttt, APK_TTT(BOB), undated, { ...ttt, finalized: false }]) {
+      await assertSucceeds(addDoc(collection(as(BOB), 'games'), g));
+    }
+    // Every day a calendar can pick, through each branch of the pattern, from both clients.
+    for (const date of ['2026-01-01', '2026-02-09', '2026-09-10', '2026-10-15', '2026-11-19', '2026-11-20', '2026-12-29', '2026-12-30', '2026-12-31']) {
+      await assertSucceeds(addDoc(collection(as(BOB), 'games'), { ...ttt, date }));
+      await assertSucceeds(addDoc(collection(as(BOB), 'games'), { ...APK_TTT(BOB), date }));
+    }
+  });
+
+  it('on a move', async () => {
+    const made = await assertSucceeds(addDoc(collection(as(BOB), 'games'), ttt));
+    const g = doc(as(ALICE), 'games', made.id);
+    for (const change of [
+      { lastMoveAt: HUGE }, { lastMoveAt: past() }, { lastMoveAt: future() }, { lastMoveAt: 0 }, { lastMoveAt: deleteField() },
+      { date: HUGE }, { date: HUGE + '2026-10-06' }, { date: '12026-10-06' }, { date: '2026-1-1' }, { date: 5 }, { date: null },
+      { finalized: HUGE }, { finalized: 'true' }, { finalized: 1 }, { finalized: null },
+    ]) {
+      await refused(updateDoc(g, change));
+    }
+    // The writes the games really make: the web's (every one stamps `lastMoveAt`), the APK's (none
+    // does), the web's End.
+    await assertSucceeds(updateDoc(g, { 'state.players.O': ALICE, status: 'playing', lastMoveAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(g, { 'state.board': Array(9).fill(null), status: 'playing' }));
+    await assertSucceeds(updateDoc(g, { ...finalizeGameUpdate({ gameType: 'tic-tac-toe', state: {} }), lastMoveAt: serverTimestamp() }));
+  });
+
+  it('a game that already holds something else stays playable and can be ended', async () => {
+    await seed(async (db) => {
+      await setDoc(doc(db, 'games', 'g-odd'), { ...APK_TTT(ALICE), createdAt: new Date(), lastMoveAt: HUGE, date: 5, finalized: 'yes' });
+    });
+    const g = doc(as(BOB), 'games', 'g-odd');
+    await assertSucceeds(updateDoc(g, { 'state.players.O': BOB, status: 'playing' }));
+    await assertSucceeds(updateDoc(g, { 'state.moves': 1, lastMoveAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(g, { ...finalizeGameUpdate({ gameType: 'tic-tac-toe', state: {} }), lastMoveAt: serverTimestamp() }));
   });
 });

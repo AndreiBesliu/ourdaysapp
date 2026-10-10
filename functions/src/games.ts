@@ -21,6 +21,7 @@ import {
   type ExpiryRefusal,
 } from "./gameSession";
 import { runJob, type JobOutcome } from "./jobRuns";
+import { addServerError } from "./errorLog";
 
 /**
  * How many idle games one run tries to close.
@@ -50,8 +51,9 @@ export const PER_RUN = 200;
 export const SCAN_WINDOW = 2000;
 /**
  * Documents per query within the window. Small on purpose: a document can be a megabyte, and the
- * verdict's own fields (`lastMoveAt`, `date`, `finalized`) are not typed by the rules yet, so one page
- * of padded games must not be able to run the function out of memory (review of 10.10.2026).
+ * verdict's own fields (`lastMoveAt`, `date`, `finalized`) were typed by the rules only from
+ * 10.10.2026 — a game written before, or by a rule not yet published, may hold a megabyte in any of
+ * them — so one page of padded games must not be able to run the function out of memory.
  */
 const PAGE = 50;
 /**
@@ -69,6 +71,18 @@ export const MAX_LAP_RUNS = 24;
 /** Where the window stops between runs. No rule matches `jobState`, so no client reads or writes it. */
 export const SWEEP_STATE_DOC = "jobState/expireIdleGames";
 /**
+ * How many games that cannot be closed the sweep remembers (their ids, in `unclosable` on the state
+ * document), so each is reported once rather than every hour. The latest met are kept: past this
+ * many, the oldest goes, and is reported again if it is met again — a row an hour at most.
+ */
+export const UNCLOSABLE_KEPT = 500;
+/**
+ * And reported again this long after the last report, while such games are still met: one row
+ * expires after 90 days (errorRetention.ts) and leaves the panel's newest 500 rows sooner, and a game
+ * that is still there must not go back to being a number in a green line.
+ */
+export const UNCLOSABLE_REPORT_EVERY_MS = 7 * 86_400_000;
+/**
  * The fields the expiry verdict reads (`expiryRefusal`), and the only ones the window reads. A game
  * padded to a megabyte costs the window nothing; only a game that is due is read whole, one at a time,
  * inside the transaction that closes it.
@@ -76,8 +90,17 @@ export const SWEEP_STATE_DOC = "jobState/expireIdleGames";
 const VERDICT_FIELDS = ["gameType", "finalized", "lastMoveAt", "createdAt", "date"];
 
 export type SweepCounts = {
-  scanned: number; due: number; closed: number; raced: number; failed: number; slowLap: number; cut: number;
+  scanned: number; due: number; closed: number; raced: number; failed: number; unclosable: number; slowLap: number;
+  cut: number;
 };
+
+/**
+ * The server refused the write for what the DOCUMENT is, not for anything this job did: gRPC
+ * INVALID_ARGUMENT (3). A game padded to just under the 1 MiB a document may hold takes no more
+ * fields, and closing it adds a few: "maximum entity size is 1048576 bytes" (measured on the
+ * emulator, 10.10.2026). Nothing this job can do closes it.
+ */
+const isUnwritable = (err: unknown): boolean => (err as { code?: unknown } | null)?.code === 3;
 
 export interface SweepResult {
   /** Runs into the turn of the collection, this one included; 0 when this run completed a turn. */
@@ -125,6 +148,18 @@ export async function sweepIdleGames(
   const startedAfter = typeof prev.after === "string" && prev.after ? prev.after : null;
   const lapRunsBefore = wholeRuns(prev.lapRuns);
   const lastLapBefore: number | null = prev.lastLapRuns == null ? null : wholeRuns(prev.lastLapRuns);
+  // The games already REPORTED as impossible to close, oldest first. A game leaves the list when it
+  // is met and is no longer one (closed after all, or played again since), or when a turn ends and
+  // it is not there any more. A game met for the first time joins it only once its report is written:
+  // remembered before, a run that died, or a report that failed, would have kept it quiet for good.
+  const unclosable = new Set<string>(
+    (Array.isArray(prev.unclosable) ? prev.unclosable : [])
+      .filter((id: unknown): id is string => typeof id === "string" && id !== "")
+      .slice(-UNCLOSABLE_KEPT),
+  );
+  let unclosableReportedAt = typeof prev.unclosableReportedAt === "number" && Number.isFinite(prev.unclosableReportedAt)
+    ? prev.unclosableReportedAt : 0;
+  const newlyUnclosable: string[] = [];
 
   let after = startedAfter;
   // From the cursor to the end of the collection ("tail"), then — only when this run began part of
@@ -134,7 +169,10 @@ export async function sweepIdleGames(
   let completedLap = false;
   const lapRuns = () => (completedLap ? 0 : lapRunsBefore + 1);
   const lastLapRuns = () => (completedLap ? lapRunsBefore + 1 : lastLapBefore);
-  const save = () => stateRef.set({ after, lapRuns: lapRuns(), lastLapRuns: lastLapRuns(), at: Date.now() });
+  const save = () => stateRef.set({
+    after, lapRuns: lapRuns(), lastLapRuns: lastLapRuns(), unclosable: [...unclosable].slice(-UNCLOSABLE_KEPT),
+    unclosableReportedAt, at: Date.now(),
+  });
   // Progress on the way is best-effort: the write at the end is the one that counts, and reports.
   const saveOnTheWay = async () => { try { await save(); } catch { /* the end writes it again */ } };
 
@@ -156,6 +194,7 @@ export async function sweepIdleGames(
       const refusal: ExpiryRefusal | null = expiryRefusal({ id: d.id, ...d.data() }, now);
       if (refusal !== null) {
         skipped[refusal] = (skipped[refusal] || 0) + 1;
+        unclosable.delete(d.id);
         after = d.id;
         continue;
       }
@@ -187,11 +226,25 @@ export async function sweepIdleGames(
         });
         if (wrote) counts.closed += 1;
         else counts.raced += 1;
+        unclosable.delete(d.id);
       } catch (err) {
-        counts.failed += 1;
-        console.error("GAMES_EXPIRY_FAIL " + JSON.stringify({
-          gameId: d.id, error: err instanceof Error ? err.message : String(err),
-        }));
+        const error = err instanceof Error ? err.message : String(err);
+        if (isUnwritable(err)) {
+          // Counted, and in the panel's line, but not a failure: it failed on every run that met it,
+          // and kept the job red for good (10.10.2026). Every other refusal is still a failure.
+          counts.unclosable += 1;
+          console.warn("GAMES_EXPIRY_UNCLOSABLE " + JSON.stringify({ gameId: d.id, error }));
+          // Tried again every turn — a game made small again is closed then — but reported once.
+          if (unclosable.has(d.id)) {
+            unclosable.delete(d.id);
+            unclosable.add(d.id);
+          } else {
+            newlyUnclosable.push(d.id);
+          }
+        } else {
+          counts.failed += 1;
+          console.error("GAMES_EXPIRY_FAIL " + JSON.stringify({ gameId: d.id, error }));
+        }
       }
       after = d.id;
     }
@@ -215,6 +268,38 @@ export async function sweepIdleGames(
     await saveOnTheWay();
   }
 
+  // A turn ended in this run: the ids of games deleted since they were reported go. Only while the
+  // list holds any, and once a turn; a read that fails leaves the list as it is for the next turn.
+  if (completedLap && unclosable.size > 0) {
+    try {
+      const listed = await db.getAll(...[...unclosable].map((id) => db.doc(`games/${id}`)), { fieldMask: [] });
+      for (const s of listed) if (!s.exists) unclosable.delete(s.id);
+    } catch { /* the next turn checks again */ }
+  }
+
+  // ONE row for the games that cannot be closed, into errorLogs, where the Health panel's problems
+  // and the digest read: a number in a green line reaches nobody. When one is met for the first time,
+  // and again a week after the last row while any is still met. The same words every time (digits
+  // aside), so it stays one problem; the ids are where the row says. A row that cannot be written is
+  // a failure of the run, and its games are news again next time.
+  const metUnclosable = counts.unclosable;
+  if (newlyUnclosable.length > 0 || (metUnclosable > 0 && now - unclosableReportedAt >= UNCLOSABLE_REPORT_EVERY_MS)) {
+    try {
+      await addServerError(
+        `expireIdleGames: ${metUnclosable} idle game(s) cannot be closed, the document is at its size limit; `
+          + `the ids are in ${SWEEP_STATE_DOC}, field unclosable`,
+        "job:expireIdleGames:unclosable",
+      );
+      for (const id of newlyUnclosable) unclosable.add(id);
+      unclosableReportedAt = now;
+    } catch (err) {
+      counts.failed += 1;
+      console.error("GAMES_EXPIRY_FAIL " + JSON.stringify({
+        report: "unclosable", error: err instanceof Error ? err.message : String(err),
+      }));
+    }
+  }
+
   // The cursor once more at the end (also when the cap stopped the run mid-page). A run that dies
   // before this repeats at most the page it died in, never skips a game; a failed write is counted.
   try {
@@ -235,7 +320,7 @@ export async function sweepIdleGames(
 /** The run's line for the health panel: the same words every run, only the numbers change, so one
  *  recurring problem stays one group in the error log (errorGrouping.ts drops digits, not words). */
 export function sweepDetail(c: SweepCounts, r: SweepResult): string {
-  return `scanned ${c.scanned}, idle ${c.due}, closed ${c.closed}, failed ${c.failed}, `
+  return `scanned ${c.scanned}, idle ${c.due}, closed ${c.closed}, failed ${c.failed}, unclosable ${c.unclosable}, `
     + `turn ${r.lapRuns}/${r.lastLapRuns ?? 0} (limit ${MAX_LAP_RUNS}), stopped early ${c.cut}`;
 }
 
@@ -249,7 +334,9 @@ export const expireIdleGames = onSchedule(
     // One line per run, whatever the run did — same shape as REMINDERS_RUN and ERROR_DIGEST, so
     // the same grep finds it. `skipped` is broken down by reason: a sweep that only reports what
     // it closed cannot be told apart from one that is silently skipping everything.
-    const counts: SweepCounts = { scanned: 0, due: 0, closed: 0, raced: 0, failed: 0, slowLap: 0, cut: 0 };
+    const counts: SweepCounts = {
+      scanned: 0, due: 0, closed: 0, raced: 0, failed: 0, unclosable: 0, slowLap: 0, cut: 0,
+    };
     const skipped: Record<string, number> = {};
     let turn: SweepResult | null = null;
     const done = () => {

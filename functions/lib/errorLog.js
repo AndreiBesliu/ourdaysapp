@@ -9,6 +9,7 @@
 // `initializeApp()` in index.ts has always run by then.
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.addErrorLog = addErrorLog;
+exports.addServerError = addServerError;
 exports.logServerError = logServerError;
 const admin = require("firebase-admin");
 const firestore_1 = require("firebase-admin/firestore");
@@ -18,16 +19,24 @@ async function addErrorLog(row, nowMs = Date.now()) {
         // A Timestamp, not a string or a number: the TTL policy silently ignores any other type.
         [errorRetention_1.ERROR_LOG_TTL_FIELD]: firestore_1.Timestamp.fromMillis((0, errorRetention_1.errorLogExpiryMs)(nowMs)) }));
 }
+/**
+ * Record a server-side error so it surfaces in the admin Health panel, and THROW if the row could not
+ * be written — for the caller that must not remember "reported" for a report that never landed (the
+ * idle-game sweep, games.ts).
+ */
+async function addServerError(message, where, extra) {
+    await addErrorLog({
+        message: String(message || "server error").slice(0, 1000),
+        stack: (extra === null || extra === void 0 ? void 0 : extra.stack) ? String(extra.stack).slice(0, 4000) : null,
+        context: where.slice(0, 200),
+        uid: (extra === null || extra === void 0 ? void 0 : extra.uid) || null,
+        source: "server",
+    });
+}
 /** Record a server-side error so it surfaces in the admin Health panel. Never throws. */
 async function logServerError(message, where, extra) {
     try {
-        await addErrorLog({
-            message: String(message || "server error").slice(0, 1000),
-            stack: (extra === null || extra === void 0 ? void 0 : extra.stack) ? String(extra.stack).slice(0, 4000) : null,
-            context: where.slice(0, 200),
-            uid: (extra === null || extra === void 0 ? void 0 : extra.uid) || null,
-            source: "server",
-        });
+        await addServerError(message, where, extra);
     }
     catch ( /* never let logging break the caller */_a) { /* never let logging break the caller */ }
 }
