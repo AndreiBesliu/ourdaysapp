@@ -12725,3 +12725,36 @@ Documentul `jobState` nu există încă; îl creează prima rulare a codului nou
 `check-bundle`, `test:tz`, `test:rules` (824). `functions/lib` reconstruit.
 
 **Nepublicat.** Pleacă doar cu funcțiile, cu acordul lui Andrei.
+
+## 2026-10-10 · Mutațiile pentru expirarea jocurilor și statisticile Admin (`a618017`) (Task Started)
+
+**Prompt (Andrei):** „continua”.
+**Model:** Claude Opus 5.5.
+**Ce e:** mutațiile rămase de la `a618017`. Lista de 38, plus cinci noi: plasa din a doua recenzie și
+compartimentele de rezervă. Rulează într-un worktree din afara Drive-ului, cu controale negative.
+
+## 2026-10-10 · Mutațiile pentru expirarea jocurilor și statisticile Admin (`a618017`) (Task Completed)
+
+**Prompt (Andrei):** „continua”.
+**Model:** Claude Opus 5.5.
+
+**Mutații: 43 din 43 prinse,** după trei teste noi.
+- La ambele rulări, controalele negative au trecut pe suitele proprii și pe cele complete (unitate, funcții, reguli).
+- Arborele a fost restaurat și verificat la final.
+- Prima rulare: 40 prinse și 3 supraviețuitoare, fiecare trecută și prin suitele complete.
+  - **G9: un joc încercat nu mută cursorul.** Nu se pierde niciun joc, dar pagina următoare îl recitește, iar la
+    final cursorul rămâne în urmă. Niciun test nu verifica cursorul după un joc închis. Testul nou are patru
+    jocuri, dintre care două se închid: patru citiri, iar cursorul ajunge pe ultimul.
+  - **T5 și T6: `inc` și `countOf` fără `hasOwnProperty`.** Pe un `{}` simplu sunt echivalente, fiindcă
+    `wireKey` pune deja între paranteze orice cheie moștenită; verificarea e o a doua plasă. Testul nou
+    folosește un obiect care moștenește cheia.
+- A doua rulare a luat doar cele trei, cu testele noi și cu controalele refăcute: toate prinse.
+- Cei cinci mutanți noi:
+  - B1–B3: timpul verificat între pagini, pagina de 50, ceasul înainte de prima pagină. Îi prinde un test nou:
+    oprirea între pagini, cu fereastra și pagina jobului.
+  - W5–W6: tipul jocului și categoria cardului fără compartimentul de rezervă. Îi prinde valoarea exactă a
+    fiecărei defalcări din statistici, care închide golul de test din a doua recenzie.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2609), `npm run build`, `test:rules` (826).
+
+**Nepublicat.** S-au schimbat doar teste. Codul din `a618017` pleacă cu funcțiile, cu acordul lui Andrei.

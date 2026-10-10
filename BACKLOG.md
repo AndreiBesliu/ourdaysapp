@@ -77,9 +77,6 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   - **Un joc umflat aproape de 1 MiB nu mai poate fi închis** (scrierea depășește limita documentului), iar
     fiecare rulare care îl întâlnește iese cu eșec: jobul rămâne roșu. Defect vechi. Remediul: un astfel de
     refuz (`INVALID_ARGUMENT`) pus deoparte, raportat o dată, nu numărat ca eșec la fiecare rulare.
-  - **Testele statisticilor** verifică cheile din paranteze, nu și fiecare compartiment de rezervă cu
-    valoarea exactă. De adăugat.
-  - **Mutațiile pentru expirare** (lista de 38 e scrisă) nu rulaseră la commit-ul reparației; rezultatul, în DEVLOG.
 - **Ce a rămas după evenimente, carduri și cheltuieli (08.10; tipul câmpurilor afișate e închis):**
   - **Elementele unui checklist și zilele de excepție nu sunt judecate de reguli** (regulile n-au bucle).
     Web-ul le citește prin normalizare. Un element vechi cu `id` care nu e text primește pe ecran un id

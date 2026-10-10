@@ -82,6 +82,15 @@ describe('wireKey and countOf', () => {
     expect(countOf(evByGroup, 'constructor')).toBe(1);
     expect(countOf(evByGroup, { a: 1 })).toBe(0);
   });
+
+  it('only their own counts, whatever the object they are given inherits', () => {
+    // A second guard behind wireKey: an inherited number is neither a starting count nor a count.
+    const o = Object.create({ chores: 5 }) as Record<string, number>;
+    expect(countOf(o, 'chores')).toBe(0);
+    inc(o, 'chores');
+    expect(o.chores).toBe(1);
+    expect(countOf(o, 'chores')).toBe(1);
+  });
 });
 
 describe('timeMs', () => {

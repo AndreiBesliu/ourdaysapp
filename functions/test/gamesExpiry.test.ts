@@ -90,6 +90,18 @@ describe('the window moves on from run to run', () => {
     expect((await Promise.all(ids('g', 4).map(isClosed))).every(Boolean)).toBe(true);
   });
 
+  it('out of time between pages, the run ends there with its work saved; a page is at most 50 games', async () => {
+    // Nothing to close, so only the look at the clock between pages can stop the run. The job's own
+    // window and page: a page of padded games must not be able to run the function out of memory.
+    await seed(many('g', 60, fresh));
+    let looks = 0;
+    // The run starts at 0; every later look is past the 40 s budget.
+    const c = counts();
+    await mod.sweepIdleGames(db, Date.now(), c, {}, { clock: () => (looks++ === 0 ? 0 : 60_000) });
+    expect(c).toMatchObject({ scanned: 50, cut: 1 });
+    expect((await state())?.after).toBe('g49');
+  });
+
   it('a window larger than the collection reads every game once, from wherever it starts', async () => {
     await seed(many('g', 7, fresh));
     await db.doc(mod.SWEEP_STATE_DOC).set({ after: 'g03', lapRuns: 0, lastLapRuns: null });
@@ -97,6 +109,14 @@ describe('the window moves on from run to run', () => {
     expect(r.counts.scanned).toBe(7);
     expect(r.lapRuns).toBe(0);
     expect((await state())?.after).toBeNull();
+  });
+
+  it('a game it tried moves the window on past it: the next page does not read it again', async () => {
+    await seed({ g00: fresh(), g01: idle(), g02: fresh(), g03: idle() });
+    const r = await run({ window: 4, page: 2 });
+    // Four reads, four games: the closed one is not read again at the top of the next page.
+    expect(r.counts).toMatchObject({ scanned: 4, closed: 2 });
+    expect((await state())?.after).toBe('g03');
   });
 
   it('closes every idle game in a turn, each exactly once', async () => {

@@ -56,6 +56,7 @@ beforeEach(async () => {
   await db.doc('games/x1').set({ groupId: 'g1', gameType: 'tic-tac-toe', status: '@type', createdAt: t });
   await db.doc('games/x2').set({ groupId: 'g1', gameType: { toString: 0 }, status: '__proto__', createdAt: t });
   await db.doc('assets/a1').set({ ownerId: ADMIN, category: 'toString', name: 'Card' });
+  await db.doc('assets/a2').set({ ownerId: ADMIN, category: 7, name: 'Card 2' });
 });
 
 describe('the Admin statistics on values a member could write', () => {
@@ -73,6 +74,11 @@ describe('the Admin statistics on values a member could write', () => {
     expect(text).toContain('"[@type]":1');
     expect(text).toContain('"[__proto__]":1');
     expect(text).toContain('"[toString]":1');
+    // Each breakdown whole: the awkward keys in brackets, the values that are not text in the fallback.
+    expect(res.events.byCategory).toEqual({ '[hasOwnProperty]': 1, other: 1 });
+    expect(res.games.byStatus).toEqual({ '[@type]': 1, '[__proto__]': 1 });
+    expect(res.games.byType).toEqual({ 'tic-tac-toe': 1, unknown: 1 });
+    expect(res.assets.byCategory).toEqual({ '[toString]': 1, Uncategorized: 1 });
   });
 
   it('the growth chart arrives, a time that is not one counted nowhere', async () => {
