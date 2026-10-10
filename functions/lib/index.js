@@ -39,6 +39,7 @@ const aiProviderError_1 = require("./aiProviderError");
 const aiChecklistOutcome_1 = require("./aiChecklistOutcome");
 const eventTime_1 = require("./eventTime");
 const eventShape_1 = require("./eventShape");
+const adminTally_1 = require("./adminTally");
 const digestEvents_1 = require("./digestEvents");
 const assetTransfer_1 = require("./assetTransfer");
 // Invite links live in their own module — index.ts is already long, and these four are a
@@ -1670,11 +1671,6 @@ async function listAllAuthUsers(max = 5000) {
     } while (token);
     return { users: out.slice(0, max), truncated };
 }
-const inc = (obj, key, by = 1) => {
-    if (!key)
-        return;
-    obj[key] = (obj[key] || 0) + by;
-};
 const chunk = (arr, size) => {
     const out = [];
     for (let i = 0; i < arr.length; i += size)
@@ -1739,7 +1735,7 @@ exports.adminGetStats = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
             signups7d++;
         if (created && now - created < 30 * day)
             signups30d++;
-        inc(byProvider, ((_c = (_b = u.providerData) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.providerId) || "password");
+        (0, adminTally_1.inc)(byProvider, (_c = (_b = u.providerData) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.providerId, "password");
     });
     let withBirthday = 0;
     let withPhoto = 0;
@@ -1797,7 +1793,7 @@ exports.adminGetStats = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
             sharedFam++;
         if (e.rsvpEnabled)
             withRsvp++;
-        inc(evByCategory, e.categoryId || "other");
+        (0, adminTally_1.inc)(evByCategory, e.categoryId, "other");
     });
     // ── Games ──
     const gByType = {};
@@ -1805,8 +1801,8 @@ exports.adminGetStats = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
     let finalized = 0;
     gamesSnap.forEach((d) => {
         const g = d.data();
-        inc(gByType, g.gameType || "unknown");
-        inc(gByStatus, g.status || "unknown");
+        (0, adminTally_1.inc)(gByType, g.gameType, "unknown");
+        (0, adminTally_1.inc)(gByStatus, g.status, "unknown");
         if (g.finalized)
             finalized++;
     });
@@ -1820,13 +1816,13 @@ exports.adminGetStats = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
         // sixteen shared assets while the wallet itself labelled those same sixteen "Never shared".
         if (typeof a.sharedGroupId === "string" && a.sharedGroupId)
             assetsShared++;
-        inc(aByCategory, a.category || "Uncategorized");
+        (0, adminTally_1.inc)(aByCategory, a.category, "Uncategorized");
     });
     // ── Social ──
     const frByStatus = {};
     const invByStatus = {};
-    friendReqSnap.forEach((d) => inc(frByStatus, d.data().status || "pending"));
-    invitesSnap.forEach((d) => inc(invByStatus, d.data().status || "pending"));
+    friendReqSnap.forEach((d) => (0, adminTally_1.inc)(frByStatus, d.data().status, "pending"));
+    invitesSnap.forEach((d) => (0, adminTally_1.inc)(invByStatus, d.data().status, "pending"));
     // ── Notifications ──
     const nByType = {};
     let unread = 0;
@@ -1834,7 +1830,7 @@ exports.adminGetStats = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
         const n = d.data();
         if (!n.read)
             unread++;
-        inc(nByType, n.type || "info");
+        (0, adminTally_1.inc)(nByType, n.type, "info");
     });
     return {
         generatedAt: new Date().toISOString(),
@@ -1881,10 +1877,11 @@ exports.adminListProfiles = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
     const profileDocs = {};
     profilesSnap.forEach((d) => { profileDocs[d.id] = d.data(); });
     const groupCount = {};
-    groupsSnap.forEach((d) => (d.data().members || []).forEach((uid) => inc(groupCount, uid)));
+    groupsSnap.forEach((d) => { const m = d.data().members; if (Array.isArray(m))
+        m.forEach((uid) => (0, adminTally_1.inc)(groupCount, uid)); });
     const eventCount = {};
     eventsSnap.forEach((d) => { const o = d.data().ownerId; if (o)
-        inc(eventCount, o); });
+        (0, adminTally_1.inc)(eventCount, o); });
     const adminUids = new Set(adminsSnap.docs.map((d) => d.id));
     const profiles = authUsers.map((u) => {
         var _a, _b, _c, _d;
@@ -1902,8 +1899,8 @@ exports.adminListProfiles = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
             lastSignInAt: ((_d = u.metadata) === null || _d === void 0 ? void 0 : _d.lastSignInTime) || null,
             birthday: fs.birthday || pr.birthday || null,
             friends: Array.isArray(fs.friends) ? fs.friends.length : 0,
-            groups: groupCount[u.uid] || 0,
-            events: eventCount[u.uid] || 0,
+            groups: (0, adminTally_1.countOf)(groupCount, u.uid),
+            events: (0, adminTally_1.countOf)(eventCount, u.uid),
             pushEnabled: Array.isArray(fs.fcmTokens) && fs.fcmTokens.length > 0,
             isAdmin: adminUids.has(u.uid),
         };
@@ -2396,16 +2393,16 @@ exports.adminListGroups = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHE
     ]);
     const evByGroup = {};
     eventsSnap.forEach((d) => { const g = d.data().groupId; if (g)
-        inc(evByGroup, g); });
+        (0, adminTally_1.inc)(evByGroup, g); });
     const gaByGroup = {};
     gamesSnap.forEach((d) => { const g = d.data().groupId; if (g)
-        inc(gaByGroup, g); });
+        (0, adminTally_1.inc)(gaByGroup, g); });
     const groups = groupsSnap.docs.map((d) => {
         const g = d.data();
         return {
             id: d.id, name: g.name || "Group", ownerId: g.ownerId || null,
             members: (g.members || []).length, memberUids: g.members || [],
-            events: evByGroup[d.id] || 0, games: gaByGroup[d.id] || 0,
+            events: (0, adminTally_1.countOf)(evByGroup, d.id), games: (0, adminTally_1.countOf)(gaByGroup, d.id),
         };
     }).sort((a, b) => b.members - a.members);
     return { groups };
@@ -2428,7 +2425,9 @@ exports.adminGetGrowth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
     const signups = mkBuckets();
     const events = mkBuckets();
     const games = mkBuckets();
-    const tsOf = (c) => { var _a, _b, _c; return typeof c === "string" ? new Date(c).getTime() : (((_c = (_b = (_a = c === null || c === void 0 ? void 0 : c.toDate) === null || _a === void 0 ? void 0 : _a.call(c)) === null || _b === void 0 ? void 0 : _b.getTime) === null || _c === void 0 ? void 0 : _c.call(_b)) || 0); };
+    // Only a time is a time (adminTally.ts): a member's event or game could hold anything, and one that
+    // only looked like a time threw here and took the whole chart down (10.10.2026).
+    const tsOf = adminTally_1.timeMs;
     const [authRes, eventsSnap, gamesSnap] = await Promise.all([
         listAllAuthUsers(),
         db.collection("events").limit(8000).get(),

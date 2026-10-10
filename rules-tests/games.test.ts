@@ -49,6 +49,7 @@ beforeEach(async () => {
     await setDoc(doc(db, 'aiSpendDaily', '2026-09-19', 'users', ALICE), { total: 0.42 });
     await setDoc(doc(db, 'errorGroups', 'grp1'), { status: 'open', count: 3 });
     await setDoc(doc(db, 'jobRuns', 'sendDueReminders'), { at: 1, ok: true, detail: 'due 0', failStreak: 0 });
+    await setDoc(doc(db, 'jobState', 'expireIdleGames'), { after: 'g1', lapRuns: 1, lastLapRuns: 1, at: 1 });
     await setDoc(doc(db, 'warlordPlayers', ALICE), { name: 'Alice', rank: 1, wins: 2, losses: 0 });
   });
 });
@@ -222,6 +223,14 @@ describe('the server-only collections really refuse', () => {
     await assertFails(getDoc(doc(as(ALICE), 'jobRuns', 'sendDueReminders')));
     await assertFails(setDoc(doc(as(ALICE), 'jobRuns', 'sendDueReminders'), { at: Date.now(), ok: true }));
     await assertFails(setDoc(doc(as(DAVE), 'jobRuns', 'logErrorDigest'), { at: Date.now(), ok: true }));
+  });
+
+  it('the game sweep’s cursor', async () => {
+    // Also matched by no rule (10.10.2026). A client that could move it could keep the sweep away from
+    // its own group's games for good, which is the defect the moving window exists to close.
+    await assertFails(getDoc(doc(as(ALICE), 'jobState', 'expireIdleGames')));
+    await assertFails(setDoc(doc(as(ALICE), 'jobState', 'expireIdleGames'), { after: '~', lapRuns: 0 }));
+    await assertFails(getDocs(collection(as(ALICE), 'jobState')));
   });
 
   it('and none of them can be listed', async () => {

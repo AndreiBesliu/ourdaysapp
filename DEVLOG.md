@@ -12662,3 +12662,66 @@ potrivirea pe id-ul brut, un id inventat altfel decât pe ecran, listele luate d
 `check-bundle`, `test:tz` (46), `test:rules` (805).
 
 **Nepublicat.** Reparațiile merg cu hosting-ul, după funcții și reguli, cu acordul lui Andrei.
+
+## 2026-10-10 · Expirarea jocurilor nu mai poate fi oarbă la o parte din colecție (Task Started)
+
+**Prompt (Andrei):** „continua” (după pauză; mutațiile pentru evenimente, carduri și cheltuieli sunt încheiate, `d6bd702`).
+**Model:** Claude Opus 5.5.
+**Ce e** (BACKLOG, secțiunea 2): `expireIdleGames` citește la fiecare rulare `games.limit(2000)`, adică primele 2000 de
+documente după id. Cine creează multe jocuri cu id-uri alese (care încep cu `!`, de pildă) într-un grup al lui ocupă
+toată fereastra, iar jocurile celorlalte grupuri nu mai expiră niciodată. Lângă el, statisticile din Admin: `inc` și
+`tsOf` aruncă pe o cheie sau o dată plantată de un membru și pică tot panoul, respectiv graficul de creștere.
+**Plan:** fereastra se mută de la o rulare la alta, cu un cursor pe id salvat pe server, așa că toată colecția e
+parcursă pe rând, cu cost fix pe rulare. Starea de sănătate spune cât durează o tură completă. Pentru Admin,
+cheile doar text, pe un obiect fără prototip, și datele citite doar dacă sunt date. Apoi probă pe emulator,
+recenzie, mutații, porți. Nimic de publicat.
+
+## 2026-10-10 · Expirarea jocurilor nu mai poate fi oarbă la o parte din colecție (Task Completed)
+
+**Prompt (Andrei):** „continua” (de mai multe ori, după pauze), apoi „o sa facem pauza cand se poate”.
+**Model:** Claude Opus 5.5.
+
+**Expirarea (`functions/src/games.ts`).**
+- Fereastra se mută. Fiecare rulare citește cel mult 2000 de jocuri, de unde s-a oprit cea dinainte (cursorul pe id,
+  în `jobState/expireIdleGames`), și o ia de la capăt la sfârșitul colecției. Un grup cu id-uri care se sortează
+  primele nu mai poate ascunde restul jocurilor.
+- Fereastra citește doar câmpurile verdictului (`select`), pe pagini de 50. Un joc se citește întreg doar în
+  tranzacția care îl închide.
+- La cotă (200 de jocuri încercate) și la timp (40 s), rularea se oprește ÎN FAȚA primului joc neîncercat, nu îl
+  sare; următoarea începe de acolo. Progresul se salvează după fiecare pagină, deci o rulare moartă la jumătate nu
+  ia fereastra de la capăt.
+- Marcajul spune acum câte rulări a durat tura: `turn A/B (limit 24)`. O tură mai lungă de o zi de rulări face jobul
+  roșu până când o tură se încheie din nou la timp. Un cursor care nu se poate scrie la final e eșec.
+- Nicio regulă nu potrivește `jobState`, deci clienții nu îl pot citi sau scrie (test nou în
+  `rules-tests/games.test.ts`). Fișierul de reguli nu s-a schimbat.
+
+**Statisticile din Admin (`functions/src/adminTally.ts`, nou).**
+- `inc` numără doar chei text. O valoare de alt tip merge în compartimentul de rezervă al defalcării (`unknown`,
+  `other`, `Uncategorized`, `password`, `pending`, `info`) și nu mai aruncă.
+- O cheie pe care o are orice obiect (`constructor`, `hasOwnProperty`, `__proto__`) sau care începe cu `@` se
+  numără între paranteze drepte (`[toString]`).
+  - Planul spunea „obiect fără prototip”, dar nu ajungea. Codificatorul callable-ului aruncă `__proto__`.
+    Decodorul clientului se împiedică de o cheie `hasOwnProperty` și ia `@type` drept marcajul lui.
+  - Probat prin codificatorul REAL și printr-un decodor care face pas cu pas ce face clientul.
+- `countOf` citește doar ce s-a numărat: un grup numit `constructor` are 0 evenimente, nu o funcție.
+- `timeMs` citește o dată doar dacă e una, deci graficul de creștere nu mai cade.
+
+**Recenzii (Workflow).** Prima a găsit 13 probleme reale în prima variantă: jocurile de după cotă erau sărite,
+cursorul se pierdea la o rulare moartă, tura nu era măsurată și altele. De aici varianta a doua. A doua recenzie
+a confirmat trei lucruri:
+- Câmpurile verdictului nu sunt tipate de reguli, deci o pagină de jocuri umflate putea epuiza memoria. Am pus o
+  plasă: pagini de 50 și timpul verificat și între pagini. Remediul întreg e în reguli și e trecut în BACKLOG.
+- Un joc umflat aproape de 1 MiB nu mai poate fi închis și ține jobul roșu. Defect vechi, trecut în BACKLOG.
+- Goluri de test. Am acoperit detaliul marcajului și tura lentă; valorile exacte din fiecare compartiment de
+  rezervă rămân în BACKLOG.
+Trei verificatori ai celei de-a doua recenzii n-au putut rula, din cauza limitei săptămânale a contului.
+
+**Pe live (doar numărători):** 18 jocuri. Ultimul marcaj e ok („scanned 18, idle 0, closed 0, failed 0”).
+Documentul `jobState` nu există încă; îl creează prima rulare a codului nou.
+
+**Mutații:** nerulate la acest commit (lista de 38 e scrisă). Rezultatul vine într-o intrare separată.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2608), `npm run build`, `check-split`, `check-offline`,
+`check-bundle`, `test:tz`, `test:rules` (824). `functions/lib` reconstruit.
+
+**Nepublicat.** Pleacă doar cu funcțiile, cu acordul lui Andrei.

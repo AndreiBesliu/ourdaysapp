@@ -68,10 +68,18 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Arcade, în interiorul grupului:** mutările din APK nu scriu `lastMoveAt`, deci un joc jucat doar
   pe telefon poate fi închis de expirarea de 24h în timp ce e jucat (dedus din cod, nemăsurat).
   (Titlul push-ului din `gameType` e închis din 06.10.)
-- **Expirarea automată a jocurilor și statisticile din Admin citesc primele 2000 de jocuri, după id**
-  (`functions/src/games.ts`): cine creează multe jocuri cu id-uri alese (de exemplu care încep cu `!`),
-  într-un grup al lui, ocupă toată fereastra, iar jocurile celorlalte grupuri nu mai expiră. Remediul:
-  citirea pe pagini, cu cursor, a întregii colecții; eventual o limită de jocuri pe om.
+- **Expirarea jocurilor: ce a rămas după fereastra care se mută (10.10).** Fereastra, cursorul, oprirea la
+  cotă și la timp, citirea doar a câmpurilor verdictului, tura lentă și statisticile Admin sunt reparate.
+  Rămân (a doua recenzie, confirmate):
+  - **`lastMoveAt`, `date` și `finalized` nu sunt tipate în regulile jocurilor.** Un membru le poate umfla
+    (un text de 1 MiB), iar `select` le citește întregi. Plasa din cod: pagini de 50 și timpul verificat
+    între pagini. Remediul întreg e regula: timp, text scurt, bool (verificat întâi pe live).
+  - **Un joc umflat aproape de 1 MiB nu mai poate fi închis** (scrierea depășește limita documentului), iar
+    fiecare rulare care îl întâlnește iese cu eșec: jobul rămâne roșu. Defect vechi. Remediul: un astfel de
+    refuz (`INVALID_ARGUMENT`) pus deoparte, raportat o dată, nu numărat ca eșec la fiecare rulare.
+  - **Testele statisticilor** verifică cheile din paranteze, nu și fiecare compartiment de rezervă cu
+    valoarea exactă. De adăugat.
+  - **Mutațiile pentru expirare** (lista de 38 e scrisă) nu rulaseră la commit-ul reparației; rezultatul, în DEVLOG.
 - **Ce a rămas după evenimente, carduri și cheltuieli (08.10; tipul câmpurilor afișate e închis):**
   - **Elementele unui checklist și zilele de excepție nu sunt judecate de reguli** (regulile n-au bucle).
     Web-ul le citește prin normalizare. Un element vechi cu `id` care nu e text primește pe ecran un id
@@ -104,10 +112,6 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Ce rămâne expus pe APK în Arcade după 06.10:** un joc deschis cu date stricate (tabla, mâinile,
   combinațiile) pică aplicația pentru cine îl deschide, până la repornire. Regula acoperă doar ce se
   citește în afara jocului (bannerul, lista, clasamentul). Se rezolvă cu reconstruirea APK-ului.
-- **Statisticile din Admin și graficul de creștere** cad dacă un membru scrie `status` sau `createdAt`
-  de tip greșit pe un joc (`inc` și `tsOf` în `functions/src/index.ts`). Doar adminul vede. Remediul e
-  mic (cheia doar text, data prin `activityMs`). Tot acolo, `inc` numără pe un `{}` simplu: o categorie
-  de eveniment sau de card numită „constructor” dă o bară de lățime NaN (nu cade).
 - **Istoricul clasamentului se poate rescrie:** un joc terminat (`finalized`) se poate modifica în
   continuare de orice membru. Blocarea lui ar refuza în tăcere „Next Round” în APK, care nu știe de
   `finalized`. Decizia lui Andrei; implicit nimic până la reconstruirea APK-ului.
