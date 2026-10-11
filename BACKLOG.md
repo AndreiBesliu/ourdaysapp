@@ -74,10 +74,26 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     regula din 10.10. Niciun client nu rescrie `date` după creare, deci fixarea lui nu refuză nimic.
   - **`status` nu e tipat** (îl citesc listele și statisticile Admin). Clienții scriu doar `waiting`, `playing`
     și `finished`.
-- **Statisticile din Admin citesc documente întregi:** până la 5000 de jocuri, 8000 de evenimente, 5000 de
-  carduri și 8000 de notificări, la fiecare deschidere a panoului. Un membru care umflă documente (fiecare
-  până la 1 MiB) poate face panoul să cadă din lipsă de memorie. Doar adminul vede. Remediul: `select` pe
-  câmpurile numărate și `count()` pentru totaluri.
+- **Documente citite întregi, în bloc, din colecții pe care le scrie oricine (recenzia din 11.10).** Orice cont
+  poate umfla documentele lui până la 1 MiB, iar o funcție care citește câteva sute deodată cade din lipsă de
+  memorie (implicit 256 MiB). Mai vechi decât statisticile Admin, de luat în ordinea asta:
+  - **Memento-urile (`sendDueReminders`, la 5 minute):** două interogări de câte 2000 de evenimente întregi.
+    Câteva sute de evenimente personale umflate opresc memento-urile pentru TOȚI, la fiecare rulare. Tot acolo,
+    `limit(2000)` pe recurente se poate umple cu evenimentele unui singur cont, iar recurentele celorlalți nu
+    mai primesc memento (aceeași formă ca fereastra jocurilor, reparată pe 10.10). Remediul: `select` pe
+    câmpurile calculului, documentul întreg doar pentru cele scadente, și o fereastră care se mută.
+  - **Ștergerea contului:** paginile de ștergere citesc documente întregi (`batchDelete.ts`, `forEachDoc`,
+    `drain`). Un străin poate trimite 400 de cereri de prietenie umflate către orice uid, iar ștergerea
+    contului acelui om (și din Admin) cade la fiecare încercare, după ce primii pași au rulat. Remediul:
+    `select()` (doar id-uri) unde se folosește doar referința, câmpurile necesare în rest, pagini mai mici.
+  - **Rezumatul AI al grupului (`generateGroupDigest`):** caută recurentele în TOATĂ baza, 500 de documente
+    întregi, nelegat de grup. Un cont cu 500 de evenimente personale cu `recurrenceRule` le umple: rezumatul
+    fiecărui grup pierde recurentele, iar umflate îl fac să cadă. Remediul: interogarea legată de grup (cere
+    un index compus, publicat înaintea funcțiilor).
+  - **Statisticile din Admin (10.10, parțial):** citesc acum doar câmpurile numărate, deci descrierile,
+    checklist-urile, tablele de joc și notele nu mai vin. Câmpurile numărate pot fi însă umflate și ele: un
+    eveniment personal nu are niciun câmp verificat, iar categoria unui card nu are plafon. Doar adminul vede.
+    Remediul: `count()` pentru prezențe și plafoane în reguli.
 - **Ce a rămas după evenimente, carduri și cheltuieli (08.10; tipul câmpurilor afișate e închis):**
   - **Elementele unui checklist și zilele de excepție nu sunt judecate de reguli** (regulile n-au bucle).
     Web-ul le citește prin normalizare. Un element vechi cu `id` care nu e text primește pe ecran un id

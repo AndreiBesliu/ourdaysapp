@@ -1701,18 +1701,25 @@ exports.adminGetStats = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
     const day = 24 * 60 * 60 * 1000;
     // Accurate totals come from count() aggregation (never truncated); the capped
     // doc reads below feed the breakdowns and flag `truncated` if they hit a cap.
+    //
+    // Each read takes ONLY the fields counted below (`select`, 10.10.2026). These are whole
+    // collections of documents of up to 1 MiB each, and what made them big — descriptions, checklists,
+    // boards, notes, padding — no longer comes along. The counted fields themselves are only as small as
+    // the rules keep them, and a personal event's are not checked at all (BACKLOG). A field used below
+    // and left out of its `select` reads as absent, so functions/test/adminReads.test.ts gives every one
+    // a value.
     const ct = (c) => db.collection(c).count().get().then((s) => s.data().count).catch(() => 0);
     const [authResult, usersSnap, groupsSnap, eventsSnap, gamesSnap, assetsSnap, friendReqSnap, invitesSnap, notifsSnap, adminsSnap, messagesCount, groupsTotal, eventsTotal, gamesTotal, assetsTotal, notifTotal] = await Promise.all([
         listAllAuthUsers(),
-        db.collection("users").limit(5000).get(),
-        db.collection("groups").limit(5000).get(),
-        db.collection("events").limit(8000).get(),
-        db.collection("games").limit(5000).get(),
-        db.collection("assets").limit(5000).get(),
-        db.collection("friend_requests").limit(5000).get(),
-        db.collection("group_invites").limit(5000).get(),
-        db.collection("notifications").limit(8000).get(),
-        db.collection("admins").get(),
+        db.collection("users").select("birthday", "photoURL", "fcmTokens", "friends").limit(5000).get(),
+        db.collection("groups").select("members").limit(5000).get(),
+        db.collection("events").select("isTask", "taskStatus", "recurrenceRule", "reminderMinutes", "groupId", "rsvpEnabled", "categoryId").limit(8000).get(),
+        db.collection("games").select("gameType", "status", "finalized").limit(5000).get(),
+        db.collection("assets").select("sharedGroupId", "category").limit(5000).get(),
+        db.collection("friend_requests").select("status").limit(5000).get(),
+        db.collection("group_invites").select("status").limit(5000).get(),
+        db.collection("notifications").select("read", "type").limit(8000).get(),
+        db.collection("admins").select().get(),
         db.collectionGroup("messages").count().get().then((s) => s.data().count).catch(() => 0),
         ct("groups"), ct("events"), ct("games"), ct("assets"), ct("notifications"),
     ]);
@@ -1863,13 +1870,14 @@ exports.adminGetStats = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
 exports.adminListProfiles = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     await assertAdmin(request);
     const db = admin.firestore();
+    // Only the fields shown or counted below (see adminGetStats).
     const [authResult, usersSnap, profilesSnap, groupsSnap, eventsSnap, adminsSnap] = await Promise.all([
         listAllAuthUsers(),
-        db.collection("users").limit(5000).get(),
-        db.collection("profiles").limit(5000).get(),
-        db.collection("groups").limit(5000).get(),
-        db.collection("events").limit(8000).get(),
-        db.collection("admins").get(),
+        db.collection("users").select("email", "name", "photoURL", "birthday", "friends", "fcmTokens").limit(5000).get(),
+        db.collection("profiles").select("name", "photoURL", "birthday").limit(5000).get(),
+        db.collection("groups").select("members").limit(5000).get(),
+        db.collection("events").select("ownerId").limit(8000).get(),
+        db.collection("admins").select().get(),
     ]);
     const authUsers = authResult.users;
     const userDocs = {};
@@ -2247,13 +2255,15 @@ exports.adminGetUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK 
         };
     }
     catch ( /* auth user may be gone */_f) { /* auth user may be gone */ }
+    // Their own two documents whole (one each); of their groups, events, games and cards only the
+    // fields shown or counted below — up to 1400 documents, each of which they could pad (see adminGetStats).
     const [userDoc, profileDoc, groupsSnap, eventsSnap, gamesSnap, assetsSnap, adminSnap] = await Promise.all([
         db.doc(`users/${uid}`).get(),
         db.doc(`profiles/${uid}`).get(),
-        db.collection("groups").where("members", "array-contains", uid).limit(200).get(),
-        db.collection("events").where("ownerId", "==", uid).limit(500).get(),
-        db.collection("games").where("createdBy", "==", uid).limit(200).get(),
-        db.collection("assets").where("ownerId", "==", uid).limit(500).get(),
+        db.collection("groups").where("members", "array-contains", uid).select("name", "members").limit(200).get(),
+        db.collection("events").where("ownerId", "==", uid).select("title", "date", "isTask", "taskStatus").limit(500).get(),
+        db.collection("games").where("createdBy", "==", uid).select().limit(200).get(),
+        db.collection("assets").where("ownerId", "==", uid).select().limit(500).get(),
         db.doc(`admins/${uid}`).get(),
     ]);
     const ud = userDoc.data() || {};
@@ -2386,10 +2396,11 @@ exports.adminBroadcast = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
 exports.adminListGroups = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     await assertAdmin(request);
     const db = admin.firestore();
+    // Only the fields shown or counted below (see adminGetStats).
     const [groupsSnap, eventsSnap, gamesSnap] = await Promise.all([
-        db.collection("groups").limit(2000).get(),
-        db.collection("events").limit(8000).get(),
-        db.collection("games").limit(5000).get(),
+        db.collection("groups").select("name", "ownerId", "members").limit(2000).get(),
+        db.collection("events").select("groupId").limit(8000).get(),
+        db.collection("games").select("groupId").limit(5000).get(),
     ]);
     const evByGroup = {};
     eventsSnap.forEach((d) => { const g = d.data().groupId; if (g)
@@ -2428,10 +2439,11 @@ exports.adminGetGrowth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
     // Only a time is a time (adminTally.ts): a member's event or game could hold anything, and one that
     // only looked like a time threw here and took the whole chart down (10.10.2026).
     const tsOf = adminTally_1.timeMs;
+    // Only the time each was made (see adminGetStats).
     const [authRes, eventsSnap, gamesSnap] = await Promise.all([
         listAllAuthUsers(),
-        db.collection("events").limit(8000).get(),
-        db.collection("games").limit(5000).get(),
+        db.collection("events").select("createdAt").limit(8000).get(),
+        db.collection("games").select("createdAt").limit(5000).get(),
     ]);
     authRes.users.forEach((u) => {
         var _a;
@@ -3364,9 +3376,10 @@ exports.adminBackfillExpenses = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
     await assertAdmin(request);
     const apply = (request.data || {}).apply === true;
     const db = admin.firestore();
+    // Only the fields it sorts by (see adminGetStats); the update goes to the document, not to what was read.
     const [expenses, groups] = await Promise.all([
-        db.collection("expenses").limit(5000).get(),
-        db.collection("groups").limit(2000).get(),
+        db.collection("expenses").select("ownerId", "paidBy").limit(5000).get(),
+        db.collection("groups").select("members").limit(2000).get(),
     ]);
     const groupsOf = {};
     groups.forEach((g) => {

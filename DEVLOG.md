@@ -12835,3 +12835,64 @@ cele complete.
 `check-bundle`, `test:tz`, `test:rules` (862). `functions/lib` reconstruit.
 
 **Nepublicat.** Pleacă cu funcțiile și cu regulile, în ordinea obișnuită, cu acordul lui Andrei.
+
+## 2026-10-10 · Statisticile din Admin citesc doar câmpurile pe care le numără (Task Started)
+
+**Prompt (Andrei):** „Ok” (de două ori, după propunerea: „Dacă spui «continua», iau următorul punct din BACKLOG
+care nu cere decizia ta. Cel mai apropiat de ce am lucrat azi sunt statisticile din Admin, care citesc documente
+întregi.”). L-am luat ca acord.
+**Model:** Claude Opus 5.5.
+**Ce e** (BACKLOG, secțiunea 2): `adminGetStats`, `adminListProfiles`, `adminListGroups`, `adminGetGrowth`,
+`adminGetUser` și `adminBackfillExpenses` citesc documente întregi. Asta înseamnă până la 5000 de jocuri,
+8000 de evenimente și 8000 de notificări la o deschidere de panou, iar fiecare document poate avea 1 MiB.
+Un membru care umflă documentele lui poate face panoul să cadă din lipsă de memorie.
+**Plan:**
+- Fiecare citire de colecție ia doar câmpurile pe care le numără (`select`).
+- Testele trec prin fiecare câmp folosit, cu valori care nu sunt cele implicite, ca un câmp lăsat afară să nu
+  devină tăcut 0.
+- Un test arată că niciun câmp nenumărat nu ajunge în funcție.
+- Apoi: măsurătoare pe live, recenzie, mutații, porți.
+
+## 2026-10-11 · Statisticile din Admin citesc doar câmpurile pe care le numără (Task Completed)
+
+**Prompt (Andrei):** „Ok” (de două ori, luat ca acord), apoi „continua”, după o pauză peste noapte.
+**Model:** Claude Opus 5.5.
+
+**Măsurat pe live (doar numărători și octeți):** toate colecțiile citite de Admin au împreună sub 150 kB, iar
+niciun document nu trece de 100 kB. Azi nu există niciun risc; e o întărire.
+
+**Ce s-a schimbat (`functions/src/index.ts`):** fiecare citire de colecție din `adminGetStats`, `adminListProfiles`,
+`adminGetUser`, `adminListGroups`, `adminGetGrowth` și `adminBackfillExpenses` ia doar câmpurile numărate sau
+afișate (`select`). Unde se numără doar documentele, `select()` e gol. Rămân întregi doar cele două documente
+proprii ale omului deschis în `adminGetUser`. Descrierile, checklist-urile, tablele de joc, notele și orice
+umplutură nu mai vin.
+
+**Probă (`functions/test/adminReads.test.ts`, nou, pe emulator, prin callable-urile reale):**
+- Fiecare document are un câmp `pad`. Testul urmărește fiecare document adus de o interogare în timpul apelului,
+  inclusiv cele doar numărate. Pe codul vechi pică toate cele cinci teste de acest fel.
+- Fiecare câmp numărat are o valoare diferită de cea implicită, deci un câmp lăsat afară din `select` apare ca o
+  cifră greșită, nu ca un 0 tăcut. Asta include emailul din `users` al unui om fără email în Auth.
+
+**Recenzie (Workflow, 11 agenți; oprită de sfârșitul sesiunii și reluată din cache):** 8 constatări, toate reale.
+- Acoperirea câmpurilor e curată în toate cele șase funcții.
+- **Câmpurile numărate pot fi și ele umflate** (găsit de două lentile). Un eveniment personal nu are niciun câmp
+  verificat, iar categoria unui card nu are plafon, deci `select` închide doar câmpurile nenumărate. Am corectat
+  comentariul din cod ca să nu promită mai mult; restul e în BACKLOG.
+- **Trei goluri de test:**
+  - o citire doar numărată nu era urmărită;
+  - citirea din `admins` era exclusă din urmărire;
+  - emailul din `users` era acoperit de cel din Auth.
+  Toate trei sunt reparate. Urmărirea vede acum tot ce aduce o interogare, nu doar ce citește codul.
+- **Trei probleme mai vechi, mai importante decât schimbarea, trecute în BACKLOG ca primele la rând:**
+  - memento-urile citesc 2 × 2000 de evenimente întregi la 5 minute, deci un cont le poate opri pentru toți;
+  - ștergerea contului poate fi blocată de un străin cu cereri de prietenie umflate;
+  - rezumatul AI citește 500 de recurente din toată baza, nelegat de grup.
+
+**Mutații: 57 din 57 prinse,** fiecare de suita ei proprie: fiecare câmp scos pe rând din fiecare `select`, plus
+nouă citiri readuse la documente întregi. Rularea s-a făcut într-o clonă în afara Drive-ului, nu într-un worktree,
+cu controale negative pe suitele proprii și pe cele complete.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2609), `npm run build`, `check-split`, `check-offline`,
+`check-bundle`, `test:tz`, `test:rules` (874). `functions/lib` reconstruit.
+
+**Nepublicat.** Pleacă doar cu funcțiile, cu acordul lui Andrei.
