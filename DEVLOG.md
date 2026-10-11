@@ -12896,3 +12896,23 @@ cu controale negative pe suitele proprii și pe cele complete.
 `check-bundle`, `test:tz`, `test:rules` (874). `functions/lib` reconstruit.
 
 **Nepublicat.** Pleacă doar cu funcțiile, cu acordul lui Andrei.
+
+## 2026-10-11 · Publicarea: tot ce s-a adunat de la 28.09 (funcții, completarea, reguli, hosting) (Task Started)
+
+**Prompt (Andrei):** „publica”.
+**Model:** Claude Opus 5.5.
+**Ce pleacă:**
+- funcțiile de la `50c8e84`, ultima lor publicare: 23 de fișiere, 4 funcții noi (`deleteMyAccount`, `onGroupCreated`,
+  `onGroupDeleted`, `onGroupMembersChanged`), niciuna ștearsă;
+- regulile de la aceeași publicare (+521 de rânduri);
+- hosting-ul de la `b4f343a` (76 de fișiere);
+- indecșii și `storage.rules` nu s-au schimbat.
+
+**Ordinea:** funcții → completarea `usedGroupIds` (`--apply`, cere cheia de scriere a lui Andrei) → reguli → hosting.
+
+**Înainte:**
+- HEAD `6e48a66` = `origin/main`, CI verde, arbore curat;
+- pe live, 2 rânduri de eroare în 7 zile (ambele din client, pe 07.10), iar cele trei joburi sunt ok;
+- completarea, rulată fără scriere: 5 grupuri, 5 id-uri de listat, nimic refuzat, niciun grup care pare recreat.
+
+Interogările noi sunt verificate față de indecșii de pe live (emulatorul nu îi cere).
