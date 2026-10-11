@@ -118,7 +118,7 @@
 
 ---
 
-## 🆕 Evenimentele, cardurile partajate și cheltuielile: un câmp care nu e text nu mai pică ecranul (08.10) — NEPUBLICAT (cere funcțiile, regulile, apoi hosting-ul)
+## 🆕 Evenimentele, cardurile partajate și cheltuielile: un câmp care nu e text nu mai pică ecranul (08.10) — PUBLICAT pe 11.10, la „publica”
 
 **Fapt:** orice membru al unui grup putea scrie pe un eveniment al grupului un titlu sau un emoji care nu
 e text, pe un card partajat cu grupul un nume care nu e text, pe o cheltuială a grupului o descriere care
@@ -171,7 +171,7 @@ acum un astfel de memento; nu se poate ști dacă vreunul l-a pierdut deja. Repa
 
 ---
 
-## 🆕 Un mesaj de chat nu mai poate pica conversația pentru ceilalți (08.10) — NEPUBLICAT (cere funcțiile, regulile, apoi hosting-ul)
+## 🆕 Un mesaj de chat nu mai poate pica conversația pentru ceilalți (08.10) — PUBLICAT pe 11.10, la „publica”
 
 **Fapt:** orice membru putea scrie un mesaj de chat (de grup sau privat) cu orice în el: un text care
 nu e text, o dată care nu e dată, reacții care nu sunt liste. Reprodus pe aplicația reală: cine
@@ -203,7 +203,7 @@ voce sunt din Storage-ul nostru. Acum:
 
 ---
 
-## 🆕 Numele unui grup și al unei invitații nu mai pot pica aplicația (08.10) — NEPUBLICAT (cere regulile, apoi hosting-ul)
+## 🆕 Numele unui grup și al unei invitații nu mai pot pica aplicația (08.10) — PUBLICAT pe 11.10, la „publica”
 
 **Fapt:** numele unui grup apare în calendarul fiecărui membru, la fiecare pornire, pe web și în APK.
 Nimic nu-l verifica, iar orice membru îl putea scrie altfel decât ca text. Reprodus pe aplicația
@@ -234,7 +234,7 @@ caractere). Acum:
 
 ---
 
-## 🆕 Datele unui joc scrise de un membru nu mai strică ecranul celorlalți (06.10) — NEPUBLICAT (cere regulile și hosting-ul; funcțiile pentru expirarea jocurilor)
+## 🆕 Datele unui joc scrise de un membru nu mai strică ecranul celorlalți (06.10) — PUBLICAT pe 11.10, la „publica”
 
 **Fapt:** orice membru al unui grup poate scrie orice câmp al unui joc din Arcade, iar ecranele îl
 citeau fără gardă. Reprodus pe aplicația reală, pe emulatoare:
@@ -264,7 +264,7 @@ Pe live nu s-a întâmplat: toate cele 18 jocuri sunt bine formate (măsurat azi
 
 ---
 
-## 🆕 Titlul notificării unui joc nu mai e text liber (06.10) — NEPUBLICAT (cere funcțiile, regulile, apoi hosting-ul)
+## 🆕 Titlul notificării unui joc nu mai e text liber (06.10) — PUBLICAT pe 11.10, la „publica”
 
 **Fapt:** la crearea unui joc din Arcade, tipul jocului (`gameType`) era text liber, iar serverul îl
 punea în titlul notificării trimise tuturor celorlalți membri ai grupului: „Joc nou: <orice>”. Un
@@ -306,7 +306,7 @@ textul de până acum.
 
 ---
 
-## 🆕 Un grup șters nu mai poate fi recreat sub același id (06.10) — NEPUBLICAT (cere funcțiile, completarea, apoi regulile)
+## 🆕 Un grup șters nu mai poate fi recreat sub același id (06.10) — PUBLICAT pe 11.10 (funcțiile și regulile); completarea listei AȘTEAPTĂ cheia ta de scriere
 
 **Fapt:** oricine știa id-ul unui grup șters îl putea crea din nou, ca singur membru. Poate fi un fost
 membru, un invitat, cineva numit pe un eveniment al grupului, cineva cu un link de invitație sau cu
@@ -338,9 +338,19 @@ fiecărui grup, iar regula refuză crearea unui id de pe listă. În aplicație 
            pasul 3.
       3. regulile. Fără pasul 2, regula nu strică nimic, dar grupurile de azi rămân descoperite.
 
+- [ ] **Pe 11.10 au plecat pașii 1 și 3; pasul 2 așteaptă o cheie cu drept de scriere.** Până atunci cele
+      5 grupuri de azi sunt ca înainte: dacă unul e șters din APK, id-ul lui poate fi recreat câteva secunde.
+      Grupurile create sau șterse de acum încolo intră singure pe listă.
+      - **Cum faci cheia:** [Firebase → Project settings → Service accounts](https://console.firebase.google.com/project/our-days-2a939/settings/serviceaccounts/adminsdk)
+        → „Generate new private key”. Pune fișierul ÎN AFARA repo-ului, de exemplu
+        `C:\Users\besli\.ourdays\write-key.json`, și spune-mi calea. Nu lipi conținutul în chat.
+      - **După rulare,** șterge cheia din [Google Cloud → Service accounts](https://console.cloud.google.com/iam-admin/serviceaccounts?project=our-days-2a939)
+        (contul `firebase-adminsdk`, fila Keys), ca să nu rămână o cheie de scriere valabilă pe disc.
+      - **Cum arată bine:** `listedNow` e cât `idsToList` (5 azi), iar `refused` și `groupsThatLookCreatedAgain` sunt goale.
+
 ---
 
-## 🆕 Doar proprietarul sau grupul mută un eveniment între calendare (05.10) — NEPUBLICAT (cere funcțiile și regulile)
+## 🆕 Doar proprietarul sau grupul mută un eveniment între calendare (05.10) — PUBLICAT pe 11.10, la „publica”
 
 **Fapt:** cine era doar numit pe un eveniment (responsabil), fără să fie proprietarul lui sau în grupul
 lui, îl putea muta:
@@ -360,7 +370,7 @@ proprietarul și membrii; pe o serie personală, cel numit pe ea o editează ca 
 
 ---
 
-## 🆕 Răspunsurile RSVP: fiecare doar pentru el; mutarea între calendare (05.10) — NEPUBLICAT (cere regulile, apoi hosting-ul)
+## 🆕 Răspunsurile RSVP: fiecare doar pentru el; mutarea între calendare (05.10) — PUBLICAT pe 11.10, la „publica”
 
 **Fapt:** până acum, oricine dintr-un grup putea scrie răspunsul altcuiva la RSVP („Ana: vin”):
 - pe un eveniment la care nu răspunsese încă nimeni;
@@ -407,7 +417,7 @@ nicio urmă de așa ceva (măsurat).
 
 ---
 
-## 🆕 Cine iese dintr-un grup e scos de pe evenimentele care urmează (05.10) — NEPUBLICAT (cere funcțiile, apoi hosting-ul)
+## 🆕 Cine iese dintr-un grup e scos de pe evenimentele care urmează (05.10) — PUBLICAT pe 11.10, la „publica”
 
 **Fapt:** când cineva iese dintr-un grup, sau îl scoți tu, serverul îl scoate în câteva secunde de pe
 evenimentele grupului care urmează și de pe seriile care încă se repetă: ca responsabil și din RSVP-uri.
@@ -452,7 +462,7 @@ de pe TOATE evenimentele, și de pe cele trecute.
 
 ---
 
-## 🆕 Ștergerea propriului cont (04.10) — NEPUBLICAT (cere funcțiile, regulile, apoi hosting-ul)
+## 🆕 Ștergerea propriului cont (04.10) — PUBLICAT pe 11.10, la „publica”
 
 **Fapt:** din Settings → „Delete account” (sub Sign Out, separat de el), oricine își poate șterge singur
 contul. Dialogul spune ce pleacă și ce rămâne. Cere cuvântul de confirmare (ȘTERGE; merge și fără

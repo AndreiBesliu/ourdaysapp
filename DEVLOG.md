@@ -12916,3 +12916,43 @@ cu controale negative pe suitele proprii și pe cele complete.
 - completarea, rulată fără scriere: 5 grupuri, 5 id-uri de listat, nimic refuzat, niciun grup care pare recreat.
 
 Interogările noi sunt verificate față de indecșii de pe live (emulatorul nu îi cere).
+
+## 2026-10-11 · Publicarea: tot ce s-a adunat de la 28.09 (funcții, completarea, reguli, hosting) (Task Completed)
+
+**Prompt (Andrei):** „publica”; apoi „ok” (după cererea cheii de scriere); apoi „Try again” (după ce sesiunea s-a
+închis în timpul publicării hosting-ului).
+**Model:** Claude Opus 5.5.
+
+**Verificat înainte de publicare:**
+- **Indecșii:** un Workflow (2 agenți) a parcurs toate interogările noi sau schimbate, de pe server de la `50c8e84`
+  și din client de la `b4f343a`. Niciuna nu cere un index compus absent din `firestore.indexes.json`, care e
+  neschimbat (emulatorul nu verifică indecșii).
+- **Funcțiile:** 51 pe live și 55 local, adică 4 noi și niciuna de șters. `deleteStoragePrefixes`, care dispăruse
+  din exporturi, era o funcție ajutătoare din cod, nu una publicată.
+
+**Publicat, în ordine:**
+1. **Funcțiile.** Prima încercare s-a oprit la validare, fără să publice nimic: cele trei triggere pe `groups` au
+   `retry: true`, iar în mod non-interactiv CLI-ul cere `--force` pentru politica de reîncercare. Am reluat cu
+   `--force` (nicio funcție de șters, verificat înainte). Toate cele 55 de operații au reușit, iar pe live sunt 55
+   de funcții, inclusiv `deleteMyAccount`, `onGroupCreated`, `onGroupDeleted` și `onGroupMembersChanged`.
+2. **Completarea `usedGroupIds`: NU.** Pe disc e doar cheia de citire. Rularea fără scriere: 5 grupuri, 5 id-uri
+   de listat, nimic refuzat, niciun grup care pare recreat. Am corectat ce îi spusesem lui Andrei: regulile nu
+   depind de completare. Lista e citită doar la crearea unui grup (`!exists(usedGroupIds/{id})`), deci fără ea
+   cele 5 grupuri de azi sunt exact ca înainte, iar cele noi intră singure pe listă. Pasul așteaptă cheia lui de
+   scriere (OWNER_VERIFY, cu link-urile pentru cheie și pentru ștergerea ei după).
+3. **Regulile:** compilate și lansate.
+4. **Hosting-ul,** imediat după reguli. Sesiunea s-a închis în timpul comenzii, iar la „Try again” am verificat
+   întâi și nu am republicat. Jurnalul arăta „release complete” și „Deploy complete!”.
+
+**Verificat pe live:**
+- `index.html`, `assets/index-DnOMhTe2.js` și `sw.js` sunt identice octet cu octet cu `dist/`, construit din
+  `8347cc5`.
+- Într-un browser, pagina de login pornește pe intrarea nouă, iar resursele aplicației vin toate cu 200.
+- **Singurul 403 e schimbul de token App Check** (reCAPTCHA) din panoul de browser automatizat. `src/firebase.ts`
+  nu s-a schimbat, iar funcțiile nu impun App Check (`APPCHECK_ENFORCE` lipsește din `.env`), deci nu blochează
+  nimic din ce s-a publicat.
+- **Jurnalul de erori:** nimic nou (tot cele 2 rânduri din 07.10). Memento-urile au rulat ok la 13:35 și la 17:15.
+- **Expirarea jocurilor** a rulat la 17:00 pe codul nou: și-a scris starea (`jobState`), tura s-a încheiat într-o
+  rulare, cu 0 jocuri de neînchis.
+
+**Rămâne:** completarea `usedGroupIds`, cu cheia lui Andrei.
