@@ -12956,3 +12956,24 @@ Interogările noi sunt verificate față de indecșii de pe live (emulatorul nu 
   rulare, cu 0 jocuri de neînchis.
 
 **Rămâne:** completarea `usedGroupIds`, cu cheia lui Andrei.
+
+## 2026-10-12 · Publicarea, pasul rămas: completarea `usedGroupIds` (Task Started)
+
+**Prompt (Andrei):** o captură cu fișierul de cheie descărcat și calea `C:\Users\besli\Downloads`.
+**Model:** Claude Opus 5.5.
+**Plan:** completarea rulată întâi fără scriere, cu cheia lui, apoi `--apply`. Verificarea se face cu cheia de citire.
+
+## 2026-10-12 · Publicarea, pasul rămas: completarea `usedGroupIds` (Task Completed)
+
+**Model:** Claude Opus 5.5.
+
+- **Fără scriere:** 5 grupuri pe live, 5 id-uri de listat, nimic refuzat, niciun grup care pare recreat (la fel ca
+  pe 11.10).
+- **`--apply`:** `listedNow` 5, `alreadyListed` 0.
+- **Verificat cu cheia de citire:** 5 intrări în `usedGroupIds`, 5 grupuri pe live, niciunul nelistat.
+- **De știut:** proba fără scriere arată și acum `idsToList: 5`, fiindcă planul numără grupurile, nu ce lipsește.
+  Scrierea e idempotentă: o a doua rulare ar da `alreadyListed: 5`.
+- **Cheia de scriere** e încă în `Downloads`. Nu am șters-o, fiindcă nu șterg definitiv fișierele lui. Ștergerea
+  fișierului și revocarea cheii în Google Cloud sunt la Andrei (OWNER_VERIFY).
+
+Publicarea din 11.10 e acum completă: funcțiile, completarea, regulile și hosting-ul.

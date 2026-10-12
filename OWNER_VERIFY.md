@@ -306,7 +306,7 @@ textul de până acum.
 
 ---
 
-## 🆕 Un grup șters nu mai poate fi recreat sub același id (06.10) — PUBLICAT pe 11.10 (funcțiile și regulile); completarea listei AȘTEAPTĂ cheia ta de scriere
+## 🆕 Un grup șters nu mai poate fi recreat sub același id (06.10) — PUBLICAT pe 11.10, completat pe 12.10; ce rămâne: șterge cheia de scriere
 
 **Fapt:** oricine știa id-ul unui grup șters îl putea crea din nou, ca singur membru. Poate fi un fost
 membru, un invitat, cineva numit pe un eveniment al grupului, cineva cu un link de invitație sau cu
@@ -338,9 +338,13 @@ fiecărui grup, iar regula refuză crearea unui id de pe listă. În aplicație 
            pasul 3.
       3. regulile. Fără pasul 2, regula nu strică nimic, dar grupurile de azi rămân descoperite.
 
-- [ ] **Pe 11.10 au plecat pașii 1 și 3; pasul 2 așteaptă o cheie cu drept de scriere.** Până atunci cele
-      5 grupuri de azi sunt ca înainte: dacă unul e șters din APK, id-ul lui poate fi recreat câteva secunde.
-      Grupurile create sau șterse de acum încolo intră singure pe listă.
+- [x] **Toți cei trei pași au plecat:** funcțiile și regulile pe 11.10, completarea pe 12.10, cu cheia ta
+      (`listedNow` 5, nimic refuzat, niciun grup recreat). Pe live: 5 grupuri, toate pe listă.
+- [ ] **Șterge cheia de scriere, în două locuri** (o cheie de scriere uitată pe disc dă acces la toată baza):
+      1. fișierul `C:\Users\besli\Downloads\our-days-2a939-firebase-adminsdk-fbsvc-894e837a5e.json`, și din Recycle Bin;
+      2. cheia însăși, în [Google Cloud → Service accounts](https://console.cloud.google.com/iam-admin/serviceaccounts?project=our-days-2a939):
+         contul `firebase-adminsdk-fbsvc`, fila Keys, cheia care începe cu `894e837a5e` → Delete.
+      - **Cum arată bine:** în fila Keys nu mai e cheia `894e837a5e`. Cheia mea de citire rămâne.
       - **Cum faci cheia:** [Firebase → Project settings → Service accounts](https://console.firebase.google.com/project/our-days-2a939/settings/serviceaccounts/adminsdk)
         → „Generate new private key”. Pune fișierul ÎN AFARA repo-ului, de exemplu
         `C:\Users\besli\.ourdays\write-key.json`, și spune-mi calea. Nu lipi conținutul în chat.
