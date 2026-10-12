@@ -345,12 +345,6 @@ fiecărui grup, iar regula refuză crearea unui id de pe listă. În aplicație 
       2. cheia însăși, în [Google Cloud → Service accounts](https://console.cloud.google.com/iam-admin/serviceaccounts?project=our-days-2a939):
          contul `firebase-adminsdk-fbsvc`, fila Keys, cheia care începe cu `894e837a5e` → Delete.
       - **Cum arată bine:** în fila Keys nu mai e cheia `894e837a5e`. Cheia mea de citire rămâne.
-      - **Cum faci cheia:** [Firebase → Project settings → Service accounts](https://console.firebase.google.com/project/our-days-2a939/settings/serviceaccounts/adminsdk)
-        → „Generate new private key”. Pune fișierul ÎN AFARA repo-ului, de exemplu
-        `C:\Users\besli\.ourdays\write-key.json`, și spune-mi calea. Nu lipi conținutul în chat.
-      - **După rulare,** șterge cheia din [Google Cloud → Service accounts](https://console.cloud.google.com/iam-admin/serviceaccounts?project=our-days-2a939)
-        (contul `firebase-adminsdk`, fila Keys), ca să nu rămână o cheie de scriere valabilă pe disc.
-      - **Cum arată bine:** `listedNow` e cât `idsToList` (5 azi), iar `refused` și `groupsThatLookCreatedAgain` sunt goale.
 
 ---
 
