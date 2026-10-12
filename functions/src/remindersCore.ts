@@ -16,7 +16,112 @@
 // which anybody reports, because there is nothing to see.
 
 import type { EventDoc } from "./recurrenceServer";
-import { displayTime, isValidZone, startInstant, zoneOffsetMs } from "./eventTime";
+import { dayPlus, displayTime, isValidDayOffset, isValidZone, startInstant, zoneOffsetMs } from "./eventTime";
+
+/**
+ * Every field the reminder is computed from: `expandInWindow` (the series, its exceptions and
+ * overrides, the span) and `dueIn` (the lead, the clock, the zone, who to tell, the title). The job
+ * reads ONLY these (12.10.2026): an event can hold a megabyte of description and checklist, and the
+ * job reads thousands of events every five minutes. Of the rule, only the two parts a series is
+ * expanded from: the rest of the map could be a megabyte too. A field read below and missing here reads as
+ * absent, and the reminder quietly changes — remindersCompact.test.ts holds the two together.
+ */
+export const REMINDER_FIELDS = [
+  "date", "recurrenceRule.frequency", "recurrenceRule.onlyOn", "recurrenceExceptions", "overrideOfParent",
+  "overrideDate", "ownerId", "groupId", "endDayOffset", "reminderMinutes", "timezone", "time", "assigneeIds",
+  "assigneeId", "title",
+] as const;
+
+/** Bounds of what the app writes; anything longer is not the app's, and is not kept. */
+const MAX_ID = 128;
+const MAX_DOC_ID = 1500;
+const MAX_DATE = 32;
+const MAX_ZONE = 64;
+const MAX_ASSIGNEES = 50;
+const TITLE_CHARS = 120;
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A copy that holds no reference into `s` (a slice of a megabyte keeps the megabyte alive in V8). */
+const flat = (s: string): string => Array.from(s).join("");
+const shortText = (v: unknown, max: number): string | undefined =>
+  typeof v === "string" && v.length <= max ? v : undefined;
+
+/**
+ * An event reduced, as it is read, to what the reminder is computed from, each part bounded.
+ *
+ * A personal event's fields are not checked by the rules, so any of them can be a megabyte, and the
+ * job keeps every candidate until it has expanded them all (the override dedupe needs them together).
+ * For every event the app writes the result is the same: `dueIn(expandInWindow(...))` over the copy
+ * equals it over the original (remindersCompact.test.ts). What does not fit the app's shapes is
+ * dropped field by field, and the whole event when its id or date cannot be one of the app's.
+ */
+export function compactEvent(
+  id: string,
+  raw: Record<string, unknown>,
+  fromDay: string,
+  toDay: string,
+): (EventDoc & Record<string, unknown>) | null {
+  // The id goes into the dedupe key (`<id>__<day>`), which Firestore refuses past 1500 bytes.
+  if (typeof id !== "string" || !id || id.length > MAX_ID) return null;
+  const date = shortText(raw.date, MAX_DATE);
+  if (!date) return null;
+
+  const out: EventDoc & Record<string, unknown> = { id, date };
+
+  const rule = raw.recurrenceRule;
+  if (rule && typeof rule === "object" && !Array.isArray(rule)) {
+    const frequency = shortText((rule as Record<string, unknown>).frequency, 16);
+    const onlyOn = shortText((rule as Record<string, unknown>).onlyOn, 16);
+    out.recurrenceRule = { ...(frequency !== undefined ? { frequency } : {}), ...(onlyOn !== undefined ? { onlyOn } : {}) };
+  } else {
+    out.recurrenceRule = null;
+  }
+
+  // Only an exception that can suppress an occurrence of this window matters: an occurrence starts
+  // in the window, or up to its span before it (a multi-day event still running on the first day),
+  // and the weekly tolerance looks one day either side. A few dozen at most, whatever was stored.
+  const span = isValidDayOffset(raw.endDayOffset) ? raw.endDayOffset : 0;
+  const lo = dayPlus(fromDay, -(span + 1)) ?? fromDay;
+  const hi = dayPlus(toDay, 1) ?? toDay;
+  if (Array.isArray(raw.recurrenceExceptions)) {
+    const kept = new Set<string>();
+    for (const x of raw.recurrenceExceptions) {
+      if (typeof x === "string" && x.length === 10 && DAY_KEY.test(x) && x >= lo && x <= hi) kept.add(x);
+    }
+    out.recurrenceExceptions = [...kept];
+  }
+
+  const parent = shortText(raw.overrideOfParent, MAX_DOC_ID);
+  if (parent !== undefined) out.overrideOfParent = parent;
+  const overrideDate = shortText(raw.overrideDate, 10);
+  if (overrideDate !== undefined) out.overrideDate = overrideDate;
+
+  const ownerId = shortText(raw.ownerId, MAX_ID);
+  if (ownerId !== undefined) out.ownerId = ownerId;
+  const groupId = shortText(raw.groupId, MAX_DOC_ID);
+  if (groupId !== undefined) out.groupId = groupId;
+
+  if (typeof raw.endDayOffset === "number") out.endDayOffset = raw.endDayOffset;
+  if (typeof raw.reminderMinutes === "number") out.reminderMinutes = raw.reminderMinutes;
+  const timezone = shortText(raw.timezone, MAX_ZONE);
+  if (timezone !== undefined) out.timezone = timezone;
+  const time = shortText(raw.time, 5);
+  if (time !== undefined) out.time = time;
+
+  if (Array.isArray(raw.assigneeIds)) {
+    const people = new Set<string>();
+    for (const x of raw.assigneeIds) {
+      if (people.size >= MAX_ASSIGNEES) break;
+      if (typeof x === "string" && x && x.length <= MAX_ID) people.add(x);
+    }
+    out.assigneeIds = [...people];
+  }
+  const single = shortText(raw.assigneeId, MAX_ID);
+  if (single !== undefined) out.assigneeId = single;
+
+  if (typeof raw.title === "string") out.title = flat(raw.title.slice(0, TITLE_CHARS));
+  return out;
+}
 
 /**
  * When an ALL-DAY event is treated as starting.
@@ -69,6 +174,15 @@ export function bodyFor(day: string, at: number, zone: string, clockText: string
   return { bodyKey: "notifReminderOn", bodyParam: `${day}, ${clockText}` };
 }
 
+/** The name Intl itself uses for a zone it accepts ('eUrOpE/bUcHaReSt' is Europe/Bucharest). */
+function canonicalZone(zone: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: zone }).resolvedOptions().timeZone || zone;
+  } catch {
+    return zone;
+  }
+}
+
 /**
  * Which reminders fall inside (from, to].
  *
@@ -83,6 +197,11 @@ export function dueIn(
   to: number,
 ): Due[] {
   const out: Due[] = [];
+  // The zone of each EVENT, resolved once and by its canonical name: a series has dozens of
+  // occurrences, and the zone caches (eventTime.ts) are keyed by name — the same zone spelt in a
+  // hundred capitalisations, which Intl accepts, would otherwise rebuild a formatter for every
+  // occurrence (review, 12.10.2026).
+  const zoneOf = new Map<object, string>();
 
   for (const occ of occurrences) {
     const ev = occ.source;
@@ -94,9 +213,13 @@ export function dueIn(
     const ownerId = typeof ev.ownerId === "string" ? ev.ownerId : "";
     // The event's own zone when it has one; otherwise the owner's, so that one occurrence has one
     // instant for everybody rather than a different one per reader.
-    const zone = isValidZone(ev.timezone)
-      ? (ev.timezone as string)
-      : (isValidZone(ownerZones[ownerId]) ? (ownerZones[ownerId] as string) : "UTC");
+    let zone = zoneOf.get(ev);
+    if (zone === undefined) {
+      zone = canonicalZone(isValidZone(ev.timezone)
+        ? (ev.timezone as string)
+        : (isValidZone(ownerZones[ownerId]) ? (ownerZones[ownerId] as string) : "UTC"));
+      zoneOf.set(ev, zone);
+    }
 
     const hasClock = typeof ev.time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(ev.time);
     const clock = hasClock ? (ev.time as string) : ALL_DAY_HOUR;

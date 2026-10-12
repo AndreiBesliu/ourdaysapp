@@ -77,11 +77,30 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Documente citite întregi, în bloc, din colecții pe care le scrie oricine (recenzia din 11.10).** Orice cont
   poate umfla documentele lui până la 1 MiB, iar o funcție care citește câteva sute deodată cade din lipsă de
   memorie (implicit 256 MiB). Mai vechi decât statisticile Admin, de luat în ordinea asta:
-  - **Memento-urile (`sendDueReminders`, la 5 minute):** două interogări de câte 2000 de evenimente întregi.
-    Câteva sute de evenimente personale umflate opresc memento-urile pentru TOȚI, la fiecare rulare. Tot acolo,
-    `limit(2000)` pe recurente se poate umple cu evenimentele unui singur cont, iar recurentele celorlalți nu
-    mai primesc memento (aceeași formă ca fereastra jocurilor, reparată pe 10.10). Remediul: `select` pe
-    câmpurile calculului, documentul întreg doar pentru cele scadente, și o fereastră care se mută.
+  - **Memento-urile (`sendDueReminders`): citirea e reparată pe 12.10, trimiterea urmează.** Citirea merge pe
+    pagini mici (10 evenimente), doar cu câmpurile calculului, fiecare eveniment redus la o formă mărginită.
+    Interogarea recurentelor nu mai citește regulile de gunoi. Peste plafon sau timp, rularea e roșie. Ce a
+    rămas:
+    - **Trimiterea (pasul următor):** nicio ordine între oameni. Mii de memento-uri ale unui cont la aceeași
+      oră trec înaintea celorlalți. Un memento amânat la ultima lui rulare se pierde fără să apară roșu, iar o
+      rulare oprită între `create` și `notify` pierde memento-ul pentru totdeauna (rândul de deduplicare există
+      deja). Remediul: rânduri pe proprietar, cu plafon, cei la ultima șansă întâi, un buget de trimitere și un
+      jurnal în doi pași (`sending` → `sent`).
+    - **Aglomerarea e acum vizibilă, nu imposibilă:** peste 5000 de evenimente pe interogare (ale tuturor
+      conturilor la un loc) sau peste 15 s de citire pe interogare, rularea e roșie la fiecare 5 minute, iar
+      memento-urile de după tăietură se pierd. Câteva zeci de evenimente umflate ajung la limita de timp. Închiderea cere citirea
+      pe proprietar: un index scris de server la fiecare eveniment (`reminderIndex`, cu momentul următorului
+      memento), din care jobul citește doar ce e scadent, cu un plafon pe proprietar. Cost: o scriere de
+      trigger la fiecare eveniment; câștig: citiri proporționale cu memento-urile scadente, nu cu evenimentele.
+    - **Interogarea seriilor citește și seriile încheiate** (nicio limită de dată; la fel înainte de 12.10).
+      Crește cu folosirea; la câteva mii de serii, limita de timp taie citirea. Remediul: o limită de jos pe
+      `date` pe frecvență (`lookbackMsFor`, ca în `aiSources.ts`), care cere indexul compus
+      (`recurrenceRule.frequency`, `date`), publicat ÎNAINTEA funcțiilor. Linia `REMINDERS_RUN` are acum timpul
+      fiecărei citiri: de urmărit pe live înainte.
+    - **Evenimentele personale nu au niciun câmp verificat de reguli:** câmpurile citite de memento-uri
+      (`recurrenceExceptions`, `assigneeIds`, `title`) pot fi umflate. Paginile de 10 țin memoria, dar câteva
+      zeci de astfel de evenimente consumă bugetul de timp. Remediul: plafoane în reguli și pentru crearea
+      personală (verificate întâi pe APK).
   - **Ștergerea contului:** paginile de ștergere citesc documente întregi (`batchDelete.ts`, `forEachDoc`,
     `drain`). Un străin poate trimite 400 de cereri de prietenie umflate către orice uid, iar ștergerea
     contului acelui om (și din Admin) cade la fiecare încercare, după ce primii pași au rulat. Remediul:

@@ -12977,3 +12977,110 @@ Interogările noi sunt verificate față de indecșii de pe live (emulatorul nu 
   fișierului și revocarea cheii în Google Cloud sunt la Andrei (OWNER_VERIFY).
 
 Publicarea din 11.10 e acum completă: funcțiile, completarea, regulile și hosting-ul.
+
+## 2026-10-12 · Memento-urile nu mai pot fi oprite pentru toți de evenimentele unui singur cont (Task Started)
+
+**Prompt (Andrei):** „continua” (după ce publicarea s-a încheiat cu completarea `usedGroupIds`).
+**Model:** Claude Opus 5.5.
+
+**Ce e** (BACKLOG, secțiunea 2, primul la rând după recenzia din 11.10). `sendDueReminders` rulează la 5 minute și
+are patru căi prin care un singur cont oprește memento-urile pentru TOȚI:
+- **Memoria:** citește evenimentele întregi, până la 2 × 2000. Câteva sute de evenimente personale umflate la 1 MiB
+  o fac să cadă la fiecare rulare.
+- **Interogarea recurentelor** (`recurrenceRule != null`, `limit(2000)`) e ordonată după valoare, iar un `true`
+  se sortează înaintea oricărei reguli reale. 2000 de evenimente cu `recurrenceRule: true` scot din citire toate
+  recurentele reale.
+- **Interogarea pe dată** e ordonată după dată. 2000 de evenimente puse la începutul ferestrei scot restul.
+- **Trimiterea** nu are nicio ordine între oameni. Mii de memento-uri ale unui cont la aceeași oră consumă tot
+  timpul rulării înaintea celorlalți.
+
+**Măsurat pe live (doar numărători):** 34 de evenimente, 2 în fereastră, 1 recurent, 2 cu memento, cel mai mare
+de 4 kB. Azi nu e niciun atac; e o întărire.
+
+**Plan:**
+- Citirea pe pagini mici, doar cu câmpurile calculului, fără plafonul de 2000.
+- Fiecare document redus imediat la o formă mărginită (excepțiile doar din fereastră, titlul tăiat).
+- Un buget de timp pentru citire, depășit = rulare roșie, nu tăcere.
+- Trimiterea pe rând între proprietari, cu o limită pe proprietar și rulare.
+- Apoi: probă pe emulator, recenzie, mutații, porți.
+
+## 2026-10-12 · Memento-urile nu mai pot fi oprite pentru toți de evenimentele unui singur cont (Task Completed)
+
+**Prompt (Andrei):** „continua”.
+**Model:** Claude Opus 5.5.
+
+Doar citirea. Trimiterea (ordinea între oameni, ultima șansă, bugetul) e pasul următor, în BACKLOG.
+
+**Ce face acum citirea (`functions/src/reminders.ts`, `remindersCore.ts`).**
+- **Interogarea seriilor** cere `recurrenceRule.frequency in [daily, weekly, monthly, yearly]`, nu
+  `recurrenceRule != null` cu `limit(2000)`. Valorile de gunoi (`true`, `'x'`, `[]`), care se sortau înaintea
+  oricărei reguli reale, nu mai sunt citite.
+- **Ambele interogări merg pe pagini de 10** (`get` + `startAfter`), fără plafonul de 2000, și aduc doar
+  câmpurile calculului (`REMINDER_FIELDS`). Din regulă se aduc doar `frequency` și `onlyOn`.
+- **Fiecare eveniment e redus pe loc la o copie mărginită** (`compactEvent`):
+  - un id de cel mult 128 de caractere și o dată de cel mult 32, altfel evenimentul e lăsat;
+  - excepțiile, doar zilele care pot ascunde o apariție din fereastră, fiecare o dată;
+  - cel mult 50 de responsabili, titlul tăiat la 120 de caractere;
+  - un câmp mai lung decât scrie aplicația e lăsat afară.
+- **Fiecare interogare are plafonul ei (5000) și timpul ei (15 s).** Peste oricare, citirea se oprește și
+  rularea e roșie („stopped early”). La fel o pagină care se repetă fără nimic nou.
+- **Fusurile proprietarilor** se citesc doar pentru evenimentele care au nevoie, doar câmpul `timezone`, pe
+  bucăți de 100. Nu se mai opresc la 400 de proprietari.
+- **Fusul fiecărui eveniment** e rezolvat o dată, la numele canonic.
+- **`eventTime.ts` (ambele copii):** formatoarele se refolosesc dintr-un cache de până la 1024 de intrări.
+  `isValidZone` refuză șirurile de peste 64 de caractere și decalajele care nu sunt reale (acceptă doar
+  sferturi de oră, cel mult 14 ore).
+- **Timeout 150 s și 512 MiB,** declarate explicit.
+- **Curățenia `reminder_log`** rulează acum la fiecare rulare, nu doar când e ceva scadent.
+- **Linia `REMINDERS_RUN`** are timpul fiecărei citiri.
+
+**Măsurat pe live:** 34 de evenimente, 2 în fereastră, 1 serie, cel mai mare de 4 kB. Azi nu e niciun atac.
+
+**Probă:** testele noi de emulator pică pe codul vechi.
+- Aglomerarea pe dată am văzut-o picând.
+- Aglomerarea seriilor e dedusă din cod: primul test trecuse fiindcă seria începea în fereastra datei; am
+  mutat-o cu 10 zile în urmă.
+
+**Recenzii (Workflow), patru runde:**
+- **Design, înainte de cod** (2 agenți). A găsit:
+  - costul de calcul al aparițiilor zilnice;
+  - câmpurile selectate care pot fi umflate;
+  - `slice` care ține în viață șirul întreg;
+  - că aglomerarea doar se vede, nu dispare.
+- **Implementarea** (20 de agenți): 14 confirmate.
+  - Ieșirea timpurie dintr-un flux nu închidea cererea → pagini în loc de flux.
+  - Seriile ținute pe loc la o citire tăiată → înlocuite cu o căutare a editărilor.
+  - Cache-ul de fusuri putea fi golit cu scrieri diferite → fus canonic pe eveniment.
+  - Golurile de test le-am închis.
+- **Remedierea** (12 agenți): 9 confirmate. Căutarea editărilor avea căi noi (limită comună pentru 30 de
+  serii, fără limită de timp), deci am scos-o:
+  - `createEventOverride` pune ziua editată în excepțiile seriei;
+  - APK-ul nu scrie editări, iar pe live nu există niciuna.
+
+  Tot de aici: paginile au scăzut la 10 (un tablou de `null` decodat e de zeci de ori mai mare decât pe
+  disc), iar regula se citește pe subcâmpuri.
+- **Versiunea finală** (5 agenți): 3 mici.
+  - Decalajele reale sunt acceptate din nou, fiindcă le raportează o gazdă pe decalaj fix.
+  - Interogarea seriilor fără limită de dată (era la fel înainte) → BACKLOG, cu timpul citirii acum în jurnal.
+  - Textul din BACKLOG.
+
+**Mutații: 59, dintre care 58 prinse și unul echivalent** (R9: altă formă a citirii „unul peste plafon”, cu
+același rezultat). Rularea s-a făcut într-o clonă în afara Drive-ului, cu controale negative pe suitele
+proprii și pe cele complete. Ce a trebuit corectat pe drum:
+- **C8** a cerut un test nou: gunoi de 10 caractere care cade în fereastră.
+- **Generarea mutanților de câmp** avea o greșeală (un mutant nu schimba nimic). Harnașamentul a oprit
+  rularea; am corectat și am reluat de acolo.
+- **O rulare oprită la mijloc** a lăsat un emulator orfan, pe care l-am oprit. Clona a fost resincronizată
+  înainte de reluare.
+
+**Rămâne (BACKLOG):**
+- trimiterea;
+- aglomerarea, care se vede, dar nu e imposibilă (indexul pe proprietar);
+- seriile încheiate citite la fiecare rulare (cere un index compus);
+- câmpurile evenimentelor personale fără plafoane în reguli.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2622), `npm run build`, `check-split`, `check-offline`,
+`check-bundle`, `test:tz`, `test:rules` (888). `functions/lib` reconstruit.
+
+**Nepublicat.** Pleacă cu funcțiile. Copia din client a `eventTime.ts` pleacă cu hosting-ul; acolo schimbarea
+e doar de viteză, plus refuzul decalajelor care nu sunt reale.

@@ -54,14 +54,42 @@ export function isValidTime(t: unknown): t is WallTime {
   return typeof t === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
 }
 
-/** An IANA zone this runtime actually knows. Anything else is refused rather than guessed. */
+/**
+ * Formatters by zone, built once each (12.10.2026). Building an `Intl.DateTimeFormat` costs about a
+ * hundred times more than using one, and the reminder job asked for a new one per occurrence, twice
+ * — thousands of series made that the whole run. Both caches are small and bounded: an IANA name is
+ * short, and a longer string is never a zone, so it is refused without being kept.
+ */
+const MAX_ZONE_LENGTH = 64;
+const MAX_CACHED_ZONES = 1024; // above the ~600 names Intl knows and the ~120 real offsets: all of them at once
+const zoneValidity = new Map<string, boolean>();
+const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function remember<V>(cache: Map<string, V>, key: string, value: V): V {
+  if (cache.size >= MAX_CACHED_ZONES) cache.clear();
+  cache.set(key, value);
+  return value;
+}
+
+/**
+ * A UTC offset written as a zone ('+05:30'). Newer runtimes accept them, and a device set to a fixed
+ * offset reports its own zone this way, so an event can carry one. Only the real ones: whole quarter
+ * hours, at most fourteen hours — about 120, so the caches still hold every zone there is. Any other
+ * spelling (thousands of them) is refused before Intl is asked.
+ */
+const OFFSET_ZONE = /^[+-](0\d|1[0-4]):(00|15|30|45)$/;
+
+/** An IANA zone, or a real offset, this runtime actually knows. Anything else is refused rather than guessed. */
 export function isValidZone(tz: unknown): tz is string {
-  if (typeof tz !== 'string' || !tz) return false;
+  if (typeof tz !== 'string' || !tz || tz.length > MAX_ZONE_LENGTH) return false;
+  if ((tz[0] === '+' || tz[0] === '-') && !OFFSET_ZONE.test(tz)) return false;
+  const known = zoneValidity.get(tz);
+  if (known !== undefined) return known;
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: tz });
-    return true;
+    return remember(zoneValidity, tz, true);
   } catch {
-    return false;
+    return remember(zoneValidity, tz, false);
   }
 }
 
@@ -81,12 +109,12 @@ export function localZone(): string {
  * government decree more often than a hand-written table gets updated.
  */
 export function zoneOffsetMs(utcMs: number, zone: string): number {
-  const dtf = new Intl.DateTimeFormat('en-US', {
+  const dtf = offsetFormatters.get(zone) ?? remember(offsetFormatters, zone, new Intl.DateTimeFormat('en-US', {
     timeZone: zone,
     hour12: false,
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
-  });
+  }));
   const parts = dtf.formatToParts(new Date(utcMs));
   const get = (type: string): number => Number(parts.find((p) => p.type === type)?.value ?? 0);
   // `hour` comes back as 24 for midnight in some engines under hour12:false.
