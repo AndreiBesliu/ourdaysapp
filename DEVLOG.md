@@ -13084,3 +13084,70 @@ proprii și pe cele complete. Ce a trebuit corectat pe drum:
 
 **Nepublicat.** Pleacă cu funcțiile. Copia din client a `eventTime.ts` pleacă cu hosting-ul; acolo schimbarea
 e doar de viteză, plus refuzul decalajelor care nu sunt reale.
+
+## 2026-10-13 · Memento-urile: trimiterea, pe rând între oameni, fără pierderi tăcute (Task Started)
+
+**Prompt (Andrei):** „continua”.
+**Model:** Claude Opus 5.5.
+
+**Ce e** (BACKLOG, pasul următor după citirea din 12.10): bucla de trimitere ia memento-urile la rând.
+- **Nicio ordine între oameni și niciun buget.** Mii de memento-uri ale unui cont la aceeași oră trec înaintea
+  celorlalți, până la timeout.
+- **Ultima șansă:** un memento e prins de trei rulări. Unul rămas netrimis la a treia se pierde fără să apară
+  roșu.
+- **Rândul de deduplicare e scris înaintea trimiterii.** O rulare căzută între cele două, sau o trimitere
+  eșuată, pierde memento-ul pentru totdeauna, iar rulările următoare îl socotesc deja trimis.
+- **`ai_assistant`** primește rânduri în clopoțel ca destinatar.
+
+**Plan:**
+- Cei la ultima șansă întâi, apoi câte unul pe rând de la fiecare proprietar.
+- Un buget de trimitere: după el, ceilalți așteaptă rularea următoare. Unul la ultima șansă care nu încape e
+  pierdut și numărat, deci rularea e roșie.
+- Jurnal în doi pași (`sending` → `sent`), cu reluare după o rulare căzută sau o trimitere eșuată.
+
+**Bugetul de agenți:** 84% din săptămână e consumat, cu resetare pe 17.10. Pe CNCVS Andrei a hotărât „fără
+agenți până la 17.10”, iar bugetul e comun, așa că aici: fără recenzie cu agenți, doar teste și mutații locale.
+Recenzia rămâne restantă după 17.10.
+
+## 2026-10-13 · Memento-urile: trimiterea, pe rând între oameni, fără pierderi tăcute (Task Completed)
+
+**Prompt (Andrei):** „continua”.
+**Model:** Claude Opus 5.5.
+
+**Ce face acum trimiterea (`functions/src/reminders.ts`, `remindersCore.ts`):**
+- **Ordinea** (`sendOrder`): întâi memento-urile la ultima lor rulare, adică cele pe care rularea următoare nu le
+  mai vede, cu 2 minute în plus pentru o rulare care pornește târziu. În fiecare grup, câte unul pe rând de la
+  fiecare proprietar. Cele o mie de memento-uri ale unui cont la aceeași oră așteaptă acum după primul memento
+  al fiecăruia dintre ceilalți.
+- **Un buget de trimitere de 60 s.** După el, un memento pe care rularea următoare îl mai vede așteaptă
+  (`deferred`, nu e eșec). Unul la ultima șansă e pierdut și numărat (`dropped`), iar rularea e roșie.
+- **Jurnal în doi pași:** rândul din `reminder_log` se creează cu `state: "sending"` și se marchează `sent` după
+  trimitere.
+  - O revendicare rămasă „sending” peste 4 minute e preluată de rularea următoare care încă vede
+    memento-ul (`retried`). Asta acoperă o rulare căzută și o trimitere eșuată, care înainte pierdeau
+    memento-ul pentru totdeauna.
+  - Prețul: un memento trimis de două ori când marcajul „sent” eșuează după o trimitere reușită.
+  - Rândurile dinainte, fără stare, rămân trimise.
+- **`ai_assistant` nu mai e destinatar.** Scria un rând în clopoțel pentru un cont care nu există.
+- **Linia de stare** spune acum și `deferred`, `dropped` și `retried`.
+
+**Probe:**
+- Teste de unitate pentru ordine: pe rând, ultima șansă întâi, granița exactă a ultimei șanse.
+- Pe emulator, prin funcția reală:
+  - bugetul și restul, trimis la rularea următoare fără nimic dublat;
+  - ultima șansă și pierderea, roșie;
+  - preluarea unei revendicări vechi, dar nu și a uneia proaspete;
+  - o trimitere eșuată, reluată;
+  - un rând vechi fără stare, netrimis din nou;
+  - fără rând în clopoțel pentru asistent.
+
+**Mutații: 16 din 16 prinse,** într-o clonă în afara Drive-ului, cu controale negative pe suitele proprii și pe
+cele complete.
+
+**Fără recenzie cu agenți:** bugetul săptămânal era la 84%, iar Andrei hotărâse „fără agenți până la 17.10”
+pentru CNCVS, pe același buget. Recenzia e restantă în BACKLOG.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2626), `npm run build`, `check-split`, `check-offline`,
+`check-bundle`, `test:tz`, `test:rules` (894). `functions/lib` reconstruit.
+
+**Nepublicat.** Pleacă cu funcțiile, cu acordul lui Andrei.

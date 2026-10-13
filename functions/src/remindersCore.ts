@@ -133,9 +133,17 @@ export function compactEvent(
  */
 const ALL_DAY_HOUR = "09:00";
 
+/**
+ * The assistant an event can be assigned to. It is nobody's phone: as a recipient it only wrote a
+ * bell row for an account that does not exist, once per reminder (13.10.2026).
+ */
+const AI_ASSISTANT = "ai_assistant";
+
 export interface Due {
   key: string;
   eventId: string;
+  /** Whose event it is: the turns between people are taken by owner (see `sendOrder`). */
+  ownerId: string;
   day: string;
   title: string;
   at: number;
@@ -237,13 +245,14 @@ export function dueIn(
       ? (ev.assigneeIds as unknown[]).filter((x): x is string => typeof x === "string" && !!x)
       : [];
     const single = typeof ev.assigneeId === "string" && ev.assigneeId ? [ev.assigneeId] : [];
-    const recipients = [...new Set([ownerId, ...assignees, ...single])].filter(Boolean);
+    const recipients = [...new Set([ownerId, ...assignees, ...single])].filter((u) => u && u !== AI_ASSISTANT);
     if (recipients.length === 0) continue;
 
     out.push({
       // Per OCCURRENCE, not per event: a weekly series has to remind every week.
       key: `${ev.id}__${occ.day}`,
       eventId: ev.id,
+      ownerId,
       day: occ.day,
       title: (typeof ev.title === "string" ? ev.title : "").slice(0, 120),
       at,
@@ -257,4 +266,42 @@ export function dueIn(
   }
 
   return out;
+}
+
+/**
+ * The order the due reminders are sent in, and which of them are on their LAST run (13.10.2026).
+ *
+ * A reminder is due in every run whose look-back (`windowMs`) holds its instant — three runs, five
+ * minutes apart. One that the next run will no longer see is on its last chance: those go first, so
+ * a run that runs out of time loses as few as it can, and each one it does lose is counted. Within
+ * each part the turns go round the OWNERS, one reminder each: one account's thousand reminders at the
+ * same minute wait behind everybody else's first one, instead of in front of all of them.
+ * `slackMs` treats a reminder as on its last chance a little early, for a next run that starts late.
+ */
+export function sendOrder(
+  due: readonly Due[],
+  now: number,
+  windowMs: number,
+  everyMs: number,
+  slackMs: number,
+): { order: Due[]; lastChance: Set<string> } {
+  const lastChance = new Set(due.filter((d) => d.at <= now + everyMs + slackMs - windowMs).map((d) => d.key));
+  const roundRobin = (items: Due[]): Due[] => {
+    const byOwner = new Map<string, Due[]>();
+    for (const d of items) {
+      const q = byOwner.get(d.ownerId);
+      if (q) q.push(d);
+      else byOwner.set(d.ownerId, [d]);
+    }
+    const queues = [...byOwner.values()];
+    const out: Due[] = [];
+    for (let i = 0; out.length < items.length; i++) {
+      for (const q of queues) if (i < q.length) out.push(q[i]);
+    }
+    return out;
+  };
+  return {
+    order: [...roundRobin(due.filter((d) => lastChance.has(d.key))), ...roundRobin(due.filter((d) => !lastChance.has(d.key)))],
+    lastChance,
+  };
 }

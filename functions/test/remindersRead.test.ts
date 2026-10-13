@@ -273,3 +273,96 @@ describe('an edited occurrence of a series', () => {
     expect(await sentFor('series')).toBe(false);
   }, 120_000);
 });
+
+describe('sending', () => {
+  /** A timed event whose "at the time" reminder lands at `atMs` (a whole minute). */
+  const eventAt = (owner: string, atMs: number, extra: Record<string, unknown> = {}) => ({
+    ownerId: owner, groupId: null, title: 'Dentist', date: `${dayOf(atMs)}T00:00:00.000Z`, time: clockOf(atMs),
+    timezone: 'UTC', reminderMinutes: 0, assigneeIds: [owner], ...extra,
+  });
+  const minute = (ms: number) => Math.floor(ms / 60_000) * 60_000;
+  const logOf = async (id: string, atMs: number) => (await db.doc(`reminder_log/${id}__${dayOf(atMs)}`).get()).data();
+  /** A clock that moves one tick a look: the send budget is then a number of sends. */
+  const ticking = () => { let t = 0; return () => t++; };
+
+  it('in turns between owners, within the time to send; the rest wait for the next run', async () => {
+    await seed({ ...many('!m', 40, () => dueEvent(MALLORY)), dentist: dueEvent(ALICE) });
+    const counts = mod.emptyCounts();
+    // Two sends' time: Mallory's first reminder, then Alice's — not Mallory's other thirty-nine.
+    await mod.remindDue(db, Date.now(), counts, { clock: ticking(), sendBudgetMs: 3 });
+    expect(counts).toMatchObject({ due: 41, sent: 2, deferred: 39, dropped: 0 });
+    expect(await sentFor('dentist')).toBe(true);
+    expect(mod.reminderOutcome(counts).failed).toBe(0);
+    // The next run sends the rest; nothing twice.
+    const next = mod.emptyCounts();
+    await mod.remindDue(db, Date.now(), next);
+    expect(next).toMatchObject({ sent: 39, dupes: 2, deferred: 0 });
+  }, 120_000);
+
+  it('a reminder on its last run goes first, and one that does not fit is counted, and red', async () => {
+    const last = minute(Date.now() - 11 * 60_000);
+    await seed({ ...many('!m', 5, () => dueEvent(MALLORY)), late: eventAt(ALICE, last) });
+    const one = mod.emptyCounts();
+    await mod.remindDue(db, Date.now(), one, { clock: ticking(), sendBudgetMs: 2 });
+    expect(one).toMatchObject({ sent: 1, deferred: 5, dropped: 0 });
+    expect(await logOf('late', last)).toMatchObject({ state: 'sent' });
+
+    await db.doc(`reminder_log/late__${dayOf(last)}`).delete();
+    const none = mod.emptyCounts();
+    await mod.remindDue(db, Date.now(), none, { sendBudgetMs: 0 });
+    expect(none).toMatchObject({ sent: 0, dropped: 1, deferred: 5 });
+    expect(mod.reminderOutcome(none).failed).toBeGreaterThan(0);
+    expect(mod.reminderOutcome(none).detail).toContain('dropped 1');
+  }, 120_000);
+
+  it('a claim left "sending" by a run that died is taken over, once old enough', async () => {
+    await seed({ dentist: dueEvent(ALICE) });
+    const row = (agoMs: number) => ({ eventId: 'dentist', day: dayOf(dueAt()), at: dueAt(), state: 'sending', claimedAt: admin.firestore.Timestamp.fromMillis(Date.now() - agoMs) });
+    await db.doc(`reminder_log/dentist__${dayOf(dueAt())}`).set(row(60_000));
+    const young = mod.emptyCounts();
+    await mod.remindDue(db, Date.now(), young);
+    expect(young).toMatchObject({ sent: 0, dupes: 1, retried: 0 });
+
+    await db.doc(`reminder_log/dentist__${dayOf(dueAt())}`).set(row(mod.STALE_CLAIM_MS + 60_000));
+    const old = mod.emptyCounts();
+    await mod.remindDue(db, Date.now(), old);
+    expect(old).toMatchObject({ sent: 1, retried: 1 });
+    expect(await logOf('dentist', dueAt())).toMatchObject({ state: 'sent', retries: 1 });
+  }, 120_000);
+
+  it('a send that fails leaves its claim, and a later run sends it', async () => {
+    await seed({ dentist: dueEvent(ALICE) });
+    const real = db.collection.bind(db);
+    vi.spyOn(db, 'collection').mockImplementation(((p: string) => {
+      if (p === 'notifications') throw new Error('injected: the bell is unwritable');
+      return real(p);
+    }) as never);
+    const first = mod.emptyCounts();
+    await mod.remindDue(db, Date.now(), first);
+    vi.restoreAllMocks();
+    expect(first).toMatchObject({ sent: 0, failed: 1 });
+    expect(await logOf('dentist', dueAt())).toMatchObject({ state: 'sending' });
+    // Once the claim is old enough, the next run that still sees the reminder delivers it.
+    await db.doc(`reminder_log/dentist__${dayOf(dueAt())}`).update({ claimedAt: admin.firestore.Timestamp.fromMillis(Date.now() - mod.STALE_CLAIM_MS - 60_000) });
+    const second = mod.emptyCounts();
+    await mod.remindDue(db, Date.now(), second);
+    expect(second).toMatchObject({ sent: 1, retried: 1, failed: 0 });
+    expect(await logOf('dentist', dueAt())).toMatchObject({ state: 'sent' });
+  }, 120_000);
+
+  it('a row from before, with no state, was sent: nothing again', async () => {
+    await seed({ dentist: dueEvent(ALICE) });
+    await db.doc(`reminder_log/dentist__${dayOf(dueAt())}`).set({ eventId: 'dentist', day: dayOf(dueAt()), at: dueAt(), sentAt: admin.firestore.Timestamp.fromMillis(Date.now() - 60 * 60_000) });
+    const counts = mod.emptyCounts();
+    await mod.remindDue(db, Date.now(), counts);
+    expect(counts).toMatchObject({ sent: 0, dupes: 1, retried: 0 });
+  }, 120_000);
+
+  it('the assistant gets no bell row', async () => {
+    await seed({ dentist: dueEvent(ALICE, { assigneeIds: [ALICE, 'ai_assistant'], assigneeId: 'ai_assistant' }) });
+    await runJob();
+    expect(await sentFor('dentist')).toBe(true);
+    expect((await db.collection('notifications').where('userId', '==', 'ai_assistant').get()).size).toBe(0);
+    expect((await db.collection('notifications').where('userId', '==', ALICE).get()).size).toBe(1);
+  }, 120_000);
+});

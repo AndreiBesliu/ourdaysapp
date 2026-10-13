@@ -53,7 +53,7 @@ import * as admin from "firebase-admin";
 import { FieldValue, type QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { FREQUENCIES, expandInWindow, type EventDoc } from "./recurrenceServer";
 import { notify } from "./notify";
-import { REMINDER_FIELDS, compactEvent, dueIn } from "./remindersCore";
+import { REMINDER_FIELDS, compactEvent, dueIn, sendOrder, type Due } from "./remindersCore";
 import { isValidZone } from "./eventTime";
 import { runJob, type JobOutcome } from "./jobRuns";
 
@@ -88,6 +88,19 @@ export const READ_BUDGET_MS = 15_000;
 export const READ_PAGE = 10;
 /** Owners' zones read per call. */
 const ZONE_CHUNK = 100;
+/** How often the job runs (its cron), and how much later than that the next run may start. */
+const RUN_EVERY_MS = 5 * 60 * 1000;
+const LATE_RUN_SLACK_MS = 2 * 60 * 1000;
+/**
+ * How long a run keeps starting sends. Past it, a reminder that a later run still sees waits for it;
+ * one on its last chance is lost, and counted. With the reads' 2 × 15 s, inside the 150 s timeout.
+ */
+export const SEND_BUDGET_MS = 60_000;
+/**
+ * A claim (`state: "sending"`) older than this was left by a run that died, or by a send that failed:
+ * the next run that still sees the reminder takes it over. A send takes seconds.
+ */
+export const STALE_CLAIM_MS = 4 * 60 * 1000;
 
 export type ReminderCounts = {
   /** Events read, and how many of them could not be the app's (no id or date it writes). */
@@ -97,30 +110,43 @@ export type ReminderCounts = {
   /** How long each read took, for the log line: the page latency on live, measured. */
   datedMs: number; seriesMs: number;
   candidates: number; occurrences: number; due: number;
+  /** Not sent this run: waiting for a later one (deferred), or on their last chance (dropped, red). */
+  deferred: number; dropped: number;
+  /** Claims left by an earlier run and taken over by this one. */
+  retried: number;
   sent: number; dupes: number; rows: number; pushed: number; failed: number;
 };
 
 export const emptyCounts = (): ReminderCounts => ({
   read: 0, skipped: 0, cut: 0, datedMs: 0, seriesMs: 0, candidates: 0, occurrences: 0, due: 0,
+  deferred: 0, dropped: 0, retried: 0,
   sent: 0, dupes: 0, rows: 0, pushed: 0, failed: 0,
 });
 
 /**
  * The run's line for the health panel, and whether it was ok: not when a reminder failed to send,
- * and not when the read stopped short — the reminders after the stop were never looked at.
+ * not when the read stopped short — the reminders after the stop were never looked at — and not
+ * when one on its last chance was left unsent.
  */
 export function reminderOutcome(c: ReminderCounts): JobOutcome {
   return {
-    failed: c.failed + c.cut,
+    failed: c.failed + c.cut + c.dropped,
     detail: `due ${c.due}, sent ${c.sent}, already sent ${c.dupes}, failed ${c.failed}, `
-      + `read ${c.read}, stopped early ${c.cut}`,
+      + `read ${c.read}, stopped early ${c.cut}, deferred ${c.deferred}, dropped ${c.dropped}, retried ${c.retried}`,
   };
 }
+
+const alreadyExists = (err: unknown): boolean => {
+  const code = (err as { code?: unknown })?.code;
+  return code === 6 || code === "already-exists"
+    || String((err as { message?: unknown })?.message || "").includes("ALREADY_EXISTS");
+};
 
 export interface RemindOptions {
   maxCandidates?: number;
   budgetMs?: number;
   page?: number;
+  sendBudgetMs?: number;
   /** The run's clock, for the read budget; the tests drive it. */
   clock?: () => number;
 }
@@ -140,6 +166,7 @@ export async function remindDue(
   const maxCandidates = opts.maxCandidates ?? MAX_CANDIDATES;
   const budgetMs = opts.budgetMs ?? READ_BUDGET_MS;
   const page = opts.page ?? READ_PAGE;
+  const sendBudgetMs = opts.sendBudgetMs ?? SEND_BUDGET_MS;
   const clock = opts.clock ?? Date.now;
   const from = now - WINDOW_MS;
 
@@ -233,26 +260,64 @@ export async function remindDue(
   counts.due = due.length;
   if (due.length === 0) return;
 
-  // ── send, at most once each ─────────────────────────────────────────────
-  for (const d of due) {
+  // ── send, at most once each, in turns ───────────────────────────────────
+  //
+  // Each send is CLAIMED first — a `reminder_log` row created with `state: "sending"`, which fails if
+  // the row exists, so an overlapping run sends nothing twice — and marked `sent` after. Until
+  // 13.10.2026 the row was the whole record: a run that died between it and the send, or a send that
+  // failed, lost the reminder for good, every later run reading it as delivered. Now a claim still
+  // "sending" after STALE_CLAIM_MS is taken over by the next run that still sees the reminder. The
+  // price is the rare reminder sent twice (delivered, then the mark failed), not a lost one.
+  const { order, lastChance } = sendOrder(due, now, WINDOW_MS, RUN_EVERY_MS, LATE_RUN_SLACK_MS);
+  const sendStarted = clock();
+
+  /** "send" when this run owns the reminder now; "skip" when another run has it, or had it delivered. */
+  const claim = async (d: Due): Promise<"send" | "skip"> => {
     const logRef = db.doc(`reminder_log/${d.key}`);
     try {
-      // `create` throws if the document exists. That is the dedupe: the first run to get here
-      // wins, and a second one stops before sending rather than having to coordinate.
-      await logRef.create({ eventId: d.eventId, day: d.day, at: d.at, sentAt: FieldValue.serverTimestamp() });
+      await logRef.create({ eventId: d.eventId, day: d.day, at: d.at, state: "sending", claimedAt: FieldValue.serverTimestamp() });
+      return "send";
     } catch (err) {
-      // Only ALREADY_EXISTS means an overlapping run got here first. Counting every rejection
-      // as a dupe would have made a transient UNAVAILABLE read as "somebody else delivered it" —
-      // a log line that lies is worse than the silence it replaced. (Review finding.)
-      const code = (err as { code?: unknown })?.code;
-      const already = code === 6 || code === "already-exists"
-        || String((err as { message?: unknown })?.message || "").includes("ALREADY_EXISTS");
-      if (already) {
-        counts.dupes += 1;
+      // Only ALREADY_EXISTS means another run got here first. Counting every rejection as a dupe
+      // would have made a transient UNAVAILABLE read as "somebody else delivered it". (Review finding.)
+      if (!alreadyExists(err)) throw err;
+    }
+    // A row made before 13.10 has no state: it was sent.
+    const taken = await db.runTransaction(async (tx) => {
+      const row = (await tx.get(logRef)).data();
+      if (!row || row.state !== "sending") return false;
+      const claimedAt = row.claimedAt as { toMillis?: () => number } | undefined;
+      const age = Date.now() - (typeof claimedAt?.toMillis === "function" ? claimedAt.toMillis() : 0);
+      if (age < STALE_CLAIM_MS) return false;
+      tx.update(logRef, { claimedAt: FieldValue.serverTimestamp(), retries: FieldValue.increment(1) });
+      return true;
+    });
+    if (!taken) return "skip";
+    counts.retried += 1;
+    return "send";
+  };
+
+  for (const d of order) {
+    if (clock() - sendStarted >= sendBudgetMs) {
+      if (lastChance.has(d.key)) {
+        counts.dropped += 1;
+        console.error("reminder: out of time on its last run", d.key);
       } else {
-        counts.failed += 1;
-        console.error("reminder: dedupe write failed", d.key, err);
+        counts.deferred += 1;
       }
+      continue;
+    }
+
+    let owned: "send" | "skip";
+    try {
+      owned = await claim(d);
+    } catch (err) {
+      counts.failed += 1;
+      console.error("reminder: dedupe write failed", d.key, err);
+      continue;
+    }
+    if (owned === "skip") {
+      counts.dupes += 1;
       continue;
     }
 
@@ -273,8 +338,16 @@ export async function remindDue(
       counts.rows += delivered.rows;
       counts.pushed += delivered.pushed;
     } catch (err) {
+      // The claim stays "sending": a later run that still sees the reminder tries again.
       counts.failed += 1;
       console.error("reminder: could not deliver", d.key, err);
+      continue;
+    }
+    try {
+      await db.doc(`reminder_log/${d.key}`).update({ state: "sent", sentAt: FieldValue.serverTimestamp() });
+    } catch (err) {
+      // Delivered; only the mark is missing, so a later run may send it again. Said, not counted.
+      console.error("reminder: delivered but not marked sent", d.key, err);
     }
   }
 }

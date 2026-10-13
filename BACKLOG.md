@@ -77,15 +77,14 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Documente citite întregi, în bloc, din colecții pe care le scrie oricine (recenzia din 11.10).** Orice cont
   poate umfla documentele lui până la 1 MiB, iar o funcție care citește câteva sute deodată cade din lipsă de
   memorie (implicit 256 MiB). Mai vechi decât statisticile Admin, de luat în ordinea asta:
-  - **Memento-urile (`sendDueReminders`): citirea e reparată pe 12.10, trimiterea urmează.** Citirea merge pe
+  - **Memento-urile (`sendDueReminders`): citirea reparată pe 12.10, trimiterea pe 13.10.** Citirea merge pe
     pagini mici (10 evenimente), doar cu câmpurile calculului, fiecare eveniment redus la o formă mărginită.
     Interogarea recurentelor nu mai citește regulile de gunoi. Peste plafon sau timp, rularea e roșie. Ce a
     rămas:
-    - **Trimiterea (pasul următor):** nicio ordine între oameni. Mii de memento-uri ale unui cont la aceeași
-      oră trec înaintea celorlalți. Un memento amânat la ultima lui rulare se pierde fără să apară roșu, iar o
-      rulare oprită între `create` și `notify` pierde memento-ul pentru totdeauna (rândul de deduplicare există
-      deja). Remediul: rânduri pe proprietar, cu plafon, cei la ultima șansă întâi, un buget de trimitere și un
-      jurnal în doi pași (`sending` → `sent`).
+    - **Recenzia cu agenți a trimiterii (13.10) e restantă:** bugetul săptămânal era la 84%, iar Andrei hotărâse
+      pentru CNCVS „fără agenți până la 17.10”. Trimiterea are teste și mutații, dar nu recenzie. De făcut după
+      resetare: ordinea pe rând, ultima șansă, preluarea revendicărilor vechi (un memento trimis de două ori
+      când marcajul „trimis” eșuează).
     - **Aglomerarea e acum vizibilă, nu imposibilă:** peste 5000 de evenimente pe interogare (ale tuturor
       conturilor la un loc) sau peste 15 s de citire pe interogare, rularea e roșie la fiecare 5 minute, iar
       memento-urile de după tăietură se pierd. Câteva zeci de evenimente umflate ajung la limita de timp. Închiderea cere citirea

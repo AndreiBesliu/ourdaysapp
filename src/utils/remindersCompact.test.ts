@@ -8,7 +8,7 @@
 //   2. whatever an event holds, the copy is small.
 
 import { describe, it, expect, vi } from 'vitest';
-import { REMINDER_FIELDS, compactEvent, dueIn } from '../../functions/src/remindersCore';
+import { REMINDER_FIELDS, compactEvent, dueIn, sendOrder } from '../../functions/src/remindersCore';
 import { isValidZone, zoneOffsetMs } from '../../functions/src/eventTime';
 import { expandInWindow } from '../../functions/src/recurrenceServer';
 
@@ -238,5 +238,40 @@ describe('zone formatters are built once per zone, not per occurrence', () => {
     const n = built(() => { due = dueIn(occ, ZONES, EVER[0], EVER[1]); });
     expect(due).toHaveLength(occ.length);
     expect(n).toBeLessThan(1100 * 4);
+  });
+});
+
+describe('the order reminders are sent in', () => {
+  const WINDOW = 15 * 60_000;
+  const EVERY = 5 * 60_000;
+  const SLACK = 2 * 60_000;
+  const NOW = Date.UTC(2026, 6, 15, 12, 0);
+  const due = (key: string, ownerId: string, at: number) =>
+    ({ key, eventId: key, ownerId, day: '2026-07-15', title: '', at, zone: 'UTC', recipients: [ownerId], bodyKey: '', bodyParam: '' });
+
+  it('round the owners, one each, so one account’s many wait behind everybody else’s first', () => {
+    const fresh = NOW - 60_000;
+    const order = sendOrder([due('a1', 'A', fresh), due('a2', 'A', fresh), due('a3', 'A', fresh), due('b1', 'B', fresh), due('c1', 'C', fresh), due('c2', 'C', fresh)], NOW, WINDOW, EVERY, SLACK).order;
+    expect(order.map((d) => d.key)).toEqual(['a1', 'b1', 'c1', 'a2', 'c2', 'a3']);
+  });
+
+  it('those the next run will not see go first, round the owners too', () => {
+    const last = NOW - 11 * 60_000;
+    const { order, lastChance } = sendOrder([due('a1', 'A', NOW - 60_000), due('a2', 'A', last), due('b1', 'B', NOW - 60_000), due('b2', 'B', last)], NOW, WINDOW, EVERY, SLACK);
+    expect(order.map((d) => d.key)).toEqual(['a2', 'b2', 'a1', 'b1']);
+    expect([...lastChance].sort()).toEqual(['a2', 'b2']);
+  });
+
+  it('the last chance starts where the next run, late by the slack, no longer looks back', () => {
+    const edge = NOW + EVERY + SLACK - WINDOW;
+    const { lastChance } = sendOrder([due('on', 'A', edge), due('after', 'A', edge + 1)], NOW, WINDOW, EVERY, SLACK);
+    expect([...lastChance]).toEqual(['on']);
+  });
+});
+
+describe('who is told', () => {
+  it('not the assistant, which is nobody’s phone', () => {
+    const occ = [{ source: { id: 'e', ownerId: OWNER, title: 'T', date: '2026-07-15T00:00:00.000Z', time: '09:00', timezone: BUC, reminderMinutes: 0, assigneeIds: ['ai_assistant', ANA], assigneeId: 'ai_assistant' } as never, day: '2026-07-15' }];
+    expect(dueIn(occ, ZONES, EVER[0], EVER[1]).map((d) => d.recipients)).toEqual([[OWNER, ANA]]);
   });
 });
