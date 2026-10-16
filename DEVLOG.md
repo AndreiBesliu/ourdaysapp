@@ -13151,3 +13151,80 @@ pentru CNCVS, pe același buget. Recenzia e restantă în BACKLOG.
 `check-bundle`, `test:tz`, `test:rules` (894). `functions/lib` reconstruit.
 
 **Nepublicat.** Pleacă cu funcțiile, cu acordul lui Andrei.
+
+## 2026-10-15 · Ștergerea contului și a grupului nu mai citesc documente întregi (Task Started)
+
+**Prompt (Andrei):** „continua”.
+**Model:** Claude Opus 5.5.
+
+**Ce e** (BACKLOG, „Documente citite întregi, în bloc”, după memento-uri): ștergerea unui cont citește
+documentele în pagini de 300–500, întregi, din colecții pe care le poate umfla altcineva. Documentele pot
+avea până la 1 MiB, iar funcția are 256 MiB.
+- **Un străin** poate trimite 400 de cereri de prietenie sau de invitații umflate către orice uid. Regulile
+  lor nu limitează niciun câmp. Ștergerea contului acelui om (și din Admin) cade atunci la fiecare încercare,
+  după ce primii pași au rulat.
+- **Un membru al unui grup** poate umfla evenimentele grupului (`checklistItems`, `imageUrl` și `hiddenFrom`
+  nu au limită în reguli). Atunci cade ștergerea contului oricărui alt membru, iar ștergerea grupului de către
+  proprietar cade la fel (`deleteGroupData`, 300 de evenimente întregi pe pagină).
+
+**Planul:** acolo unde se folosește doar referința, se citește doar id-ul (`select()`). În rest se citesc doar
+câmpurile folosite, în pagini mici. Grupurile citite pe drum se citesc doar cu `members` și `ownerId`.
+Fără agenți: decizia „fără agenți până la 17.10” ține încă. Un singur segment.
+
+## 2026-10-16 · Ștergerea contului și a grupului nu mai citesc documente întregi (Task Completed)
+
+**Prompt (Andrei):** „continua” (15.10, codul și testele). Încheierea, pe 16.10: „Citește
+C:\Users\besli\Desktop\MyWork\Apps\HANDOVER_OurDaysApp.md și continuă de la secțiunea 2 (mutații → porți →
+DEVLOG Completed → BACKLOG → commit). Fără agenți până la 17.10, fără deploy.”
+**Model:** Claude Opus 5.5.
+
+**Ce citesc acum ștergerile (`functions/src/batchDelete.ts`, `accountDeletion.ts`, `groupDeletion.ts`,
+`index.ts`):**
+- **O singură regulă, `pageOf`:** fără câmpuri, doar referințele (`select()`), în paginile de până acum; cu
+  câmpuri, doar acelea, câte 10 documente pe pagină (`FIELD_PAGE`). În cel mai rău caz, 10 MiB pe pagină.
+  `forEachDoc` s-a mutat în `batchDelete.ts`, iar `deleteQueryInBatches` citește doar referințele.
+- **Ștergerea contului:** fiecare pas își cere doar câmpurile lui.
+  - Lista de păstrat citește `ownerId`, `groupId`, `hiddenFrom`, `imageUrl` și `checklistItems`.
+  - Răspunsul RSVP vine doar prin `new FieldPath("rsvps", uid)`.
+  - Grupurile se citesc doar ca referințe. Cele citite pe drum vin doar cu `members` și `ownerId` (`getAll` cu
+    `fieldMask`).
+  - `drain` are limita în documente: `DRAIN_MOST = 60 000`, cât era (200 de pagini de 300). Cu 10 pe pagină,
+    limita veche de 200 de pagini ar fi oprit pe oricine are peste 2000 de astfel de documente.
+- **Ștergerea grupului (`deleteGroupData`):** evenimentele se citesc doar ca referințe, în două treceri: întâi
+  ale proprietarului (`groupId ==` și `ownerId ==`), apoi restul, cu limita de 200 de pagini comună. Linkurile
+  se citesc pe pagini, doar cu `revoked`; înainte veneau toate deodată, întregi.
+- **`deleteGroupCascade`:** grupul se citește doar cu `ownerId`.
+
+**Rămâne citit întreg, deliberat:**
+- tranzacțiile, câte un document o dată (grupul la predare, lista unui prieten);
+- listarea fișierelor persoanei, fiindcă în dosarele ei scrie doar ea.
+
+**Probe:**
+- **`functions/test/deletionReads.test.ts`:** 5 teste pe emulator, prin funcțiile reale.
+  - Un `pad` pe fiecare document scris de altcineva, urmărit pe ce aduc `Query.get` și `Firestore.getAll`.
+  - Cel mult 10 documente cu câmpuri pe pagină.
+  - Tot ce trebuie făcut, peste mai multe pagini din fiecare fel, inclusiv un eveniment ascuns de toți, al
+    cărui fișier pleacă.
+  - 2001 documente drenate cu câmpuri, într-o singură rulare.
+- **Roșu pe codul vechi:** ștergerea contului aducea 268 de documente umflate, ștergerea grupului 50.
+- **Pe live (15.10, doar citire, doar numere):** 8 conturi și 5 grupuri; cel mai mare document are 7,8 KB, iar
+  cea mai mare interogare găsește 132 de documente. Azi nu e nicio pagubă, deci repararea e preventivă. Formele
+  noi de interogare merg pe live fără index nou.
+
+**Mutații: 29 din 29 prinse, fiecare de testul așteptat.** Rularea s-a făcut într-o clonă în afara Drive-ului,
+cu controale negative pe suita proprie și pe cele complete (funcții, reguli, unitate).
+- **A7** (lista de păstrat fără `hiddenFrom`) l-a prins doar testul nou: suita veche nu avea nicio plasă pentru
+  fișierul unui eveniment ascuns de toți.
+- **Pe drum:**
+  - Harnașamentul nu găsea numele testelor picate: vitest 2.1 pune fișierul la capătul rândului `FAIL`. L-am
+    oprit, am restaurat clona din repo (verificată pe sha) și am reluat de la capăt.
+  - O reluare a picat la controlul inițial: emulatorul Firestore a ieșit la câteva secunde după pornire, din
+    afara testelor. A treia rulare a mers curat.
+
+**Fără recenzie cu agenți:** decizia „fără agenți până la 17.10” (buget comun cu CNCVS). Recenzia e restantă în
+BACKLOG, împreună cu cea a trimiterii memento-urilor.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2626), `npm run build`, `check-split`, `check-offline`,
+`check-bundle`, `test:tz`, `test:rules` (899). `functions/lib` reconstruit.
+
+**Nepublicat.** Pleacă cu funcțiile, cu acordul lui Andrei.

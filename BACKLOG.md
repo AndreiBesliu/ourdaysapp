@@ -100,10 +100,16 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
       (`recurrenceExceptions`, `assigneeIds`, `title`) pot fi umflate. Paginile de 10 țin memoria, dar câteva
       zeci de astfel de evenimente consumă bugetul de timp. Remediul: plafoane în reguli și pentru crearea
       personală (verificate întâi pe APK).
-  - **Ștergerea contului:** paginile de ștergere citesc documente întregi (`batchDelete.ts`, `forEachDoc`,
-    `drain`). Un străin poate trimite 400 de cereri de prietenie umflate către orice uid, iar ștergerea
-    contului acelui om (și din Admin) cade la fiecare încercare, după ce primii pași au rulat. Remediul:
-    `select()` (doar id-uri) unde se folosește doar referința, câmpurile necesare în rest, pagini mai mici.
+  - **Ștergerea contului și a grupului: reparată pe 16.10.** Citesc acum doar referințele (`select()`) sau doar
+    câmpurile pe care le folosește fiecare pas, câte 10 documente pe pagină (`batchDelete.ts`, `pageOf`).
+    Grupurile citite pe drum vin doar cu `members` și `ownerId`, iar în `deleteGroupCascade` doar cu `ownerId`.
+    Cererile de prietenie și invitațiile umflate de un străin, sau evenimentele umflate de un membru, nu mai
+    opresc ștergerea. Ce a rămas, deliberat:
+    - **Tranzacțiile citesc întreg câte un document** (grupul la predare, lista unui prieten): unul o dată,
+      lăsat imediat, iar documentul grupului e limitat de reguli din 08.10.
+    - **Listarea fișierelor persoanei** (`deleteFilesExcept`): în dosarele ei scrie doar ea.
+    - **Recenzia cu agenți e restantă** (fără agenți până la resetarea din 17.10): are teste și mutații, nu și
+      recenzie. De făcut după resetare, împreună cu cea a trimiterii memento-urilor.
   - **Rezumatul AI al grupului (`generateGroupDigest`):** caută recurentele în TOATĂ baza, 500 de documente
     întregi, nelegat de grup. Un cont cu 500 de evenimente personale cu `recurrenceRule` le umple: rezumatul
     fiecărui grup pierde recurentele, iar umflate îl fac să cadă. Remediul: interogarea legată de grup (cere

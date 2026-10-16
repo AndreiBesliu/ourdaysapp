@@ -12,7 +12,7 @@ import * as admin from "firebase-admin";
 import { HttpsError } from "firebase-functions/v2/https";
 import { GROUP_ID, groupMedia } from "./groupMedia";
 import { logServerError } from "./errorLog";
-import { deleteQueryInBatches } from "./batchDelete";
+import { deleteQueryInBatches, forEachDoc } from "./batchDelete";
 import { registerGroupId } from "./groupIds";
 
 export interface GroupDeletion {
@@ -39,30 +39,37 @@ export async function deleteGroupData(groupId: string, ownerUid: string, keep: R
 
   let deleted = 0;
   let freed = 0;
+  // References only (15.10.2026): every member writes the group's events, and pages of 300 whole ones
+  // could be padded past the function's memory (batchDelete.ts). Whose an event is, the query says:
+  // the owner's first, then everybody else's.
+  //
   // No cursor is needed: every document this loop touches stops matching `groupId == groupId`
   // (it is either deleted or re-parented to null), so the same query drains itself. The bound is
   // there so a write that silently fails cannot turn that into a spin — and reaching it now STOPS
   // the cascade before the group goes (25.09.2026). It used to carry on after 40 pages and delete
   // the group anyway, leaving every event past 12,000 pointing at a group that no longer existed.
   // Every page is committed, so a retry picks up where this one stopped.
-  for (let page = 0; ; page++) {
-    const snap = await db.collection("events").where("groupId", "==", groupId).limit(300).get();
-    if (snap.empty) break;
-    if (page >= 200) {
-      throw new HttpsError("deadline-exceeded", "Still clearing the group's events — try again.");
-    }
-    const batch = db.batch();
-    for (const d of snap.docs) {
-      const ev = d.data() || {};
-      if (ev.ownerId === ownerUid && !keep.has(d.id)) {
-        batch.delete(d.ref);
-        deleted++;
-      } else {
-        batch.update(d.ref, { groupId: null, sharedWithFamily: false });
-        freed++;
+  const inGroup = db.collection("events").where("groupId", "==", groupId);
+  let pages = 0;
+  for (const [events, owners] of [[inGroup.where("ownerId", "==", ownerUid), true], [inGroup, false]] as const) {
+    for (;;) {
+      const snap = await events.select().limit(300).get();
+      if (snap.empty) break;
+      if (pages++ >= 200) {
+        throw new HttpsError("deadline-exceeded", "Still clearing the group's events — try again.");
       }
+      const batch = db.batch();
+      for (const d of snap.docs) {
+        if (owners && !keep.has(d.id)) {
+          batch.delete(d.ref);
+          deleted++;
+        } else {
+          batch.update(d.ref, { groupId: null, sharedWithFamily: false });
+          freed++;
+        }
+      }
+      await batch.commit();
     }
-    await batch.commit();
   }
 
   const invites = await deleteQueryInBatches(
@@ -70,18 +77,14 @@ export async function deleteGroupData(groupId: string, ownerUid: string, keep: R
   );
 
   // Its links, revoked rather than deleted, so their creators' lists still explain them. A redeem
-  // would answer "group not found" anyway; this keeps "listMyInviteLinks" honest.
+  // would answer "group not found" anyway; this keeps "listMyInviteLinks" honest. In pages, and only
+  // `revoked`: all of them used to come at once, whole.
   let links = 0;
-  const linkSnap = await db.collection("invite_links").where("groupId", "==", groupId).get();
-  for (let i = 0; i < linkSnap.docs.length; i += 400) {
-    const batch = db.batch();
-    for (const d of linkSnap.docs.slice(i, i + 400)) {
-      if (d.data()?.revoked === true) continue;
-      batch.update(d.ref, { revoked: true });
-      links++;
-    }
-    await batch.commit();
-  }
+  await forEachDoc(db.collection("invite_links").where("groupId", "==", groupId), ["revoked"], async (d) => {
+    if (d.data()?.revoked === true) return;
+    await d.ref.update({ revoked: true });
+    links++;
+  });
 
   // Its chat media, BEFORE the group goes: if the sweep fails, the group still exists and the owner
   // can retry — every step above is idempotent — whereas once the document is gone a retry answers

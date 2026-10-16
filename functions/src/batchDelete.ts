@@ -2,15 +2,63 @@
 //
 // The two deletes every cascade needs: the documents a query matches, and the files under a folder.
 // Moved out of index.ts on 04.10.2026 so the account deletion (accountDeletion.ts) and the group
-// deletion (groupDeletion.ts) use the same ones.
+// deletion (groupDeletion.ts) use the same ones. And, since 15.10.2026, how the two read.
 
 import * as admin from "firebase-admin";
+import { FieldPath } from "firebase-admin/firestore";
 
-/** Delete every doc matching a query, in batches, until exhausted (or a cap). */
+// ── What a page brings ───────────────────────────────────────────────────────────────────────
+//
+// Until 15.10.2026 both cascades read every document whole, in pages of 300 to 500. Anybody can pad a
+// document to 1 MiB, and some of what they read is written by other people: a friend request or an
+// invitation by anybody signed in (their rules type no field), a group event's checklist, picture and
+// `hiddenFrom` by every member. A few hundred of those ran a deletion out of its 256 MiB at every
+// attempt, after its first steps had run, so an account could not be deleted, from Settings or from
+// Admin, nor a group by its owner. Now a read brings only the references, in the pages it had, or only
+// the fields it uses, ten documents a page: 10 MiB at worst.
+
+/** How many documents one page may bring when it brings field values. */
+export const FIELD_PAGE = 10;
+
+export type Field = string | FieldPath;
+
+/**
+ * `query` bringing only `fields`, or only the references when there are none, with the page size that
+ * goes with that: FIELD_PAGE, or `refsPage`. One place for the rule, so that no read brings fields in a
+ * page sized for references.
+ */
+export function pageOf(query: admin.firestore.Query, fields: Field[], refsPage: number): { query: admin.firestore.Query; size: number } {
+  return fields.length > 0
+    ? { query: query.select(...fields), size: FIELD_PAGE }
+    : { query: query.select(), size: refsPage };
+}
+
+/**
+ * Every document a query matches, page by page, bringing only `fields`, for a query that the caller does
+ * not drain as it reads. The cursor is the document id, which an equality or array filter can be ordered
+ * by without an index.
+ */
+export async function forEachDoc(
+  query: admin.firestore.Query, fields: Field[],
+  each: (d: admin.firestore.QueryDocumentSnapshot) => void | Promise<void>,
+): Promise<void> {
+  const page = pageOf(query, fields, 500);
+  let last: admin.firestore.QueryDocumentSnapshot | null = null;
+  for (;;) {
+    let q = page.query.orderBy(FieldPath.documentId()).limit(page.size);
+    if (last) q = q.startAfter(last);
+    const snap = await q.get();
+    for (const d of snap.docs) await each(d);
+    if (snap.size < page.size) return;
+    last = snap.docs[snap.docs.length - 1];
+  }
+}
+
+/** Delete every doc matching a query, in batches, until exhausted (or a cap). Only the references are read. */
 export async function deleteQueryInBatches(query: admin.firestore.Query, max = 3000): Promise<number> {
   let deleted = 0;
   while (deleted < max) {
-    const snap = await query.limit(400).get();
+    const snap = await query.select().limit(400).get();
     if (snap.empty) break;
     const batch = admin.firestore().batch();
     snap.docs.forEach((d) => batch.delete(d.ref));

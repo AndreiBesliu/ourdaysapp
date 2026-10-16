@@ -1467,7 +1467,8 @@ export const deleteGroupCascade = onCall({ enforceAppCheck: ENFORCE_APP_CHECK },
   );
 
   const db = admin.firestore();
-  const groupSnap = await db.doc(`groups/${groupId}`).get();
+  // Only who owns it: nothing else of the group is read here (functions/src/batchDelete.ts).
+  const [groupSnap] = await db.getAll(db.doc(`groups/${groupId}`), { fieldMask: ["ownerId"] });
   if (!groupSnap.exists) {
     throw new HttpsError("not-found", "Group not found.");
   }

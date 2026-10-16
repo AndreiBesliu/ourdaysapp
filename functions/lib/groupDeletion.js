@@ -22,7 +22,6 @@ const groupIds_1 = require("./groupIds");
  * way can be repeated and finishes the job.
  */
 async function deleteGroupData(groupId, ownerUid, keep) {
-    var _a;
     const db = admin.firestore();
     const groupRef = db.doc(`groups/${groupId}`);
     // Its id goes on the list of used ids FIRST, before anything is taken away: from here on nobody
@@ -30,48 +29,52 @@ async function deleteGroupData(groupId, ownerUid, keep) {
     await (0, groupIds_1.registerGroupId)(groupId);
     let deleted = 0;
     let freed = 0;
+    // References only (15.10.2026): every member writes the group's events, and pages of 300 whole ones
+    // could be padded past the function's memory (batchDelete.ts). Whose an event is, the query says:
+    // the owner's first, then everybody else's.
+    //
     // No cursor is needed: every document this loop touches stops matching `groupId == groupId`
     // (it is either deleted or re-parented to null), so the same query drains itself. The bound is
     // there so a write that silently fails cannot turn that into a spin — and reaching it now STOPS
     // the cascade before the group goes (25.09.2026). It used to carry on after 40 pages and delete
     // the group anyway, leaving every event past 12,000 pointing at a group that no longer existed.
     // Every page is committed, so a retry picks up where this one stopped.
-    for (let page = 0;; page++) {
-        const snap = await db.collection("events").where("groupId", "==", groupId).limit(300).get();
-        if (snap.empty)
-            break;
-        if (page >= 200) {
-            throw new https_1.HttpsError("deadline-exceeded", "Still clearing the group's events — try again.");
-        }
-        const batch = db.batch();
-        for (const d of snap.docs) {
-            const ev = d.data() || {};
-            if (ev.ownerId === ownerUid && !keep.has(d.id)) {
-                batch.delete(d.ref);
-                deleted++;
+    const inGroup = db.collection("events").where("groupId", "==", groupId);
+    let pages = 0;
+    for (const [events, owners] of [[inGroup.where("ownerId", "==", ownerUid), true], [inGroup, false]]) {
+        for (;;) {
+            const snap = await events.select().limit(300).get();
+            if (snap.empty)
+                break;
+            if (pages++ >= 200) {
+                throw new https_1.HttpsError("deadline-exceeded", "Still clearing the group's events — try again.");
             }
-            else {
-                batch.update(d.ref, { groupId: null, sharedWithFamily: false });
-                freed++;
+            const batch = db.batch();
+            for (const d of snap.docs) {
+                if (owners && !keep.has(d.id)) {
+                    batch.delete(d.ref);
+                    deleted++;
+                }
+                else {
+                    batch.update(d.ref, { groupId: null, sharedWithFamily: false });
+                    freed++;
+                }
             }
+            await batch.commit();
         }
-        await batch.commit();
     }
     const invites = await (0, batchDelete_1.deleteQueryInBatches)(db.collection("group_invites").where("groupId", "==", groupId));
     // Its links, revoked rather than deleted, so their creators' lists still explain them. A redeem
-    // would answer "group not found" anyway; this keeps "listMyInviteLinks" honest.
+    // would answer "group not found" anyway; this keeps "listMyInviteLinks" honest. In pages, and only
+    // `revoked`: all of them used to come at once, whole.
     let links = 0;
-    const linkSnap = await db.collection("invite_links").where("groupId", "==", groupId).get();
-    for (let i = 0; i < linkSnap.docs.length; i += 400) {
-        const batch = db.batch();
-        for (const d of linkSnap.docs.slice(i, i + 400)) {
-            if (((_a = d.data()) === null || _a === void 0 ? void 0 : _a.revoked) === true)
-                continue;
-            batch.update(d.ref, { revoked: true });
-            links++;
-        }
-        await batch.commit();
-    }
+    await (0, batchDelete_1.forEachDoc)(db.collection("invite_links").where("groupId", "==", groupId), ["revoked"], async (d) => {
+        var _a;
+        if (((_a = d.data()) === null || _a === void 0 ? void 0 : _a.revoked) === true)
+            return;
+        await d.ref.update({ revoked: true });
+        links++;
+    });
     // Its chat media, BEFORE the group goes: if the sweep fails, the group still exists and the owner
     // can retry — every step above is idempotent — whereas once the document is gone a retry answers
     // "not found" for ever. Guarded; see groupMedia.ts for why a naive sweep would be a way to wipe

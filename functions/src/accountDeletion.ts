@@ -51,6 +51,11 @@
 // Never a profile photo or a background: nothing that stays shows them. A copy somebody made of an
 // event when they left a group loses its pictures: nothing proves where its links came from.
 //
+// ── What it reads ────────────────────────────────────────────────────────────────────────────
+//
+// References only, or only the fields a step uses, ten documents a page (15.10.2026; batchDelete.ts
+// says why). Read whole, a stranger's padded friend requests stopped it at every attempt.
+//
 // ── A deletion that stops part way can be run again ─────────────────────────────────────────
 //
 // Every step can be repeated, and the sign-in account goes LAST, so the person can sign in and press
@@ -70,7 +75,7 @@ import * as admin from "firebase-admin";
 import { FieldPath, FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { bootstrapAdminEmails } from "./bootstrapAdmins";
-import { deleteQueryInBatches, deleteFilesExcept } from "./batchDelete";
+import { deleteQueryInBatches, deleteFilesExcept, forEachDoc, pageOf, type Field } from "./batchDelete";
 import { deleteGroupData } from "./groupDeletion";
 import { groupMedia } from "./groupMedia";
 import { logServerError } from "./errorLog";
@@ -172,38 +177,27 @@ type Doc = admin.firestore.QueryDocumentSnapshot;
 /** Called through this object, so a test can make the files fail and prove the deletion stops. */
 export const accountFiles = { deleteExcept: deleteFilesExcept };
 
-/**
- * Every document a query matches, page by page, for queries this cascade does not drain as it reads.
- * The cursor is the document id, which an equality or array filter can be ordered by without an index.
- */
-async function forEachDoc(query: admin.firestore.Query, each: (d: Doc) => void | Promise<void>): Promise<void> {
-  let last: Doc | null = null;
-  for (;;) {
-    let q = query.orderBy(FieldPath.documentId()).limit(500);
-    if (last) q = q.startAfter(last);
-    const snap = await q.get();
-    for (const d of snap.docs) await each(d);
-    if (snap.size < 500) return;
-    last = snap.docs[snap.docs.length - 1];
-  }
-}
+/** At most this many documents through one `drain` a run, as before 15.10.2026 (200 pages of 300). */
+const DRAIN_MOST = 60_000;
 
 /**
- * Apply `each` to a query's documents until none match. Every caller's `each` makes its document
- * stop matching, so the same query drains itself, and every page is committed, so a retry picks up
- * where a stopped run left off. The bound turns a write that silently does nothing into an error
- * instead of a spin.
+ * Apply `each` to a query's documents until none match, bringing only `fields` (batchDelete.ts says
+ * why). Every caller's `each` makes its document stop matching, so the same query drains itself, and
+ * every page is committed, so a retry picks up where a stopped run left off. The bound turns a write
+ * that silently does nothing into an error instead of a spin.
  */
 async function drain(
   query: admin.firestore.Query,
+  fields: Field[],
   each: (d: Doc, batch: admin.firestore.WriteBatch) => void | Promise<void>,
 ): Promise<number> {
   const db = admin.firestore();
+  const page = pageOf(query, fields, 300);
   let n = 0;
-  for (let page = 0; ; page++) {
-    const snap = await query.limit(300).get();
+  for (let i = 0; ; i++) {
+    const snap = await page.query.limit(page.size).get();
     if (snap.empty) return n;
-    if (page >= 200) throw new HttpsError("deadline-exceeded", "Still working through the account's data. Try again.");
+    if (i >= Math.ceil(DRAIN_MOST / page.size)) throw new HttpsError("deadline-exceeded", "Still working through the account's data. Try again.");
     const batch = db.batch();
     for (const d of snap.docs) await each(d, batch);
     await batch.commit();
@@ -248,22 +242,23 @@ export async function deleteAccountData(uid: string, by: string): Promise<Accoun
   const record = await recordRef.get();
   if (!record.exists) await recordRef.set({ startedAt: FieldValue.serverTimestamp(), by });
 
-  const memberGroups = async () => (await db.collection("groups").where("members", "array-contains", uid).get()).docs;
+  // References only: what a group holds is read where it is needed.
+  const memberGroups = async () => (await db.collection("groups").where("members", "array-contains", uid).select().get()).docs;
+  // Only what decides who inherits. A group's document holds more, and every one read is kept for the
+  // rest of the run.
   const readGroup = async (gid: string): Promise<Record<string, unknown> | null> => {
-    const s = await db.doc(`groups/${gid}`).get();
+    const [s] = await db.getAll(db.doc(`groups/${gid}`), { fieldMask: ["members", "ownerId"] });
     return s.exists ? (s.data() || {}) : null;
   };
 
   // ── 1. Their files, except those something that stays still shows. Once. ─────────────────
   let files: AccountDeletion["files"] = null;
   if (record.data()?.filesDone !== true) {
-    const groups = await memberGroups();
-    const asNow = new Map(groups.map((g) => [g.id, g.data() || {}]));
-    const elsewhere = new Map<string, Record<string, unknown> | null>();
+    const inGroups = new Set((await memberGroups()).map((g) => g.id));
+    const groupsRead = new Map<string, Record<string, unknown> | null>();
     const groupOf = async (gid: string) => {
-      if (asNow.has(gid)) return asNow.get(gid)!;
-      if (!elsewhere.has(gid)) elsewhere.set(gid, await readGroup(gid));
-      return elsewhere.get(gid) ?? null;
+      if (!groupsRead.has(gid)) groupsRead.set(gid, await readGroup(gid));
+      return groupsRead.get(gid) ?? null;
     };
     // Their event stays when somebody inherits it. The group's owner may change on the way out, but
     // the heir does not: whoever is first in line now is the owner then. A group with nobody else in
@@ -279,23 +274,26 @@ export async function deleteAccountData(uid: string, by: string): Promise<Accoun
     };
     const anyOfTheirs = [`assets/${uid}/`, `events/${uid}/`, `checklists/${uid}/`];
     const uploadedIntoEvents = [`events/${uid}/`, `checklists/${uid}/`];
+    // What the keep list reads of an event: whose it is, where, whom it is hidden from (who inherits),
+    // and what it shows (`filesShownBy`).
+    const KEEP_FIELDS = ["ownerId", "groupId", "hiddenFrom", "imageUrl", "checklistItems"];
 
-    for (const g of groups) {
-      await forEachDoc(db.collection("events").where("groupId", "==", g.id), async (d) => {
+    for (const gid of inGroups) {
+      await forEachDoc(db.collection("events").where("groupId", "==", gid), KEEP_FIELDS, async (d) => {
         const ev = d.data() || {};
         if (ev.ownerId !== uid) keepUnder(ev, uploadedIntoEvents);
         else if (await theirsStays(ev)) keepUnder(ev, anyOfTheirs);
       });
     }
     // Their events in groups they had already left: those are inherited too.
-    await forEachDoc(db.collection("events").where("ownerId", "==", uid), async (d) => {
+    await forEachDoc(db.collection("events").where("ownerId", "==", uid), KEEP_FIELDS, async (d) => {
       const ev = d.data() || {};
       const gid = groupIdOf(ev);
-      if (gid && asNow.has(gid)) return; // read above
+      if (gid && inGroups.has(gid)) return; // read above
       if (await theirsStays(ev)) keepUnder(ev, anyOfTheirs);
     });
     // Wallet cards they gave away.
-    await forEachDoc(db.collection("assets").where("transferredFrom", "==", uid), (d) => {
+    await forEachDoc(db.collection("assets").where("transferredFrom", "==", uid), ["imageUrl"], (d) => {
       const p = storagePathOf(d.data()?.imageUrl);
       if (p && p.startsWith(`assets/${uid}/`)) keep.add(p);
     });
@@ -310,20 +308,21 @@ export async function deleteAccountData(uid: string, by: string): Promise<Accoun
 
   // ── 2. Off other people's events, while they are still a member ─────────────────────────
   // Reminders also go to every assignee.
-  await drain(db.collection("events").where("assigneeIds", "array-contains", uid), (d, batch) => {
+  await drain(db.collection("events").where("assigneeIds", "array-contains", uid), [], (d, batch) => {
     batch.update(d.ref, { assigneeIds: FieldValue.arrayRemove(uid) });
     add("eventsUnassigned", 1);
   });
   // The older single field, which the app keeps as the list's first: after the list, so the next one
   // in it is a person who still exists.
-  await drain(db.collection("events").where("assigneeId", "==", uid), (d, batch) => {
+  await drain(db.collection("events").where("assigneeId", "==", uid), ["assigneeIds"], (d, batch) => {
     const ids = d.data()?.assigneeIds;
     batch.update(d.ref, { assigneeId: Array.isArray(ids) && typeof ids[0] === "string" ? ids[0] : null });
   });
   // An answer from somebody who no longer exists would still count as a guest. Only in their groups:
   // anybody may create events of their own with any answers in them, and those are nobody's business.
+  // Only their own answer is brought: a field path, so the uid stays one key whatever it holds.
   for (const g of await memberGroups()) {
-    await forEachDoc(db.collection("events").where("groupId", "==", g.id), async (d) => {
+    await forEachDoc(db.collection("events").where("groupId", "==", g.id), [new FieldPath("rsvps", uid)], async (d) => {
       const rsvps = d.data()?.rsvps;
       if (!rsvps || typeof rsvps !== "object" || !(uid in rsvps)) return;
       await d.ref.update(new FieldPath("rsvps", uid), FieldValue.delete());
@@ -335,7 +334,7 @@ export async function deleteAccountData(uid: string, by: string): Promise<Accoun
   const inGroups = await memberGroups();
   const seen = new Set(inGroups.map((g) => g.id));
   // A group they own without being in it: an owner may take themselves off the list.
-  const ownedOnly = (await db.collection("groups").where("ownerId", "==", uid).get()).docs.filter((g) => !seen.has(g.id));
+  const ownedOnly = (await db.collection("groups").where("ownerId", "==", uid).select().get()).docs.filter((g) => !seen.has(g.id));
   for (const g of [...inGroups, ...ownedOnly]) {
     const outcome = await db.runTransaction(async (tx) => {
       const snap = await tx.get(g.ref);
@@ -365,7 +364,7 @@ export async function deleteAccountData(uid: string, by: string): Promise<Accoun
 
   // ── 4. Their events: a group's stay with whoever inherits, the rest go ───────────────────
   const groupNow = new Map<string, Record<string, unknown> | null>();
-  await drain(db.collection("events").where("ownerId", "==", uid), async (d, batch) => {
+  await drain(db.collection("events").where("ownerId", "==", uid), ["groupId", "hiddenFrom"], async (d, batch) => {
     const ev = d.data() || {};
     const gid = groupIdOf(ev);
     if (gid && !groupNow.has(gid)) groupNow.set(gid, await readGroup(gid));
@@ -382,7 +381,7 @@ export async function deleteAccountData(uid: string, by: string): Promise<Accoun
   // ── 5. Direct chats: the conversation stays, and so do both people in it ─────────────────
   // `members` keeps them: it is what names the conversation, and the other person keeps reading it.
   // Once nobody in it is left, it goes, with its photos and voice notes.
-  await forEachDoc(db.collection("chats").where("members", "array-contains", uid), async (c) => {
+  await forEachDoc(db.collection("chats").where("members", "array-contains", uid), ["members", "formerMembers"], async (c) => {
     const data = c.data() || {};
     const fm = data.formerMembers && typeof data.formerMembers === "object" ? data.formerMembers as Record<string, unknown> : {};
     const nobodyLeft = strList(data.members).every((m) => m === uid || !!fm[m]);
@@ -411,7 +410,7 @@ export async function deleteAccountData(uid: string, by: string): Promise<Accoun
   // Revoked rather than deleted, as when a group goes: a link that still worked would introduce the
   // newcomer as invited by somebody who no longer exists. And without the name, which anybody holding
   // the link can read without signing in (`peekGroupInviteLink`).
-  await forEachDoc(db.collection("invite_links").where("createdBy", "==", uid), async (d) => {
+  await forEachDoc(db.collection("invite_links").where("createdBy", "==", uid), ["revoked", "createdByName"], async (d) => {
     const link = d.data() || {};
     if (link.revoked === true && link.createdByName == null) return;
     await d.ref.update({ revoked: true, createdByName: null });
@@ -432,7 +431,7 @@ export async function deleteAccountData(uid: string, by: string): Promise<Accoun
   add("notifications", await deleteQueryInBatches(db.collection("notifications").where("userId", "==", uid), ALL));
 
   // ── 8. The AI cost ledger keeps its rows, without them ───────────────────────────────────
-  add("aiLedgerRows", await drain(db.collection("aiLedger").where("uid", "==", uid), (d, batch) => {
+  add("aiLedgerRows", await drain(db.collection("aiLedger").where("uid", "==", uid), [], (d, batch) => {
     batch.update(d.ref, { uid: null });
   }));
   // Their line in each day's spend; the day's totals stay.
