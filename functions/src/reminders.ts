@@ -51,7 +51,9 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import { FieldValue, type QueryDocumentSnapshot } from "firebase-admin/firestore";
-import { FREQUENCIES, expandInWindow, type EventDoc } from "./recurrenceServer";
+import {
+  FREQUENCIES, SHORT_FREQUENCIES, expandInWindow, lookbackMsFor, type EventDoc, type Frequency,
+} from "./recurrenceServer";
 import { notify } from "./notify";
 import { REMINDER_FIELDS, compactEvent, dueIn, sendOrder, type Due } from "./remindersCore";
 import { isValidZone } from "./eventTime";
@@ -61,6 +63,20 @@ import { runJob, type JobOutcome } from "./jobRuns";
 const LOG_TTL_DAYS = 45;
 
 const dayString = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+
+/** The frequencies whose horizon does not fit in 400 days: their series are read from further back. */
+const LONG_FREQUENCIES: readonly Frequency[] = FREQUENCIES.filter((f) => !SHORT_FREQUENCIES.includes(f));
+
+/** The earliest start a series of these frequencies can have and still run on `fromDay` or after. */
+const seriesFrom = (fromDay: string, freqs: readonly Frequency[]): string =>
+  `${dayString(Date.parse(`${fromDay}T00:00:00.000Z`) - Math.max(...freqs.map(lookbackMsFor)))}T00:00:00.000Z`;
+
+/** Firestore's refusal of a query whose composite index is missing, or still being built. */
+const missingIndex = (err: unknown): boolean => {
+  const code = (err as { code?: unknown })?.code;
+  return (code === 9 || code === "failed-precondition")
+    && /index/i.test(String((err as { message?: unknown })?.message || ""));
+};
 
 /**
  * How far ahead to look for events. A reminder may be set days in advance; beyond this it is not
@@ -114,12 +130,14 @@ export type ReminderCounts = {
   deferred: number; dropped: number;
   /** Claims left by an earlier run and taken over by this one. */
   retried: number;
+  /** 1 when the series were read without a bound on their start: the index was not there yet. */
+  seriesUnbounded: number;
   sent: number; dupes: number; rows: number; pushed: number; failed: number;
 };
 
 export const emptyCounts = (): ReminderCounts => ({
   read: 0, skipped: 0, cut: 0, datedMs: 0, seriesMs: 0, candidates: 0, occurrences: 0, due: 0,
-  deferred: 0, dropped: 0, retried: 0,
+  deferred: 0, dropped: 0, retried: 0, seriesUnbounded: 0,
   sent: 0, dupes: 0, rows: 0, pushed: 0, failed: 0,
 });
 
@@ -132,7 +150,9 @@ export function reminderOutcome(c: ReminderCounts): JobOutcome {
   return {
     failed: c.failed + c.cut + c.dropped,
     detail: `due ${c.due}, sent ${c.sent}, already sent ${c.dupes}, failed ${c.failed}, `
-      + `read ${c.read}, stopped early ${c.cut}, deferred ${c.deferred}, dropped ${c.dropped}, retried ${c.retried}`,
+      + `read ${c.read}, stopped early ${c.cut}, deferred ${c.deferred}, dropped ${c.dropped}, retried ${c.retried}`
+      // Not red: nothing is lost. Said, so that a read longer than it should be has its reason beside it.
+      + (c.seriesUnbounded ? ", series read without their index" : ""),
   };
 }
 
@@ -176,9 +196,12 @@ export async function remindDue(
   // reminder instant, because there is no such field.
   //
   //   * events starting inside the lookahead — covers every non-recurring one;
-  //   * series (a rule with a frequency the app knows), which start anywhere and are expanded below.
-  //     Any other rule is not a series to `expandInWindow` either; inside the window the first query
-  //     reads it, as before.
+  //   * series (a rule with a frequency the app knows), expanded below. Any other rule is not a series
+  //     to `expandInWindow` either; inside the window the first query reads it, as before. Only those
+  //     that can still have an occurrence from `fromDay` on (16.10.2026): a series ends at its horizon,
+  //     counted from its start (recurrenceCore.ts), so it began at most `lookbackMsFor` before — 400
+  //     days, or five years for a yearly one — and not after the lookahead. Until then every run read
+  //     every series ever made.
   const fromDay = dayString(now - 2 * 86_400_000);
   const toDay = dayString(now + MAX_LEAD_DAYS * 86_400_000);
   const byId = new Map<string, Candidate>();
@@ -190,33 +213,37 @@ export async function remindDue(
   };
 
   /**
-   * Reads one query to its end, page by page, or to its cap or its time: true when it stopped short.
-   * Its own budget, so one query read to the limit leaves the other its full share.
+   * Reads queries in turn, each to its end, page by page, or to the cap or the time: true when it
+   * stopped short. One budget and one cap for the queries of one read, so the dated read and the series
+   * read each have their own full share.
    */
-  const readAll = async (base: FirebaseFirestore.Query): Promise<boolean> => {
+  const readAll = async (...bases: FirebaseFirestore.Query[]): Promise<boolean> => {
     const started = clock();
     const seen = new Set<string>();
-    let last: QueryDocumentSnapshot | null = null;
-    for (;;) {
-      if (clock() - started >= budgetMs) return true;
-      // One past the cap, to tell "exactly the cap" from "more than it".
-      const want = Math.min(page, maxCandidates + 1 - seen.size);
-      const snap = await (last ? base.startAfter(last) : base).limit(want).get();
-      let fresh = 0;
-      for (const d of snap.docs) {
-        // A cursor on a value longer than Firestore indexes (1500 bytes) can repeat a page.
-        if (seen.has(d.id)) continue;
-        if (seen.size >= maxCandidates) return true;
-        seen.add(d.id);
-        fresh += 1;
-        counts.read += 1;
-        keep(d);
+    for (const base of bases) {
+      let last: QueryDocumentSnapshot | null = null;
+      for (;;) {
+        if (clock() - started >= budgetMs) return true;
+        // One past the cap, to tell "exactly the cap" from "more than it".
+        const want = Math.min(page, maxCandidates + 1 - seen.size);
+        const snap = await (last ? base.startAfter(last) : base).limit(want).get();
+        let fresh = 0;
+        for (const d of snap.docs) {
+          // A cursor on a value longer than Firestore indexes (1500 bytes) can repeat a page.
+          if (seen.has(d.id)) continue;
+          if (seen.size >= maxCandidates) return true;
+          seen.add(d.id);
+          fresh += 1;
+          counts.read += 1;
+          keep(d);
+        }
+        if (snap.size < want) break;
+        // A full page with nothing new would be read again for ever: stop, and say so.
+        if (fresh === 0) return true;
+        last = snap.docs[snap.docs.length - 1];
       }
-      if (snap.size < want) return false;
-      // A full page with nothing new would be read again for ever: stop, and say so.
-      if (fresh === 0) return true;
-      last = snap.docs[snap.docs.length - 1];
     }
+    return false;
   };
   const events = db.collection("events");
   let t0 = Date.now();
@@ -226,9 +253,24 @@ export async function remindDue(
     .select(...REMINDER_FIELDS));
   counts.datedMs = Date.now() - t0;
   t0 = Date.now();
-  const seriesCut = await readAll(events
-    .where("recurrenceRule.frequency", "in", [...FREQUENCIES])
-    .select(...REMINDER_FIELDS));
+  const series = (freqs: readonly Frequency[]) => events
+    .where("recurrenceRule.frequency", "in", [...freqs])
+    .where("date", ">=", seriesFrom(fromDay, freqs))
+    .where("date", "<=", `${toDay}T23:59:59.999Z`)
+    .select(...REMINDER_FIELDS);
+  let seriesCut: boolean;
+  try {
+    seriesCut = await readAll(series(SHORT_FREQUENCIES), series(LONG_FREQUENCIES));
+  } catch (err) {
+    // The two ranges need the composite index (`recurrenceRule.frequency`, `date`), which is built for
+    // minutes after it is published, and a query without its index throws rather than returning less.
+    // Until it is there: every series, however old, as before 16.10.2026, and the run says so.
+    if (!missingIndex(err)) throw err;
+    counts.seriesUnbounded = 1;
+    seriesCut = await readAll(events
+      .where("recurrenceRule.frequency", "in", [...FREQUENCIES])
+      .select(...REMINDER_FIELDS));
+  }
   counts.seriesMs = Date.now() - t0;
   counts.cut = datedCut || seriesCut ? 1 : 0;
 

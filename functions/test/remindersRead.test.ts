@@ -366,3 +366,122 @@ describe('sending', () => {
     expect((await db.collection('notifications').where('userId', '==', ALICE).get()).size).toBe(1);
   }, 120_000);
 });
+
+describe('the series query reaches back as far as a series can still run (16.10.2026)', () => {
+  // A series runs from its start to its horizon (recurrenceCore.ts): daily 30 days, weekly 52 weeks,
+  // monthly 12 months, yearly 5 years. The series query had no bound on `date`, so every run read every
+  // series ever made, ended or not. Now it reaches back 400 days for the first three and 5 × 366 for the
+  // last (`lookbackMsFor`, as the AI sources do), from the first day the run looks at, and not past its
+  // lookahead.
+  const NOW = Date.parse('2026-10-16T12:00:00.000Z');
+  const FROM = Date.parse('2026-10-14T00:00:00.000Z'); // two days before NOW, the first day a run looks at
+  const TO = Date.parse('2026-11-16T00:00:00.000Z'); // NOW plus the 31 days of lookahead
+  const at = (ms: number) => `${dayOf(ms)}T00:00:00.000Z`;
+  const series = (frequency: string, date: string) =>
+    ({ ownerId: ALICE, groupId: null, title: frequency, date, recurrenceRule: { frequency }, reminderMinutes: null });
+  /** A refusal like live's when the composite index is missing, or still building just after it is published. */
+  const missingIndex = () => Object.assign(
+    new Error('9 FAILED_PRECONDITION: The query requires an index. You can create it here: https://console.firebase.google.com/'),
+    { code: 9 },
+  );
+  /** Every series query that bounds `date` fails with `error`; the rest run. Returns how many failed. */
+  const refuseBoundedSeries = (error: () => Error) => {
+    const realGet = Query.prototype.get;
+    const refused = { n: 0 };
+    vi.spyOn(Query.prototype, 'get').mockImplementation(async function (this: Query, ...args: unknown[]) {
+      const filters = ((this as unknown as { _queryOptions?: { filters?: Array<{ field?: { formattedName?: string } }> } })
+        ._queryOptions?.filters ?? []).map((f) => f.field?.formattedName);
+      if (filters.includes('recurrenceRule.frequency') && filters.includes('date')) {
+        refused.n += 1;
+        throw error();
+      }
+      return (realGet as (...a: unknown[]) => Promise<admin.firestore.QuerySnapshot>).apply(this, args);
+    } as never);
+    return refused;
+  };
+
+  it('reads a series still running, to the day it can, and none that has ended or not begun', async () => {
+    await seed({
+      'weekly-edge': series('weekly', at(FROM - 400 * DAY)),
+      'weekly-past': series('weekly', at(FROM - 401 * DAY)),
+      'daily-running': series('daily', at(FROM - 20 * DAY)),
+      'daily-past': series('daily', at(FROM - 401 * DAY)),
+      'monthly-past': series('monthly', at(FROM - 401 * DAY)),
+      'yearly-four': series('yearly', at(FROM - 4 * 365 * DAY)),
+      'yearly-edge': series('yearly', at(FROM - 5 * 366 * DAY)),
+      'yearly-past': series('yearly', at(FROM - (5 * 366 + 1) * DAY)),
+      'starts-last-day': series('weekly', at(TO)),
+      'starts-after': series('weekly', at(TO + DAY)),
+    });
+    const counts = mod.emptyCounts();
+    const read = new Set(onEvents(await fetched(() => mod.remindDue(db, NOW, counts))).map((f) => f.path));
+    expect([...read].sort()).toEqual([
+      'events/daily-running', 'events/starts-last-day', 'events/weekly-edge', 'events/yearly-edge', 'events/yearly-four',
+    ]);
+    expect(counts).toMatchObject({ cut: 0, seriesUnbounded: 0 });
+  }, 120_000);
+
+  it('without its index, as just after publishing, it reads as before 16.10, and the run says so', async () => {
+    await seed({ series: dueSeries(ALICE), ended: series('weekly', at(Date.now() - 600 * DAY)) });
+    const refused = refuseBoundedSeries(missingIndex);
+    const counts = mod.emptyCounts();
+    const read = new Set(onEvents(await fetched(() => mod.remindDue(db, Date.now(), counts))).map((f) => f.path));
+    expect(refused.n).toBe(1);
+    expect(await sentFor('series')).toBe(true);
+    expect(read).toEqual(new Set(['events/series', 'events/ended']));
+    expect(counts).toMatchObject({ cut: 0, seriesUnbounded: 1 });
+    // Nothing is lost, so the run is not red; the line says why it read more than it should.
+    expect(mod.reminderOutcome(counts).failed).toBe(0);
+    expect(mod.reminderOutcome(counts).detail).toContain('series read without their index');
+  }, 120_000);
+
+  it('any other failure of that read is not taken for a missing index', async () => {
+    await seed({ series: dueSeries(ALICE) });
+    for (const error of [
+      () => Object.assign(new Error('14 UNAVAILABLE: No connection established'), { code: 14 }),
+      () => Object.assign(new Error('9 FAILED_PRECONDITION: Too much contention on these documents'), { code: 9 }),
+      () => Object.assign(new Error('8 RESOURCE_EXHAUSTED: Too many index entries'), { code: 8 }),
+    ]) {
+      refuseBoundedSeries(error);
+      await expect(mod.remindDue(db, Date.now(), mod.emptyCounts())).rejects.toThrow(error().message);
+      vi.restoreAllMocks();
+    }
+    expect(await sentFor('series')).toBe(false);
+  }, 120_000);
+
+  it('one cap for both of its ranges, as for one query', async () => {
+    await seed({
+      ...many('w', 3, () => series('weekly', at(FROM - 100 * DAY))),
+      yearly: series('yearly', at(FROM - 1000 * DAY)),
+    });
+    const counts = mod.emptyCounts();
+    await mod.remindDue(db, NOW, counts, { maxCandidates: 3, page: 2 });
+    expect(counts).toMatchObject({ cut: 1, read: 3 });
+    const exact = mod.emptyCounts();
+    await mod.remindDue(db, NOW, exact, { maxCandidates: 4, page: 2 });
+    expect(exact).toMatchObject({ cut: 0, read: 4 });
+  }, 120_000);
+
+  it('one time for both of its ranges: past it, the second is not read, and the run says it stopped', async () => {
+    await seed({ weekly: series('weekly', at(FROM - 100 * DAY)), yearly: series('yearly', at(FROM - 1000 * DAY)) });
+    // Every look at the clock costs eight of the fifteen seconds. The dated read starts and looks once;
+    // the series read starts, looks before its first range (8 s in), and before its second (16 s in).
+    let t = 0;
+    const counts = mod.emptyCounts();
+    const read = new Set(onEvents(await fetched(() => mod.remindDue(db, NOW, counts, { clock: () => (t += 8_000), budgetMs: 15_000 })))
+      .map((f) => f.path));
+    expect(counts).toMatchObject({ cut: 1 });
+    expect(read).toEqual(new Set(['events/weekly']));
+  }, 120_000);
+
+  it('its index is in firestore.indexes.json, so publishing it publishes the index', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { indexes } = JSON.parse(readFileSync('firestore.indexes.json', 'utf8')) as {
+      indexes: Array<{ collectionGroup: string; queryScope: string; fields: Array<{ fieldPath: string; order?: string }> }>;
+    };
+    expect(indexes.filter((i) => i.collectionGroup === 'events' && i.queryScope === 'COLLECTION'
+      && JSON.stringify(i.fields) === JSON.stringify([
+        { fieldPath: 'recurrenceRule.frequency', order: 'ASCENDING' }, { fieldPath: 'date', order: 'ASCENDING' },
+      ]))).toHaveLength(1);
+  });
+});

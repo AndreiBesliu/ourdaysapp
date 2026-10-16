@@ -13316,3 +13316,82 @@ căzut la jumătate: emulatorul Firestore a fost oprit din afară, iar jurnalul 
 A doua oară azi, de fiecare dată cu o sesiune paralelă care folosea emulatoare. A doua rulare a mers curat.
 
 **Nepublicat.** Pleacă cu funcțiile, cu acordul lui Andrei. Nu cere index nou.
+
+## 2026-10-16 · Memento-urile: seriile încheiate nu mai sunt citite (Task Started)
+
+**Prompt (Andrei):** „continua cu seriile memento-urilor fără limită de dată (lookbackMsFor + indexul compus),
+fără agenți și fără deploy”.
+**Model:** Claude Opus 5.5.
+
+**Ce e** (BACKLOG, la memento-uri): interogarea seriilor din `sendDueReminders` (`recurrenceRule.frequency in
+[...]`) nu are nicio limită de dată, deci citește la fiecare 5 minute și seriile încheiate de mult. O serie are
+un orizont de la început: zilnic 30 de zile, săptămânal 52 de săptămâni, lunar 12 luni, anual 5 ani. Numărul
+crește cu folosirea, iar la câteva mii de serii limita de timp taie citirea și rularea devine roșie.
+
+**Măsurat pe live (doar citire, doar numere):**
+- forma cu limită pe `date` pică fără index (cod 9, „requires an index”), deci cere indexul compus
+  (`recurrenceRule.frequency`, `date`);
+- azi: 1 serie din 34 de evenimente, niciuna încheiată. Repararea e preventivă.
+
+**Planul:**
+- O limită de jos pe `date` pe frecvență (`lookbackMsFor`, ca în `aiSources.ts`): 400 de zile pentru zilnic,
+  săptămânal și lunar, 5×366 pentru anual. O limită de sus la capătul ferestrei.
+- Indexul compus în `firestore.indexes.json`.
+- O cale de rezervă: un index lipsă face interogarea să arunce, iar după publicare indexul se construiește
+  câteva minute. Atunci se citește ca înainte, fără limită, iar rularea o spune. Așa ordinea publicării nu mai
+  poate opri memento-urile.
+
+Fără agenți și fără deploy.
+
+## 2026-10-16 · Memento-urile: seriile încheiate nu mai sunt citite (Task Completed)
+
+**Prompt (Andrei):** „continua cu seriile memento-urilor fără limită de dată (lookbackMsFor + indexul compus),
+fără agenți și fără deploy”.
+**Model:** Claude Opus 5.5.
+
+**Ce citește acum `sendDueReminders` (`functions/src/reminders.ts`, `firestore.indexes.json`):**
+- **Seriile care încă pot avea o apariție din prima zi a rulării încolo.** Două intervale pe `date`: pentru
+  zilnic, săptămânal și lunar de la 400 de zile înainte (`lookbackMsFor`), pentru anual de la 5×366, ambele până
+  la capătul ferestrei de 31 de zile. O serie se termină la orizontul ei, numărat de la început (30 de zile, 52
+  de săptămâni, 12 luni, 5 ani), deci una mai veche nu mai are ce aminti. Până acum fiecare rulare citea toate
+  seriile făcute vreodată.
+- **Un singur buget de timp și un singur plafon** pentru cele două intervale, ca pentru o interogare. Citirea
+  datelor și citirea seriilor își păstrează fiecare bugetul ei.
+- **Indexul compus nou** (`recurrenceRule.frequency`, `date`) e în `firestore.indexes.json`.
+- **Calea de rezervă:** dacă indexul lipsește (cod 9 care pomenește un index), cum se întâmplă câteva minute
+  după publicare, cât se construiește, seriile se citesc ca înainte, fără limită. Rularea nu e roșie, fiindcă
+  nu se pierde nimic, dar rândul ei din Health spune „series read without their index”, iar `REMINDERS_RUN` are
+  `seriesUnbounded: 1`. Orice altă eroare se aruncă mai departe, ca înainte. Așa ordinea publicării nu mai poate
+  opri memento-urile.
+
+**Măsurat pe live (doar citire, doar numere), înainte de cod:**
+- forma nouă pică fără index (cod 9, „requires an index”), deci indexul trebuie publicat;
+- 1 serie din 34 de evenimente, niciuna încheiată. Repararea e preventivă.
+
+**Probe (`functions/test/remindersRead.test.ts`, 6 teste noi, prin `remindDue` pe emulator):**
+- **Seriile citite:** cele care încă rulează da, inclusiv una anuală de 4 ani; cele încheiate sau care încep
+  după fereastră nu. Granițele exacte: 400 de zile și 5×366 înapoi, ultima zi a ferestrei înainte. Pe codul
+  vechi se citeau 5 serii în plus (roșu văzut).
+- **Fără index:** forma veche, cu `seriesUnbounded` și cu propoziția din detalii, iar rularea nu e roșie.
+  Indexul lipsă e simulat, fiindcă emulatorul nu cere indexuri.
+- **Alte erori nu sunt luate drept index lipsă:** UNAVAILABLE, un cod 9 fără index, o eroare cu „index”, dar
+  alt cod.
+- **Un singur plafon și un singur timp** pentru ambele intervale.
+- **Indexul e în `firestore.indexes.json`**, deci publicarea lui îl publică.
+
+**Mutații: 19 din 19 prinse, fiecare de testul așteptat,** într-o clonă în afara Drive-ului, cu controale negative
+pe suita proprie și pe cele complete.
+- Înainte de rulare, lista de mutanți a scos trei goluri, închise cu teste: un plafon comun pentru cele două
+  intervale, indexul din fișier, o eroare cu „index” și alt cod.
+- La prima rulare a supraviețuit S17 (un timp separat pentru fiecare interval). L-a prins testul „un singur timp
+  pentru ambele intervale”, adăugat după aceea; reluat cu toate controalele.
+
+**Fără recenzie cu agenți:** decizia „fără agenți până la 17.10”. Recenzia e restantă în BACKLOG.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2629), `npm run build`, `check-split`, `check-offline`,
+`check-bundle`, `test:tz`, `test:rules` (912). `functions/lib` reconstruit.
+
+**Nepublicat.** La publicare: întâi `firestore:indexes` (cu „Nu” la ștergerea indexurilor care există doar pe
+live), apoi funcțiile. Ordinea inversă nu mai strică nimic, doar amână limita până e gata indexul. După
+publicare, rândul memento-urilor din Admin → Health nu mai trebuie să conțină „series read without their
+index”.

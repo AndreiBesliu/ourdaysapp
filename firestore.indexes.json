@@ -71,6 +71,20 @@
       ]
     },
     {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "recurrenceRule.frequency",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "expenses",
       "queryScope": "COLLECTION",
       "fields": [

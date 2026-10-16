@@ -91,11 +91,15 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
       pe proprietar: un index scris de server la fiecare eveniment (`reminderIndex`, cu momentul următorului
       memento), din care jobul citește doar ce e scadent, cu un plafon pe proprietar. Cost: o scriere de
       trigger la fiecare eveniment; câștig: citiri proporționale cu memento-urile scadente, nu cu evenimentele.
-    - **Interogarea seriilor citește și seriile încheiate** (nicio limită de dată; la fel înainte de 12.10).
-      Crește cu folosirea; la câteva mii de serii, limita de timp taie citirea. Remediul: o limită de jos pe
-      `date` pe frecvență (`lookbackMsFor`, ca în `aiSources.ts`), care cere indexul compus
-      (`recurrenceRule.frequency`, `date`), publicat ÎNAINTEA funcțiilor. Linia `REMINDERS_RUN` are acum timpul
-      fiecărei citiri: de urmărit pe live înainte.
+    - **Seriile încheiate nu mai sunt citite: reparat pe 16.10.** Interogarea seriilor are acum o limită de jos pe
+      `date`, pe frecvență (`lookbackMsFor`: 400 de zile, 5×366 pentru anual), și una de sus la capătul ferestrei.
+      Cere indexul compus (`recurrenceRule.frequency`, `date`), adăugat în `firestore.indexes.json`.
+      - **La publicare: `firestore:indexes` înaintea funcțiilor.** Nu mai e obligatoriu: fără index (sau cât se
+        construiește), citirea cade pe forma veche, fără limită, iar rularea scrie „series read without their
+        index” în rândul ei din Health (nu e roșie, nu se pierde nimic). Dar până e gata indexul, se citește ca
+        înainte.
+      - **La `firestore:indexes` se răspunde „Nu”** la ștergerea indexurilor care există doar pe live (CLAUDE.md).
+      - **Recenzia cu agenți e restantă**, după 17.10.
     - **Evenimentele personale nu au niciun câmp verificat de reguli:** câmpurile citite de memento-uri
       (`recurrenceExceptions`, `assigneeIds`, `title`) pot fi umflate. Paginile de 10 țin memoria, dar câteva
       zeci de astfel de evenimente consumă bugetul de timp. Remediul: plafoane în reguli și pentru crearea
