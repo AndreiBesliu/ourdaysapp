@@ -22,7 +22,7 @@
 // Pulled out here so the window and the selection can be stated and proved without a Firestore.
 // The IO stays in `index.ts`; everything that decides anything is below, and pure.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DIGEST_EVENT_LINES = exports.DIGEST_RECURRING_SCAN = exports.DIGEST_EVENT_SCAN = exports.DIGEST_SPAN_LOOKBACK_DAYS = void 0;
+exports.DIGEST_PAGE = exports.DIGEST_FIELDS = exports.DIGEST_EVENT_LINES = exports.DIGEST_RECURRING_SCAN = exports.DIGEST_EVENT_SCAN = exports.DIGEST_SPAN_LOOKBACK_DAYS = void 0;
 exports.digestWindow = digestWindow;
 exports.digestEventLines = digestEventLines;
 const eventTime_1 = require("./eventTime");
@@ -43,6 +43,19 @@ exports.DIGEST_EVENT_SCAN = 300;
 exports.DIGEST_RECURRING_SCAN = 500;
 /** Lines put in front of the model. Enough for a busy week, short enough to stay a digest. */
 exports.DIGEST_EVENT_LINES = 20;
+/**
+ * Every field the lines are made from: `expandInWindow` (the series, its exceptions and edits, the
+ * span, whose edit is whose) and the title. The two reads bring ONLY these (digestRead.ts,
+ * 16.10.2026): any member can pad a group's event to a megabyte. Of the rule, only the two parts a
+ * series is expanded from. A field read and missing here reads as absent, and the digest quietly
+ * changes; src/utils/digestCompact.test.ts holds the two together.
+ */
+exports.DIGEST_FIELDS = [
+    "date", "recurrenceRule.frequency", "recurrenceRule.onlyOn", "recurrenceExceptions", "overrideOfParent",
+    "overrideDate", "ownerId", "groupId", "endDayOffset", "title",
+];
+/** Events per page of those reads: what one page holds, padded, is ten times what one event can. */
+exports.DIGEST_PAGE = 10;
 /**
  * The window, from an instant.
  *
@@ -67,10 +80,10 @@ function digestWindow(nowIso, aheadDays = 7) {
 /**
  * The lines, from whatever the two queries returned.
  *
- * `docs` may contain documents belonging to other groups: the recurring-parent query is not
- * scoped by group, because on live `groupId ==` alongside `recurrenceRule != null` is refused for
- * want of a composite index. The filter is here, before anything reads them, and it is a test of
- * its own below — a query that widened for an indexing reason must not widen the ANSWER.
+ * Both queries are the group's own since 16.10.2026 (digestRead.ts). Until then the series one was
+ * not, for want of an index, and `docs` held other groups' documents. The filter stays here, before
+ * anything reads them, and it is a test of its own: a query that widens again must not widen the
+ * ANSWER.
  */
 function digestEventLines(docs, groupId, window, max = exports.DIGEST_EVENT_LINES) {
     const byId = new Map();

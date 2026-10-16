@@ -13228,3 +13228,91 @@ BACKLOG, împreună cu cea a trimiterii memento-urilor.
 `check-bundle`, `test:tz`, `test:rules` (899). `functions/lib` reconstruit.
 
 **Nepublicat.** Pleacă cu funcțiile, cu acordul lui Andrei.
+
+## 2026-10-16 · Rezumatul AI al grupului: citirea evenimentelor legată de grup (Task Started)
+
+**Prompt (Andrei):** „continua cu generateGroupDigest (interogarea legată de grup), fără agenți și fără deploy”.
+**Model:** Claude Opus 5.5.
+
+**Ce e** (BACKLOG, „Documente citite întregi, în bloc”, după ștergere): `generateGroupDigest` citește
+evenimentele în două interogări, ambele cu documente întregi.
+- **Seriile se caută în toată baza** (`recurrenceRule != null`, 500 de documente), fără legătură cu grupul.
+  Un cont cu 500 de evenimente personale cu o regulă oarecare le umple, iar rezumatul fiecărui grup pierde
+  seriile. Umflate, îl fac să cadă din lipsă de memorie.
+- **Fereastra datelor** aduce până la 300 de evenimente întregi ale grupului, pe care orice membru le poate
+  umfla (`checklistItems`, `imageUrl` și `hiddenFrom` nu au limită în reguli).
+
+**Măsurat pe live (doar citire, doar numere):**
+- formele noi merg fără index nou, în toate cele 5 grupuri: seriile legate de grup (`groupId ==` și
+  `recurrenceRule.frequency in`), cu `select` și cu cursor, și fereastra datelor cu `select` și `startAfter`;
+- o singură serie în toată baza, a niciunui grup; cel mai aglomerat grup are 7 evenimente în fereastră.
+
+Deci nu trebuie publicat niciun index înaintea funcțiilor.
+
+**Planul:** ambele interogări legate de grup, pe pagini de 10, doar cu câmpurile calculului, fiecare eveniment
+redus pe loc (`compactEvent`, ca la memento-uri). Plafoanele (300 și 500) rămân, iar peste ele rezumatul
+spune în continuare că e tăiat. Mesajele, profilurile și numele grupului sunt deja mărginite de reguli.
+Fără agenți și fără deploy.
+
+## 2026-10-16 · Rezumatul AI al grupului: citirea evenimentelor legată de grup (Task Completed)
+
+**Prompt (Andrei):** „continua cu generateGroupDigest (interogarea legată de grup), fără agenți și fără deploy”;
+pe drum: „nu imi mai cere permisiune si continua cu ce ai nevoie”.
+**Model:** Claude Opus 5.5.
+
+**Ce citește acum rezumatul (`functions/src/digestRead.ts`, nou; `digestEvents.ts`, `index.ts`):**
+- **Ambele interogări sunt ale grupului.** Seriile se caută prin `groupId ==` și `recurrenceRule.frequency in`
+  [daily, weekly, monthly, yearly], nu prin `recurrenceRule != null` în toată baza. Regulile care nu sunt
+  serii (`true`, gunoi) nu mai sunt citite deloc.
+- **Pe pagini de 10** (`DIGEST_PAGE`), doar cu câmpurile din care se fac liniile (`DIGEST_FIELDS`), fiecare
+  eveniment redus pe loc (`compactEvent`, ca la memento-uri).
+- **Plafoanele rămân** (300 pentru fereastră, 500 pentru serii), dar acum sunt exacte: fix plafonul nu mai e
+  „tăiat”, unul în plus da. Un document repetat de cursor se numără și el, deci citirea se termină orice ar
+  conține datele.
+- **Schimbare de comportament:** un titlu ajunge la model doar cu primele 120 de caractere, cum îl taie și
+  memento-urile. Web-ul scrie până la 500, iar APK-ul și regulile nu au limită, deci un titlu umflat de un
+  membru se plătea până acum în promptul fiecărui rezumat.
+- **Fără index nou:** pe live, toate formele merg cu indexurile de azi (măsurat înainte de cod, doar citire,
+  doar numere), deci nu e nevoie de o publicare de indexuri înaintea funcțiilor.
+
+**Probe:**
+- **`functions/test/groupDigestRead.test.ts`:** 7 teste pe emulator, prin funcția reală, cu rețeaua simulată,
+  ca promptul să poată fi citit.
+  - Toate cele 12 serii ale grupului ajung în prompt, lângă 600 de evenimente personale ale unui străin cu
+    `recurrenceRule: true`. Pe codul vechi lipseau toate 12 (roșu văzut).
+  - Niciun document adus cu `pad`, cel mult 10 pe pagină și niciun document al altui grup sau al altui cont,
+    nici măcar doar cu câmpurile selectate. Pe codul vechi: 513 documente umflate aduse.
+  - Un titlu de 200 000 de caractere ajunge ca primele 120.
+  - Granițele exacte ale ambelor plafoane, prin funcția reală și prin cititor, peste mai multe pagini.
+  - Evenimentele grupului care nu sunt nici în fereastră, nici serii nu sunt citite.
+- **`src/utils/digestCompact.test.ts`:** aceleași linii din câmpurile selectate și reduse ca din documentele
+  întregi, iar fiecare câmp din `DIGEST_FIELDS` schimbă o linie când lipsește.
+- **`watchReads`** s-a mutat din `deletionReads.test.ts` într-un ajutor comun (`functions/test/watchReads.ts`)
+  și păstrează acum și calea fiecărui document adus.
+
+**Incident pe drum:** două teste noi au trimis câte o cerere reală către api.anthropic.com, refuzată cu 401.
+- **Cauza:** clientul Claude păstrează `fetch`-ul cu care a fost creat. După `vi.restoreAllMocks()`, simularea
+  veche trecea la rețeaua reală, cu tokenul fals al testului.
+- **Ce conținea:** doar date de test („Family”, titluri ca `ended-000`). Nicio cheie, nicio dată reală, niciun
+  cost.
+- **Reparat:** o singură simulare pe test, plus o plasă pe tot fișierul, care pică testul la orice cerere către
+  Anthropic sau serverul de metadate. Plasa e probată: varianta cu scurgerea pică acum cu „outbound call outside
+  the stub”, fără nicio cerere în rețea.
+
+**Mutații: 26 din 26 prinse, fiecare de testul așteptat.** Rularea s-a făcut într-o clonă în afara Drive-ului, cu controale negative pe suitele proprii
+și pe cele complete. Cele 10 câmpuri din `DIGEST_FIELDS` sunt prinse, fiecare, de testul de unitate.
+- **Înainte de rulare,** lista de mutanți a scos două goluri, închise cu teste: seriile fără filtrul de
+  frecvență și plafonul seriilor confundat cu cel al ferestrei (granițele exacte, prin funcția reală).
+- **Prima rulare: 24 din 26.** Au supraviețuit R3 și R4, interogările fără filtrul de grup. Pe acolo veneau doar
+  câmpurile selectate, deci testul `pad` nu vedea nimic. Le-a prins `watchReads`, după ce a început să
+  păstreze fiecare document adus: niciunul al altui grup sau al altui cont nu are voie să fie citit. Reluate
+  cu toate controalele, ambele au fost prinse.
+
+**Fără recenzie cu agenți:** decizia „fără agenți până la 17.10”. Recenzia e restantă în BACKLOG.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2629), `npm run build`, `check-split`, `check-offline`,
+`check-bundle`, `test:tz`, `test:rules` (906). `functions/lib` reconstruit. Prima rulare a `test:rules` a
+căzut la jumătate: emulatorul Firestore a fost oprit din afară, iar jurnalul lui se termină fără nicio eroare.
+A doua oară azi, de fiecare dată cu o sesiune paralelă care folosea emulatoare. A doua rulare a mers curat.
+
+**Nepublicat.** Pleacă cu funcțiile, cu acordul lui Andrei. Nu cere index nou.

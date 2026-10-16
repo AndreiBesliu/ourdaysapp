@@ -46,10 +46,8 @@ import {
 import { spanProblem } from "./eventTime";
 import { eventFieldProblem } from "./eventShape";
 import { countOf, inc, timeMs } from "./adminTally";
-import type { EventDoc } from "./recurrenceServer";
-import {
-  digestWindow, digestEventLines, DIGEST_EVENT_SCAN, DIGEST_RECURRING_SCAN,
-} from "./digestEvents";
+import { digestWindow, digestEventLines } from "./digestEvents";
+import { readDigestEvents } from "./digestRead";
 import { transferredCopy } from "./assetTransfer";
 
 // Invite links live in their own module — index.ts is already long, and these four are a
@@ -921,8 +919,8 @@ export const generateGroupDigest = onCall(AI_CALLABLE_OPTS, async (request) => {
     //
     // The window and the selection live in `digestEvents.ts`, tested from
     // `src/utils/digestEvents.test.ts` — this section had no test at all, which is most of the
-    // reason it was wrong three ways for as long as it was. What is left here is the two reads,
-    // and the reason the second one is shaped the way it is.
+    // reason it was wrong three ways for as long as it was. The two reads live in `digestRead.ts`
+    // (16.10.2026): the group's own events only, in pages, only the fields the lines are made from.
     //
     // Measured on live on 19.09, before any of it was written: five groups, zero events anywhere
     // in the next eight days, and ONE recurring event in the whole database — belonging to no
@@ -938,33 +936,10 @@ export const generateGroupDigest = onCall(AI_CALLABLE_OPTS, async (request) => {
       // "(No upcoming events)" would read as a calendar with nothing on it.
       upcomingEvents += "(Upcoming events unavailable)\n";
     } else {
-      const [windowSnap, recurringSnap] = await Promise.all([
-        db.collection('events')
-          .where('groupId', '==', groupId)
-          .where('date', '>=', eventWindow.scanFrom)
-          .where('date', '<=', eventWindow.scanTo)
-          .orderBy('date', 'asc')
-          .limit(DIGEST_EVENT_SCAN)
-          .get(),
-        // Deliberately NOT scoped by `groupId`, and that is measured rather than assumed: on
-        // 19.09 `groupId == X` alongside `recurrenceRule != null` was refused on live with
-        // FAILED_PRECONDITION for want of a composite index. Deploying an index so that a query
-        // can be narrow — on a code path where a MISSING index throws rather than returning
-        // less — is the worse trade when the whole database holds one such document.
-        // `digestEventLines` filters by group before anything reads them.
-        db.collection('events')
-          .where('recurrenceRule', '!=', null)
-          .limit(DIGEST_RECURRING_SCAN)
-          .get(),
-      ]);
+      const read = await readDigestEvents(db, groupId, eventWindow);
+      const selection = digestEventLines(read.docs, groupId, eventWindow);
 
-      const docs: EventDoc[] = [...windowSnap.docs, ...recurringSnap.docs]
-        .map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) } as EventDoc));
-      const selection = digestEventLines(docs, groupId, eventWindow);
-
-      eventsTruncated = selection.truncated
-        || windowSnap.size >= DIGEST_EVENT_SCAN
-        || recurringSnap.size >= DIGEST_RECURRING_SCAN;
+      eventsTruncated = selection.truncated || read.truncated;
 
       upcomingEvents += selection.lines.length === 0
         ? "(No upcoming events)\n"

@@ -110,10 +110,14 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     - **Listarea fișierelor persoanei** (`deleteFilesExcept`): în dosarele ei scrie doar ea.
     - **Recenzia cu agenți e restantă** (fără agenți până la resetarea din 17.10): are teste și mutații, nu și
       recenzie. De făcut după resetare, împreună cu cea a trimiterii memento-urilor.
-  - **Rezumatul AI al grupului (`generateGroupDigest`):** caută recurentele în TOATĂ baza, 500 de documente
-    întregi, nelegat de grup. Un cont cu 500 de evenimente personale cu `recurrenceRule` le umple: rezumatul
-    fiecărui grup pierde recurentele, iar umflate îl fac să cadă. Remediul: interogarea legată de grup (cere
-    un index compus, publicat înaintea funcțiilor).
+  - **Rezumatul AI al grupului (`generateGroupDigest`): reparat pe 16.10** (`digestRead.ts`). Ambele interogări
+    sunt acum ale grupului: seriile prin `groupId ==` și `recurrenceRule.frequency in`, nu în toată baza. Se citesc
+    pe pagini de 10, doar cu câmpurile din care se fac liniile (`DIGEST_FIELDS`), și fiecare eveniment e redus pe
+    loc (`compactEvent`). Un titlu ajunge la model doar cu primele 120 de caractere. Pe live, formele merg fără
+    index nou, deci nu e nevoie de o publicare de indexuri înaintea funcțiilor. Ce a rămas, deliberat:
+    - **Mesajele, profilurile expeditorilor și numele grupului** se citesc întregi: regulile le mărginesc (text
+      ≤ 4000, nume ≤ 60, chei fixe).
+    - **Recenzia cu agenți e restantă**, după resetarea din 17.10.
   - **Statisticile din Admin (10.10, parțial):** citesc acum doar câmpurile numărate, deci descrierile,
     checklist-urile, tablele de joc și notele nu mai vin. Câmpurile numărate pot fi însă umflate și ele: un
     eveniment personal nu are niciun câmp verificat, iar categoria unui card nu are plafon. Doar adminul vede.
