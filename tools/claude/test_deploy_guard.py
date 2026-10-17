@@ -122,6 +122,23 @@ CAZURI = [
     # PowerShell: Set-Location și `;`.
     (f'Set-Location {APPS}\\DataRead; npm run deploy', APPS, ASK),
     (f'Set-Location {APPS}\\cncvs2; node scripts/publica-canal.ts etapa-01', APPS, ALLOW),
+    # ── 17.10: citirile pure trec, oricâte „firebase-tools” și „deploy” ar fi în CĂI ──
+    ('FT="/c/x/npm/node_modules/firebase-tools"; sed -n 1,80p "$FT/lib/deploy/functions/release/planner.js"; '
+     'echo ======; grep -n "groupEndpointsByCodebase" -A 22 "$FT/lib/deploy/functions/prepare.js" | head -80', CNCVS, ALLOW),
+    ('cat node_modules/firebase-tools/lib/deploy/index.js | head -50', OURDAYS, ALLOW),
+    ('Get-Content "$env:APPDATA\\npm\\node_modules\\firebase-tools\\lib\\deploy\\functions\\prepare.js" | '
+     'Select-Object -First 40', OURDAYS, ALLOW),
+    ("cd node_modules/firebase-tools/lib && sed -n '120,180p' deploy/functions/release/fabricator.js", OURDAYS, ALLOW),
+    # …dar orice bucată care poate porni ceva decide ca înainte:
+    ('FT=node_modules/firebase-tools/lib/bin/firebase.js; node $FT deploy', OURDAYS, ASK),
+    ('sed -n 1p "$(firebase deploy)" x', OURDAYS, ASK),
+    ("sed -n '1e firebase deploy' node_modules/firebase-tools/lib/deploy/a.js", OURDAYS, ASK),
+    ('echo "firebase deploy" | sh', OURDAYS, ASK),
+    ('PATH=/tmp/x:$PATH; grep -n x node_modules/firebase-tools/lib/deploy/a.js; firebase deploy', OURDAYS, ASK),
+    ('grep -n x node_modules/firebase-tools/lib/deploy/a.js; firebase deploy --project live', DATAREAD, ASK),
+    # Gaura VECHE (exista și înainte de 17.10): un vizualizator care pornește un program prin opțiune.
+    ('rg --pre "firebase deploy" -n x .', OURDAYS, ASK),
+    ('sort --compress-program="firebase deploy" x', OURDAYS, ASK),
 ]
 
 

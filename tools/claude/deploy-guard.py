@@ -670,7 +670,8 @@ def _bucati_de_judecat(t: Text) -> list:
         if not cuv:
             continue
         p = _program(cuv[0])
-        if p in VIZUALIZATOARE:
+        # Un vizualizator cu `--pre CMD` / `--compress-program=CMD` pornește CMD: nu mai e scutit (gaură veche, 17.10).
+        if p in VIZUALIZATOARE and not any(OPTIUNI_CARE_RULEAZA.match(c) for c in cuv):
             continue
         if p == 'git' and len(cuv) > 1 and cuv[1].lower() in GIT_CITIRE and 'alias' not in b and '!' not in b:
             continue
@@ -823,6 +824,68 @@ def _dovada_cod(text: str, director: str, motive: list):
         motive.append('firebase pomenit în cod în afara unui apel pe care să-l pot dovedi')
 
 
+# ── trecerea citirilor pure (17.10.2026) ──
+# O comandă făcută NUMAI din cititori puri și atribuiri literale nu poate porni nimic. Agenții citesc des sursele
+# firebase-tools (`…/node_modules/firebase-tools/lib/deploy/…`): „firebase-tools” + „deploy” din CALE cereau confirmare
+# pentru un `sed -n 1,80p`, iar un workflow stătea după om la fiecare citire. E o DOVADĂ adăugată, nu o scutire pe
+# cuvinte: o singură bucată care nu e cititor pur (sau o substituție, un bloc, un heredoc, o redirectare în fișier,
+# un program numit printr-o cale) și decide restul gardianului, exact ca înainte.
+CITITORI_PURI = {'grep', 'egrep', 'fgrep', 'rg', 'findstr', 'select-string', 'sls', 'cat', 'type', 'get-content', 'gc',
+                 'head', 'tail', 'wc', 'ls', 'dir', 'get-childitem', 'gci', 'nl', 'cut', 'echo', 'printf', 'pwd', 'cd',
+                 'select-object', 'sed'}
+# Opțiunile prin care un „cititor” pornește totuși un program: `rg --pre CMD`, `sort --compress-program=CMD`.
+OPTIUNI_CARE_RULEAZA = re.compile(r'^--(?:pre|pre-glob|compress-program)(?:=|$)', re.IGNORECASE)
+SED_DOAR_TIPARIRE = re.compile(r'^(?:(?:\d+|\$)(?:,(?:\d+|\$))?p;?)+$')
+SED_OPTIUNI_CITIRE = {'-n', '--quiet', '--silent', '-E', '-r', '--regexp-extended'}
+# O atribuire care schimbă CE program rulează sau ce rulează shell-ul la pornire nu e o simplă dată.
+VARIABILE_DE_LANSARE = {'PATH', 'PATHEXT', 'BASH_ENV', 'ENV', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'IFS', 'PROMPT_COMMAND',
+                        'SHELLOPTS', 'BASHOPTS', 'NODE_OPTIONS', 'PS4'}
+
+
+def _bucata_doar_citire(b: str) -> bool:
+    if _scrie_in_fisier(b):
+        return False
+    cuv = _jetoane(b)
+    i = 0
+    while i < len(cuv) and re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', cuv[i]):
+        if cuv[i].split('=', 1)[0].upper() in VARIABILE_DE_LANSARE:
+            return False
+        i += 1
+    cuv = cuv[i:]
+    if not cuv:
+        return True
+    p = _program(cuv[0])
+    # Numele gol, fără cale și fără extensie: `./grep` sau `grep.cmd` e un fișier local, nu cititorul.
+    if p not in CITITORI_PURI or cuv[0].lower() != p:
+        return False
+    args = cuv[1:]
+    if any(OPTIUNI_CARE_RULEAZA.match(a) for a in args):
+        return False
+    # `echo "firebase deploy …"` rămâne la regulile vechi (tabelul îl vrea întrebat): un text de comandă tipărit poate
+    # pleca mai departe pe căi pe care nu le văd. Un `echo ======` nu pomenește nimic.
+    if p in ('echo', 'printf') and (_are_fb(b) or DEPLOY.search(_strivit(b))):
+        return False
+    if p == 'sed':
+        scripturi = [a for a in args if not a.startswith('-')]
+        if (any(a not in SED_OPTIUNI_CITIRE for a in args if a.startswith('-'))
+                or not scripturi or not SED_DOAR_TIPARIRE.match(scripturi[0])):
+            return False
+    return True
+
+
+def _doar_citiri(comanda: str) -> bool:
+    text = _fara_continuari(comanda or '')
+    if not text.strip() or re.search(r'\$\(|`|<\(|>\(|@\(|[{}]|<<', text):
+        return False
+    bucati = _bucati(text)
+    # A doua tăiere, FĂRĂ ghilimele: `_bucati` nu știe de `\"`, deci `echo \" ; npm run deploy ; echo \"` i-ar părea o
+    # singură bucată `echo`. Trebuie să fie citire pură în AMBELE tăieri (o ghilimea cu `;` înăuntru doar cere).
+    brut = [x.strip() for x in re.split(r'[;|&\r\n]', re.sub(r'\d*>&\d*|&>', ' ', text)) if x.strip()]
+    if not bucati or not brut:
+        return False
+    return all(_bucata_doar_citire(b) for b in bucati) and all(_bucata_doar_citire(b) for b in brut)
+
+
 def _texte_de_judecat(t: Text) -> list:
     """Ce se judecă dintr-un text: bucățile shell nescutite, codul fără comentarii și fără șirurile-mesaj, scriptul
     Python întreg."""
@@ -835,6 +898,8 @@ def _texte_de_judecat(t: Text) -> list:
 
 def decide(comanda: str, director: str):
     """('ask', motive) dacă trebuie confirmată, altfel (None, [])."""
+    if _doar_citiri(comanda):
+        return None, []
     director = director or APPS
     ext = Extindere()
     ext.adauga('shell', comanda or '', director, 'comanda', 0)
