@@ -13547,3 +13547,22 @@ functiile, apoi hosting-ul”.
 
 Pleacă `6e48a66`, `bc2dc7d`, `106729a`, `4602596`, `8797ed7`, `f1052b7`, `f3706d2`, `5f8f0c2`, `14d2d7d`, `c7a303d`,
 `c60463e` și testele, în ordine: regulile, indexurile (fără ștergeri), funcțiile, hosting-ul.
+
+## 2026-10-17 · Publicarea pe live a celor de la 12 la 17.10 (Task Completed)
+
+**Prompt (Andrei):** „publica pe live in ordinea din predare: regulile, firestore:indexes (Nu la stergeri),
+functiile, apoi hosting-ul”, apoi „continua”.
+**Model:** Claude Opus 5.5.
+
+Publicat cu `--project live --non-interactive`, de pe un arbore curat (`5aab899`), în ordine:
+1. **Regulile:** compilate, două avertismente vechi despre operatorul ternar.
+2. **Indexurile:** nimic șters (fără mod interactiv, nu se șterge nimic), plus indexul compus nou
+   (`recurrenceRule.frequency`, `date`).
+3. **Funcțiile:** 55 actualizate, niciuna creată, niciun eșec.
+4. **Hosting-ul:** build nou; live-ul servește exact pachetul local (`index-iRdNJZrV.js`, hash egal).
+
+**După publicare:** jobul memento-urilor a rulat `ok`, fără „series read without their index”.
+
+De urmărit în Admin → Health în zilele următoare:
+- rândul memento-urilor;
+- `REMINDERS_RUN` (`datedMs`, `seriesMs`): timpul real al unei pagini între us-central1 și europe-central2.
