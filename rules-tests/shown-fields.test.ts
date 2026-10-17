@@ -85,7 +85,11 @@ describe('a group event is created only with shown fields of the app’s kind', 
   });
 
   it('a personal event stays open, as its answers do: leaving a group copies the event as stored', async () => {
-    await assertSucceeds(addDoc(collection(as(BOB), 'events'), { ...webEvent(BOB), groupId: null, title: MAP, emoji: MAP }));
+    await assertSucceeds(addDoc(collection(as(BOB), 'events'), { ...webEvent(BOB), groupId: null, emoji: MAP, description: MAP }));
+    // Except what the server reads in bulk (17.10.2026, bulk-read-fields.test.ts): the reminders read
+    // every personal event's title, ten to a page, and a title that is a map or a list could hold a
+    // list of a million nulls. Live held none (08.10.2026), and the web's copy normalises the title.
+    await fails(addDoc(collection(as(BOB), 'events'), { ...webEvent(BOB), groupId: null, title: MAP }));
     // The copy the web and the installed APK make on leaving carries the server's AI note too.
     await assertSucceeds(addDoc(collection(as(BOB), 'events'), {
       ...webEvent(BOB), groupId: null, aiChecklist: { status: 'failed', reason: 'ai-checklist/quota', at: DAY },

@@ -16,7 +16,7 @@
 //
 // It imports NOTHING: both runtimes hand it plain data.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.EVENT_JUDGED_FIELDS = exports.EVENT_DATE = exports.EVENT_TIME = exports.EVENT_LABEL_MAX = exports.EVENT_EMOJI_MAX = exports.EVENT_LOCATION_MAX = exports.EVENT_DESCRIPTION_MAX = exports.EVENT_TITLE_MAX = void 0;
+exports.EVENT_JUDGED_FIELDS = exports.EVENT_DATE = exports.EVENT_TIME = exports.EVENT_EXCEPTIONS_MAX = exports.EVENT_LABEL_MAX = exports.EVENT_EMOJI_MAX = exports.EVENT_LOCATION_MAX = exports.EVENT_DESCRIPTION_MAX = exports.EVENT_TITLE_MAX = void 0;
 exports.eventFieldOk = eventFieldOk;
 exports.clampText = clampText;
 exports.eventFieldProblem = eventFieldProblem;
@@ -31,6 +31,9 @@ exports.EVENT_LOCATION_MAX = 300;
 exports.EVENT_EMOJI_MAX = 16;
 /** Short labels the screens only compare or look up: task status, colour, category, time zone. */
 exports.EVENT_LABEL_MAX = 64;
+/** A series' exceptions (17.10.2026): the server reads them in bulk, ten events a page, and a list is
+ *  decoded at about a hundred times its stored size. A series has at most 53 occurrences to except. */
+exports.EVENT_EXCEPTIONS_MAX = 500;
 /** A wall-clock time, as the form writes it ("09:30"), the same test as `isValidTime`. */
 exports.EVENT_TIME = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
 /** A day ("2026-10-08", as the server writes an occurrence) or that day at a UTC time, as
@@ -40,11 +43,13 @@ exports.EVENT_DATE = /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(T([01][
 exports.EVENT_JUDGED_FIELDS = [
     'title', 'emoji', 'description', 'location', 'time', 'endTime', 'date',
     'checklistItems', 'recurrenceExceptions', 'recurrenceRule',
-    'taskStatus', 'color', 'categoryId', 'timezone', 'reminderMinutes',
+    'taskStatus', 'color', 'categoryId', 'timezone', 'reminderMinutes', 'endDayOffset',
 ];
 const isText = (v, max) => typeof v === 'string' && v.length <= max;
 const isOptText = (v, max) => v === null || v === undefined || isText(v, max);
 const isPlainMap = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+/** A part of a rule the server reads (`frequency`, `onlyOn`): absent, or text, never a list or a map. */
+const isRulePart = (v) => v === undefined || typeof v === 'string';
 /** Whether one field holds what the app writes there. Absent (`undefined`) is judged like null. */
 function eventFieldOk(field, v) {
     switch (field) {
@@ -55,15 +60,19 @@ function eventFieldOk(field, v) {
         case 'time':
         case 'endTime': return v === null || v === undefined || (typeof v === 'string' && exports.EVENT_TIME.test(v));
         case 'date': return typeof v === 'string' && exports.EVENT_DATE.test(v);
-        case 'checklistItems':
-        case 'recurrenceExceptions': return v === null || v === undefined || Array.isArray(v);
-        case 'recurrenceRule': return v === null || v === undefined || isPlainMap(v);
+        case 'checklistItems': return v === null || v === undefined || Array.isArray(v);
+        // Short, and no map or list inside it (the rules: `size()` and `join`, which takes only scalars).
+        case 'recurrenceExceptions': return v === null || v === undefined || (Array.isArray(v) && v.length <= exports.EVENT_EXCEPTIONS_MAX
+            && v.every((x) => x === null || typeof x === 'string' || typeof x === 'number' || typeof x === 'boolean'));
+        case 'recurrenceRule': return v === null || v === undefined || (isPlainMap(v)
+            && isRulePart(v.frequency) && isRulePart(v.onlyOn));
         case 'taskStatus':
         case 'color':
         case 'categoryId':
         case 'timezone': return isOptText(v, exports.EVENT_LABEL_MAX);
         // Any number, as the rules say `is number`: the details window prints it.
-        case 'reminderMinutes': return v === null || v === undefined || typeof v === 'number';
+        case 'reminderMinutes':
+        case 'endDayOffset': return v === null || v === undefined || typeof v === 'number';
         default: return true;
     }
 }

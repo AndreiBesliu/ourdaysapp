@@ -69,7 +69,7 @@
 //     so a run stopped in between would freeze those events for everybody.
 //   * The name kept on conversations is read before the profile goes, and written once.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteMyAccount = exports.accountFiles = exports.REFUSAL = exports.RECENT_SIGN_IN_S = void 0;
+exports.deleteMyAccount = exports.DELETION_MEMORY = exports.accountFiles = exports.REFUSAL = exports.RECENT_SIGN_IN_S = void 0;
 exports.signedInRecently = signedInRecently;
 exports.nextOwner = nextOwner;
 exports.eventHeir = eventHeir;
@@ -513,8 +513,13 @@ async function deleteAccountData(uid, by) {
  * shared computer is exactly the case this guards. Admin accounts are refused: losing the last admin
  * would lock the admin screen, and a bootstrap address would simply become one again at the next
  * sign-up.
+ *
+ * 512 MiB (17.10.2026): a checklist is read one event at a time (batchDelete.ts), and one event can
+ * decode to about 100 MB; the same for the person's own document and each friend's, read whole one by
+ * one. The platform's 256 MiB is the instance's own footprint plus little more.
  */
-exports.deleteMyAccount = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540 }, async (request) => {
+exports.DELETION_MEMORY = "512MiB";
+exports.deleteMyAccount = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540, memory: exports.DELETION_MEMORY }, async (request) => {
     var _a, _b, _c;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)

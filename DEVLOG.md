@@ -13395,3 +13395,34 @@ pe suita proprie și pe cele complete.
 live), apoi funcțiile. Ordinea inversă nu mai strică nimic, doar amână limita până e gata indexul. După
 publicare, rândul memento-urilor din Admin → Health nu mai trebuie să conțină „series read without their
 index”.
+
+## 2026-10-17 · Recenzia cu agenți a celor patru commit-uri din 13–16.10, și reparațiile (Task Started)
+
+**Prompt (Andrei):** „usageul saptamanal se reseteaza 50 min, deci poti sa lucrezi la maximum efort”, apoi
+„continua”.
+**Model:** Claude Opus 5.5.
+
+**Ce e:** recenziile cu agenți amânate până la resetarea din 17.10 (BACKLOG), pe `106729a` (trimiterea
+memento-urilor), `4602596` (ștergerile), `8797ed7` (rezumatul AI) și `f1052b7` (seriile).
+
+**Cum s-a făcut recenzia:**
+- **Pe un instantaneu** (`git archive HEAD`), nu în repo, cu 5 sloturi de emulator pe porturi separate și un
+  rulator cu lacăt (`emu-run.mjs`). Acesta poate înlocui un fișier sursă doar pe durata unei rulări, ca să se
+  vadă dacă un test pică pe cod stricat.
+- **Faza 1:** 10 lentile care reproduc pe emulator, la efort maxim: câte una de corectitudine pentru fiecare
+  commit, plus abuz, operare, două de teste și porți, semantica Firestore și consecvență. Au ieșit 42 de
+  constatări, în 3,7 M tokeni și 54 de minute.
+- **Faza 2:** 13 verificatori adversariali pe grupele de după eliminarea dublurilor, câte doi pe cele HIGH
+  (unul infirmă, celălalt proiectează remedierea). 5,2 M tokeni, 2 h 26 min.
+- **Rezultat:** aproape totul confirmat, cu numere corectate; o constatare infirmată pe adevăr.
+
+**Ce urmează:** reparațiile, pe părți, fiecare cu testele ei, roșii pe codul de azi:
+1. memoria (liste umflate de clienți);
+2. durata ștergerii unui cont;
+3. rezumatul (evenimente ascunse de cel care cere, tăierea emoji-urilor, privirea înapoi care împinge
+   zilele cerute);
+4. trimiterea memento-urilor (revendicările);
+5. seriile;
+6. igiena testelor.
+
+La final, mutații pe tot ce e nou. Fără deploy.

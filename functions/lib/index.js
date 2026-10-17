@@ -1184,9 +1184,11 @@ exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
         ? p.assigneeIds.filter((x) => typeof x === "string")
         : [];
     const allowed = new Set([...parentAssignees, uid]);
+    // Each once (17.10.2026): the rules bound how many names a client writes, and this writes on the Admin
+    // SDK, where they do not look; the reminders and the account deletion read the list in bulk.
     const requested = Array.isArray(data.assigneeIds)
-        ? data.assigneeIds
-            .filter((x) => typeof x === "string")
+        ? [...new Set(data.assigneeIds
+                .filter((x) => typeof x === "string"))]
         : [];
     // And on a group event, only who is in the group NOW. Somebody who left still passes `canEdit` as
     // the series' owner, and a parent read just before the leaver sweep cleaned it (groupLeave.ts)
@@ -2271,8 +2273,9 @@ exports.adminGetUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK 
 });
 // Moderate a user: enable | disable | forceVerify | delete. Admins/owner and the
 // caller themselves are protected from disable/delete.
-// The deletion runs the whole account cascade, the same as `deleteMyAccount`, and gets its time.
-exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540 }, async (request) => {
+// The deletion runs the whole account cascade, the same as `deleteMyAccount`, and gets its time and its
+// memory: the account an admin deletes may be a hostile one, which wrote its own documents to be heavy.
+exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540, memory: accountDeletion_1.DELETION_MEMORY }, async (request) => {
     const callerUid = await assertAdmin(request);
     const { uid, action } = request.data || {};
     if (!uid || typeof uid !== "string" || uid.includes("/"))

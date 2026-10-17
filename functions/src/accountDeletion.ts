@@ -499,8 +499,13 @@ export async function deleteAccountData(uid: string, by: string): Promise<Accoun
  * shared computer is exactly the case this guards. Admin accounts are refused: losing the last admin
  * would lock the admin screen, and a bootstrap address would simply become one again at the next
  * sign-up.
+ *
+ * 512 MiB (17.10.2026): a checklist is read one event at a time (batchDelete.ts), and one event can
+ * decode to about 100 MB; the same for the person's own document and each friend's, read whole one by
+ * one. The platform's 256 MiB is the instance's own footprint plus little more.
  */
-export const deleteMyAccount = onCall({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540 }, async (request) => {
+export const DELETION_MEMORY = "512MiB" as const;
+export const deleteMyAccount = onCall({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540, memory: DELETION_MEMORY }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
   if (!signedInRecently(request.auth?.token?.auth_time, Math.floor(Date.now() / 1000))) {

@@ -7,8 +7,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
-  EVENT_DATE, EVENT_DESCRIPTION_MAX, EVENT_EMOJI_MAX, EVENT_JUDGED_FIELDS, EVENT_LABEL_MAX, EVENT_LOCATION_MAX,
-  EVENT_TIME, EVENT_TITLE_MAX, clampText, eventFieldOk, eventFieldProblem,
+  EVENT_DATE, EVENT_DESCRIPTION_MAX, EVENT_EMOJI_MAX, EVENT_EXCEPTIONS_MAX, EVENT_JUDGED_FIELDS, EVENT_LABEL_MAX,
+  EVENT_LOCATION_MAX, EVENT_TIME, EVENT_TITLE_MAX, clampText, eventFieldOk, eventFieldProblem,
 } from './eventShape';
 import { ASSET_NAME_MAX } from './walletAsset';
 
@@ -27,6 +27,10 @@ describe('a field the app writes passes, one it never writes does not', () => {
     ['taskStatus', 'not-started'], ['color', '#3b82f6'], ['categoryId', 'family_time'], ['timezone', 'America/Argentina/Buenos_Aires'],
     ['reminderMinutes', 15], ['reminderMinutes', null],
     ['anythingElse', MAP],
+    // What the server reads in bulk (17.10.2026): at the cap, and as the apps write it.
+    ['recurrenceExceptions', Array(EVENT_EXCEPTIONS_MAX).fill('2026-10-08')], ['recurrenceExceptions', null],
+    ['recurrenceRule', { frequency: 'weekly' }], ['recurrenceRule', { frequency: 'yearly', anythingElse: [MAP] }],
+    ['endDayOffset', 2], ['endDayOffset', null], ['endDayOffset', undefined],
   ])('%s = %j', (field, value) => {
     expect(eventFieldOk(field, value)).toBe(true);
   });
@@ -40,6 +44,13 @@ describe('a field the app writes passes, one it never writes does not', () => {
     ['checklistItems', 'bread'], ['recurrenceExceptions', MAP], ['recurrenceRule', 'daily'], ['recurrenceRule', ['daily']],
     ['taskStatus', MAP], ['color', long(EVENT_LABEL_MAX + 1)], ['categoryId', 5], ['timezone', true],
     ['reminderMinutes', '15'], ['reminderMinutes', POISON],
+    // A list decoded at a hundred times its stored size: too long, or holding a map; a rule part or a
+    // span that is a list or a map.
+    ['recurrenceExceptions', Array(EVENT_EXCEPTIONS_MAX + 1).fill('2026-10-08')], ['recurrenceExceptions', [MAP]],
+    ['recurrenceExceptions', [['2026-10-08']]],
+    ['recurrenceRule', { frequency: ['daily'] }], ['recurrenceRule', { frequency: 'daily', onlyOn: [null] }],
+    ['recurrenceRule', { frequency: null }], ['recurrenceRule', { frequency: 'daily', onlyOn: MAP }],
+    ['endDayOffset', '2'], ['endDayOffset', [null]], ['endDayOffset', MAP],
   ])('not %s = %j', (field, value) => {
     expect(eventFieldOk(field, value)).toBe(false);
   });
@@ -76,6 +87,21 @@ describe('the rules say the same', () => {
   it('the same numbers', () => {
     expect(limitOf('emoji')).toBe(EVENT_EMOJI_MAX);
     for (const f of ['taskStatus', 'color', 'categoryId', 'timezone']) expect(limitOf(f), f).toBe(EVENT_LABEL_MAX);
+  });
+
+  it('the same bounds on what the server reads in bulk, on an edit and on a personal create (17.10.2026)', () => {
+    const edit = /d\.recurrenceExceptions\.size\(\) <= (\d+) && d\.recurrenceExceptions\.join\(','\) is string/.exec(fn);
+    expect(edit).not.toBeNull();
+    expect(Number(edit![1])).toBe(EVENT_EXCEPTIONS_MAX);
+    expect(fn).toContain("d.recurrenceRule is map && d.recurrenceRule.get('frequency', '') is string && d.recurrenceRule.get('onlyOn', '') is string");
+    const personal = rules.slice(rules.indexOf('function bulkReadOk('), rules.indexOf('function eventFieldsOk('));
+    const born = /evList\(d\.get\('recurrenceExceptions', null\), (\d+)\)/.exec(personal);
+    expect(born).not.toBeNull();
+    expect(Number(born![1])).toBe(EVENT_EXCEPTIONS_MAX);
+    // A personal create is judged on them: the reminders read every personal event in their window.
+    const block = rules.slice(rules.indexOf('match /events/{eventId}'), rules.indexOf('match /games/{gameId}'));
+    const create = block.slice(block.indexOf('allow create:'), block.indexOf('allow update:'));
+    expect(create).toContain("request.resource.data.get('groupId', null) == null\n            ? bulkReadOk(request.resource.data)");
   });
 
   it('and no length on the free text the installed APK writes without a limit (only the web form has one)', () => {

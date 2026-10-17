@@ -26,6 +26,9 @@ export const EVENT_LOCATION_MAX = 300;
 export const EVENT_EMOJI_MAX = 16;
 /** Short labels the screens only compare or look up: task status, colour, category, time zone. */
 export const EVENT_LABEL_MAX = 64;
+/** A series' exceptions (17.10.2026): the server reads them in bulk, ten events a page, and a list is
+ *  decoded at about a hundred times its stored size. A series has at most 53 occurrences to except. */
+export const EVENT_EXCEPTIONS_MAX = 500;
 
 /** A wall-clock time, as the form writes it ("09:30"), the same test as `isValidTime`. */
 export const EVENT_TIME = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
@@ -37,12 +40,14 @@ export const EVENT_DATE = /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])(T(
 export const EVENT_JUDGED_FIELDS = [
   'title', 'emoji', 'description', 'location', 'time', 'endTime', 'date',
   'checklistItems', 'recurrenceExceptions', 'recurrenceRule',
-  'taskStatus', 'color', 'categoryId', 'timezone', 'reminderMinutes',
+  'taskStatus', 'color', 'categoryId', 'timezone', 'reminderMinutes', 'endDayOffset',
 ] as const;
 
 const isText = (v: unknown, max: number): boolean => typeof v === 'string' && v.length <= max;
 const isOptText = (v: unknown, max: number): boolean => v === null || v === undefined || isText(v, max);
 const isPlainMap = (v: unknown): boolean => v !== null && typeof v === 'object' && !Array.isArray(v);
+/** A part of a rule the server reads (`frequency`, `onlyOn`): absent, or text, never a list or a map. */
+const isRulePart = (v: unknown): boolean => v === undefined || typeof v === 'string';
 
 /** Whether one field holds what the app writes there. Absent (`undefined`) is judged like null. */
 export function eventFieldOk(field: string, v: unknown): boolean {
@@ -54,15 +59,19 @@ export function eventFieldOk(field: string, v: unknown): boolean {
     case 'time':
     case 'endTime': return v === null || v === undefined || (typeof v === 'string' && EVENT_TIME.test(v));
     case 'date': return typeof v === 'string' && EVENT_DATE.test(v);
-    case 'checklistItems':
-    case 'recurrenceExceptions': return v === null || v === undefined || Array.isArray(v);
-    case 'recurrenceRule': return v === null || v === undefined || isPlainMap(v);
+    case 'checklistItems': return v === null || v === undefined || Array.isArray(v);
+    // Short, and no map or list inside it (the rules: `size()` and `join`, which takes only scalars).
+    case 'recurrenceExceptions': return v === null || v === undefined || (Array.isArray(v) && v.length <= EVENT_EXCEPTIONS_MAX
+      && v.every((x) => x === null || typeof x === 'string' || typeof x === 'number' || typeof x === 'boolean'));
+    case 'recurrenceRule': return v === null || v === undefined || (isPlainMap(v)
+      && isRulePart((v as Record<string, unknown>).frequency) && isRulePart((v as Record<string, unknown>).onlyOn));
     case 'taskStatus':
     case 'color':
     case 'categoryId':
     case 'timezone': return isOptText(v, EVENT_LABEL_MAX);
     // Any number, as the rules say `is number`: the details window prints it.
-    case 'reminderMinutes': return v === null || v === undefined || typeof v === 'number';
+    case 'reminderMinutes':
+    case 'endDayOffset': return v === null || v === undefined || typeof v === 'number';
     default: return true;
   }
 }

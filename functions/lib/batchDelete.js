@@ -5,7 +5,7 @@
 // Moved out of index.ts on 04.10.2026 so the account deletion (accountDeletion.ts) and the group
 // deletion (groupDeletion.ts) use the same ones. And, since 15.10.2026, how the two read.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FIELD_PAGE = void 0;
+exports.ONE_A_PAGE = exports.FIELD_PAGE = void 0;
 exports.pageOf = pageOf;
 exports.forEachDoc = forEachDoc;
 exports.deleteQueryInBatches = deleteQueryInBatches;
@@ -20,18 +20,31 @@ const firestore_1 = require("firebase-admin/firestore");
 // `hiddenFrom` by every member. A few hundred of those ran a deletion out of its 256 MiB at every
 // attempt, after its first steps had run, so an account could not be deleted, from Settings or from
 // Admin, nor a group by its owner. Now a read brings only the references, in the pages it had, or only
-// the fields it uses, ten documents a page: 10 MiB at worst.
+// the fields it uses, ten documents a page.
+//
+// Ten is not "10 MiB at worst": a megabyte stored is not a megabyte decoded. A list of a million nulls
+// fits in a document and is about 100 MB once decoded (review of 17.10.2026). So every field a page of
+// ten brings is bounded by the rules — a short list of scalars, or a value that is not a list or a map
+// (firestore.rules, "What the server reads in bulk") — or written only by the server. Three are not,
+// and a read that brings one brings one document a page, the most one document can decode to, which
+// the deletion has the memory for: a checklist, whose items are maps the rules cannot look into; the
+// picture, whose kind the rules do not check (an edit of an event has no room left under the 1000
+// expressions a request may evaluate); and `hiddenFrom`, which the rules bound on a group's events but
+// not on a personal one, and the deletion's hand-over reads the person's own events of both kinds.
 /** How many documents one page may bring when it brings field values. */
 exports.FIELD_PAGE = 10;
+/** Fields whose decoded size the rules do not bound: a read that brings one brings one document a page. */
+exports.ONE_A_PAGE = new Set(["checklistItems", "hiddenFrom", "imageUrl"]);
 /**
  * `query` bringing only `fields`, or only the references when there are none, with the page size that
- * goes with that: FIELD_PAGE, or `refsPage`. One place for the rule, so that no read brings fields in a
- * page sized for references.
+ * goes with that: FIELD_PAGE, one for a field in ONE_A_PAGE, or `refsPage`. One place for the rule, so
+ * that no read brings fields in a page sized for references.
  */
 function pageOf(query, fields, refsPage) {
-    return fields.length > 0
-        ? { query: query.select(...fields), size: exports.FIELD_PAGE }
-        : { query: query.select(), size: refsPage };
+    if (fields.length === 0)
+        return { query: query.select(), size: refsPage };
+    const one = fields.some((f) => typeof f === "string" && exports.ONE_A_PAGE.has(f));
+    return { query: query.select(...fields), size: one ? 1 : exports.FIELD_PAGE };
 }
 /**
  * Every document a query matches, page by page, bringing only `fields`, for a query that the caller does

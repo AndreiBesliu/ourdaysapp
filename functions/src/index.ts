@@ -11,7 +11,7 @@ import * as crypto from "crypto";
 
 import { claudeConfigured, generate, requestChars, type GenerateRequest } from "./claude";
 import { deleteGroupData } from "./groupDeletion";
-import { deleteAccountData } from "./accountDeletion";
+import { DELETION_MEMORY, deleteAccountData } from "./accountDeletion";
 import { addErrorLog, logServerError } from "./errorLog";
 import { applyCommand } from "./warlordCombat/combat/engine";
 import { sanitizeDeploy, createPvpBattle } from "./warlordCombat/combat/pvp";
@@ -1275,9 +1275,11 @@ export const createEventOverride = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
     ? p.assigneeIds.filter((x: unknown): x is string => typeof x === "string")
     : [];
   const allowed = new Set([...parentAssignees, uid]);
+  // Each once (17.10.2026): the rules bound how many names a client writes, and this writes on the Admin
+  // SDK, where they do not look; the reminders and the account deletion read the list in bulk.
   const requested: string[] = Array.isArray((data as Record<string, unknown>).assigneeIds)
-    ? ((data as Record<string, unknown>).assigneeIds as unknown[])
-        .filter((x): x is string => typeof x === "string")
+    ? [...new Set(((data as Record<string, unknown>).assigneeIds as unknown[])
+        .filter((x): x is string => typeof x === "string"))]
     : [];
   // And on a group event, only who is in the group NOW. Somebody who left still passes `canEdit` as
   // the series' owner, and a parent read just before the leaver sweep cleaned it (groupLeave.ts)
@@ -2386,8 +2388,9 @@ export const adminGetUser = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async
 
 // Moderate a user: enable | disable | forceVerify | delete. Admins/owner and the
 // caller themselves are protected from disable/delete.
-// The deletion runs the whole account cascade, the same as `deleteMyAccount`, and gets its time.
-export const adminModerateUser = onCall({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540 }, async (request) => {
+// The deletion runs the whole account cascade, the same as `deleteMyAccount`, and gets its time and its
+// memory: the account an admin deletes may be a hostile one, which wrote its own documents to be heavy.
+export const adminModerateUser = onCall({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540, memory: DELETION_MEMORY }, async (request) => {
   const callerUid = await assertAdmin(request);
   const { uid, action } = request.data || {};
   if (!uid || typeof uid !== "string" || uid.includes("/")) throw new HttpsError("invalid-argument", "A valid uid is required.");

@@ -53,7 +53,10 @@ async function notify(spec) {
         .slice(0, 50);
     if (targets.length === 0)
         return { rows: 0, pushed: 0, pruned: 0 };
-    const snaps = await db.getAll(...targets.map((u) => db.doc(`users/${u}`)));
+    // Only the two fields used, both bounded by the rules (17.10.2026): the rest of a user's document is
+    // the owner's to fill, and fifty of them read whole, each with a list of a million nulls, ran the
+    // reminders out of memory for everybody.
+    const snaps = await db.getAll(...targets.map((u) => db.doc(`users/${u}`)), { fieldMask: ["language", "fcmTokens"] });
     const recipients = snaps.map((s, i) => {
         var _a, _b;
         return ({

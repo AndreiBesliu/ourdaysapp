@@ -54,7 +54,9 @@ exports.DIGEST_FIELDS = [
     "date", "recurrenceRule.frequency", "recurrenceRule.onlyOn", "recurrenceExceptions", "overrideOfParent",
     "overrideDate", "ownerId", "groupId", "endDayOffset", "title",
 ];
-/** Events per page of those reads: what one page holds, padded, is ten times what one event can. */
+/** Events per page of those reads. Ten is safe only because the rules bound every field above (17.10.2026,
+ *  firestore.rules "What the server reads in bulk"): a list is decoded at about a hundred times its stored
+ *  size, so before that one page of padded exceptions was ten times what the function could hold. */
 exports.DIGEST_PAGE = 10;
 /**
  * The window, from an instant.
