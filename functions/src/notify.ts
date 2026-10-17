@@ -24,6 +24,7 @@
 // reinstall, a cleared site — each adds one and none is ever removed. Every send then spends
 // calls on addresses that can never arrive. Pruning happens here, once, for every caller.
 
+import { createHash } from "crypto";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import {
@@ -70,6 +71,12 @@ export interface NotifySpec {
    * with a label. `titleKey` is then only a type-level requirement and is never written or shown.
    */
   titleText?: string;
+  /**
+   * One piece of news that may be sent again: a reminder that a later run takes over (reminders.ts).
+   * The bell rows then get ids made from it and the recipient, so a second call rewrites them instead
+   * of adding a second row. Without it, every call writes new rows, as before.
+   */
+  rowKey?: string;
 }
 
 export interface NotifyResult {
@@ -92,6 +99,13 @@ const BODY_CAP = 500;
 
 /** Where a tapped push opens. The project is fixed in .firebaserc; there is no runtime lookup for it. */
 const APP_ORIGIN = "https://our-days-2a939.web.app";
+
+/**
+ * The bell row of `rowKey` for one recipient. A hash, so that no length or character of either part
+ * can make it an invalid id: a reminder's recipients come from an event's assignees, which members write.
+ */
+const rowIdFor = (rowKey: string, uid: string): string =>
+  createHash("sha256").update(rowKey).update("\u0000").update(uid).digest("hex");
 
 /**
  * Tell people something, in their own language, through both channels.
@@ -128,7 +142,10 @@ export async function notify(spec: NotifySpec): Promise<NotifyResult> {
   // English line among four Romanian ones.
   const batch = db.batch();
   for (const r of recipients) {
-    batch.set(db.collection("notifications").doc(), {
+    const row = spec.rowKey
+      ? db.collection("notifications").doc(rowIdFor(spec.rowKey, r.uid))
+      : db.collection("notifications").doc();
+    batch.set(row, {
       userId: r.uid,
       createdBy: spec.createdBy,
       type: spec.type,

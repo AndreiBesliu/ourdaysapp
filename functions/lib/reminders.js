@@ -49,9 +49,10 @@
 // (`expandInWindow`'s second dedupe) matters only for edits made before that, none on live; past a
 // cut, such an edit may not have been read.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendDueReminders = exports.emptyCounts = exports.STALE_CLAIM_MS = exports.SEND_BUDGET_MS = exports.READ_PAGE = exports.READ_BUDGET_MS = exports.MAX_CANDIDATES = void 0;
+exports.sendDueReminders = exports.emptyCounts = exports.STALE_CLAIM_MS = exports.SEND_BUDGET_MS = exports.LATE_RUN_SLACK_MS = exports.RUN_EVERY_MS = exports.READ_PAGE = exports.READ_BUDGET_MS = exports.MAX_CANDIDATES = void 0;
 exports.reminderOutcome = reminderOutcome;
 exports.remindDue = remindDue;
+const crypto = require("crypto");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const firestore_1 = require("firebase-admin/firestore");
@@ -97,19 +98,31 @@ exports.READ_BUDGET_MS = 15000;
 exports.READ_PAGE = 10;
 /** Owners' zones read per call. */
 const ZONE_CHUNK = 100;
+/** Dedupe rows read per call, before the turns are drawn: only their state. */
+const LOG_CHUNK = 100;
 /** How often the job runs (its cron), and how much later than that the next run may start. */
-const RUN_EVERY_MS = 5 * 60 * 1000;
-const LATE_RUN_SLACK_MS = 2 * 60 * 1000;
+exports.RUN_EVERY_MS = 5 * 60 * 1000;
+exports.LATE_RUN_SLACK_MS = 2 * 60 * 1000;
 /**
  * How long a run keeps starting sends. Past it, a reminder that a later run still sees waits for it;
- * one on its last chance is lost, and counted. With the reads' 2 × 15 s, inside the 150 s timeout.
+ * one on its last chance is counted as dropped, and the run is red: lost, unless it is in the slack
+ * band and the next run starts on time (`sendOrder`). With the reads' 2 × 15 s, inside the 150 s timeout.
  */
 exports.SEND_BUDGET_MS = 60000;
 /**
- * A claim (`state: "sending"`) older than this was left by a run that died, or by a send that failed:
- * the next run that still sees the reminder takes it over. A send takes seconds.
+ * A claim (`state: "sending"`) whose RUN started this long ago was left by a run that is over: it died,
+ * or its send failed. The next run that still sees the reminder takes it over.
+ *
+ * Counted from the run's start (`runAt`), not from the claim (review, 17.10.2026). A run claims for as
+ * long as it sends, up to a minute and a half after it starts, and the next run starts five minutes
+ * after this one STARTED: four minutes from the claim was not yet reached when the next run looked at
+ * a claim made late in a heavy run, or made by a run that started a minute late, and on the reminder's
+ * last run that was a loss counted as "already sent". Two bounds, held by remindersStale.test.ts:
+ *   * past the timeout (150 s), with room: a run still alive never loses its claim;
+ *   * the cadence less the slack: the next run takes the claim over even when the claiming run
+ *     started LATE_RUN_SLACK_MS later in its slot than the next one does.
  */
-exports.STALE_CLAIM_MS = 4 * 60 * 1000;
+exports.STALE_CLAIM_MS = exports.RUN_EVERY_MS - exports.LATE_RUN_SLACK_MS;
 const emptyCounts = () => ({
     read: 0, skipped: 0, cut: 0, datedMs: 0, seriesMs: 0, candidates: 0, occurrences: 0, due: 0,
     deferred: 0, dropped: 0, retried: 0, seriesUnbounded: 0,
@@ -130,13 +143,25 @@ function reminderOutcome(c) {
             + (c.seriesUnbounded ? ", series read without their index" : ""),
     };
 }
+/**
+ * When the run holding a claim started, at the latest: the row's `runAt`, or, for a claim written before
+ * 17.10.2026 (it has none), the claim itself. That run started before either, so the earlier of the two
+ * is the nearest to its start. A row with neither was never the job's claim: stale, as before.
+ */
+function claimRunStart(row) {
+    const claimedAt = row.claimedAt;
+    const claimed = typeof (claimedAt === null || claimedAt === void 0 ? void 0 : claimedAt.toMillis) === "function" ? claimedAt.toMillis() : 0;
+    const runAt = typeof row.runAt === "number" && Number.isFinite(row.runAt) ? row.runAt : Number.POSITIVE_INFINITY;
+    return Math.min(runAt, claimed);
+}
 const alreadyExists = (err) => {
     const code = err === null || err === void 0 ? void 0 : err.code;
     return code === 6 || code === "already-exists"
         || String((err === null || err === void 0 ? void 0 : err.message) || "").includes("ALREADY_EXISTS");
 };
 /**
- * Find and send the reminders due in (now − WINDOW_MS, now]. `counts` is filled as the run goes, so
+ * Find and send the reminders due in (now − WINDOW_MS, now]. `now` is also the run's start, written in
+ * its claims (`runAt`): the job passes `Date.now()` as it starts. `counts` is filled as the run goes, so
  * a run that dies half way still reports what it did.
  */
 async function remindDue(db, now, counts, opts = {}) {
@@ -270,38 +295,84 @@ async function remindDue(db, now, counts, opts = {}) {
     // the row exists, so an overlapping run sends nothing twice — and marked `sent` after. Until
     // 13.10.2026 the row was the whole record: a run that died between it and the send, or a send that
     // failed, lost the reminder for good, every later run reading it as delivered. Now a claim still
-    // "sending" after STALE_CLAIM_MS is taken over by the next run that still sees the reminder. The
-    // price is the rare reminder sent twice (delivered, then the mark failed), not a lost one.
-    const { order, lastChance } = (0, remindersCore_1.sendOrder)(due, now, WINDOW_MS, RUN_EVERY_MS, LATE_RUN_SLACK_MS);
+    // "sending" whose run started STALE_CLAIM_MS ago is taken over by the next run that still sees the
+    // reminder, however late in its run it was made. The price is the rare reminder sent twice
+    // (delivered, then the mark failed), not a lost one; the bell rows are keyed by the reminder
+    // (`rowKey`), so a second send rewrites them, and the push goes again. A claim whose run started less
+    // long ago may still be on its way (a run started alongside this one: a delivery twice, a run by
+    // hand): it is left to that run, which counts its own failure.
     const sendStarted = clock();
+    // What an earlier run already sent is neither this run's to send nor to count as lost (review,
+    // 17.10.2026). A reminder is due in three runs, and each of them sent it through `claim`: a create
+    // that fails and a transaction, three round trips, at the head of its owner's turns, and past the
+    // budget one delivered runs before was counted dropped (red) or deferred. So its row is read first,
+    // only the state, a hundred a call, inside the send time: "sent", or no state at all (a row from
+    // before 13.10, or from that code until it is replaced), is a dupe now; a row still "sending" goes
+    // on to `claim`, which alone decides whether it is taken over. A read that fails costs only its
+    // price: its reminders go to `claim`, as before.
+    const pending = [];
+    for (let i = 0; i < due.length; i += LOG_CHUNK) {
+        const chunk = due.slice(i, i + LOG_CHUNK);
+        let rows;
+        try {
+            rows = await db.getAll(...chunk.map((d) => db.doc(`reminder_log/${d.key}`)), { fieldMask: ["state"] });
+        }
+        catch (err) {
+            console.error("reminder: could not read the dedupe rows; each is claimed instead", err);
+            pending.push(...chunk);
+            continue;
+        }
+        rows.forEach((row, j) => {
+            if (row.exists && row.get("state") !== "sending")
+                counts.dupes += 1;
+            else
+                pending.push(chunk[j]);
+        });
+    }
+    const { order, lastChance } = (0, remindersCore_1.sendOrder)(pending, now, WINDOW_MS, exports.RUN_EVERY_MS, exports.LATE_RUN_SLACK_MS);
     /** "send" when this run owns the reminder now; "skip" when another run has it, or had it delivered. */
     const claim = async (d) => {
         const logRef = db.doc(`reminder_log/${d.key}`);
+        // This claim's own mark, written with it. The SDK resends a write whose answer was lost: the
+        // `create` on UNAVAILABLE, the whole transaction below on INTERNAL or DEADLINE_EXCEEDED. When the
+        // first attempt had been applied, the resend meets this claim's own row, which without the mark
+        // reads as another run's: not sent, counted "already sent", and lost on its last run. (Review,
+        // 17.10.2026.) One per claim, not per run, so that only a resend of this very write matches it.
+        const claimId = crypto.randomUUID();
         try {
-            await logRef.create({ eventId: d.eventId, day: d.day, at: d.at, state: "sending", claimedAt: firestore_1.FieldValue.serverTimestamp() });
+            // `runAt`: when this run started, which is what a later run judges the claim by (STALE_CLAIM_MS).
+            await logRef.create({ eventId: d.eventId, day: d.day, at: d.at, state: "sending", claimedAt: firestore_1.FieldValue.serverTimestamp(), runAt: now, claimId });
             return "send";
         }
         catch (err) {
-            // Only ALREADY_EXISTS means another run got here first. Counting every rejection as a dupe
-            // would have made a transient UNAVAILABLE read as "somebody else delivered it". (Review finding.)
+            // Only ALREADY_EXISTS means the row is there: another run's, or this claim's own, resent.
+            // Counting every rejection as a dupe would have made a transient UNAVAILABLE read as "somebody
+            // else delivered it". (Review finding.)
             if (!alreadyExists(err))
                 throw err;
         }
-        // A row made before 13.10 has no state: it was sent.
+        // A row made before 13.10 has no state: it was sent. A claim made before 17.10 has no `claimId`
+        // (never this one's) and no `runAt` (judged by when it was made, which is later than its run's start).
+        let tookOver = false;
         const taken = await db.runTransaction(async (tx) => {
             const row = (await tx.get(logRef)).data();
             if (!row || row.state !== "sending")
                 return false;
-            const claimedAt = row.claimedAt;
-            const age = Date.now() - (typeof (claimedAt === null || claimedAt === void 0 ? void 0 : claimedAt.toMillis) === "function" ? claimedAt.toMillis() : 0);
-            if (age < exports.STALE_CLAIM_MS)
+            if (row.claimId === claimId)
+                return true;
+            if (Date.now() - claimRunStart(row) < exports.STALE_CLAIM_MS)
                 return false;
-            tx.update(logRef, { claimedAt: firestore_1.FieldValue.serverTimestamp(), retries: firestore_1.FieldValue.increment(1) });
+            // `runAt` moves with the claim: left as it was, a second run would read the claim this one has
+            // just taken as still stale, and send it too.
+            tx.update(logRef, { claimedAt: firestore_1.FieldValue.serverTimestamp(), runAt: now, claimId, retries: firestore_1.FieldValue.increment(1) });
+            tookOver = true;
             return true;
         });
         if (!taken)
             return "skip";
-        counts.retried += 1;
+        // Taken over from an earlier run, by this attempt or by one whose commit was applied unanswered.
+        if (tookOver)
+            counts.retried += 1;
         return "send";
     };
     for (const d of order) {
@@ -340,13 +411,16 @@ async function remindDue(db, now, counts, opts = {}) {
                 bodyKey: d.bodyKey,
                 param: d.bodyParam,
                 data: { route: "/", eventId: d.eventId },
+                rowKey: `reminder:${d.key}`,
             });
             counts.sent += 1;
             counts.rows += delivered.rows;
             counts.pushed += delivered.pushed;
         }
         catch (err) {
-            // The claim stays "sending": a later run that still sees the reminder tries again.
+            // The claim stays "sending": a later run that still sees the reminder tries again. The bell rows
+            // may be written already (their commit applied, then answered with DEADLINE_EXCEEDED or INTERNAL,
+            // which the SDK does not retry); the retry rewrites them. No push went out: it follows the rows.
             counts.failed += 1;
             console.error("reminder: could not deliver", d.key, err);
             continue;

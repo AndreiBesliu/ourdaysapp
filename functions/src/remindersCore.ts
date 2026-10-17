@@ -286,6 +286,18 @@ export function dueIn(
  * each part the turns go round the OWNERS, one reminder each: one account's thousand reminders at the
  * same minute wait behind everybody else's first one, instead of in front of all of them.
  * `slackMs` treats a reminder as on its last chance a little early, for a next run that starts late.
+ *
+ * Oldest first (review, 17.10.2026): each owner's queue goes by instant, and so do the owners within a
+ * round. Until then the queues kept the order of the read (date, then id), so an owner's reminder that
+ * an on-time next run still sees (the slack band) could go before that owner's one that no later run
+ * sees, and a run out of time sent the first and lost the second. The rounds stay: another owner's
+ * slack-band reminder still goes before this owner's second one, or one account's old reminders would
+ * push everybody else's out.
+ *
+ * What the first part leaves unsent is counted as dropped, and the run is red, the slack band included.
+ * An upper bound, on purpose: one in the slack band still goes out if the next run starts on time (and
+ * is counted again if that run runs out too), but no run can know whether the next one will be late,
+ * which is what the slack is for.
  */
 export function sendOrder(
   due: readonly Due[],
@@ -295,6 +307,8 @@ export function sendOrder(
   slackMs: number,
 ): { order: Due[]; lastChance: Set<string> } {
   const lastChance = new Set(due.filter((d) => d.at <= now + everyMs + slackMs - windowMs).map((d) => d.key));
+  // Oldest first. The sort is stable: equal instants keep the order they were read in.
+  const byAt = [...due].sort((x, y) => x.at - y.at);
   const roundRobin = (items: Due[]): Due[] => {
     const byOwner = new Map<string, Due[]>();
     for (const d of items) {
@@ -310,7 +324,7 @@ export function sendOrder(
     return out;
   };
   return {
-    order: [...roundRobin(due.filter((d) => lastChance.has(d.key))), ...roundRobin(due.filter((d) => !lastChance.has(d.key)))],
+    order: [...roundRobin(byAt.filter((d) => lastChance.has(d.key))), ...roundRobin(byAt.filter((d) => !lastChance.has(d.key)))],
     lastChance,
   };
 }

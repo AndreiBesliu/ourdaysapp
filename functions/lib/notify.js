@@ -27,6 +27,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DEFAULT_LANG = void 0;
 exports.notify = notify;
+const crypto_1 = require("crypto");
 const admin = require("firebase-admin");
 const firestore_1 = require("firebase-admin/firestore");
 const notifyStrings_1 = require("./notifyStrings");
@@ -38,6 +39,11 @@ const CAP = 200;
 const BODY_CAP = 500;
 /** Where a tapped push opens. The project is fixed in .firebaserc; there is no runtime lookup for it. */
 const APP_ORIGIN = "https://our-days-2a939.web.app";
+/**
+ * The bell row of `rowKey` for one recipient. A hash, so that no length or character of either part
+ * can make it an invalid id: a reminder's recipients come from an event's assignees, which members write.
+ */
+const rowIdFor = (rowKey, uid) => (0, crypto_1.createHash)("sha256").update(rowKey).update("\u0000").update(uid).digest("hex");
 /**
  * Tell people something, in their own language, through both channels.
  *
@@ -75,7 +81,10 @@ async function notify(spec) {
     // English line among four Romanian ones.
     const batch = db.batch();
     for (const r of recipients) {
-        batch.set(db.collection("notifications").doc(), Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({ userId: r.uid, createdBy: spec.createdBy, type: spec.type }, (spec.titleText ? {} : { titleKey: spec.titleKey.slice(0, 60) })), (spec.titleParam && !spec.titleText ? { titleParam: (0, pushText_1.clampText)(spec.titleParam, CAP) } : {})), (spec.bodyKey ? { bodyKey: spec.bodyKey.slice(0, 60) } : {})), (spec.param ? { param: (0, pushText_1.clampText)(spec.param, CAP) } : {})), { title: titleFor(spec, r.lang), body: bodyFor(spec, r.lang), read: false, createdAt: firestore_1.FieldValue.serverTimestamp() }));
+        const row = spec.rowKey
+            ? db.collection("notifications").doc(rowIdFor(spec.rowKey, r.uid))
+            : db.collection("notifications").doc();
+        batch.set(row, Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({ userId: r.uid, createdBy: spec.createdBy, type: spec.type }, (spec.titleText ? {} : { titleKey: spec.titleKey.slice(0, 60) })), (spec.titleParam && !spec.titleText ? { titleParam: (0, pushText_1.clampText)(spec.titleParam, CAP) } : {})), (spec.bodyKey ? { bodyKey: spec.bodyKey.slice(0, 60) } : {})), (spec.param ? { param: (0, pushText_1.clampText)(spec.param, CAP) } : {})), { title: titleFor(spec, r.lang), body: bodyFor(spec, r.lang), read: false, createdAt: firestore_1.FieldValue.serverTimestamp() }));
     }
     await batch.commit();
     if (spec.push === false)
