@@ -64,10 +64,13 @@ const jobRuns_1 = require("./jobRuns");
 /** Delete dedupe rows older than this. They are only needed while their window is still in reach. */
 const LOG_TTL_DAYS = 45;
 const dayString = (ms) => new Date(ms).toISOString().slice(0, 10);
-/** The frequencies whose horizon does not fit in 400 days: their series are read from further back. */
-const LONG_FREQUENCIES = recurrenceServer_1.FREQUENCIES.filter((f) => !recurrenceServer_1.SHORT_FREQUENCIES.includes(f));
-/** The earliest start a series of these frequencies can have and still run on `fromDay` or after. */
-const seriesFrom = (fromDay, freqs) => `${dayString(Date.parse(`${fromDay}T00:00:00.000Z`) - Math.max(...freqs.map(recurrenceServer_1.lookbackMsFor)))}T00:00:00.000Z`;
+/**
+ * The earliest `date` a series of this frequency can have and still run on `fromDay` or after. One
+ * range per frequency, each its own reach: a daily series runs 30 days, and the 400 days daily, weekly
+ * and monthly shared until 17.10.2026 read a year of ended daily series first, in date order (review of
+ * f1052b7).
+ */
+const seriesFrom = (fromDay, freq) => `${dayString(Date.parse(`${fromDay}T00:00:00.000Z`) - recurrenceServer_1.SERIES_REACH_DAYS[freq] * 86400000)}T00:00:00.000Z`;
 /** Firestore's refusal of a query whose composite index is missing, or still being built. */
 const missingIndex = (err) => {
     const code = err === null || err === void 0 ? void 0 : err.code;
@@ -181,9 +184,9 @@ async function remindDue(db, now, counts, opts = {}) {
     //   * series (a rule with a frequency the app knows), expanded below. Any other rule is not a series
     //     to `expandInWindow` either; inside the window the first query reads it, as before. Only those
     //     that can still have an occurrence from `fromDay` on (16.10.2026): a series ends at its horizon,
-    //     counted from its start (recurrenceCore.ts), so it began at most `lookbackMsFor` before — 400
-    //     days, or five years for a yearly one — and not after the lookahead. Until then every run read
-    //     every series ever made.
+    //     counted from its start (recurrenceCore.ts), so it began at most its frequency's reach before
+    //     (`SERIES_REACH_DAYS`: 31 days, 365, 367, 1828) — and not after the lookahead. Until then every
+    //     run read every series ever made.
     const fromDay = dayString(now - 2 * 86400000);
     const toDay = dayString(now + MAX_LEAD_DAYS * 86400000);
     const byId = new Map();
@@ -194,16 +197,21 @@ async function remindDue(db, now, counts, opts = {}) {
         else
             counts.skipped += 1;
     };
+    const startRead = () => ({ started: clock(), seen: new Set() });
     /**
      * Reads queries in turn, each to its end, page by page, or to the cap or the time: true when it
      * stopped short. One budget and one cap for the queries of one read, so the dated read and the series
-     * read each have their own full share.
+     * read each have their own full share — the series read's fallback included (review, 17.10.2026: a
+     * refusal after a page started it over, counting twice, with a second budget and a second cap).
      */
-    const readAll = async (...bases) => {
-        const started = clock();
-        const seen = new Set();
+    const readAll = async (read, ...bases) => {
+        const { started, seen } = read;
         for (const base of bases) {
             let last = null;
+            // This query's own documents, for the guard below; not `seen`, which also holds what an earlier
+            // query of the read brought. A fallback reads those again, and that is progress, not a page coming
+            // back: judged on `seen`, its first page stopped the read (red) before the rest was reached.
+            const here = new Set();
             for (;;) {
                 if (clock() - started >= budgetMs)
                     return true;
@@ -213,12 +221,16 @@ async function remindDue(db, now, counts, opts = {}) {
                 let fresh = 0;
                 for (const d of snap.docs) {
                     // A cursor on a value longer than Firestore indexes (1500 bytes) can repeat a page.
+                    if (here.has(d.id))
+                        continue;
+                    here.add(d.id);
+                    fresh += 1;
+                    // Read already by an earlier query of this read: once is enough, and counted once.
                     if (seen.has(d.id))
                         continue;
                     if (seen.size >= maxCandidates)
                         return true;
                     seen.add(d.id);
-                    fresh += 1;
                     counts.read += 1;
                     keep(d);
                 }
@@ -234,29 +246,32 @@ async function remindDue(db, now, counts, opts = {}) {
     };
     const events = db.collection("events");
     let t0 = Date.now();
-    const datedCut = await readAll(events
+    const datedCut = await readAll(startRead(), events
         .where("date", ">=", `${fromDay}T00:00:00.000Z`)
         .where("date", "<=", `${toDay}T23:59:59.999Z`)
         .select(...remindersCore_1.REMINDER_FIELDS));
     counts.datedMs = Date.now() - t0;
     t0 = Date.now();
-    const series = (freqs) => events
-        .where("recurrenceRule.frequency", "in", [...freqs])
-        .where("date", ">=", seriesFrom(fromDay, freqs))
+    // One frequency a range (`in` of one, the shape measured on live), each from its own reach back.
+    const series = (freq) => events
+        .where("recurrenceRule.frequency", "in", [freq])
+        .where("date", ">=", seriesFrom(fromDay, freq))
         .where("date", "<=", `${toDay}T23:59:59.999Z`)
         .select(...remindersCore_1.REMINDER_FIELDS);
+    const seriesRead = startRead();
     let seriesCut;
     try {
-        seriesCut = await readAll(series(recurrenceServer_1.SHORT_FREQUENCIES), series(LONG_FREQUENCIES));
+        seriesCut = await readAll(seriesRead, ...recurrenceServer_1.FREQUENCIES.map(series));
     }
     catch (err) {
-        // The two ranges need the composite index (`recurrenceRule.frequency`, `date`), which is built for
+        // The ranges need the composite index (`recurrenceRule.frequency`, `date`), which is built for
         // minutes after it is published, and a query without its index throws rather than returning less.
-        // Until it is there: every series, however old, as before 16.10.2026, and the run says so.
+        // Until it is there: every series, however old, as before 16.10.2026, and the run says so. Inside
+        // the same read, should the refusal come after a page: its time, its cap, its count.
         if (!missingIndex(err))
             throw err;
         counts.seriesUnbounded = 1;
-        seriesCut = await readAll(events
+        seriesCut = await readAll(seriesRead, events
             .where("recurrenceRule.frequency", "in", [...recurrenceServer_1.FREQUENCIES])
             .select(...remindersCore_1.REMINDER_FIELDS));
     }

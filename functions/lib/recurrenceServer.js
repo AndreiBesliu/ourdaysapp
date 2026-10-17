@@ -32,15 +32,24 @@
 // whatever the exception key says, whoever wrote it, from whatever offset. The data gives us
 // the dedupe for free, and it is the only branch here that cannot be defeated by a timezone.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SHORT_FREQUENCIES = exports.FREQUENCIES = void 0;
+exports.SERIES_REACH_DAYS = exports.FREQUENCIES = void 0;
 exports.frequencyOf = frequencyOf;
 exports.lookbackMsFor = lookbackMsFor;
 exports.expandInWindow = expandInWindow;
 const eventTime_1 = require("./eventTime");
 const recurrenceCore_1 = require("./recurrenceCore");
 Object.defineProperty(exports, "FREQUENCIES", { enumerable: true, get: function () { return recurrenceCore_1.FREQUENCIES; } });
-/** Frequencies whose whole horizon fits inside 400 days back. */
-exports.SHORT_FREQUENCIES = ["daily", "weekly", "monthly"];
+/**
+ * How many days before a given day a series of this frequency can have started and still have an
+ * occurrence on that day or after. A series ends at `horizonEndDay` (recurrenceCore.ts), counted from
+ * its first day: daily +30 days, weekly +52 weeks, monthly +12 months (366 days when a 29 February
+ * falls inside), yearly +5 years (1827 days with two) — measured for every first day from 1899 to 2201
+ * (seriesReach.test.ts holds the two together). One day more: a start stored in the last two hours of
+ * the day before is read as the next day (`seriesStartDay`), and sorts before it. The reminders read
+ * series by these; `lookbackMsFor` below is the AI sources' coarser figure, 400 days for a daily series
+ * that runs 30 (review of f1052b7, 17.10.2026).
+ */
+exports.SERIES_REACH_DAYS = { daily: 31, weekly: 365, monthly: 367, yearly: 1828 };
 const DAY_MS = 86400000;
 const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
 function frequencyOf(ev) {

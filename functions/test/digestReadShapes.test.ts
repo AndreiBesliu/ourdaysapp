@@ -6,6 +6,7 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as admin from 'firebase-admin';
+import { awayFromEdge } from './clockEdges';
 import { Query } from 'firebase-admin/firestore';
 import { digestEventLines, digestWindow } from '../src/digestEvents';
 import { readDigestEvents } from '../src/digestRead';
@@ -50,6 +51,8 @@ beforeAll(async () => {
   db = admin.firestore();
 });
 beforeEach(async () => {
+  // The test computes days itself, the code reads its own clock: not across the day's edge.
+  await awayFromEdge(0);
   expect((await fetch(`http://${HOST}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: 'DELETE' })).ok).toBe(true);
 });
 afterEach(() => vi.restoreAllMocks());

@@ -76,6 +76,10 @@ mkdirSync(runTmp, { recursive: true });
 env.TMP = runTmp;
 env.TEMP = runTmp;
 env.TMPDIR = runTmp;
+// No question to Google's metadata server. The Admin SDK asks it (gcp-metadata, through gaxios on node's
+// http, not fetch) whether it runs on Google's machines, in every run, twice, past any test's fetch stub
+// (review of 17.10.2026). Off a Google machine the answer is no; this says so without asking.
+env.METADATA_SERVER_DETECTION = 'none';
 if (chosen.home) {
   env.JAVA_HOME = chosen.home;
   env.PATH = `${join(chosen.home, 'bin')}${process.platform === 'win32' ? ';' : ':'}${env.PATH}`;

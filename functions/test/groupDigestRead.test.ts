@@ -15,6 +15,7 @@
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as admin from 'firebase-admin';
+import { awayFromEdge } from './clockEdges';
 import type { CallableRequest } from 'firebase-functions/v2/https';
 import { resetClaudeClientForTests } from '../src/claude';
 import { digestWindow } from '../src/digestEvents';
@@ -62,7 +63,9 @@ const asAlice = () => digest.run({
 const REAL_FETCH = globalThis.fetch;
 /**
  * Under every stub, for the whole file: a request for Anthropic or Google's metadata server that gets
- * past one fails the test instead of leaving the machine. A restored stub falls through to this.
+ * past one fails the test instead of leaving the machine. A restored stub falls through to this. It
+ * sees `fetch` only: the Admin SDK's own question to the metadata server goes through node's http, and
+ * scripts/test-rules.mjs turns it off (METADATA_SERVER_DETECTION).
  */
 const refuseOutbound = ((input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input instanceof Request ? input.url : input);
@@ -155,6 +158,8 @@ beforeAll(async () => {
 afterAll(() => { globalThis.fetch = REAL_FETCH; });
 
 beforeEach(async () => {
+  // The test computes days itself, the code reads its own clock: not across the day's edge.
+  await awayFromEdge(0);
   expect((await fetch(`http://${HOST}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: 'DELETE' })).ok).toBe(true);
   for (const k of ENV) { saved[k] = process.env[k]; delete process.env[k]; }
   process.env.ANTHROPIC_FEDERATION_RULE_ID = 'fdrl_test';

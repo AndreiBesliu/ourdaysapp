@@ -12,6 +12,7 @@
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as admin from 'firebase-admin';
+import { awayFromEdge } from './clockEdges';
 import type { CallableRequest } from 'firebase-functions/v2/https';
 import { resetClaudeClientForTests } from '../src/claude';
 import { digestWindow, digestEventLines, DIGEST_EVENT_SCAN, DIGEST_RECURRING_SCAN } from '../src/digestEvents';
@@ -71,6 +72,8 @@ beforeAll(async () => {
 });
 afterAll(() => { globalThis.fetch = REAL_FETCH; });
 beforeEach(async () => {
+  // The test computes days itself, the code reads its own clock: not across the day's edge.
+  await awayFromEdge(0);
   expect((await fetch(`http://${HOST}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: 'DELETE' })).ok).toBe(true);
   for (const k of ENV) { saved[k] = process.env[k]; delete process.env[k]; }
   process.env.ANTHROPIC_FEDERATION_RULE_ID = 'fdrl_test';

@@ -20,6 +20,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as admin from 'firebase-admin';
+import { awayFromEdge } from './clockEdges';
 import type { CallableRequest } from 'firebase-functions/v2/https';
 import { assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { doc, setDoc } from 'firebase/firestore';
@@ -128,6 +129,8 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
+  // The test computes days itself, the code reads its own clock: not across the day's edge.
+  await awayFromEdge(0);
   expect((await fetch(`http://${HOST}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: 'DELETE' })).ok).toBe(true);
   for (const k of ENV) { saved[k] = process.env[k]; delete process.env[k]; }
   process.env.ANTHROPIC_FEDERATION_RULE_ID = 'fdrl_test';

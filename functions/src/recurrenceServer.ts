@@ -39,8 +39,18 @@ import {
 // Re-exported so the readers of this module keep one import. The DEFINITIONS live in the shared
 // core now, which the calendar runs byte-for-byte — see recurrenceCore.ts.
 export { FREQUENCIES, type Frequency };
-/** Frequencies whose whole horizon fits inside 400 days back. */
-export const SHORT_FREQUENCIES: readonly Frequency[] = ["daily", "weekly", "monthly"];
+
+/**
+ * How many days before a given day a series of this frequency can have started and still have an
+ * occurrence on that day or after. A series ends at `horizonEndDay` (recurrenceCore.ts), counted from
+ * its first day: daily +30 days, weekly +52 weeks, monthly +12 months (366 days when a 29 February
+ * falls inside), yearly +5 years (1827 days with two) — measured for every first day from 1899 to 2201
+ * (seriesReach.test.ts holds the two together). One day more: a start stored in the last two hours of
+ * the day before is read as the next day (`seriesStartDay`), and sorts before it. The reminders read
+ * series by these; `lookbackMsFor` below is the AI sources' coarser figure, 400 days for a daily series
+ * that runs 30 (review of f1052b7, 17.10.2026).
+ */
+export const SERIES_REACH_DAYS: Readonly<Record<Frequency, number>> = { daily: 31, weekly: 365, monthly: 367, yearly: 1828 };
 
 export interface EventDoc {
   id: string;
