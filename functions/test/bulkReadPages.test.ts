@@ -4,13 +4,14 @@
 // million nulls fits in a document and is about 100 MB decoded (review of 17.10.2026). The rules now
 // bound every field read ten a page (rules-tests/bulk-read-fields.test.ts), except three of an event: a
 // checklist (its items are maps, which the rules cannot look into), `hiddenFrom` and the picture (an edit
-// of an event has no room left under the rules' 1000 expressions). Pinned here, on the emulators:
-//   1. the account deletion brings those three one event a page, and still keeps every file they show
-//      and hands every event over as before;
+// of an event has no room left under the rules' 1000 expressions). Only the account deletion reads those.
+// Pinned here, on the emulators:
+//   1. the account deletion brings those three at most ten events a page, and still keeps every file
+//      they show and hands every event over as before;
 //   2. a notification reads only the language and the push tokens of its recipients, never the rest of
 //      a document its owner fills as they like;
 //   3. the server's own door for events writes each assignee once, whatever the request repeats;
-//   4. both doors to the deletion have the memory one such event needs.
+//   4. both doors to the deletion have the memory ten such events need (2 GiB: one decodes to ~100 MB).
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as admin from 'firebase-admin';
@@ -71,7 +72,7 @@ async function pagesBringing(fields: string[], call: () => Promise<unknown>): Pr
   return out;
 }
 
-describe('a checklist, hiddenFrom and the picture are read one event a page', () => {
+describe('a checklist, hiddenFrom and the picture are read at most ten events a page', () => {
   it('by the account deletion, which still keeps every file they show and hands every event over', async () => {
     await admin.auth().createUser({ uid: GONE, email: 'gone@example.test', emailVerified: true });
     await admin.auth().createUser({ uid: ANA });
@@ -99,8 +100,8 @@ describe('a checklist, hiddenFrom and the picture are read one event a page', ()
     let result: any;
     const seen = await pagesBringing(['checklistItems', 'hiddenFrom', 'imageUrl'], async () => { result = await index.deleteMyAccount.run(req); });
     for (const f of ['checklistItems', 'hiddenFrom', 'imageUrl']) {
-      expect(seen[f].most, f).toBe(1);
-      expect(seen[f].pages, f).toBeGreaterThanOrEqual(N);
+      expect(seen[f].most, f).toBeLessThanOrEqual(10);
+      expect(seen[f].pages, f).toBeGreaterThan(0);
     }
     expect(result).toMatchObject({ ok: true, authDeleted: true, files: { deleted: 0, kept: 2 * N }, counts: { eventsHandedOver: N } });
     for (const id of ids('mine')) expect((await db.doc(`events/${id}`).get()).data()?.ownerId, id).toBe(ANA);
@@ -150,9 +151,9 @@ describe('the server’s own door for events writes each assignee once', () => {
   }, 60_000);
 });
 
-describe('the deletion has the memory one event a page needs', () => {
+describe('the deletion has the memory ten such events a page need', () => {
   it('both doors: the person’s own and an admin’s', () => {
-    expect(index.deleteMyAccount.__endpoint?.availableMemoryMb).toBeGreaterThanOrEqual(512);
-    expect(index.adminModerateUser.__endpoint?.availableMemoryMb).toBeGreaterThanOrEqual(512);
+    expect(index.deleteMyAccount.__endpoint?.availableMemoryMb).toBeGreaterThanOrEqual(2048);
+    expect(index.adminModerateUser.__endpoint?.availableMemoryMb).toBeGreaterThanOrEqual(2048);
   });
 });

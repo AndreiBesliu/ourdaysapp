@@ -77,14 +77,40 @@ export async function deleteGroupData(groupId: string, ownerUid: string, keep: R
   );
 
   // Its links, revoked rather than deleted, so their creators' lists still explain them. A redeem
-  // would answer "group not found" anyway; this keeps "listMyInviteLinks" honest. In pages, and only
-  // `revoked`: all of them used to come at once, whole.
+  // would answer "group not found" anyway; this keeps "listMyInviteLinks" honest.
+  //
+  // The open ones only, as references, one batch a page (17.10.2026). Revoking a link takes it out of
+  // `revoked == false`, so the query drains itself and a retry reads only what is left. Read ten a
+  // page and revoked one write at a time (15.10.2026), a group with a few hundred links ran past this
+  // callable's 60 s: every write is a round trip from the function to the database, and any member
+  // may mint 20 links a day, which are never deleted. The bound is the events' one, for the same reason.
   let links = 0;
-  await forEachDoc(db.collection("invite_links").where("groupId", "==", groupId), ["revoked"], async (d) => {
-    if (d.data()?.revoked === true) return;
-    await d.ref.update({ revoked: true });
-    links++;
-  });
+  const groupLinks = db.collection("invite_links").where("groupId", "==", groupId);
+  for (let page = 0; ; page++) {
+    const snap = await groupLinks.where("revoked", "==", false).select().limit(400).get();
+    if (snap.empty) break;
+    if (page >= 200) {
+      throw new HttpsError("deadline-exceeded", "Still revoking the group's links — try again.");
+    }
+    const batch = db.batch();
+    for (const d of snap.docs) batch.update(d.ref, { revoked: true });
+    await batch.commit();
+    links += snap.size;
+  }
+  // Every link is minted with `revoked: false` (createGroupInviteLink, the only writer: clients can
+  // neither read nor write the collection). One that is not, no query can find: the counts catch it,
+  // and it is revoked the slow way, as every link was before.
+  const [all, closed] = await Promise.all([
+    groupLinks.count().get(),
+    groupLinks.where("revoked", "==", true).count().get(),
+  ]);
+  if (all.data().count > closed.data().count) {
+    await forEachDoc(groupLinks, ["revoked"], async (d) => {
+      if (d.data()?.revoked === true) return;
+      await d.ref.update({ revoked: true });
+      links++;
+    });
+  }
 
   // Its chat media, BEFORE the group goes: if the sweep fails, the group still exists and the owner
   // can retry — every step above is idempotent — whereas once the document is gone a retry answers

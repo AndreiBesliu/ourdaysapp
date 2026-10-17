@@ -57,19 +57,39 @@
 // References only, or only the fields a step uses, ten documents a page (15.10.2026; batchDelete.ts
 // says why). Read whole, a stranger's padded friend requests stopped it at every attempt.
 //
+// ── How long it takes (17.10.2026) ──────────────────────────────────────────────────────────
+//
+// Ten a page made the keep list (step 1) and the answers (step 2) one round trip per ten events of
+// every group the person is in, and both started again from their first page at every attempt. Any
+// member writes a group's events, as many as they like, so one member's events could keep every other
+// member's deletion past its 540 s at every attempt. Now:
+//   * the answers are read by the answer: only the events that hold theirs, as references, each one
+//     leaving the query when its answer goes. A person writes only their own answer, so the count is
+//     theirs, and a stopped run loses nothing;
+//   * the keep list keeps its place in `accountDeletions/{uid}.keep`: the reads it has finished, the
+//     last document of the one under way, and what it has found, so each attempt continues;
+//   * it only ever names a file that is in their folders. A link keeps nothing by itself: anybody can
+//     write one, and one event's checklist holds a megabyte of them, which used to pile up for the
+//     whole run;
+//   * with no file of theirs in `events/` or `checklists/`, nothing in other people's events can be
+//     kept, and the groups' events are not read at all;
+//   * a run stops by itself after RUN_BUDGET_MS, writes down where it is and asks to be called again,
+//     instead of being killed at 540 s with nothing written down and nothing logged.
+//
 // ── A deletion that stops part way can be run again ─────────────────────────────────────────
 //
 // Every step can be repeated, and the sign-in account goes LAST, so the person can sign in and press
 // the button again. The order matters three times:
 //   * The files go FIRST, while the person is still in their groups, because the keep list is read
 //     from those groups. They go only once: `accountDeletions/{uid}.filesDone` records it, so a second
-//     run, after the groups have let the person go, cannot read a shorter list.
+//     run, after the groups have let the person go, cannot read a shorter list. Until then the keep
+//     list's progress is kept there too, and it goes when the files have gone.
 //   * They come off other people's events BEFORE they leave the groups: an assignee who is not a
 //     member refuses every later write to the event (`namedAreInGroup` checks the resulting document),
 //     so a run stopped in between would freeze those events for everybody.
 //   * The name kept on conversations is read before the profile goes, and written once.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteMyAccount = exports.DELETION_MEMORY = exports.accountFiles = exports.REFUSAL = exports.RECENT_SIGN_IN_S = void 0;
+exports.deleteMyAccount = exports.DELETION_MEMORY = exports.fileKey = exports.deletionClock = exports.RUN_BUDGET_MS = exports.accountFiles = exports.REFUSAL = exports.RECENT_SIGN_IN_S = void 0;
 exports.signedInRecently = signedInRecently;
 exports.nextOwner = nextOwner;
 exports.eventHeir = eventHeir;
@@ -78,6 +98,7 @@ exports.ownFolders = ownFolders;
 exports.storagePathOf = storagePathOf;
 exports.filesShownBy = filesShownBy;
 exports.deleteAccountData = deleteAccountData;
+const node_crypto_1 = require("node:crypto");
 const admin = require("firebase-admin");
 // The modular entry, not `admin.firestore.FieldValue`: under the functions emulator the namespace loses
 // its statics (undefined there, the same objects in production), and this deletion was first run end to
@@ -89,6 +110,7 @@ const batchDelete_1 = require("./batchDelete");
 const groupDeletion_1 = require("./groupDeletion");
 const groupMedia_1 = require("./groupMedia");
 const errorLog_1 = require("./errorLog");
+const overrideRsvps_1 = require("./overrideRsvps");
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 const BOOTSTRAP_ADMIN_EMAILS = (0, bootstrapAdmins_1.bootstrapAdminEmails)(process.env.BOOTSTRAP_ADMIN_EMAILS);
 const ALL = Number.MAX_SAFE_INTEGER;
@@ -186,25 +208,56 @@ function filesShownBy(ev) {
 }
 const groupIdOf = (ev) => typeof ev.groupId === "string" && ev.groupId ? ev.groupId : null;
 /** Called through this object, so a test can make the files fail and prove the deletion stops. */
-exports.accountFiles = { deleteExcept: batchDelete_1.deleteFilesExcept };
+exports.accountFiles = { deleteExcept: batchDelete_1.deleteFilesExcept, list: batchDelete_1.listFiles };
+/**
+ * How long one run works before it stops by itself and asks to be called again (17.10.2026). The two
+ * callables that run it may take 540 s, and a run the platform kills writes nothing down: it neither
+ * keeps its place nor logs. What may still run after the stop is a page, a group's hand-over, a
+ * listing of files: seconds, not two minutes.
+ */
+exports.RUN_BUDGET_MS = 420000;
+/** The time, through an object a test can point at a clock of its own. */
+exports.deletionClock = { now: () => Date.now() };
+/** Pages of the keep list between two notes of where it is, for a run killed before its own stop. */
+const SAVE_EVERY = 25;
+const stillWorking = () => new https_1.HttpsError("deadline-exceeded", "Still working through the account's data. Try again.");
+/** A file in `accountDeletions/{uid}.keep`: 16 characters whatever the length of its name, and not the name. */
+const fileKey = (path) => (0, node_crypto_1.createHash)("sha256").update(path).digest("base64url").slice(0, 16);
+exports.fileKey = fileKey;
+/**
+ * `accountDeletions/{uid}.keep` as an earlier run left it: the keep-list reads it finished, where the
+ * one under way stopped, and the files found so far (`fileKey`). Anything else counts as nothing done.
+ */
+function keepProgress(v) {
+    const o = v && typeof v === "object" ? v : {};
+    const at = typeof o.at === "string" ? o.at : null;
+    return {
+        done: new Set(strList(o.done)),
+        at,
+        after: at !== null && typeof o.after === "string" ? o.after : null,
+        kept: new Set(strList(o.kept)),
+    };
+}
 /** At most this many documents through one `drain` a run, as before 15.10.2026 (200 pages of 300). */
 const DRAIN_MOST = 60000;
 /**
  * Apply `each` to a query's documents until none match, bringing only `fields` (batchDelete.ts says
  * why). Every caller's `each` makes its document stop matching, so the same query drains itself, and
  * every page is committed, so a retry picks up where a stopped run left off. The bound turns a write
- * that silently does nothing into an error instead of a spin.
+ * that silently does nothing into an error instead of a spin; `outOfTime` stops it in time.
  */
-async function drain(query, fields, each) {
+async function drain(query, fields, each, outOfTime = () => false) {
     const db = admin.firestore();
     const page = (0, batchDelete_1.pageOf)(query, fields, 300);
     let n = 0;
     for (let i = 0;; i++) {
+        if (outOfTime())
+            throw stillWorking();
         const snap = await page.query.limit(page.size).get();
         if (snap.empty)
             return n;
         if (i >= Math.ceil(DRAIN_MOST / page.size))
-            throw new https_1.HttpsError("deadline-exceeded", "Still working through the account's data. Try again.");
+            throw stillWorking();
         const batch = db.batch();
         for (const d of snap.docs)
             await each(d, batch);
@@ -217,10 +270,26 @@ async function drain(query, fields, each) {
  * account still there, if any step fails, so the deletion can be asked for again.
  */
 async function deleteAccountData(uid, by) {
-    var _a, _b;
+    var _a, _b, _c;
     const db = admin.firestore();
     const counts = {};
     const add = (key, n) => { counts[key] = (counts[key] || 0) + n; };
+    const deadline = exports.deletionClock.now() + exports.RUN_BUDGET_MS;
+    const outOfTime = () => exports.deletionClock.now() >= deadline;
+    // Every document of a query the step does not drain, stopping in time. What these do to a document is
+    // done once (a mark, a revocation), so the next run reads them again and changes nothing twice.
+    const forEachInTime = async (query, fields, each) => {
+        if (!(await (0, batchDelete_1.forEachDoc)(query, fields, each, { stop: outOfTime })).done)
+            throw stillWorking();
+    };
+    // Everything a query matches, deleted, stopping in time: what is deleted stays deleted. A stranger can
+    // send anybody as many friend requests and invitations as they like.
+    const deleteAll = async (query) => {
+        const n = await (0, batchDelete_1.deleteQueryInBatches)(query, ALL, outOfTime);
+        if (outOfTime())
+            throw stillWorking();
+        return n;
+    };
     // ── Who they are, read before anything goes ──────────────────────────────────────────────
     const [userSnap, profileSnap] = await Promise.all([db.doc(`users/${uid}`).get(), db.doc(`profiles/${uid}`).get()]);
     let authUser = null;
@@ -254,6 +323,12 @@ async function deleteAccountData(uid, by) {
     // ── 1. Their files, except those something that stays still shows. Once. ─────────────────
     let files = null;
     if (((_b = record.data()) === null || _b === void 0 ? void 0 : _b.filesDone) !== true) {
+        // What is in their folders now, of what something may keep. The keep list only ever names one of
+        // these: so neither it nor the record can be made to grow by links to files that do not exist.
+        const existing = await exports.accountFiles.list([`assets/${uid}/`, `events/${uid}/`, `checklists/${uid}/`]);
+        if (!existing) {
+            throw new https_1.HttpsError("unavailable", "Some of the files could not be removed yet. Try again: it continues where it stopped.");
+        }
         const inGroups = new Set((await memberGroups()).map((g) => g.id));
         const groupsRead = new Map();
         const groupOf = async (gid) => {
@@ -269,47 +344,100 @@ async function deleteAccountData(uid, by) {
             const gid = groupIdOf(ev);
             return !!gid && eventHeir(await groupOf(gid), uid, ev.hiddenFrom) !== null;
         };
-        const keep = new Set();
+        // What earlier runs found, and what this one finds that is not written down yet.
+        const saved = keepProgress((_c = record.data()) === null || _c === void 0 ? void 0 : _c.keep);
+        const keep = new Set([...existing].filter((p) => saved.kept.has((0, exports.fileKey)(p))));
+        let unsaved = [];
+        const keepFile = (p) => {
+            if (keep.has(p) || !existing.has(p))
+                return;
+            keep.add(p);
+            unsaved.push((0, exports.fileKey)(p));
+        };
         const keepUnder = (ev, folders) => {
             for (const p of filesShownBy(ev))
                 if (folders.some((f) => p.startsWith(f)))
-                    keep.add(p);
+                    keepFile(p);
         };
         const anyOfTheirs = [`assets/${uid}/`, `events/${uid}/`, `checklists/${uid}/`];
         const uploadedIntoEvents = [`events/${uid}/`, `checklists/${uid}/`];
         // What the keep list reads of an event: whose it is, where, whom it is hidden from (who inherits),
         // and what it shows (`filesShownBy`).
         const KEEP_FIELDS = ["ownerId", "groupId", "hiddenFrom", "imageUrl", "checklistItems"];
-        for (const gid of inGroups) {
-            await (0, batchDelete_1.forEachDoc)(db.collection("events").where("groupId", "==", gid), KEEP_FIELDS, async (d) => {
-                const ev = d.data() || {};
-                if (ev.ownerId !== uid)
-                    keepUnder(ev, uploadedIntoEvents);
-                else if (await theirsStays(ev))
-                    keepUnder(ev, anyOfTheirs);
-            });
+        // Only a file in `events/` or `checklists/` can be kept by somebody else's event. With none of those,
+        // the groups' events have nothing to say, and their own events are all read by owner below.
+        const viaGroups = [...existing].some((p) => uploadedIntoEvents.some((f) => p.startsWith(f))) ? inGroups : new Set();
+        const reads = [
+            ...[...viaGroups].map((gid) => ({
+                key: `group:${gid}`,
+                query: db.collection("events").where("groupId", "==", gid),
+                fields: KEEP_FIELDS,
+                each: async (d) => {
+                    const ev = d.data() || {};
+                    if (ev.ownerId !== uid)
+                        keepUnder(ev, uploadedIntoEvents);
+                    else if (await theirsStays(ev))
+                        keepUnder(ev, anyOfTheirs);
+                },
+            })),
+            {
+                // Their events in groups they had already left: those are inherited too.
+                key: "own",
+                query: db.collection("events").where("ownerId", "==", uid),
+                fields: KEEP_FIELDS,
+                each: async (d) => {
+                    const ev = d.data() || {};
+                    const gid = groupIdOf(ev);
+                    if (gid && viaGroups.has(gid))
+                        return; // read with the group
+                    if (await theirsStays(ev))
+                        keepUnder(ev, anyOfTheirs);
+                },
+            },
+            {
+                // Wallet cards they gave away.
+                key: "gifts",
+                query: db.collection("assets").where("transferredFrom", "==", uid),
+                fields: ["imageUrl"],
+                each: (d) => {
+                    var _a;
+                    const p = storagePathOf((_a = d.data()) === null || _a === void 0 ? void 0 : _a.imageUrl);
+                    if (p && p.startsWith(`assets/${uid}/`))
+                        keepFile(p);
+                },
+            },
+        ];
+        // Where the keep list is, written together with what it found since the last time: a run that
+        // continues from a place never lacks what was found before it. Concurrent runs only add.
+        const save = async (place) => {
+            const found = unsaved;
+            unsaved = [];
+            await recordRef.update(found.length ? Object.assign(Object.assign({}, place), { "keep.kept": firestore_1.FieldValue.arrayUnion(...found) }) : place);
+        };
+        for (const r of reads) {
+            if (saved.done.has(r.key))
+                continue;
+            const resume = {
+                after: saved.at === r.key ? saved.after : null,
+                stop: outOfTime,
+                saveEvery: SAVE_EVERY,
+                save: (after) => save({ "keep.at": r.key, "keep.after": after }),
+            };
+            const read = await (0, batchDelete_1.forEachDoc)(r.query, r.fields, r.each, resume);
+            if (!read.done) {
+                await save({ "keep.at": r.key, "keep.after": read.after });
+                throw stillWorking();
+            }
+            await save({ "keep.at": null, "keep.after": null, "keep.done": firestore_1.FieldValue.arrayUnion(r.key) });
         }
-        // Their events in groups they had already left: those are inherited too.
-        await (0, batchDelete_1.forEachDoc)(db.collection("events").where("ownerId", "==", uid), KEEP_FIELDS, async (d) => {
-            const ev = d.data() || {};
-            const gid = groupIdOf(ev);
-            if (gid && inGroups.has(gid))
-                return; // read above
-            if (await theirsStays(ev))
-                keepUnder(ev, anyOfTheirs);
-        });
-        // Wallet cards they gave away.
-        await (0, batchDelete_1.forEachDoc)(db.collection("assets").where("transferredFrom", "==", uid), ["imageUrl"], (d) => {
-            var _a;
-            const p = storagePathOf((_a = d.data()) === null || _a === void 0 ? void 0 : _a.imageUrl);
-            if (p && p.startsWith(`assets/${uid}/`))
-                keep.add(p);
-        });
-        const out = await exports.accountFiles.deleteExcept(ownFolders(uid), keep);
+        const out = await exports.accountFiles.deleteExcept(ownFolders(uid), keep, undefined, outOfTime);
         if (!out.ok) {
+            if (outOfTime())
+                throw stillWorking();
             throw new https_1.HttpsError("unavailable", "Some of the files could not be removed yet. Try again: it continues where it stopped.");
         }
-        await recordRef.set({ filesDone: true, filesDeleted: out.deleted, filesKept: out.kept }, { merge: true });
+        // The keep list goes with them: the record stays for good, and what was in their folders does not.
+        await recordRef.set({ filesDone: true, filesDeleted: out.deleted, filesKept: out.kept, keep: firestore_1.FieldValue.delete() }, { merge: true });
         files = { deleted: out.deleted, kept: out.kept };
     }
     // ── 2. Off other people's events, while they are still a member ─────────────────────────
@@ -317,26 +445,26 @@ async function deleteAccountData(uid, by) {
     await drain(db.collection("events").where("assigneeIds", "array-contains", uid), [], (d, batch) => {
         batch.update(d.ref, { assigneeIds: firestore_1.FieldValue.arrayRemove(uid) });
         add("eventsUnassigned", 1);
-    });
+    }, outOfTime);
     // The older single field, which the app keeps as the list's first: after the list, so the next one
     // in it is a person who still exists.
     await drain(db.collection("events").where("assigneeId", "==", uid), ["assigneeIds"], (d, batch) => {
         var _a;
         const ids = (_a = d.data()) === null || _a === void 0 ? void 0 : _a.assigneeIds;
         batch.update(d.ref, { assigneeId: Array.isArray(ids) && typeof ids[0] === "string" ? ids[0] : null });
-    });
+    }, outOfTime);
     // An answer from somebody who no longer exists would still count as a guest. Only in their groups:
     // anybody may create events of their own with any answers in them, and those are nobody's business.
-    // Only their own answer is brought: a field path, so the uid stays one key whatever it holds.
+    // Only the events that hold their answer, as references (17.10.2026): the rules let a person write
+    // only their own answer and only one of RSVP_ANSWERS, so how many there are is theirs, not the
+    // group's; and each event leaves the query as its answer goes, so a stopped run loses nothing. A
+    // field path, so the uid stays one key whatever it holds.
     for (const g of await memberGroups()) {
-        await (0, batchDelete_1.forEachDoc)(db.collection("events").where("groupId", "==", g.id), [new firestore_1.FieldPath("rsvps", uid)], async (d) => {
-            var _a;
-            const rsvps = (_a = d.data()) === null || _a === void 0 ? void 0 : _a.rsvps;
-            if (!rsvps || typeof rsvps !== "object" || !(uid in rsvps))
-                return;
-            await d.ref.update(new firestore_1.FieldPath("rsvps", uid), firestore_1.FieldValue.delete());
+        const answered = db.collection("events").where("groupId", "==", g.id).where(new firestore_1.FieldPath("rsvps", uid), "in", [...overrideRsvps_1.RSVP_ANSWERS]);
+        await drain(answered, [], (d, batch) => {
+            batch.update(d.ref, new firestore_1.FieldPath("rsvps", uid), firestore_1.FieldValue.delete());
             add("rsvpsRemoved", 1);
-        });
+        }, outOfTime);
     }
     // ── 3. Their groups, each read again in a transaction ────────────────────────────────────
     const inGroups = await memberGroups();
@@ -391,11 +519,11 @@ async function deleteAccountData(uid, by) {
             batch.delete(d.ref);
             add("eventsDeleted", 1);
         }
-    });
+    }, outOfTime);
     // ── 5. Direct chats: the conversation stays, and so do both people in it ─────────────────
     // `members` keeps them: it is what names the conversation, and the other person keeps reading it.
     // Once nobody in it is left, it goes, with its photos and voice notes.
-    await (0, batchDelete_1.forEachDoc)(db.collection("chats").where("members", "array-contains", uid), ["members", "formerMembers"], async (c) => {
+    await forEachInTime(db.collection("chats").where("members", "array-contains", uid), ["members", "formerMembers"], async (c) => {
         const data = c.data() || {};
         const fm = data.formerMembers && typeof data.formerMembers === "object" ? data.formerMembers : {};
         const nobodyLeft = strList(data.members).every((m) => m === uid || !!fm[m]);
@@ -412,40 +540,54 @@ async function deleteAccountData(uid, by) {
         await db.doc(`chats/${c.id}/typing/${uid}`).delete();
     });
     // ── 6. Invitations, friend requests and links ────────────────────────────────────────────
-    add("invites", await (0, batchDelete_1.deleteQueryInBatches)(db.collection("group_invites").where("fromId", "==", uid), ALL));
-    add("invites", await (0, batchDelete_1.deleteQueryInBatches)(db.collection("group_invites").where("toId", "==", uid), ALL));
-    add("friendRequests", await (0, batchDelete_1.deleteQueryInBatches)(db.collection("friend_requests").where("fromId", "==", uid), ALL));
-    add("friendRequests", await (0, batchDelete_1.deleteQueryInBatches)(db.collection("friend_requests").where("toId", "==", uid), ALL));
+    add("invites", await deleteAll(db.collection("group_invites").where("fromId", "==", uid)));
+    add("invites", await deleteAll(db.collection("group_invites").where("toId", "==", uid)));
+    add("friendRequests", await deleteAll(db.collection("friend_requests").where("fromId", "==", uid)));
+    add("friendRequests", await deleteAll(db.collection("friend_requests").where("toId", "==", uid)));
     if (provenEmail) {
-        add("invites", await (0, batchDelete_1.deleteQueryInBatches)(db.collection("group_invites").where("toEmail", "==", provenEmail), ALL));
-        add("friendRequests", await (0, batchDelete_1.deleteQueryInBatches)(db.collection("friend_requests").where("toEmail", "==", provenEmail), ALL));
+        add("invites", await deleteAll(db.collection("group_invites").where("toEmail", "==", provenEmail)));
+        add("friendRequests", await deleteAll(db.collection("friend_requests").where("toEmail", "==", provenEmail)));
     }
     // Revoked rather than deleted, as when a group goes: a link that still worked would introduce the
     // newcomer as invited by somebody who no longer exists. And without the name, which anybody holding
-    // the link can read without signing in (`peekGroupInviteLink`).
-    await (0, batchDelete_1.forEachDoc)(db.collection("invite_links").where("createdBy", "==", uid), ["revoked", "createdByName"], async (d) => {
+    // the link can read without signing in (`peekGroupInviteLink`). Written 400 to a batch, not one at a
+    // time (17.10.2026): every write is a round trip, and a person may mint 20 links a day. A run stopped
+    // in time leaves the rest unrevoked, and the next one revokes them.
+    const linksToRevoke = [];
+    const revokeLinks = async () => {
+        const batch = db.batch();
+        const refs = linksToRevoke.splice(0, linksToRevoke.length);
+        for (const ref of refs)
+            batch.update(ref, { revoked: true, createdByName: null });
+        await batch.commit();
+        add("linksRevoked", refs.length);
+    };
+    await forEachInTime(db.collection("invite_links").where("createdBy", "==", uid), ["revoked", "createdByName"], async (d) => {
         const link = d.data() || {};
         if (link.revoked === true && link.createdByName == null)
             return;
-        await d.ref.update({ revoked: true, createdByName: null });
-        add("linksRevoked", 1);
+        linksToRevoke.push(d.ref);
+        if (linksToRevoke.length >= 400)
+            await revokeLinks();
     });
+    if (linksToRevoke.length > 0)
+        await revokeLinks();
     // ── 7. Everything else that is theirs ────────────────────────────────────────────────────
-    add("assets", await (0, batchDelete_1.deleteQueryInBatches)(db.collection("assets").where("ownerId", "==", uid), ALL));
-    add("games", await (0, batchDelete_1.deleteQueryInBatches)(db.collection("games").where("createdBy", "==", uid), ALL));
+    add("assets", await deleteAll(db.collection("assets").where("ownerId", "==", uid)));
+    add("games", await deleteAll(db.collection("games").where("createdBy", "==", uid)));
     // A waiting Warlord challenge keeps its army here until accepted.
-    add("warlordDeploys", await (0, batchDelete_1.deleteQueryInBatches)(db.collection("warlordDeploys").where("challengerUid", "==", uid), ALL));
+    add("warlordDeploys", await deleteAll(db.collection("warlordDeploys").where("challengerUid", "==", uid)));
     // Expenses were NOT deleted once, and that corrupted every group the person was in: the rows
     // survived, the members could still read them, the balance still SUMMED the departed person's
     // spending, but the divisor shrank when they left the member list. Everyone left was told they
     // owed more than they did.
-    add("expenses", await (0, batchDelete_1.deleteQueryInBatches)(db.collection("expenses").where("ownerId", "==", uid), ALL));
+    add("expenses", await deleteAll(db.collection("expenses").where("ownerId", "==", uid)));
     // Notifications addressed to them: the rules key them to the recipient, so nothing else can.
-    add("notifications", await (0, batchDelete_1.deleteQueryInBatches)(db.collection("notifications").where("userId", "==", uid), ALL));
+    add("notifications", await deleteAll(db.collection("notifications").where("userId", "==", uid)));
     // ── 8. The AI cost ledger keeps its rows, without them ───────────────────────────────────
     add("aiLedgerRows", await drain(db.collection("aiLedger").where("uid", "==", uid), [], (d, batch) => {
         batch.update(d.ref, { uid: null });
-    }));
+    }, outOfTime));
     // Their line in each day's spend; the day's totals stay.
     const days = await db.collection("aiSpendDaily").listDocuments();
     for (let i = 0; i < days.length; i += 400) {
@@ -477,7 +619,7 @@ async function deleteAccountData(uid, by) {
     // ── 10. Error rows, after everything above that could write one ──────────────────────────
     // Each carries their uid and, for client reports, their email, user agent and urls. They expire
     // after 90 days (errorRetention.ts); a deleted account's should not wait for that (25.09.2026).
-    add("errorLogs", await (0, batchDelete_1.deleteQueryInBatches)(db.collection("errorLogs").where("uid", "==", uid), ALL));
+    add("errorLogs", await deleteAll(db.collection("errorLogs").where("uid", "==", uid)));
     // ── 11. Their own documents ──────────────────────────────────────────────────────────────
     await Promise.all([
         "users", "profiles", "admins",
@@ -514,11 +656,13 @@ async function deleteAccountData(uid, by) {
  * would lock the admin screen, and a bootstrap address would simply become one again at the next
  * sign-up.
  *
- * 512 MiB (17.10.2026): a checklist is read one event at a time (batchDelete.ts), and one event can
- * decode to about 100 MB; the same for the person's own document and each friend's, read whole one by
- * one. The platform's 256 MiB is the instance's own footprint plus little more.
+ * 2 GiB (17.10.2026): the keep list reads checklists, pictures and `hiddenFrom` ten events a page,
+ * fields the rules cannot bound (batchDelete.ts), and one event can decode to about 100 MB (measured on
+ * the emulator with the largest a client can write). Ten of them, the person's own document and each
+ * friend's (read whole, one by one) and the instance's own ~120 MB fit; 256 MiB fitted two. The memory
+ * is paid only while a deletion runs, and an account is deleted once.
  */
-exports.DELETION_MEMORY = "512MiB";
+exports.DELETION_MEMORY = "2GiB";
 exports.deleteMyAccount = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540, memory: exports.DELETION_MEMORY }, async (request) => {
     var _a, _b, _c;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;

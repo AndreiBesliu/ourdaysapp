@@ -21,56 +21,76 @@ import { FieldPath } from "firebase-admin/firestore";
 // fits in a document and is about 100 MB once decoded (review of 17.10.2026). So every field a page of
 // ten brings is bounded by the rules — a short list of scalars, or a value that is not a list or a map
 // (firestore.rules, "What the server reads in bulk") — or written only by the server. Three are not,
-// and a read that brings one brings one document a page, the most one document can decode to, which
-// the deletion has the memory for: a checklist, whose items are maps the rules cannot look into; the
-// picture, whose kind the rules do not check (an edit of an event has no room left under the 1000
-// expressions a request may evaluate); and `hiddenFrom`, which the rules bound on a group's events but
-// not on a personal one, and the deletion's hand-over reads the person's own events of both kinds.
+// and only the account deletion reads them: a checklist, whose items are maps the rules cannot look
+// into; the picture, whose kind the rules do not check (an edit of an event has no room left under the
+// 1000 expressions a request may evaluate); and `hiddenFrom`, which no clause fits there either. The
+// deletion has the memory for ten of the largest a client can write (DELETION_MEMORY,
+// accountDeletion.ts). One a page (the first answer, the same day) held the memory but multiplied the
+// round trips by ten, and any member decides how many events a group has.
 
 /** How many documents one page may bring when it brings field values. */
 export const FIELD_PAGE = 10;
-
-/** Fields whose decoded size the rules do not bound: a read that brings one brings one document a page. */
-export const ONE_A_PAGE: ReadonlySet<string> = new Set(["checklistItems", "hiddenFrom", "imageUrl"]);
 
 export type Field = string | FieldPath;
 
 /**
  * `query` bringing only `fields`, or only the references when there are none, with the page size that
- * goes with that: FIELD_PAGE, one for a field in ONE_A_PAGE, or `refsPage`. One place for the rule, so
- * that no read brings fields in a page sized for references.
+ * goes with that: FIELD_PAGE, or `refsPage`. One place for the rule, so that no read brings fields in a
+ * page sized for references.
  */
 export function pageOf(query: admin.firestore.Query, fields: Field[], refsPage: number): { query: admin.firestore.Query; size: number } {
-  if (fields.length === 0) return { query: query.select(), size: refsPage };
-  const one = fields.some((f) => typeof f === "string" && ONE_A_PAGE.has(f));
-  return { query: query.select(...fields), size: one ? 1 : FIELD_PAGE };
+  return fields.length > 0
+    ? { query: query.select(...fields), size: FIELD_PAGE }
+    : { query: query.select(), size: refsPage };
+}
+
+/**
+ * Where a `forEachDoc` starts, when it stops before the end, and how it keeps its place (17.10.2026).
+ * A read that the caller does not drain matches as many documents at the next attempt as at this one,
+ * so without a place kept every attempt starts again from the first page.
+ */
+export interface Resume {
+  /** The id of the last document an earlier run read: this one starts after it. */
+  after?: string | null;
+  /** Asked before every page; true ends the read there, before that page. */
+  stop?: () => boolean;
+  /** Called every `saveEvery` pages with the id of the last document read, so that a run killed in
+   * between loses at most that many pages. */
+  save?: (after: string) => Promise<void>;
+  saveEvery?: number;
 }
 
 /**
  * Every document a query matches, page by page, bringing only `fields`, for a query that the caller does
  * not drain as it reads. The cursor is the document id, which an equality or array filter can be ordered
- * by without an index.
+ * by without an index. Done, or stopped by `resume.stop` with the id to start after next time.
  */
 export async function forEachDoc(
   query: admin.firestore.Query, fields: Field[],
   each: (d: admin.firestore.QueryDocumentSnapshot) => void | Promise<void>,
-): Promise<void> {
+  resume: Resume = {},
+): Promise<{ done: boolean; after: string | null }> {
   const page = pageOf(query, fields, 500);
-  let last: admin.firestore.QueryDocumentSnapshot | null = null;
-  for (;;) {
+  let after = resume.after ?? null;
+  for (let n = 1; ; n++) {
+    if (resume.stop?.()) return { done: false, after };
     let q = page.query.orderBy(FieldPath.documentId()).limit(page.size);
-    if (last) q = q.startAfter(last);
+    if (after !== null) q = q.startAfter(after);
     const snap = await q.get();
     for (const d of snap.docs) await each(d);
-    if (snap.size < page.size) return;
-    last = snap.docs[snap.docs.length - 1];
+    if (snap.size < page.size) return { done: true, after: null };
+    after = snap.docs[snap.docs.length - 1].id;
+    if (resume.save && resume.saveEvery && n % resume.saveEvery === 0) await resume.save(after);
   }
 }
 
-/** Delete every doc matching a query, in batches, until exhausted (or a cap). Only the references are read. */
-export async function deleteQueryInBatches(query: admin.firestore.Query, max = 3000): Promise<number> {
+/**
+ * Delete every doc matching a query, in batches, until exhausted (or a cap, or `stop`, asked before each
+ * batch: what is deleted stays deleted, and the next call goes on). Only the references are read.
+ */
+export async function deleteQueryInBatches(query: admin.firestore.Query, max = 3000, stop: () => boolean = () => false): Promise<number> {
   let deleted = 0;
-  while (deleted < max) {
+  while (deleted < max && !stop()) {
     const snap = await query.select().limit(400).get();
     if (snap.empty) break;
     const batch = admin.firestore().batch();
@@ -87,12 +107,30 @@ export interface FileBucket {
   getFiles(o: { prefix: string }): Promise<[Array<{ name: string; delete(o: { ignoreNotFound: boolean }): Promise<unknown> }>]>;
 }
 
+const projectBucket = (): FileBucket => admin.storage().bucket() as unknown as FileBucket;
+
 export interface FilesOutcome {
-  /** False when ANY listing or delete failed. Never true by default: see below. */
+  /** False when ANY listing or delete failed, or `stop` ended it early. Never true by default: see below. */
   ok: boolean;
   deleted: number;
   /** Files under the prefixes that were left because something that stays still shows them. */
   kept: number;
+}
+
+/** The names of every Storage object under the prefixes, or null when a listing failed. */
+export async function listFiles(prefixes: string[], bucketOf: () => FileBucket = projectBucket): Promise<Set<string> | null> {
+  let bucket: FileBucket;
+  try { bucket = bucketOf(); } catch { return null; }
+  const names = new Set<string>();
+  for (const prefix of prefixes) {
+    try {
+      const [files] = await bucket.getFiles({ prefix });
+      for (const f of files) names.add(f.name);
+    } catch {
+      return null;
+    }
+  }
+  return names;
 }
 
 /**
@@ -104,16 +142,21 @@ export interface FilesOutcome {
  * This one is listed and deleted file by file, because some files under a person's folder are not
  * theirs to take any more: a group event they attached a photo to stays in the group, and so does a
  * wallet card they gave away (accountDeletion.ts).
+ *
+ * `stop`, asked before each listing and each twenty deletes, ends it early as not done: whatever was
+ * deleted stays deleted, and the next call lists what is left.
  */
 export async function deleteFilesExcept(
   prefixes: string[],
   keep: ReadonlySet<string>,
-  bucketOf: () => FileBucket = () => admin.storage().bucket() as unknown as FileBucket,
+  bucketOf: () => FileBucket = projectBucket,
+  stop: () => boolean = () => false,
 ): Promise<FilesOutcome> {
   const out: FilesOutcome = { ok: true, deleted: 0, kept: 0 };
   let bucket: FileBucket;
   try { bucket = bucketOf(); } catch { return { ...out, ok: false }; }
   for (const prefix of prefixes) {
+    if (stop()) return { ...out, ok: false };
     let files: Awaited<ReturnType<FileBucket["getFiles"]>>[0];
     try {
       [files] = await bucket.getFiles({ prefix });
@@ -127,6 +170,7 @@ export async function deleteFilesExcept(
     });
     // Twenty at a time: one person's folder can hold hundreds of photos.
     for (let i = 0; i < doomed.length; i += 20) {
+      if (stop()) return { ...out, ok: false };
       const results = await Promise.allSettled(doomed.slice(i, i + 20).map((f) => f.delete({ ignoreNotFound: true })));
       for (const r of results) {
         if (r.status === "fulfilled") out.deleted++;

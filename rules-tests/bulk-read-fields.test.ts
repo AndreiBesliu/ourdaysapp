@@ -13,8 +13,8 @@
 //      map inside the list);
 //   2. everything the web and the installed APK write and copy still passes, the largest real values
 //      included, and so does a value exactly at each cap.
-// Three fields of an event the rules leave alone, and the server reads them one event a page instead
-// (functions/src/batchDelete.ts, functions/test/bulkReadPages.test.ts): a checklist (its items are maps,
+// Three fields of an event the rules leave alone, and only the account deletion reads them, with the
+// memory for ten of the largest (functions/test/bulkReadPages.test.ts): a checklist (its items are maps,
 // and rules have no loops), `hiddenFrom` and the picture (an edit of an event has no room left under the
 // 1000 expressions, measured again on 17.10.2026 for `hiddenFrom`: 194 refusals past the limit).
 

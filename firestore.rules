@@ -148,11 +148,12 @@ service cloud.firestore {
     // much more (measured, review of 17.10.2026). So an edit judges only what it can change and the
     // pages of ten bring: the exceptions, the rule's two parts and the span here, the assignees' number
     // beside their names (`namedAreInGroup`, the personal clause). An override's two keys are pinned on
-    // an edit and judged where the event is born. Three fields the server reads one event a page instead
-    // (functions/src/batchDelete.ts), and the rules leave them alone: a checklist, whose items are maps
-    // (no loops here), and `hiddenFrom` and the picture. A clause for `hiddenFrom` here took every refused
-    // edit past the 1000 (measured, 17.10.2026: 194 refusals in events.test.ts), so no bulk read brings
-    // it ten a page: the group digest asks who it is hidden from by a query of references instead.
+    // an edit and judged where the event is born. Three fields the rules leave alone, and only the account
+    // deletion reads them, with the memory for ten of the largest a client can write
+    // (functions/src/accountDeletion.ts): a checklist, whose items are maps (no loops here), and
+    // `hiddenFrom` and the picture. A clause for `hiddenFrom` here took every refused edit past the 1000
+    // (measured, 17.10.2026: 194 refusals in events.test.ts), so the group digest asks who an event is
+    // hidden from by a query of references instead of reading the list.
     function evList(v, max) {
       return v == null || (v is list && v.size() <= max && v.join(',') is string);
     }
