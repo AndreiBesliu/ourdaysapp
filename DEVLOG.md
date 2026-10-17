@@ -13504,3 +13504,37 @@ Firestore compară cursorii trunchiați, exact ca indexul.
 2. `firestore:indexes`, cu „Nu” la ștergerea celor care există doar pe live;
 3. funcțiile;
 4. hosting-ul, pentru `bc2dc7d`.
+
+## 2026-10-17 · Mutațiile pe reparațiile recenziei (Task Completed)
+
+**Prompt (Andrei):** „continua”.
+**Model:** Claude Opus 5.5.
+
+5 agenți, câte unul pe commit (`f3706d2`, `5f8f0c2`, `14d2d7d`, `c7a303d`, `c60463e`), pe un instantaneu cu sloturi
+de emulator separate. Controalele au trecut pe toate suitele. Fiecare mutant s-a aplicat doar pe durata rulării și a
+fost restaurat octet cu octet. 1,8 M tokeni, 2 h 16 min.
+
+**168 de mutanți: 126 prinși, 5 echivalenți și 37 de goluri.** Pe părți:
+- citirile în bloc: 35 de mutanți, 30 prinși;
+- ștergerea: 30, 17 prinși;
+- rezumatul: 31, 27 prinși;
+- trimiterea: 30, 22 prinși, 2 echivalenți;
+- seriile: 42, 30 prinși, 3 echivalenți.
+
+Fiecare gol are acum testul lui, verde pe cod și roșu pe mutant: 21 de fișiere noi. Exemple:
+- plafoanele din reguli la granița exactă și în ambele forme (listă și hartă);
+- cheia de 16 caractere a listei de fișiere păstrate;
+- locul reluat doar în citirea lui;
+- o listare eșuată care oprește ștergerea în loc să șteargă;
+- răspunsurile „nu” golite și ele;
+- bugetul de timp la fiecare pas;
+- `runAt` la creare;
+- id-ul rândului de clopoțel diferit pe fiecare destinatar;
+- limita de sus a seriilor;
+- plafonul păstrat în calea de rezervă;
+- serverul de metadate întrebat de nimeni.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2669), `npm run build`, `check-split`, `check-offline`,
+`check-bundle`, `test:tz`, funcții pe emulator (383), reguli (720, niciuna peste 1000 de expresii).
+
+**Nepublicat.** Ordinea e în intrarea de mai sus.
