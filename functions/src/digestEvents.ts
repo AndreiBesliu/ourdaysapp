@@ -41,6 +41,12 @@ export const DIGEST_EVENT_SCAN = 300;
 /** Recurring parents fetched. They are few; this is a backstop, not a budget. */
 export const DIGEST_RECURRING_SCAN = 500;
 
+/**
+ * Events hiding from the viewer, read as references (digestRead.ts). Past it, which of the rest hide is
+ * unknown, and only what is the viewer's, or names them, gets a line.
+ */
+export const DIGEST_HIDDEN_SCAN = 5000;
+
 /** Lines put in front of the model. Enough for a busy week, short enough to stay a digest. */
 export const DIGEST_EVENT_LINES = 20;
 
@@ -55,6 +61,15 @@ export const DIGEST_FIELDS = [
   "date", "recurrenceRule.frequency", "recurrenceRule.onlyOn", "recurrenceExceptions", "overrideOfParent",
   "overrideDate", "ownerId", "groupId", "endDayOffset", "title",
 ] as const;
+
+/**
+ * Who may see each event: what `maySee` and `isPendingInvite` read (aiVisibility.ts), the rule the
+ * calendar and the Period Log apply, but `hiddenFrom` (17.10.2026). `ownerId` is on the list above. No
+ * line is made from these, so they are not on that list. Every one is bounded by the rules (the
+ * assignees at 200, the rest single values); `hiddenFrom` is not, so digestRead.ts asks by a query of
+ * references which events hide from the viewer instead of reading it.
+ */
+export const DIGEST_VISIBILITY_FIELDS = ["assigneeIds", "assigneeId", "inviteeId", "inviteStatus"] as const;
 
 /** Events per page of those reads. Ten is safe only because the rules bound every field above (17.10.2026,
  *  firestore.rules "What the server reads in bulk"): a list is decoded at about a hundred times its stored
@@ -96,19 +111,22 @@ export interface DigestSelection {
   truncated: boolean;
 }
 
+const NOBODY_HIDDEN: ReadonlySet<string> = new Set();
+
 /**
  * The lines, from whatever the two queries returned.
  *
  * Both queries are the group's own since 16.10.2026 (digestRead.ts). Until then the series one was
  * not, for want of an index, and `docs` held other groups' documents. The filter stays here, before
  * anything reads them, and it is a test of its own: a query that widens again must not widen the
- * ANSWER.
+ * ANSWER. `hidden` are the ids the viewer may not see (digestRead.ts decides them).
  */
 export function digestEventLines(
   docs: readonly EventDoc[],
   groupId: string,
   window: DigestWindow,
   max = DIGEST_EVENT_LINES,
+  hidden: ReadonlySet<string> = NOBODY_HIDDEN,
 ): DigestSelection {
   const byId = new Map<string, EventDoc>();
   for (const doc of docs) {
@@ -120,7 +138,13 @@ export function digestEventLines(
   // `expandInWindow` does the deciding: it drops the documents fetched only because they MIGHT
   // reach the window, keeps a multi-day event on every day it covers, emits a series on each of
   // its occurrences, and suppresses a ghost that an override document already stands in for.
-  const occurrences = expandInWindow([...byId.values()], window.fromDay, window.toDay);
+  //
+  // What the viewer may not see goes only AFTER that, by the document each occurrence comes from: a
+  // hidden EDIT still stands in for its parent's occurrence, and dropping it first would put the
+  // parent's ghost back on that day. And BEFORE the cut: a hidden event takes no line from the viewer,
+  // nor makes the viewer's digest say it is cut.
+  const occurrences = expandInWindow([...byId.values()], window.fromDay, window.toDay)
+    .filter((occ) => !hidden.has(occ.source.id));
   const shown = occurrences.slice(0, Math.max(0, max));
 
   return {

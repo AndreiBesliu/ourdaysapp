@@ -82,9 +82,9 @@ describe('which events end up in front of the model', () => {
     expect(lines).toContain('- Trip on 2026-09-15');
   });
 
-  it('drops a document that was only fetched because the query could not be scoped', () => {
-    // The recurring-parent query is not scoped by group — the composite index for that is
-    // refused on live. Widening a query for an indexing reason must not widen the ANSWER.
+  it('drops a document of another group, should a query ever bring one', () => {
+    // Every read is the group's own since 16.10.2026 (digestRead.ts); until then the recurring-parent
+    // one was not, for want of an index. Widening a query again must not widen the ANSWER.
     const foreign = ev({ id: 'x', title: 'Not ours', groupId: 'group-2', date: day('2026-09-20') });
     const mine = ev({ id: 'y', title: 'Ours', date: day('2026-09-20') });
     const { lines } = digestEventLines([foreign, mine], G, w);

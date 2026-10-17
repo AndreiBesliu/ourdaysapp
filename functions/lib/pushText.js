@@ -10,8 +10,9 @@
 // long message would have pruned the push tokens of everybody in the group at once. Cut to the
 // bell's lengths, a title and a body are at most 2,100 bytes of UTF-8 together.
 //
-// A cut must not split a character. Half an emoji (a lone surrogate) has no UTF-8 encoding, and
-// event titles already arrive here cut at 120 by the reminders, with no such care.
+// A cut must not split a character. Half an emoji (a lone surrogate) has no UTF-8 encoding. Event
+// titles arrive here cut at 120 by the reminders, on whole characters since 17.10.2026 (remindersCore's
+// titleOf, with `wellFormed` below); a title from anywhere else may still hold half of one.
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PUSH_NAME_MAX = void 0;
 exports.wellFormed = wellFormed;

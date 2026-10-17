@@ -17,6 +17,7 @@
 
 import type { EventDoc } from "./recurrenceServer";
 import { dayPlus, displayTime, isValidDayOffset, isValidZone, startInstant, zoneOffsetMs } from "./eventTime";
+import { wellFormed } from "./pushText";
 
 /**
  * Every field the reminder is computed from: `expandInWindow` (the series, its exceptions and
@@ -43,6 +44,14 @@ const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** A copy that holds no reference into `s` (a slice of a megabyte keeps the megabyte alive in V8). */
 const flat = (s: string): string => Array.from(s).join("");
+/**
+ * The first TITLE_CHARS UTF-16 units of a title, never half a character (17.10.2026). `slice` cuts
+ * units, and an emoji across the cut left its first half alone, which is not text: the reminders
+ * repaired it on the way out (notify.ts), but the group digest put it in the prompt as it was, and
+ * the API refuses a body with an unpaired surrogate ("no low surrogate in string"). Cut first, then
+ * repair the cut: a padded title is never walked whole.
+ */
+const titleOf = (s: string): string => flat(wellFormed(s.slice(0, TITLE_CHARS)));
 const shortText = (v: unknown, max: number): string | undefined =>
   typeof v === "string" && v.length <= max ? v : undefined;
 
@@ -119,7 +128,7 @@ export function compactEvent(
   const single = shortText(raw.assigneeId, MAX_ID);
   if (single !== undefined) out.assigneeId = single;
 
-  if (typeof raw.title === "string") out.title = flat(raw.title.slice(0, TITLE_CHARS));
+  if (typeof raw.title === "string") out.title = titleOf(raw.title);
   return out;
 }
 
@@ -254,7 +263,7 @@ export function dueIn(
       eventId: ev.id,
       ownerId,
       day: occ.day,
-      title: (typeof ev.title === "string" ? ev.title : "").slice(0, 120),
+      title: titleOf(typeof ev.title === "string" ? ev.title : ""),
       at,
       zone,
       recipients,

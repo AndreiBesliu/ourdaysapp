@@ -936,8 +936,9 @@ export const generateGroupDigest = onCall(AI_CALLABLE_OPTS, async (request) => {
       // "(No upcoming events)" would read as a calendar with nothing on it.
       upcomingEvents += "(Upcoming events unavailable)\n";
     } else {
-      const read = await readDigestEvents(db, groupId, eventWindow);
-      const selection = digestEventLines(read.docs, groupId, eventWindow);
+      // The caller's own digest: nothing hidden from them gets a line (17.10.2026).
+      const read = await readDigestEvents(db, groupId, eventWindow, { viewer: callerUid });
+      const selection = digestEventLines(read.docs, groupId, eventWindow, undefined, read.hidden);
 
       eventsTruncated = selection.truncated || read.truncated;
 

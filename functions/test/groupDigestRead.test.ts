@@ -9,7 +9,9 @@
 //   1. the group's series reach the digest whatever other accounts hold;
 //   2. no read brings a field the lines are not made from (a `pad` on every event), and a page of
 //      fields holds at most ten documents;
-//   3. everything still arrives across pages, and past either query's cap the digest says it is cut.
+//   3. everything still arrives across pages, and past either query's cap the digest says it is cut;
+//   4. what is dated before today cannot crowd the days the digest is about out of its read: a member's
+//      past single-day events, which are no line, used to fill the dated read's cap first (17.10.2026).
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as admin from 'firebase-admin';
@@ -205,6 +207,21 @@ describe('the group digest reads its own group', () => {
     await asAlice();
     expect(eventLines(prompts[0])).toEqual([`- ${'T'.repeat(120)} on ${dayFrom(1)}`]);
   });
+
+  it('a title cut through an emoji loses the whole emoji, never half of it', async () => {
+    // The cut is at 120 UTF-16 units. An emoji across it left its first half alone (17.10.2026): the SDK
+    // sends that as the escape `\ud83c`, and the API refuses such a body ("no low surrogate in string"),
+    // so the digest failed for every member, each attempt costing the caller a unit.
+    const title = `${'x'.repeat(119)}\u{1F382} party`;
+    await writeAll([
+      [`groups/${G}`, { name: 'Family', ownerId: ALICE, members: [ALICE, BOB] }],
+      ['events/cake', { ownerId: BOB, groupId: G, title, date: at(dayFrom(1)) }],
+    ]);
+    const prompts = stubModel();
+    await asAlice();
+    expect(prompts[0]).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
+    expect(eventLines(prompts[0])).toEqual([`- ${'x'.repeat(119)} on ${dayFrom(1)}`]);
+  });
 });
 
 describe('past a cap, the digest says it is cut', () => {
@@ -255,6 +272,21 @@ describe('past a cap, the digest says it is cut', () => {
     expect(r).toEqual({ digest: 'The digest.', truncated: false });
     expect(eventLines(prompts[0])).toEqual([]);
     expect(reads.fieldPages).toBe(0);
+  });
+
+  it('what is dated before today cannot crowd out the days asked about, at the look-back\'s cap or past it', async () => {
+    const group: [string, Record<string, unknown>] = [`groups/${G}`, { name: 'Family', ownerId: ALICE, members: [ALICE, BOB] }];
+    // A member's single-day events, each on one of the thirty days before today: by date they come
+    // before the days the digest is about, and none of them is a line. Any member may write them.
+    const past = (id: string, i: number): [string, Record<string, unknown>] =>
+      [`events/${id}`, { ownerId: BOB, groupId: G, title: id, date: at(dayFrom(-1 - (i % 30))) }];
+    const soon = ids('soon', SOON.length).map((id, i): [string, Record<string, unknown>] =>
+      [`events/${id}`, { ownerId: ALICE, groupId: G, title: id, date: at(dayFrom(SOON[i])) }]);
+    const lines = ids('soon', SOON.length).map((id, i) => `- ${id} on ${dayFrom(SOON[i])}`);
+    await writeAll([group, ...ids('past', EVENT_SCAN).map(past), ...soon]);
+    expect(await digestNow()).toEqual({ r: { digest: 'The digest.', truncated: false }, lines });
+    await writeAll([past('past-one-more', 0)]);
+    expect(await digestNow()).toEqual({ r: { digest: 'The digest.', truncated: true }, lines });
   });
 
   it('exactly a cap is the whole of it; one more is cut, and the cap is kept (both reads, across pages)', async () => {

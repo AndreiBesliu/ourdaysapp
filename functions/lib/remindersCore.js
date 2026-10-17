@@ -22,6 +22,7 @@ exports.bodyFor = bodyFor;
 exports.dueIn = dueIn;
 exports.sendOrder = sendOrder;
 const eventTime_1 = require("./eventTime");
+const pushText_1 = require("./pushText");
 /**
  * Every field the reminder is computed from: `expandInWindow` (the series, its exceptions and
  * overrides, the span) and `dueIn` (the lead, the clock, the zone, who to tell, the title). The job
@@ -45,6 +46,14 @@ const TITLE_CHARS = 120;
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 /** A copy that holds no reference into `s` (a slice of a megabyte keeps the megabyte alive in V8). */
 const flat = (s) => Array.from(s).join("");
+/**
+ * The first TITLE_CHARS UTF-16 units of a title, never half a character (17.10.2026). `slice` cuts
+ * units, and an emoji across the cut left its first half alone, which is not text: the reminders
+ * repaired it on the way out (notify.ts), but the group digest put it in the prompt as it was, and
+ * the API refuses a body with an unpaired surrogate ("no low surrogate in string"). Cut first, then
+ * repair the cut: a padded title is never walked whole.
+ */
+const titleOf = (s) => flat((0, pushText_1.wellFormed)(s.slice(0, TITLE_CHARS)));
 const shortText = (v, max) => typeof v === "string" && v.length <= max ? v : undefined;
 /**
  * An event reduced, as it is read, to what the reminder is computed from, each part bounded.
@@ -123,7 +132,7 @@ function compactEvent(id, raw, fromDay, toDay) {
     if (single !== undefined)
         out.assigneeId = single;
     if (typeof raw.title === "string")
-        out.title = flat(raw.title.slice(0, TITLE_CHARS));
+        out.title = titleOf(raw.title);
     return out;
 }
 /**
@@ -230,7 +239,7 @@ function dueIn(occurrences, ownerZones, from, to) {
             continue;
         out.push(Object.assign({ 
             // Per OCCURRENCE, not per event: a weekly series has to remind every week.
-            key: `${ev.id}__${occ.day}`, eventId: ev.id, ownerId, day: occ.day, title: (typeof ev.title === "string" ? ev.title : "").slice(0, 120), at,
+            key: `${ev.id}__${occ.day}`, eventId: ev.id, ownerId, day: occ.day, title: titleOf(typeof ev.title === "string" ? ev.title : ""), at,
             zone,
             recipients }, bodyFor(occ.day, at, zone, hasClock ? (((_a = (0, eventTime_1.displayTime)({ date: `${occ.day}T00:00:00.000Z`, time: clock, timezone: zone }, zone)) === null || _a === void 0 ? void 0 : _a.text) || clock) : null)));
     }

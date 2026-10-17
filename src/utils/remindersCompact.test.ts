@@ -112,6 +112,18 @@ describe('whatever an event holds, the copy is small', () => {
     expect(c.title).toBe('x'.repeat(120));
   });
 
+  it('a title is cut on whole characters: an emoji across the cut is left out whole, in the copy and in the reminder', () => {
+    // Half an emoji is not text: the digest sent it to the model, and the API refuses it (17.10.2026).
+    const cake = '\u{1F382}';
+    const across = { id: 'e', ownerId: OWNER, date: '2026-07-15T00:00:00.000Z', time: '10:00', timezone: 'UTC', reminderMinutes: 0, title: `${'x'.repeat(119)}${cake} party` };
+    expect(compactEvent('e', across, FROM_DAY, TO_DAY)!.title).toBe('x'.repeat(119));
+    // An emoji that ends at the cut is kept.
+    expect(compactEvent('e', { ...across, title: `${'x'.repeat(118)}${cake} party` }, FROM_DAY, TO_DAY)!.title).toBe(`${'x'.repeat(118)}${cake}`);
+    const fromCopy = reminders(compactAll([across]));
+    expect(fromCopy.map((d) => d.title)).toEqual(['x'.repeat(119)]);
+    expect(reminders([across])).toEqual(fromCopy);
+  });
+
   it('exceptions: only days that can suppress an occurrence of the window, each once', () => {
     const c = compactEvent('e', {
       date: '2026-07-01T00:00:00.000Z', endDayOffset: 2,

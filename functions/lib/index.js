@@ -869,8 +869,9 @@ exports.generateGroupDigest = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (reque
             upcomingEvents += "(Upcoming events unavailable)\n";
         }
         else {
-            const read = await (0, digestRead_1.readDigestEvents)(db, groupId, eventWindow);
-            const selection = (0, digestEvents_1.digestEventLines)(read.docs, groupId, eventWindow);
+            // The caller's own digest: nothing hidden from them gets a line (17.10.2026).
+            const read = await (0, digestRead_1.readDigestEvents)(db, groupId, eventWindow, { viewer: callerUid });
+            const selection = (0, digestEvents_1.digestEventLines)(read.docs, groupId, eventWindow, undefined, read.hidden);
             eventsTruncated = selection.truncated || read.truncated;
             upcomingEvents += selection.lines.length === 0
                 ? "(No upcoming events)\n"
