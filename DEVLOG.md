@@ -13538,3 +13538,12 @@ Fiecare gol are acum testul lui, verde pe cod și roșu pe mutant: 21 de fișier
 `check-bundle`, `test:tz`, funcții pe emulator (383), reguli (720, niciuna peste 1000 de expresii).
 
 **Nepublicat.** Ordinea e în intrarea de mai sus.
+
+## 2026-10-17 · Publicarea pe live a celor de la 12 la 17.10 (Task Started)
+
+**Prompt (Andrei):** „publica pe live in ordinea din predare: regulile, firestore:indexes (Nu la stergeri),
+functiile, apoi hosting-ul”.
+**Model:** Claude Opus 5.5.
+
+Pleacă `6e48a66`, `bc2dc7d`, `106729a`, `4602596`, `8797ed7`, `f1052b7`, `f3706d2`, `5f8f0c2`, `14d2d7d`, `c7a303d`,
+`c60463e` și testele, în ordine: regulile, indexurile (fără ștergeri), funcțiile, hosting-ul.
