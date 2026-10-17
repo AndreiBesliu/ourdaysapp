@@ -13426,3 +13426,81 @@ memento-urilor), `4602596` (ștergerile), `8797ed7` (rezumatul AI) și `f1052b7`
 6. igiena testelor.
 
 La final, mutații pe tot ce e nou. Fără deploy.
+
+## 2026-10-17 · Recenzia cu agenți a celor patru commit-uri din 13–16.10, și reparațiile (Task Completed)
+
+**Prompt (Andrei):** „usageul saptamanal se reseteaza 50 min, deci poti sa lucrezi la maximum efort”, apoi
+„continua” (de trei ori).
+**Model:** Claude Opus 5.5.
+
+**Recenzia** (detalii în intrarea „Task Started” de azi): 10 lentile, apoi 13 verificatori, pe un instantaneu
+cu sloturi de emulator separate. 42 de constatări, aproape toate confirmate. Reparațiile au intrat în cinci
+commit-uri, fiecare cu testele lui, roșii pe codul vechi.
+
+**1. `f3706d2` · Citirile în bloc: o listă umflată nu le mai oprește.**
+- Zece documente pe pagină nu înseamnă „10 MiB”: o listă de sute de mii de `null`, acceptată de reguli, se
+  decodează la zeci de MB. Un singur cont putea opri memento-urile tuturor (evenimentele lui personale), iar un
+  membru putea face de neșters contul altui membru, sau putea face să pice rezumatul grupului.
+- **În reguli,** tot ce aduce o citire în bloc e scurt și fără hărți:
+  - excepțiile, cel mult 500 de valori simple;
+  - cele două părți ale regulii, text; durata, număr; asignații, cel mult 200;
+  - la crearea unui eveniment personal se verifică tipul exact al acestor câmpuri;
+  - în `users`: fusul, limba și tokenurile de push;
+  - un grup se creează cu un singur membru și nu mai poate fi umplut cu copii.
+- **Limita de 1000 de expresii a fost măsurată.** O clauză pentru `hiddenFrom` n-a încăput: 194 de refuzuri
+  peste limită. De aceea nu există.
+- **Pe server:** `notify` citește doar limba și tokenurile, iar `createEventOverride` scrie fiecare asignat o
+  singură dată.
+- APK-ul trece (`apk-compat`).
+
+**2. `5f8f0c2` · Ștergerea unui cont continuă de unde a rămas, în timp.**
+- Lista de fișiere păstrate își ține locul în `accountDeletions/{uid}.keep`. Numește doar fișiere care
+  există, cu chei de 16 caractere. Sare peste grupuri când nimic de acolo nu poate păstra un fișier.
+- Pasul RSVP golește doar evenimentele cu răspunsul persoanei.
+- Fiecare buclă se oprește la 420 s și cere reluarea, în loc să fie omorâtă la 540 s fără nicio urmă.
+- Linkurile persoanei se revocă câte 400 într-un lot. Linkurile deschise ale unui grup se golesc prin
+  referințe, un lot pe pagină.
+- **Ștergerea are 2 GiB și pagini de 10.** Prima variantă, de dimineață, citea câte un eveniment pe pagină
+  cu 512 MiB și înmulțea cu zece drumurile dus-întors.
+- Pe live, doar citire: ambele forme noi merg fără index; 14 răspunsuri, toate da/poate/nu; un singur link.
+
+**3. `14d2d7d` · Rezumatul AI.**
+- **Confidențialitate, preexistent:** rezumatul celui care cere arăta evenimente ascunse de el. Acum aplică
+  regula calendarului (`maySee`, `isPendingInvite`), pe fiecare apariție, după expandare și înainte de tăiere.
+  `hiddenFrom` nu se citește deloc: o interogare doar pe referințe (`array-contains`, fără index, măsurat pe
+  live) spune ce e ascuns. Peste plafonul ei (5000), apare doar ce e al celui care cere sau îl numește.
+- **Tăierea titlului la 120 de unități** prin mijlocul unui emoji lăsa jumătate de caracter, pe care API-ul îl
+  refuză. Acum se taie pe caractere întregi (`titleOf`).
+- **Zilele cerute se citesc separat de privirea înapoi**, așa că evenimentele trecute nu le mai pot împinge
+  afară.
+
+**4. `c7a303d` · Trimiterea memento-urilor.**
+- O revendicare e judecată după începutul rulării ei (`runAt`): e preluată după 180 s, adică după timeout-ul
+  de 150 s.
+- Jetonul `claimId` recunoaște reîncercarea SDK-ului a propriei scrieri.
+- Rândurile deja trimise se citesc înainte de ordonare, doar starea, câte 100 pe apel, și nu mai consumă
+  bugetul.
+- Ordinea e „cel mai vechi întâi” în tura fiecărui proprietar.
+- Rândurile de notificare au id-ul derivat din memento, deci o retrimitere le rescrie.
+- `dropped` e descris drept limită superioară.
+
+**5. `c60463e` · Seriile și igiena testelor.**
+- Câte un interval pe frecvență, fiecare cu propria acoperire (`SERIES_REACH_DAYS`: 31, 365, 367, 1828 de
+  zile), legată prin test de orizontul calendarului.
+- Calea de rezervă la index lipsă continuă aceeași citire, cu același buget și același plafon.
+- Testele care își calculează singure ziua așteaptă să treacă granița zilei (`clockEdges.ts`).
+- Întrebarea SDK-ului către serverul de metadate Google e oprită în rulările pe emulator.
+
+**Infirmat:** `firestore-2` (un cursor pe o dată de peste 1500 de octeți ar repeta o pagină). Contractul
+Firestore compară cursorii trunchiați, exact ca indexul.
+
+**Porți, înainte de mutații:** `tsc -b`, `lint-gate`, `npm test` (2661), funcții pe emulator (354), reguli
+(692). `functions/lib` reconstruit.
+
+**Mutațiile pe tot ce e nou** rulează după această intrare. Rezultatul lor intră în intrarea următoare.
+
+**Nepublicat.** Ordinea la publicare:
+1. regulile (sunt compatibile înapoi: refuză doar scrieri abuzive noi);
+2. `firestore:indexes`, cu „Nu” la ștergerea celor care există doar pe live;
+3. funcțiile;
+4. hosting-ul, pentru `bc2dc7d`.

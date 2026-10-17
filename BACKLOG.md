@@ -81,10 +81,10 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     pagini mici (10 evenimente), doar cu câmpurile calculului, fiecare eveniment redus la o formă mărginită.
     Interogarea recurentelor nu mai citește regulile de gunoi. Peste plafon sau timp, rularea e roșie. Ce a
     rămas:
-    - **Recenzia cu agenți a trimiterii (13.10) e restantă:** bugetul săptămânal era la 84%, iar Andrei hotărâse
-      pentru CNCVS „fără agenți până la 17.10”. Trimiterea are teste și mutații, dar nu recenzie. De făcut după
-      resetare: ordinea pe rând, ultima șansă, preluarea revendicărilor vechi (un memento trimis de două ori
-      când marcajul „trimis” eșuează).
+    - **Recenzia cu agenți a trimiterii: făcută pe 17.10,** reparată în `c7a303d`: revendicarea judecată după
+      rularea ei, jetonul pentru reîncercările SDK-ului, cele deja trimise citite întâi (DEVLOG, 17.10).
+      Rămâne știut: un memento trimis de două ori când marcajul „trimis” eșuează după livrare (clopoțelul se
+      rescrie acum, push-ul pleacă a doua oară).
     - **Aglomerarea e acum vizibilă, nu imposibilă:** peste 5000 de evenimente pe interogare (ale tuturor
       conturilor la un loc) sau peste 15 s de citire pe interogare, rularea e roșie la fiecare 5 minute, iar
       memento-urile de după tăietură se pierd. Câteva zeci de evenimente umflate ajung la limita de timp. Închiderea cere citirea
@@ -99,7 +99,8 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
         index” în rândul ei din Health (nu e roșie, nu se pierde nimic). Dar până e gata indexul, se citește ca
         înainte.
       - **La `firestore:indexes` se răspunde „Nu”** la ștergerea indexurilor care există doar pe live (CLAUDE.md).
-      - **Recenzia cu agenți e restantă**, după 17.10.
+      - **Recenzia cu agenți: făcută pe 17.10,** reparată în `c60463e` (un interval pe frecvență, calea de
+        rezervă în aceeași citire).
     - **Evenimentele personale nu au niciun câmp verificat de reguli:** câmpurile citite de memento-uri
       (`recurrenceExceptions`, `assigneeIds`, `title`) pot fi umflate. Paginile de 10 țin memoria, dar câteva
       zeci de astfel de evenimente consumă bugetul de timp. Remediul: plafoane în reguli și pentru crearea
@@ -112,8 +113,8 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     - **Tranzacțiile citesc întreg câte un document** (grupul la predare, lista unui prieten): unul o dată,
       lăsat imediat, iar documentul grupului e limitat de reguli din 08.10.
     - **Listarea fișierelor persoanei** (`deleteFilesExcept`): în dosarele ei scrie doar ea.
-    - **Recenzia cu agenți e restantă** (fără agenți până la resetarea din 17.10): are teste și mutații, nu și
-      recenzie. De făcut după resetare, împreună cu cea a trimiterii memento-urilor.
+    - **Recenzia cu agenți: făcută pe 17.10,** reparată în `f3706d2` (listele umflate) și `5f8f0c2` (ștergerea
+      reluabilă, 2 GiB, linkurile în loturi).
   - **Rezumatul AI al grupului (`generateGroupDigest`): reparat pe 16.10** (`digestRead.ts`). Ambele interogări
     sunt acum ale grupului: seriile prin `groupId ==` și `recurrenceRule.frequency in`, nu în toată baza. Se citesc
     pe pagini de 10, doar cu câmpurile din care se fac liniile (`DIGEST_FIELDS`), și fiecare eveniment e redus pe
@@ -121,7 +122,11 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     index nou, deci nu e nevoie de o publicare de indexuri înaintea funcțiilor. Ce a rămas, deliberat:
     - **Mesajele, profilurile expeditorilor și numele grupului** se citesc întregi: regulile le mărginesc (text
       ≤ 4000, nume ≤ 60, chei fixe).
-    - **Recenzia cu agenți e restantă**, după resetarea din 17.10.
+    - **Recenzia cu agenți: făcută pe 17.10,** reparată în `14d2d7d` (evenimentele ascunse de cel care cere,
+      preexistent; emoji-urile tăiate; zilele cerute citite întâi).
+    - **Știut, mic:** o grămadă de evenimente trecute ale unui membru poate tot umple privirea înapoi (300) și
+      ascunde o călătorie începută mai devreme; seriile pot fi înghesuite la fel (500). Rezumatul spune atunci
+      că e tăiat.
   - **Statisticile din Admin (10.10, parțial):** citesc acum doar câmpurile numărate, deci descrierile,
     checklist-urile, tablele de joc și notele nu mai vin. Câmpurile numărate pot fi însă umflate și ele: un
     eveniment personal nu are niciun câmp verificat, iar categoria unui card nu are plafon. Doar adminul vede.
