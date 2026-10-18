@@ -307,7 +307,8 @@ export function sendOrder(
   slackMs: number,
 ): { order: Due[]; lastChance: Set<string> } {
   const lastChance = new Set(due.filter((d) => d.at <= now + everyMs + slackMs - windowMs).map((d) => d.key));
-  // Oldest first. The sort is stable: equal instants keep the order they were read in.
+  // Oldest first. The sort is stable: equal instants keep the order they came in, which is
+  // `expandInWindow`'s (by day, then by document; 18.10.2026), not the order they were read in.
   const byAt = [...due].sort((x, y) => x.at - y.at);
   const roundRobin = (items: Due[]): Due[] => {
     const byOwner = new Map<string, Due[]>();

@@ -8,6 +8,7 @@
 import { afterEach, beforeAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import * as admin from 'firebase-admin';
 import type { CallableRequest } from 'firebase-functions/v2/https';
+import { awayFromEdge } from './clockEdges';
 
 const PROJECT = process.env.GCLOUD_PROJECT || '';
 const FS = process.env.FIRESTORE_EMULATOR_HOST || '';
@@ -32,6 +33,9 @@ beforeAll(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 beforeEach(async () => {
+  // The quota test writes its own today and the quota reads the clock again: not across midnight, where
+  // the count starts over and the report goes through (review of 18.10.2026).
+  await awayFromEdge(0);
   expect((await fetch(`http://${FS}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: 'DELETE' })).ok).toBe(true);
 });
 

@@ -13566,3 +13566,58 @@ Publicat cu `--project live --non-interactive`, de pe un arbore curat (`5aab899`
 De urmărit în Admin → Health în zilele următoare:
 - rândul memento-urilor;
 - `REMINDERS_RUN` (`datedMs`, `seriesMs`): timpul real al unei pagini între us-central1 și europe-central2.
+
+## 2026-10-18 · CI roșu pe `e467aaa`: ordinea unei zile din rezumat depindea de citirea care sosea prima (Task Started)
+
+**Prompt (Andrei):** o captură de ecran, fără text, cu e-mailul GitHub
+„[AndreiBesliu/ourdaysapp] Run failed: CI - main (e467aaa)”.
+**Model:** Claude Opus 5.5.
+
+`e467aaa` atinge doar `OWNER_VERIFY.md`. Pasul „Rules tests” a picat la un singur test:
+`digestReadEquivalence` > „and the callable puts the same (first twenty) in front of the model”. Al
+douăzecilea rând era „legacy edit on 2026-10-23” în loc de „daily-weekdays-begun-5-days-ago on 2026-10-23”.
+Local, același test a trecut, dar cu `ORDER identical=false`.
+
+## 2026-10-18 · CI roșu pe `e467aaa`: ordinea unei zile din rezumat depindea de citirea care sosea prima (Task Completed)
+
+**Prompt (Andrei):** captura de mai sus.
+**Model:** Claude Opus 5.5.
+
+**Cauza:**
+- `expandInWindow` ordona aparițiile doar după zi (sortare stabilă), așa că două evenimente din aceeași zi
+  rămâneau în ordinea în care au intrat.
+- Rezumatul citește cu trei interogări care rulează în același timp și umplu aceeași hartă, deci ordinea
+  aceea se schimbă de la un apel la altul.
+- Tăierea la 20 de rânduri păstra uneori un eveniment din ziua de la margine, alteori pe celălalt. Pe live,
+  două rezumate cerute la rând puteau lista alt eveniment din ultima zi.
+
+**Reparația:** ordinea e acum după zi, apoi după id-ul documentului. E totală: un document are cel mult o
+apariție pe zi, iar fiecare apelant îl dă o singură dată.
+- Testul nou `src/utils/digestTieOrder.test.ts` încearcă toate ordinile de citire pentru patru evenimente
+  în aceeași zi, cu tăierea căzută la egalitate. E roșu pe codul vechi (3 din 3).
+- `digestReadEquivalence` compară acum ordinea exactă, nu doar mulțimea.
+
+**Verificarea cu agenți** (ultracode; 8 agenți, 1,35 M tokeni măsurați, față de 300–500k anunțați):
+- **Reparația ține.** Niciun test și niciun consumator nu se baza pe ordinea veche. În memento-uri,
+  egalitățile aveau deja ordinea id-ului.
+- **Măsurat pe 400 de zile:** pe codul vechi, cele 20 de rânduri depindeau de ordinea de citire în toate cele
+  400; în 343 dintre ele se schimbau chiar rândurile păstrate. Pe codul nou, în niciuna.
+- **Două teste reale care pot pica la miezul nopții UTC**, fără gardă, primesc acum `awayFromEdge`:
+  - `aiLedgerSettle`: totalul pe model e scris sub ziua registrului, iar testul își calculează ziua
+    după vreo nouă drumuri dus-întors;
+  - `errorLogExpiry`, cota zilnică: contorul o ia de la zero după miezul nopții.
+- **Infirmate:** trei teste suspectate de dependență de viteză sau de cronometre (`uploadFile`,
+  `remindersStale`, `remindersRead`), cu marje măsurate pe 8 rulări CI.
+- Comentarii corectate în `recurrenceServer.ts` și `remindersCore.ts` (`sendOrder`).
+
+**Efect vizibil:** în previzualizarea Period Log, evenimentele unei zile sunt acum ordonate după id, nu după
+interogare (înainte, cele proprii erau primele). Niciun test nu fixa ordinea aceea.
+
+**Rămas, ca sarcină separată:** pe server, cinci locuri construiesc `{ id: d.id, ...data }`, deci un câmp
+`id` scris în document înlocuiește id-ul documentului: `aiSources.ts`, `errorDigest.ts`, `games.ts` și
+`index.ts` de două ori. `documentIdFirst.test.ts` scanează doar `src/`.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2672), `test:tz` (46), build, split guard, offline guard, suita
+pe emulator (1103). `functions/lib` reconstruit.
+
+**Nepublicat.** Pe live, rezumatul păstrează ordinea veche până la următoarea publicare a funcțiilor.

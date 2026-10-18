@@ -12,6 +12,7 @@
 import { beforeAll, beforeEach, describe, it, expect } from 'vitest';
 import * as admin from 'firebase-admin';
 import { withLedger, usageOf, unfinishedReason, priceUsd } from '../src/aiLedger';
+import { awayFromEdge } from './clockEdges';
 
 const PROJECT = process.env.GCLOUD_PROJECT || '';
 const HOST = process.env.FIRESTORE_EMULATOR_HOST || '';
@@ -29,6 +30,9 @@ beforeAll(() => {
 });
 
 beforeEach(async () => {
+  // The rollup is written under the ledger's own today(), and DAY() reads the clock again after some nine
+  // round trips: not across midnight (review of 18.10.2026).
+  await awayFromEdge(0);
   const res = await fetch(`http://${HOST}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: 'DELETE' });
   expect(res.ok).toBe(true);
 });

@@ -169,9 +169,9 @@ describe('old and new reads give the digest the same lines', () => {
     console.log(`OLD (${old.lines.length})\n${old.lines.join('\n')}`);
     console.log(`NEW (${now.lines.length})\n${now.lines.join('\n')}`);
     expect(old.lines.length).toBeGreaterThan(15);
-    expect([...now.lines].sort()).toEqual([...old.lines].sort());
-    // Same-day ties come out in the order the two concurrent reads happened to fill the Map: logged, not pinned.
-    console.log(`ORDER identical=${JSON.stringify(now.lines) === JSON.stringify(old.lines)}`);
+    // In the same ORDER: a day's events by document, not by which concurrent read returned first. Until
+    // 18.10.2026 that order was the arrival order, and the callable's cut below failed on CI for it.
+    expect(now.lines).toEqual(old.lines);
     expect(read.truncated).toBe(false);
   });
 
@@ -181,7 +181,7 @@ describe('old and new reads give the digest the same lines', () => {
     const r = await asAlice();
     const old = digestEventLines(await oldDocs(w), G, w);
     console.log(`CALLABLE ${JSON.stringify(r)} lines=${eventLines(prompts[0]).length} oldTruncated=${old.truncated}`);
-    expect(new Set(eventLines(prompts[0]))).toEqual(new Set(old.lines));
+    expect(eventLines(prompts[0])).toEqual(old.lines);
   });
 
   it('page size does not change the answer (1, 3, 7), with documents read by both queries', async () => {
