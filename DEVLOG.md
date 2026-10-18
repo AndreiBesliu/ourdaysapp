@@ -13631,3 +13631,20 @@ De la ultima publicare (`5aab899`), singurul lucru publicabil e `cf7c59d`: `expa
 evenimentele unei zile după document, iar comentariul din `sendOrder` s-a schimbat. Regulile, indexurile,
 Storage-ul și sursele aplicației sunt neschimbate; în `src/` e doar un test nou. Deci se publică funcțiile,
 iar la hosting doar se verifică dacă pachetul construit acum e cel servit.
+
+## 2026-10-18 · Publicarea pe live a ordinii zilei din rezumat (Task Completed)
+
+**Prompt (Andrei):** „Du totul pe live”.
+**Model:** Claude Opus 5.5.
+
+Publicat cu `--project live --non-interactive`, de pe un arbore curat (`b2c2ebe`):
+- **Funcțiile:** 55 actualizate, niciuna creată, niciun eșec; garda de mediu a trecut. Publicarea s-a
+  încheiat la 08:18 UTC.
+- **Hosting-ul:** nepublicat, pentru că nu avea ce să schimbe. Live-ul servește deja exact pachetul
+  construit din sursa de acum (`index-iRdNJZrV.js`, același hash). Regulile, indexurile și Storage-ul
+  sunt neschimbate față de `5aab899`.
+
+**După publicare** (cheia de citire, doar valori booleene și numere): jobul memento-urilor a rulat la
+08:20 UTC, `ok`, fără eșecuri la rând și fără „series read without their index”.
+
+Rezumatul AI și previzualizarea Period Log ordonează acum evenimentele unei zile după document.
