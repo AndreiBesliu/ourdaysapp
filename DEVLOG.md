@@ -13621,3 +13621,13 @@ interogare (înainte, cele proprii erau primele). Niciun test nu fixa ordinea ac
 pe emulator (1103). `functions/lib` reconstruit.
 
 **Nepublicat.** Pe live, rezumatul păstrează ordinea veche până la următoarea publicare a funcțiilor.
+
+## 2026-10-18 · Publicarea pe live a ordinii zilei din rezumat (Task Started)
+
+**Prompt (Andrei):** „Du totul pe live”.
+**Model:** Claude Opus 5.5.
+
+De la ultima publicare (`5aab899`), singurul lucru publicabil e `cf7c59d`: `expandInWindow` ordonează
+evenimentele unei zile după document, iar comentariul din `sendOrder` s-a schimbat. Regulile, indexurile,
+Storage-ul și sursele aplicației sunt neschimbate; în `src/` e doar un test nou. Deci se publică funcțiile,
+iar la hosting doar se verifică dacă pachetul construit acum e cel servit.
