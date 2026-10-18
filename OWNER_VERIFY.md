@@ -340,11 +340,11 @@ fiecărui grup, iar regula refuză crearea unui id de pe listă. În aplicație 
 
 - [x] **Toți cei trei pași au plecat:** funcțiile și regulile pe 11.10, completarea pe 12.10, cu cheia ta
       (`listedNow` 5, nimic refuzat, niciun grup recreat). Pe live: 5 grupuri, toate pe listă.
-- [ ] **Șterge cheia de scriere, în două locuri** (o cheie de scriere uitată pe disc dă acces la toată baza):
-      1. fișierul `C:\Users\besli\Downloads\our-days-2a939-firebase-adminsdk-fbsvc-894e837a5e.json`, și din Recycle Bin;
-      2. cheia însăși, în [Google Cloud → Service accounts](https://console.cloud.google.com/iam-admin/serviceaccounts?project=our-days-2a939):
-         contul `firebase-adminsdk-fbsvc`, fila Keys, cheia care începe cu `894e837a5e` → Delete.
-      - **Cum arată bine:** în fila Keys nu mai e cheia `894e837a5e`. Cheia mea de citire rămâne.
+- [x] **Cheia de scriere `894e837a5e` e ștearsă, în ambele locuri** (18.10): în Google Cloud, contul
+      `firebase-adminsdk-fbsvc` nu mai are nicio cheie („No rows to display”), iar fișierul din Downloads nu mai
+      e nici pe disc, nici în Recycle Bin (măsurat). Cheia mea de citire e pe alt cont și merge în continuare
+      (5 grupuri citite pe live după ștergere). O completare viitoare cu `--apply` cere o cheie de scriere nouă,
+      ștearsă la fel după folosire.
 
 ---
 
