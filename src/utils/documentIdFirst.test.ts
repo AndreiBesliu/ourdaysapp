@@ -17,8 +17,12 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
-/** `{ id: <x>.id, ...<anything>` — the document's data, or a copy of it, spread over the id taken from it. */
-const ID_THEN_SPREAD = /\{\s*id:\s*[\w$.]+\.id\s*,\s*\.\.\./g;
+/**
+ * `{ id: <x>.id, ...<anything>` — the document's data, or a copy of it, spread over the id taken from it —
+ * and the shorthand `{ id, ...<anything>` where `id` names the document (29.10.2026: four profile and user
+ * readers on the client). Not a destructuring (`const { id, ...rest } = x`), which takes the id OFF.
+ */
+const ID_THEN_SPREAD = /(?<!(?:const|let|var)\s+)\{\s*id(?:\s*:\s*[\w$.]+\.id)?\s*,\s*\.\.\./g;
 
 function sources(dir: string, out: string[] = []): string[] {
   for (const f of readdirSync(dir)) {
@@ -44,6 +48,13 @@ describe('the id is the document’s', () => {
     expect(hits('byId.set(doc.id, { id: doc.id, ...data });')).toBe(1);
     expect(hits('return { id: d.id, ...e, createdAt: e.createdAt?.toDate?.() || null };')).toBe(1);
     expect(hits('return {\n  id: d.id,\n  ...data,\n};')).toBe(1);
+    // The shorthand, where the id is the variable that named the document's path.
+    expect(hits('if (p.exists()) found[id] = { id, ...p.data() };')).toBe(1);
+    expect(hits('fetchedUsers.push({ id, ...profileDoc.data() });')).toBe(1);
+    expect(hits('found[id] = { ...p.data(), id };')).toBe(0);
+    // A destructuring that takes the id off is the opposite, and is not one.
+    expect(hits('const { id, ...eventData } = ev;')).toBe(0);
+    expect(hits('let {id,...rest} = x')).toBe(0);
     // The right order, and explicit fields, are not.
     expect(hits('({ ...d.data(), id: d.id })')).toBe(0);
     expect(hits('{ ...data, id: doc.id }')).toBe(0);

@@ -269,7 +269,7 @@ export default function Wallet() {
             // soon-to-be owner-only `users` collection).
             const profileDoc = await getDoc(doc(db, 'profiles', id));
             if (profileDoc.exists()) {
-              fetchedUsers.push({ id, ...profileDoc.data() });
+              fetchedUsers.push({ ...profileDoc.data(), id });
             }
           } catch (err) {
             reportError(err instanceof Error ? err.message : String(err), { context: 'Wallet.memberProfile' });

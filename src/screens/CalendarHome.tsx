@@ -141,7 +141,7 @@ export default function CalendarHome() {
       for (const id of missing) {
         try {
           const p = await getDoc(doc(db, 'profiles', id));
-          if (p.exists()) found[id] = { id, ...p.data() };
+          if (p.exists()) found[id] = { ...p.data(), id };
         } catch (err) {
           // One name we could not read stays "Member"; the next change of events asks again.
           askedNames.current.delete(id);
@@ -260,12 +260,12 @@ export default function CalendarHome() {
               // Own doc: read the full (owner-only) user doc — needed for birthday,
               // photoURL, etc.
               const userDoc = await getDoc(doc(db, 'users', id));
-              if (userDoc.exists()) map[id] = { id, ...userDoc.data() };
+              if (userDoc.exists()) map[id] = { ...userDoc.data(), id };
             } else {
               // Other members: read the public profile (name/photoURL/birthday) so
               // we don't depend on the (soon owner-only) users collection.
               const profileDoc = await getDoc(doc(db, 'profiles', id));
-              if (profileDoc.exists()) map[id] = { id, ...profileDoc.data() };
+              if (profileDoc.exists()) map[id] = { ...profileDoc.data(), id };
             }
           } catch (err) {
             // One member we could not read costs that member's avatar, not the whole screen.

@@ -103,6 +103,17 @@ export function normaliseEvent<T extends Record<string, any>>(raw: T): T & { tit
   // when the list is missing, and an empty list there took the assignee off on the next autosave.
   if (raw.hiddenFrom !== undefined) out.hiddenFrom = strings(raw.hiddenFrom);
   if (raw.assigneeIds !== undefined) out.assigneeIds = strings(raw.assigneeIds);
+  // Only `expandRecurringEvents` makes these, on the occurrences it mints in memory after this runs,
+  // and the app never stores them. A stored copy — any member of the group could write one, and the
+  // rules did not look — made a plain event pass for an occurrence of ANOTHER event: deleting it
+  // deleted that one (the owner's own delete, steered by somebody else), editing it overwrote that one,
+  // a tick or an answer went into an override of it (review of 29.10.2026). None on live that day.
+  // This is the only guard, on purpose: the rules do not refuse them, because ONE comparison more in
+  // the events update rule took every refused update (a changed owner, an override's key) over the
+  // ceiling of 1000 expressions (measured 29.10.2026). The installed APK has no code that reads them.
+  delete out.isRecurringInstance;
+  delete out.parentEventId;
+  delete out.recurrenceDate;
   return out as T & { title: string };
 }
 

@@ -173,9 +173,8 @@ export function expandInWindow(docs: readonly EventDoc[], fromDay: string, toDay
   // reads with queries that run at the same time, so its arrival order changes from one call to the next,
   // and it cuts at twenty: two events on the boundary day swapped places between calls, and between the old
   // and new reads (CI, 18.10.2026). A document has at most one occurrence a day and each caller passes it
-  // once, so the order is total wherever `id` is the document's own (the digest and reminders build it
-  // from `d.id`; aiSources.ts lets a stored field named `id` replace it, and its ties then keep their
-  // read order, which is fixed there).
+  // once, and every caller sets `id` last from the document's own (`{ ...data, id: d.id }`: the digest,
+  // the reminders, and aiSources.ts since 29.10.2026; documentIdFirst.test.ts), so the order is total.
   out.sort((a, b) =>
     a.day < b.day ? -1 : a.day > b.day ? 1 : a.source.id < b.source.id ? -1 : a.source.id > b.source.id ? 1 : 0);
   return out;

@@ -13692,3 +13692,56 @@ rulărilor mele. Ei trimit la `vitest`/`tsc`/`vite` din `node_modules` și la `f
 
 **Porți:** `tsc -b`, `lint-gate`, unit (2673), `test:tz` (46), build (cele două config-uri + `stamp-offline`),
 split guard, offline guard, emulator (1104). `functions/lib` reconstruit.
+
+## 2026-10-29 · Recenzia lui `3ae83a0`: marcajele de apariție stocate conduceau ștergerea spre alt eveniment (Task Started)
+
+**Prompt (Andrei):** „continua” (ultracode pornit).
+**Model:** Claude Opus 5.5.
+
+Înainte de publicare, o recenzie adversarială a lui `3ae83a0`: 2 agenți, apoi câte un verificator pentru
+fiecare constatare (9 agenți, 1,21 M tokeni măsurați, față de 300–500k anunțați).
+- **Partea despre schimbarea în sine:** ține; nicio schimbare de comportament, testele sunt valide.
+- **Partea care a căutat forme ratate a găsit o problemă reală, mai veche** (medie): un eveniment obișnuit pe
+  care cineva scrisese `isRecurringInstance`, `parentEventId` și `recurrenceDate` trecea drept apariție a
+  ALTUI eveniment.
+
+## 2026-10-29 · Recenzia lui `3ae83a0`: marcajele de apariție stocate conduceau ștergerea spre alt eveniment (Task Completed)
+
+**Prompt (Andrei):** „continua”.
+**Model:** Claude Opus 5.5.
+
+**Problema:**
+- Cele trei chei le pune doar `expandRecurringEvents`, în memorie, pe aparițiile unei serii. Aplicația nu
+  le stochează.
+- Regulile nu se uitau la ele, așa că orice membru al grupului le putea scrie pe un eveniment al grupului.
+- `normaliseEvent` le lăsa să treacă, iar un eveniment fără serie trece prin extindere neschimbat.
+- Ce urma, cu X un alt eveniment, ales de cel care a plantat cheile:
+  - **ștergerea:** owner-ul ștergea evenimentul plantat, iar la „toată seria” se ștergeau X și editările
+    lui. X nu putea fi șters de cel care a plantat, pentru că ștergerea e doar a owner-ului;
+  - **editarea:** formularul suprascria X la „toate” și crea un override al lui X la „doar aceasta”;
+  - **bifele, asignații și răspunsurile** din fereastra de detalii intrau într-un override al lui X.
+
+**Reparația:** `normaliseEvent` (`src/utils/eventDoc.ts`) aruncă cele trei chei. Orice eveniment citit trece
+pe acolo înaintea extinderii (calendarul și dialogul de părăsire a grupului). Seriile adevărate le primesc
+în continuare de la extindere. Testul nou din `eventDoc.test.ts` e roșu pe codul vechi.
+
+**Regulile nu le refuză. Am măsurat:** pe regulile de azi, refuzurile la actualizarea unui eveniment
+(schimbarea `ownerId`, `overrideOfParent`, `inviteeId`) stau sub plafonul de 1000 de expresii. Cu O SINGURĂ
+comparație în plus (`parentEventId` neschimbat), toate trec peste, oriunde ar sta clauza în regulă.
+- La un refuz se evaluează toată regula.
+- Riscul era ca și scrieri legitime să ajungă la plafon.
+- Garda rămâne doar în client: aplicația web aruncă marcajele la citire.
+- APK-ul instalat nu are deloc cod care să le citească: în bundle-ul din mai nu apare cuvântul
+  `isRecurringInstance`.
+
+**Măsurat pe live** (cheia de citire, doar numere): 0 din 34 de evenimente au vreuna din cele trei chei.
+
+**Tot din recenzie:**
+- **Forma scurtă `{ id, ...data }`:** scanerul `documentIdFirst` o prinde acum, fără destructurări. Patru
+  locuri au fost întoarse: `CalendarHome.tsx` de trei ori și `Wallet.tsx`. Regulile nu le lăsau accesibile
+  (profilurile admit doar trei chei; documentul propriu e doar al lui), dar rămân pe aceeași regulă.
+- **Comentariul din `recurrenceServer.ts`:** spunea încă că `aiSources` lasă un `id` stocat să înlocuiască
+  id-ul documentului; acum spune ce face codul.
+
+**Porți:** `tsc -b`, `lint-gate`, unit (2674), `test:tz` (46), build, split guard, offline guard, emulator (1104).
+`functions/lib` reconstruit.

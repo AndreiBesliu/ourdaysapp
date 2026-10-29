@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { eventImageSrc, normaliseEvent } from './eventDoc';
 import { eventFieldProblem } from './eventShape';
 import { expandRecurringEvents } from './recurrence';
+import { planEventWrite } from './eventWriteTarget';
 
 const MAP = { a: 1 };
 const POISON = { toString: 0 };
@@ -58,6 +59,25 @@ describe('an event as the screens may use it', () => {
     expect(eventFieldProblem(long)).toBeNull();
     expect(long).toMatchObject({ emoji: null, reminderMinutes: null });
     expect(long.title).toHaveLength(5001);
+  });
+
+  it('an occurrence’s markers are the calendar’s to make: stored ones do not steer a write to another event', () => {
+    const planted = {
+      id: 'E', ownerId: 'v', groupId: 'g', title: 'Planted', date: '2026-11-03T00:00:00.000Z', recurrenceRule: null,
+      isRecurringInstance: true, parentEventId: 'X', recurrenceDate: '2026-11-03',
+    };
+    // As the calendar reads it: normalised, then expanded.
+    const [seen] = expandRecurringEvents([normaliseEvent(planted)] as never[], new Date('2026-11-01'), new Date('2026-11-30')) as Record<string, unknown>[];
+    for (const k of ['isRecurringInstance', 'parentEventId', 'recurrenceDate']) expect(k in seen, k).toBe(false);
+    // So the details window and the edit form write to the event itself, not to X.
+    expect(planEventWrite(seen as never)).toEqual({ kind: 'direct', id: 'E' });
+    // A real series still gets them, from the expansion, on every occurrence.
+    const series = expandRecurringEvents(
+      [normaliseEvent({ ...planted, id: 'S', recurrenceRule: { frequency: 'weekly' } })] as never[],
+      new Date('2026-11-01'), new Date('2026-11-30'),
+    ) as Record<string, unknown>[];
+    expect(series.length).toBeGreaterThan(1);
+    for (const occ of series) expect([occ.isRecurringInstance, occ.parentEventId]).toEqual([true, 'S']);
   });
 
   it('the answers are kept as stored: the answer buttons write the map back, and the rules judge every key of it', () => {
