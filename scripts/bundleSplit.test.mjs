@@ -3,9 +3,12 @@
 // The split guard's decision on fixtures shaped like a real Vite manifest. See bundleSplit.mjs.
 
 import { describe, it, expect } from 'vitest';
-import { splitProblems, bootFiles, LAZY_SCREENS } from './bundleSplit.mjs';
+import { splitProblems, bootFiles, LAZY_SCREENS, HEAVY } from './bundleSplit.mjs';
 
-/** A manifest where every lazy screen is its own dynamic entry and the scanner lives in Wallet. */
+/**
+ * A manifest where every lazy screen is its own dynamic entry, the scanner lives in Wallet and the two
+ * code libraries in the card code's chunk.
+ */
 function goodBuild() {
   const manifest = {
     'index.html': { file: 'assets/index-a.js', isEntry: true, imports: ['_jsx-runtime.js'] },
@@ -15,7 +18,8 @@ function goodBuild() {
   for (const s of LAZY_SCREENS) {
     const file = `assets/${s.split('/').pop().replace('.tsx', '')}-x.js`;
     manifest[s] = { file, isDynamicEntry: true, imports: ['_jsx-runtime.js'] };
-    code[file] = s.includes('Wallet') ? 'new Html5Qrcode(el)' : 'screen';
+    code[file] = s.includes('Wallet') ? 'new Html5Qrcode(el)'
+      : s.includes('AssetBarcode') ? 'class InvalidElementException{} throw Error("bad rs block")' : 'screen';
   }
   return { manifest, code };
 }
@@ -24,7 +28,7 @@ describe('the split guard', () => {
   it('passes a build where every lazy screen is out of the boot set', () => {
     const r = splitProblems(goodBuild());
     expect(r.fatal).toEqual([]);
-    expect(r.verified).toHaveLength(LAZY_SCREENS.length + 1);
+    expect(r.verified).toHaveLength(LAZY_SCREENS.length + HEAVY.length);
   });
 
   it('refuses a screen with no chunk of its own — a static import bundled it into the entry', () => {
@@ -45,6 +49,22 @@ describe('the split guard', () => {
     const b = goodBuild();
     b.code['assets/index-a.js'] += ' Html5Qrcode';
     expect(splitProblems(b).fatal.join()).toMatch(/html5-qrcode .* is in the boot set/);
+  });
+
+  it('refuses either code library in boot code (29.10.2026: the event and invitation windows carried them)', () => {
+    for (const [marker, what] of [['InvalidElementException', /JsBarcode .* is in the boot set/], ['bad rs block', /QR encoder .* is in the boot set/]]) {
+      const b = goodBuild();
+      b.code['assets/index-a.js'] += ` ${marker}`;
+      expect(splitProblems(b).fatal.join(), marker).toMatch(what);
+    }
+  });
+
+  it('refuses the card code or the invitation window pulled back into boot', () => {
+    for (const s of ['src/components/AssetBarcode.tsx', 'src/components/InviteFamilyModal.tsx']) {
+      const b = goodBuild();
+      b.manifest['index.html'].imports.push(s);
+      expect(splitProblems(b).fatal.join(), s).toMatch(/is in the boot set/);
+    }
   });
 
   it('follows the boot set through shared chunks, not just the entry', () => {

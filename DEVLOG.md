@@ -14012,3 +14012,66 @@ probă proprie (ar cere mii de documente); bannerul statisticilor, care le acope
 - **Verificat pe live după:** regulile publicate sunt identice, octet cu octet, cu `firestore.rules` din arbore; memento-urile
   au rulat „ok” la 2 minute după, fără eșecuri la rând; în `errorLogs`, niciun rând nou (cel mai nou are 22 de zile).
 - **Admin nu-l pot deschide eu:** punctul e în `OWNER_VERIFY.md`, sus.
+
+## 2026-10-29 · Bundle: codurile de bare și QR încărcate la cerere (Task Started)
+
+**Prompt (Andrei):** „Da, bundle-ul” (la propunerea: „Iau ca felie următoare bundle-ul (cititorul de coduri de bare
+încărcat la cerere)?”).
+**Model:** Claude Opus 5.5.
+**Ce e** (BACKLOG §3, „Bundle-ul, pasul următor”): chunk-ul de pornire are azi **1.211.927 de octeți** (1.145 kB pe 25.09).
+În el stau cele două biblioteci de coduri: `react-barcode` (cu JsBarcode, toate simbologiile) și `react-qr-code`. Le aduc
+`EventDetailsModal` (prin `AssetBarcode`, cardul legat de un eveniment și cel de lângă un rând de checklist) și
+`InviteFamilyModal` (QR-ul linkului de invitație), ambele în pornire prin `CalendarHome`. Wallet e deja separat.
+**Plan:**
+- `AssetBarcode` încărcat la cerere în `EventDetailsModal`, printr-un înveliș cu o rezervă care arată NUMĂRUL cardului
+  dacă bucata nu se poate încărca (la casă, cu semnal slab, numărul se poate citi sau tasta);
+- `InviteFamilyModal` montat doar când e deschis, din bucata lui;
+- ambele bucăți aduse din timp, cât aplicația stă (ca Wallet, Chat și Settings), deci sunt deja în cache-ul browserului
+  când e nevoie de ele;
+- `check-split` refuză o construcție care le readuce în pornire (marcaje pe JsBarcode și pe QR);
+- versiunea offline a cardurilor rămâne cu importul direct (e o construcție separată).
+
+## 2026-10-29 · Bundle: codurile de bare și QR încărcate la cerere (Task Completed)
+
+**Prompt (Andrei):** „Da, bundle-ul”.
+**Model:** Claude Opus 5.5.
+
+**Ce s-a schimbat:**
+- **`LazyAssetBarcode` (nou):** `AssetBarcode` încărcat prima dată când se arată un cod, în `EventDetailsModal` (cardul
+  legat de eveniment și cel de lângă un rând de checklist). Cât se încarcă, un loc gol de înălțimea codului; dacă nu se
+  poate încărca, NUMĂRUL cardului, cu un rând care spune că o reîncărcare aduce codul înapoi. O încărcare eșuată nu se
+  păstrează: la următoarea deschidere a ferestrei se cere din nou.
+- **`CodeNumber` (nou):** numărul cu rândul de sub el, scos din `AssetBarcode` (îl folosesc amândouă).
+- **`InviteFamilyModal`:** montat doar când e deschis, din bucata lui (cu QR-ul), cu o barieră locală care spune pe
+  calendar că fereastra nu s-a putut încărca, în loc să cadă toată aplicația.
+- **`App.tsx`:** ambele bucăți aduse cât aplicația stă, ca Wallet, Chat și Settings (`src/utils/lazyParts.ts`).
+- **`check-split`:** cere ca `AssetBarcode` și `InviteFamilyModal` să fie bucăți separate și refuză marcajele lui
+  JsBarcode și ale codorului QR în pornire.
+- **Pagina offline a cardurilor** rămâne cu importul direct; `CodeNumber.tsx` e în lista ei Tailwind.
+- Două chei noi în cele 6 limbi: `walletCodeNotLoaded`, `inviteCouldNotOpen`.
+
+**Măsurat (tot ce se încarcă la pornire: intrarea și importurile ei statice, din manifest):** la `HEAD`,
+1.785.125 octeți (gzip 524.186, 3 fișiere); acum 1.693.025 (gzip 505.995, 5 fișiere: bundler-ul a scos `i18n` și
+`jsx-runtime` în bucăți comune). Cifra de „1.145 kB” din BACKLOG era doar chunk-ul principal; `serverActions-*.js`
+(~520 kB) se încarcă și el la pornire.
+
+**Probe:**
+- **Banc temporar** (o pagină cu `LazyAssetBarcode` real, ștearsă după), în dev ȘI construit ca în producție: EAN-13,
+  QR și CODE128 desenate (interop-ul QR, care a mai stricat o dată, merge), bucata `AssetBarcode` cerută separat,
+  rezerva cu numărul la o bucată care nu se încarcă, locul gol la una care nu vine.
+- `src/components/lazyAssetBarcode.test.tsx` (nou, 10): locul gol pe mărimi; rezerva randată din elementul
+  învelișului (numărul cardului, mărimea, limba); o încărcare eșuată cerută din nou; nimic din ce încarcă pornirea nu
+  importă direct bibliotecile, `AssetBarcode` sau `InviteFamilyModal`; bariera ferestrei de invitație.
+- `src/offline/offlineIsolation.test.ts`: orice fișier cu `className` din graful paginii offline e în lista ei Tailwind.
+- `scripts/bundleSplit.test.mjs`: cele două module și cele două marcaje.
+- **Mutații: 11 din 11 prinse**; la cele două importuri statice pică și `check-split` pe construcția reală.
+
+**Recenzia cu agenți** (2 lentile + 5 verificatori, 7 agenți, **0,85 M tokeni** măsurați, anunțat 1,5–2 M): 5 constatări,
+toate confirmate (2 dubluri), toate reparate:
+1. pagina offline și-a pierdut stilul numărului: `CodeNumber.tsx` lipsea din lista ei Tailwind (numărul la mărimea
+   textului, fără rupere; verificat în CSS-ul construit, acum are regulile);
+2. o încărcare eșuată rămânea eșuată toată sesiunea, fără să spună că o reîncărcare ajută;
+3. testele nu randau rezerva (un înveliș care trimitea formatul în loc de număr trecea).
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2694), build, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46),
+`test:rules` (1127).

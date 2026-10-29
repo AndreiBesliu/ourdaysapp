@@ -15,6 +15,24 @@
 
 ---
 
+## 🆕 Codurile cardurilor și fereastra de invitație se încarcă la cerere (29.10) — PUBLICAT pe 29.10
+
+**Fapt:** bibliotecile care desenează codurile de bare și QR nu mai stau în ce încarcă oricine la pornire; vin când se
+arată un cod sau se deschide invitația, și sunt aduse din timp cât aplicația stă. Ce se încarcă la pornire a scăzut cu
+92 kB (gzip 18 kB). Am probat codurile într-o pagină de banc, construită ca în producție; ecranele din spatele login-ului
+nu le pot deschide eu.
+
+- [ ] **Un eveniment cu un card legat, și unul cu un card pe un rând de checklist; apoi „Invite” la un grup** (2 minute,
+      pe telefon dacă poți)
+      - **Cum arată bine:** codul cardului apare ca înainte (o clipă poate fi un loc gol de înălțimea lui); fereastra de
+        invitație se deschide, cu QR-ul linkului.
+      - **Ce e greșit:** în locul codului, numărul cardului cu „The code could not be loaded…” deși ai semnal, sau „The
+        invitation window could not be loaded”. Spune-mi; eroarea e și în Admin → Health.
+      - **Ce se strică dacă nu te uiți:** dacă e ceva greșit, la casă se vede numărul în loc de cod (se poate citi sau
+        tasta); restul aplicației nu depinde de asta.
+
+---
+
 ## 🆕 Admin: ce scriu membrii nu mai poate bloca panoul (29.10) — PUBLICAT pe 29.10 (funcțiile, apoi regulile)
 
 **Fapt:** statisticile din Admin numără acum cu `count()` tot ce un membru ar putea umfla, iar ce trebuie citit (categoriile

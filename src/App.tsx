@@ -36,6 +36,7 @@ const Wallet = lazy(loadWallet);
 const Chat = lazy(loadChat);
 const Settings = lazy(loadSettings);
 import { warmRoutes } from './utils/routeWarmup';
+import { loadAssetBarcode, loadInviteFamilyModal } from './utils/lazyParts';
 import { forgetOfflineWallet, readOfflineWallet } from './utils/offlineWallet';
 import { startOfflineWalletSync, stopOfflineWalletSync } from './utils/offlineWalletSync';
 import { offlineCardsEnabled } from './utils/offlineCardsFlag';
@@ -364,10 +365,12 @@ function App() {
 
   // Fetch the lazy screens once somebody is signed in and the browser is idle. While online, so a
   // first visit to Wallet later — offline, or after a deploy has replaced the chunk — still works:
-  // the module is already in memory. Above the `if (loading)` return, like every hook here.
+  // the module is already in memory. Above the `if (loading)` return, like every hook here. The
+  // card codes and the invitation window too (29.10.2026): a code is opened at the till, where the
+  // signal is what it is.
   useEffect(() => {
     if (!user) return;
-    const warm = () => { void warmRoutes([loadWallet, loadChat, loadSettings]); };
+    const warm = () => { void warmRoutes([loadWallet, loadChat, loadSettings, loadAssetBarcode, loadInviteFamilyModal]); };
     const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
     const cic = (window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
     if (ric && cic) {

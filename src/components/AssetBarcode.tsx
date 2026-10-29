@@ -26,7 +26,7 @@ import Barcode from 'react-barcode';
 // as module.exports itself, which is why its default import works. See qrInterop.test.ts.
 import { QRCode } from 'react-qr-code';
 import { renderFor } from '../utils/barcodeFormat';
-import { t } from '../utils/i18n';
+import CodeNumber from './CodeNumber';
 
 interface Props {
   value: unknown;
@@ -45,9 +45,9 @@ interface Props {
 // the printed digits by a third — the digits somebody reads out when the scanner refuses. Caught
 // by review, and invisible to every gate: nothing in a test knows what the old JSX did not say.
 const SIZES = {
-  lg: { qr: 200, width: 2, height: 100, font: undefined, number: 'text-2xl' },
-  md: { qr: 150, width: 2, height: 80, font: undefined, number: 'text-xl' },
-  sm: { qr: 100, width: 1.5, height: 50, font: 12, number: 'text-lg' },
+  lg: { qr: 200, width: 2, height: 100, font: undefined },
+  md: { qr: 150, width: 2, height: 80, font: undefined },
+  sm: { qr: 100, width: 1.5, height: 50, font: 12 },
 } as const;
 
 export default function AssetBarcode({ value, format, size = 'lg', language }: Props) {
@@ -80,13 +80,11 @@ export default function AssetBarcode({ value, format, size = 'lg', language }: P
   // Not drawable as the code it really is. The NUMBER is shown instead, large enough to read out
   // or type in, with a line saying why.
   return (
-    <div className="w-full text-center py-2">
-      <p className={`${s.number} font-mono font-bold tracking-wider text-zinc-900 break-all`}>
-        {code || '—'}
-      </p>
-      <p className="mt-2 text-xs text-amber-600 font-medium">
-        {t(how.reason === 'value-mismatch' ? 'walletCodeMismatch' : 'walletCodeNotDrawable', language)}
-      </p>
-    </div>
+    <CodeNumber
+      value={value}
+      size={size}
+      reason={how.reason === 'value-mismatch' ? 'walletCodeMismatch' : 'walletCodeNotDrawable'}
+      language={language}
+    />
   );
 }

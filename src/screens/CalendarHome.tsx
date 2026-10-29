@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react';
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { auth, db, messaging } from '../firebase';
 import { getToken, onMessage } from 'firebase/messaging';
@@ -13,7 +13,6 @@ import CalendarGrid from '../components/CalendarGrid';
 import DayTimeline from '../components/DayTimeline';
 import AddEventModal from '../components/AddEventModal';
 import EventDetailsModal from '../components/EventDetailsModal';
-import InviteFamilyModal from '../components/InviteFamilyModal';
 import CreateGroupModal from '../components/CreateGroupModal';
 import LeaveGroupModal from '../components/LeaveGroupModal';
 import GroupSettingsModal from '../components/GroupSettingsModal';
@@ -28,6 +27,11 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import RecurringEventsPanel from '../components/RecurringEventsPanel';
 import CouldNotShow from '../components/CouldNotShow';
 import { normaliseEvent } from '../utils/eventDoc';
+import { loadInviteFamilyModal } from '../utils/lazyParts';
+
+// Its own chunk since 29.10.2026, with the QR library its link carries: opened a few times, ever,
+// per group. Fetched while the app is idle (App.tsx), so the first open does not wait for it.
+const InviteFamilyModal = lazy(loadInviteFamilyModal);
 import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../store';
 import { shownSender, shownGroupName } from '../utils/requestSender';
@@ -1283,14 +1287,25 @@ export default function CalendarHome() {
       />
       </ErrorBoundary>
 
-      {/* Invite Group Modal */}
-      <InviteFamilyModal
-        isOpen={isInviteModalOpen}
-        onClose={() => setIsInviteModalOpen(false)}
-        groupId={activeGroupId !== 'personal' ? activeGroupId : undefined}
-        groupName={groups.find(g => g.id === activeGroupId)?.name}
-        memberIds={groups.find(g => g.id === activeGroupId)?.members || []}
-      />
+      {/* Invite Group Modal: mounted only while open (it renders nothing when closed), so its chunk
+          is asked for only then; until it arrives, nothing, as before it opened. A chunk that cannot
+          load (offline and never fetched, or a tab older than a deploy) says so over the calendar,
+          which keeps working, instead of taking the whole app down. */}
+      {isInviteModalOpen && (
+        <ErrorBoundary context="InviteFamilyModal" fallback={
+          <CouldNotShow messageKey="inviteCouldNotOpen" onClose={() => setIsInviteModalOpen(false)} />
+        }>
+          <Suspense fallback={null}>
+            <InviteFamilyModal
+              isOpen={isInviteModalOpen}
+              onClose={() => setIsInviteModalOpen(false)}
+              groupId={activeGroupId !== 'personal' ? activeGroupId : undefined}
+              groupName={groups.find(g => g.id === activeGroupId)?.name}
+              memberIds={groups.find(g => g.id === activeGroupId)?.members || []}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )}
 
       <CreateGroupModal
         isOpen={isCreateGroupModalOpen}

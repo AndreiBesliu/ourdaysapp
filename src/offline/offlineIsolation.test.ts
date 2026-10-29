@@ -65,4 +65,19 @@ describe('the offline Cards page', () => {
   it('draws codes only through AssetBarcode, like every other screen', () => {
     expect(readFileSync(join(SRC, 'offline', 'OfflineCards.tsx'), 'utf8')).toContain("import AssetBarcode from '../components/AssetBarcode';");
   });
+
+  // The page's CSS is Tailwind built from vite.offline.config.ts's own `content` list, not the app's.
+  // A file of the graph that is not on it keeps its class names and loses their rules: on 29.10.2026
+  // the number of a code that cannot be drawn moved into CodeNumber.tsx and showed at body size, with
+  // no wrap, on the page meant for the till (found by review; every markup test stayed green).
+  it('every file of the page that styles something is on the offline Tailwind list', () => {
+    const config = readFileSync(join(SRC, '..', 'vite.offline.config.ts'), 'utf8');
+    const list = config.slice(config.indexOf('content: ['), config.indexOf(']', config.indexOf('content: [')));
+    const globs = [...list.matchAll(/new URL\('\.\/src\/([^']+)'/g)].map((m) => m[1]);
+    expect(globs.length).toBeGreaterThan(1);
+    const covered = (f: string) => globs.some((g) => g.includes('**') ? f.startsWith(g.slice(0, g.indexOf('**'))) : f === g);
+    const styling = files.filter((f) => /\.(tsx|html)$/.test(f) && /className=/.test(readFileSync(join(SRC, f), 'utf8')));
+    expect(styling).toContain('components/CodeNumber.tsx');
+    expect(styling.filter((f) => !covered(f))).toEqual([]);
+  });
 });

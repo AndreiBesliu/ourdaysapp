@@ -344,10 +344,13 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     care cheamă `paidGenerate` fără să intre în lista de cinci pică `aiLedgerShape.test.ts`, deci nu
     trece neobservată.
 
-- **Bundle-ul, pasul următor.** Wallet, Chat și Settings sunt separate din 25.09: chunk-ul principal
-  a scăzut de la 1.592 kB la 1.145 kB. Rămân în el două lucruri: coduri de bare și QR
-  (`AssetBarcode`, importat de `EventDetailsModal`) și `GroupChatWidget` (importat de `CalendarHome`).
-  Candidatul următor e `AssetBarcode`, încărcat la cerere.
+- **Bundle-ul, pasul următor.** Wallet, Chat și Settings sunt separate din 25.09. **Codurile de bare și QR
+  sunt la cerere din 29.10** (`LazyAssetBarcode` în `EventDetailsModal`, fereastra de invitație montată doar
+  când e deschisă; `check-split` refuză întoarcerea lor). Măsurat pe TOT ce se încarcă la pornire (intrarea și
+  importurile ei statice, din manifest), nu doar pe chunk-ul principal: 1.785.125 → 1.692.709 octeți, gzip
+  524.186 → 505.873. Cifra veche de „1.145 kB” era doar a chunk-ului principal; lângă el se încarcă la
+  pornire și `serverActions-*.js` (~520–566 kB). Candidații următori: `GroupChatWidget` (importat de
+  `CalendarHome`) și ce ține `serverActions-*.js` la pornire, de măsurat întâi.
 - **Hosting răspunde cu `index.html` la un `/assets/*.js` lipsă**, cu cache imutabil pe un an (măsurat
   pe live).
   - **Ce nu se strică:** un tab vechi după un deploy vede tot „versiune nouă”; Chrome, Firefox și

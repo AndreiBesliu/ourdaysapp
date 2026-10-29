@@ -60,6 +60,10 @@ export default defineConfig({
           content: [
             fileURLToPath(new URL('./src/offline/**/*.{ts,tsx,html}', import.meta.url)),
             fileURLToPath(new URL('./src/components/AssetBarcode.tsx', import.meta.url)),
+            // The number a code shows when it cannot be drawn, since 29.10.2026 its own module: without it
+            // here the offline page drew the number at body size, with no wrap (review of that day).
+            // offlineIsolation.test.ts holds every file of the page's graph to this list.
+            fileURLToPath(new URL('./src/components/CodeNumber.tsx', import.meta.url)),
           ],
           theme: { extend: {} },
         }),

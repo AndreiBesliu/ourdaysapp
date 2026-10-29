@@ -7,7 +7,8 @@ import { unsharedAttachedCards } from '../utils/assetAttach';
 import { shareFieldsFor, groupNameOf } from '../utils/assetSharing';
 import { createEventOverride } from '../serverActions';
 import { db, auth } from '../firebase';
-import AssetBarcode from './AssetBarcode';
+// Loaded the first time a code is shown, with the card's number if it cannot be (29.10.2026).
+import LazyAssetBarcode from './LazyAssetBarcode';
 import { normaliseAsset } from '../utils/walletAsset';
 import { eventImageSrc } from '../utils/eventDoc';
 import { storageUrlOrNull } from '../utils/chatMessage';
@@ -1125,7 +1126,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                               {item.assetId && !item.isCompleted && linkedChecklistAssets[item.assetId]?.barcodeValue && (
                                 <div className="ml-8 mt-2 bg-white p-3 rounded-xl flex flex-col items-center justify-center border border-zinc-200 dark:border-zinc-700 self-start">
                                   <p className="font-semibold text-zinc-900 mb-2 text-xs">{linkedChecklistAssets[item.assetId].name}</p>
-                                  <AssetBarcode
+                                  <LazyAssetBarcode
                                     value={linkedChecklistAssets[item.assetId].barcodeValue}
                                     format={linkedChecklistAssets[item.assetId].barcodeFormat}
                                     size="sm"
@@ -1238,7 +1239,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
               </p>
               <div className="bg-white p-4 rounded-xl flex flex-col items-center justify-center w-full min-h-[150px] border border-zinc-200 dark:border-zinc-700">
                 <p className="font-semibold text-zinc-900 mb-4 text-center">{linkedAsset.name}</p>
-                <AssetBarcode
+                <LazyAssetBarcode
                   value={linkedAsset.barcodeValue}
                   format={linkedAsset.barcodeFormat}
                   size="md"

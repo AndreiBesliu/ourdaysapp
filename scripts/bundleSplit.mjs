@@ -10,14 +10,24 @@
 // left Wallet as its own chunk while pulling html5-qrcode into boot code. Only a marker in the text
 // catches that.
 
-/** Screens that must be dynamic entries, outside the boot set. */
+/**
+ * Screens, and parts of screens, that must be dynamic entries, outside the boot set. The card code and
+ * the invitation window since 29.10.2026: they carried the two code libraries into boot.
+ */
 export const LAZY_SCREENS = [
   'src/screens/Wallet.tsx', 'src/screens/Chat.tsx', 'src/screens/Settings.tsx',
   'src/screens/Admin.tsx', 'src/screens/PeriodLog.tsx', 'src/screens/Warlord.tsx',
+  'src/components/AssetBarcode.tsx', 'src/components/InviteFamilyModal.tsx',
 ];
 
 /** Code that must never load at boot, found by a string that survives minification. */
-export const HEAVY = [{ what: 'html5-qrcode (the Wallet scanner)', marker: 'Html5Qrcode' }];
+export const HEAVY = [
+  { what: 'html5-qrcode (the Wallet scanner)', marker: 'Html5Qrcode' },
+  // JsBarcode's own error class, and the QR encoder's (qr.js, under react-qr-code): each was in the
+  // boot chunk only, through the event window and the invitation window, until 29.10.2026.
+  { what: 'JsBarcode (react-barcode, the card codes)', marker: 'InvalidElementException' },
+  { what: 'the QR encoder (react-qr-code)', marker: 'bad rs block' },
+];
 
 /** File names loaded at boot: the single entry chunk and everything it statically imports. */
 export function bootFiles(manifest) {
