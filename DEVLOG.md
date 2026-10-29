@@ -13759,3 +13759,21 @@ Pleacă `3ae83a0` și `7411f26`, cu CI verde pe ambele. Ordinea:
 Regulile, indexurile și Storage-ul sunt neschimbate față de ultima publicare. npm e stricat pe mașină, așa
 că `firebase-tools` pornește direct cu `node`, iar `predeploy` folosește înlocuitorul de `npm` din
 scratchpad.
+
+## 2026-10-29 · Publicarea pe live: id-ul documentului pe server și marcajele de apariție (Task Completed)
+
+**Prompt (Andrei):** „continua”.
+**Model:** Claude Opus 5.5.
+
+Publicat cu `--project live --non-interactive`, de pe un arbore curat (`2c5dac4`):
+1. **Funcțiile:** 55 actualizate, niciuna creată, niciun eșec. `predeploy` a trecut: arborele curat, garda
+   de mediu și build-ul (`tsc`, prin înlocuitorul de `npm`). Gata la 08:02 UTC.
+2. **Hosting-ul:** au trecut cele patru gărzi (arborele curat, pachetul, pornirea, pagina offline). Live-ul
+   servește acum `index-CY0TuEbO.js`, cu același număr de octeți ca pachetul local (1 211 927).
+
+**După publicare** (cheia de citire, doar valori booleene și numere): jobul memento-urilor a rulat la circa
+2 minute după funcții, `ok`, fără eșecuri la rând și fără „series read without their index”.
+
+**De făcut de Andrei:** npm e stricat pe mașina asta (vezi intrarea de azi despre id-ul documentului).
+Repararea lui Node, din programul de instalare (Repair) sau printr-o reinstalare, îl readuce. Până atunci,
+porțile și publicarea merg doar prin înlocuitorii din scratchpad.
