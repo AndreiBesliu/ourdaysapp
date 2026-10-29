@@ -40,6 +40,9 @@ const aiChecklistOutcome_1 = require("./aiChecklistOutcome");
 const eventTime_1 = require("./eventTime");
 const eventShape_1 = require("./eventShape");
 const adminTally_1 = require("./adminTally");
+const adminRead_1 = require("./adminRead");
+const gameSession_2 = require("./gameSession");
+const recurrenceServer_1 = require("./recurrenceServer");
 const digestEvents_1 = require("./digestEvents");
 const digestRead_1 = require("./digestRead");
 const assetTransfer_1 = require("./assetTransfer");
@@ -710,6 +713,8 @@ exports.generateAIChecklist = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (reque
         throw new https_1.HttpsError('internal', `AI Error: ${error.message || 'Unknown error'}`);
     }
 });
+/** The categories the event form saves and the classifier answers with (src/utils/eventCategories.ts). */
+const EVENT_CATEGORIES = ["work", "family_time", "chores", "health", "other"];
 exports.suggestEventCategory = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (request) => {
     const { title, description } = request.data;
     if (!title) {
@@ -726,7 +731,6 @@ exports.suggestEventCategory = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (requ
             await releaseQuota(callerUid, 'ai_usage').catch(() => undefined);
             throw new https_1.HttpsError('failed-precondition', 'AI is not configured on the server.');
         }
-        const validCategories = ["work", "family_time", "chores", "health", "other"];
         const result = await paidGenerate("category", callerUid, {
             system: "You sort events in a family organization app into exactly one category: "
                 + "work, family_time (time with family or friends), chores (errands, cleaning, shopping), "
@@ -737,13 +741,13 @@ exports.suggestEventCategory = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (requ
             // which read any reply naming two categories as "work", the first in the list.
             schema: {
                 type: "object",
-                properties: { categoryId: { type: "string", enum: validCategories } },
+                properties: { categoryId: { type: "string", enum: EVENT_CATEGORIES } },
                 required: ["categoryId"],
                 additionalProperties: false,
             },
         });
         const reply = (0, aiLedger_1.jsonOf)(result);
-        const categoryId = typeof (reply === null || reply === void 0 ? void 0 : reply.categoryId) === "string" && validCategories.includes(reply.categoryId)
+        const categoryId = typeof (reply === null || reply === void 0 ? void 0 : reply.categoryId) === "string" && EVENT_CATEGORIES.includes(reply.categoryId)
             ? reply.categoryId
             : "other";
         return { categoryId };
@@ -1063,7 +1067,9 @@ exports.notifyUsers = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }
         if (!sharedMembers.has(rid))
             continue; // only notify users you share a group with
         const ref = db.collection("notifications").doc();
-        batch.set(ref, Object.assign(Object.assign(Object.assign(Object.assign({ userId: rid, createdBy: uid, type: typeof type === "string" ? type : "info", 
+        batch.set(ref, Object.assign(Object.assign(Object.assign(Object.assign({ userId: rid, createdBy: uid, 
+            // As short as the keys below: the Admin statistics read every notification's type (29.10.2026).
+            type: typeof type === "string" && type ? type.slice(0, 60) : "info", 
             // The rendered strings stay, as the fallback for documents the reader's build cannot
             // translate — but they are the SENDER'S language, frozen at write time, which is why a
             // Romanian account was reading "New Task Assigned" next to four Romanian ones.
@@ -1682,35 +1688,71 @@ exports.adminGetStats = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
     const db = admin.firestore();
     const now = Date.now();
     const day = 24 * 60 * 60 * 1000;
-    // Accurate totals come from count() aggregation (never truncated); the capped
-    // doc reads below feed the breakdowns and flag `truncated` if they hit a cap.
-    //
-    // Each read takes ONLY the fields counted below (`select`, 10.10.2026). These are whole
-    // collections of documents of up to 1 MiB each, and what made them big — descriptions, checklists,
-    // boards, notes, padding — no longer comes along. The counted fields themselves are only as small as
-    // the rules keep them, and a personal event's are not checked at all (BACKLOG). A field used below
-    // and left out of its `select` reads as absent, so functions/test/adminReads.test.ts gives every one
-    // a value.
-    const ct = (c) => db.collection(c).count().get().then((s) => s.data().count).catch(() => 0);
-    const [authResult, usersSnap, groupsSnap, eventsSnap, gamesSnap, assetsSnap, friendReqSnap, invitesSnap, notifsSnap, adminsSnap, messagesCount, groupsTotal, eventsTotal, gamesTotal, assetsTotal, notifTotal] = await Promise.all([
+    // Totals and every number that says whether a field is set, or how many hold a value the app
+    // writes, are COUNTED (`count()`): no document is read for them, so nothing a member writes there
+    // can be large here (adminRead.ts, 29.10.2026). The rest is read: a group's members (bounded by the
+    // rules since 08.10.2026), a notification's type (written by the server), the admins' references,
+    // and two reads ten a page within a time budget — the friends lists (written only by the server) and
+    // the cards' categories (one text each). `truncated` says when one of those stopped short.
+    const users = db.collection("users");
+    const events = db.collection("events");
+    const games = db.collection("games");
+    const assets = db.collection("assets");
+    const requests = db.collection("friend_requests");
+    const invites = db.collection("group_invites");
+    const notifs = db.collection("notifications");
+    const eventsTotal = (0, adminRead_1.howMany)(events);
+    const gamesTotal = (0, adminRead_1.howMany)(games);
+    const notifTotal = (0, adminRead_1.howMany)(notifs);
+    const requestsTotal = (0, adminRead_1.howMany)(requests);
+    const invitesTotal = (0, adminRead_1.howMany)(invites);
+    let totalFriendEntries = 0;
+    const aByCategory = {};
+    const [authResult, groupsSnap, notifsSnap, adminsSnap, messagesCount, groupsTotal, assetsTotal, withBirthday, withPhoto, pushEnabled, withFriends, friendsDone, tasks, completedTasks, recurring, withReminder, sharedFam, withRsvp, evByCategory, gByType, gByStatus, finalized, assetsShared, assetsDone, frByStatus, invByStatus, notifsRead,] = await Promise.all([
         listAllAuthUsers(),
-        db.collection("users").select("birthday", "photoURL", "fcmTokens", "friends").limit(5000).get(),
         db.collection("groups").select("members").limit(5000).get(),
-        db.collection("events").select("isTask", "taskStatus", "recurrenceRule", "reminderMinutes", "groupId", "rsvpEnabled", "categoryId").limit(8000).get(),
-        db.collection("games").select("gameType", "status", "finalized").limit(5000).get(),
-        db.collection("assets").select("sharedGroupId", "category").limit(5000).get(),
-        db.collection("friend_requests").select("status").limit(5000).get(),
-        db.collection("group_invites").select("status").limit(5000).get(),
-        db.collection("notifications").select("read", "type").limit(8000).get(),
+        notifs.select("type").limit(8000).get(),
         db.collection("admins").select().get(),
-        db.collectionGroup("messages").count().get().then((s) => s.data().count).catch(() => 0),
-        ct("groups"), ct("events"), ct("games"), ct("assets"), ct("notifications"),
+        (0, adminRead_1.howMany)(db.collectionGroup("messages")),
+        (0, adminRead_1.howMany)(db.collection("groups")),
+        (0, adminRead_1.howMany)(assets),
+        // Text that is not empty, and a list that is not: a range on a kind matches that kind only.
+        (0, adminRead_1.howMany)(users.where("birthday", ">", "")),
+        (0, adminRead_1.howMany)(users.where("photoURL", ">", "")),
+        (0, adminRead_1.howMany)(users.where("fcmTokens", ">", [])),
+        (0, adminRead_1.howMany)(users.where("friends", ">", [])),
+        (0, adminRead_1.readPaged)(users, ["friends"], (d) => {
+            const f = d.get("friends");
+            if (Array.isArray(f))
+                totalFriendEntries += f.length;
+        }),
+        (0, adminRead_1.howMany)(events.where("isTask", "==", true)),
+        (0, adminRead_1.howMany)(events.where("isTask", "==", true).where("taskStatus", "==", "completed")),
+        // A series is a rule the app repeats; sharing an event has meant being in a group since the wallet
+        // fix (`sharedWithFamily` is written false on every new event).
+        (0, adminRead_1.howMany)(events.where("recurrenceRule.frequency", "in", [...recurrenceServer_1.FREQUENCIES])),
+        (0, adminRead_1.howMany)(events.where("reminderMinutes", "!=", null)),
+        (0, adminRead_1.howMany)(events.where("groupId", ">", "")),
+        (0, adminRead_1.howMany)(events.where("rsvpEnabled", "==", true)),
+        (0, adminRead_1.breakdown)(events, "categoryId", EVENT_CATEGORIES, eventsTotal, "other"),
+        (0, adminRead_1.breakdown)(games, "gameType", [...gameSession_2.ARCADE_GAME_TYPES, gameSession_2.SERVER_OWNED_GAME], gamesTotal, "unknown"),
+        (0, adminRead_1.breakdown)(games, "status", adminRead_1.GAME_STATUSES, gamesTotal, "unknown"),
+        (0, adminRead_1.howMany)(games.where("finalized", "==", true)),
+        // The field the rules and queries actually consult. `sharedWithFamily` on an asset is a derived
+        // echo of the legacy flag that never granted anybody access, so this tile once claimed sixteen
+        // shared assets while the wallet itself labelled those same sixteen "Never shared".
+        (0, adminRead_1.howMany)(assets.where("sharedGroupId", ">", "")),
+        // A category is one text (the rules), kept here at most 100 characters long.
+        (0, adminRead_1.readPaged)(assets, ["category"], (d) => (0, adminTally_1.inc)(aByCategory, (0, adminTally_1.clip)(d.get("category"), 100), "Uncategorized")),
+        // A request or an invitation with no answer is waiting for one (the invitations' rule reads it so).
+        (0, adminRead_1.breakdown)(requests, "status", adminRead_1.ANSWER_STATUSES, requestsTotal, "pending"),
+        (0, adminRead_1.breakdown)(invites, "status", adminRead_1.ANSWER_STATUSES, invitesTotal, "pending"),
+        // `read` is the one field the recipient writes, and the rules do not type it.
+        (0, adminRead_1.howMany)(notifs.where("read", "==", true)),
     ]);
     const authUsers = authResult.users;
-    const truncated = authResult.truncated ||
-        usersSnap.size >= 5000 || groupsSnap.size >= 5000 || eventsSnap.size >= 8000 ||
-        gamesSnap.size >= 5000 || assetsSnap.size >= 5000 || friendReqSnap.size >= 5000 ||
-        invitesSnap.size >= 5000 || notifsSnap.size >= 8000;
+    const truncated = authResult.truncated || !friendsDone || !assetsDone ||
+        groupsSnap.size >= 5000 || notifsSnap.size >= 8000;
     // ── Users (Firebase Auth + Firestore user docs) ──
     const byProvider = {};
     let verified = 0;
@@ -1727,24 +1769,6 @@ exports.adminGetStats = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
             signups30d++;
         (0, adminTally_1.inc)(byProvider, (_c = (_b = u.providerData) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.providerId, "password");
     });
-    let withBirthday = 0;
-    let withPhoto = 0;
-    let pushEnabled = 0;
-    let withFriends = 0;
-    let totalFriendEntries = 0;
-    usersSnap.forEach((d) => {
-        const u = d.data();
-        if (u.birthday)
-            withBirthday++;
-        if (u.photoURL)
-            withPhoto++;
-        if (Array.isArray(u.fcmTokens) && u.fcmTokens.length > 0)
-            pushEnabled++;
-        if (Array.isArray(u.friends) && u.friends.length > 0) {
-            withFriends++;
-            totalFriendEntries += u.friends.length;
-        }
-    });
     // ── Groups ──
     let memberships = 0;
     let largest = 0;
@@ -1757,74 +1781,17 @@ exports.adminGetStats = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
         if (m > 1)
             shared++;
     });
-    // ── Events ──
-    const evByCategory = {};
-    let tasks = 0;
-    let completedTasks = 0;
-    let recurring = 0;
-    let withReminder = 0;
-    let sharedFam = 0;
-    let withRsvp = 0;
-    eventsSnap.forEach((d) => {
-        const e = d.data();
-        if (e.isTask) {
-            tasks++;
-            if (e.taskStatus === "completed")
-                completedTasks++;
-        }
-        if (e.recurrenceRule)
-            recurring++;
-        if (e.reminderMinutes !== null && e.reminderMinutes !== undefined)
-            withReminder++;
-        // Counts group membership, which is what sharing an event has MEANT since the wallet fix.
-        // `sharedWithFamily` is now written as a constant false on every new event, so this tile
-        // read 0 while half the calendar genuinely sat in a shared group.
-        if (e.groupId)
-            sharedFam++;
-        if (e.rsvpEnabled)
-            withRsvp++;
-        (0, adminTally_1.inc)(evByCategory, e.categoryId, "other");
-    });
-    // ── Games ──
-    const gByType = {};
-    const gByStatus = {};
-    let finalized = 0;
-    gamesSnap.forEach((d) => {
-        const g = d.data();
-        (0, adminTally_1.inc)(gByType, g.gameType, "unknown");
-        (0, adminTally_1.inc)(gByStatus, g.status, "unknown");
-        if (g.finalized)
-            finalized++;
-    });
-    // ── Assets ──
-    const aByCategory = {};
-    let assetsShared = 0;
-    assetsSnap.forEach((d) => {
-        const a = d.data();
-        // The field the rules and queries actually consult. `sharedWithFamily` on an asset is a
-        // derived echo of the legacy flag that never granted anybody access, so this tile claimed
-        // sixteen shared assets while the wallet itself labelled those same sixteen "Never shared".
-        if (typeof a.sharedGroupId === "string" && a.sharedGroupId)
-            assetsShared++;
-        (0, adminTally_1.inc)(aByCategory, a.category, "Uncategorized");
-    });
-    // ── Social ──
-    const frByStatus = {};
-    const invByStatus = {};
-    friendReqSnap.forEach((d) => (0, adminTally_1.inc)(frByStatus, d.data().status, "pending"));
-    invitesSnap.forEach((d) => (0, adminTally_1.inc)(invByStatus, d.data().status, "pending"));
     // ── Notifications ──
     const nByType = {};
-    let unread = 0;
-    notifsSnap.forEach((d) => {
-        const n = d.data();
-        if (!n.read)
-            unread++;
-        (0, adminTally_1.inc)(nByType, n.type, "info");
-    });
+    notifsSnap.forEach((d) => (0, adminTally_1.inc)(nByType, d.get("type"), "info"));
+    const [eventsN, gamesN, notifN] = await Promise.all([eventsTotal, gamesTotal, notifTotal]);
+    const unread = Math.max(0, notifN - notifsRead);
+    // The banner this raises speaks for the other panels too ("some breakdowns/profiles show only the first
+    // few thousand"): the people's and the groups' counts still read 8000 events and 5000 games at most.
+    const pastOtherCaps = eventsN >= 8000 || gamesN >= 5000 || groupsTotal >= 2000;
     return {
         generatedAt: new Date().toISOString(),
-        truncated, // true if a breakdown read hit its cap (totals from count() stay accurate)
+        truncated: truncated || pastOtherCaps, // a read stopped at its cap or its time (the counts stay exact)
         users: {
             total: authUsers.length, verified, unverified: authUsers.length - verified,
             withBirthday, withPhoto, pushEnabled, withFriends,
@@ -1837,15 +1804,15 @@ exports.adminGetStats = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
             largest,
         },
         events: {
-            total: eventsTotal, tasks, completedTasks, pendingTasks: tasks - completedTasks,
-            plainEvents: eventsTotal - tasks, recurring, withReminder, sharedWithFamily: sharedFam,
+            total: eventsN, tasks, completedTasks, pendingTasks: tasks - completedTasks,
+            plainEvents: eventsN - tasks, recurring, withReminder, sharedWithFamily: sharedFam,
             withRsvp, byCategory: evByCategory,
         },
-        games: { total: gamesTotal, byType: gByType, byStatus: gByStatus, finalized },
+        games: { total: gamesN, byType: gByType, byStatus: gByStatus, finalized },
         messages: { total: messagesCount },
         assets: { total: assetsTotal, shared: assetsShared, byCategory: aByCategory },
         social: { friendRequests: frByStatus, groupInvites: invByStatus },
-        notifications: { total: notifTotal, unread, byType: nByType },
+        notifications: { total: notifN, unread, byType: nByType },
         admins: { total: adminsSnap.size },
     };
 });
@@ -1853,18 +1820,27 @@ exports.adminGetStats = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
 exports.adminListProfiles = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     await assertAdmin(request);
     const db = admin.firestore();
-    // Only the fields shown or counted below (see adminGetStats).
-    const [authResult, usersSnap, profilesSnap, groupsSnap, eventsSnap, adminsSnap] = await Promise.all([
+    // Only the fields shown or counted below (see adminGetStats). A person writes their own user
+    // document, so it is read ten a page within a time budget (adminRead.ts), and what is kept of it is
+    // cut to a length: the rules keep each of these fields to one value, not to a size, and the friends
+    // list is the server's. The profiles, groups and event owners are bounded by the rules.
+    const userDocs = {};
+    const [authResult, usersDone, profilesSnap, groupsSnap, eventsSnap, adminsSnap] = await Promise.all([
         listAllAuthUsers(),
-        db.collection("users").select("email", "name", "photoURL", "birthday", "friends", "fcmTokens").limit(5000).get(),
+        (0, adminRead_1.readPaged)(db.collection("users"), ["email", "name", "photoURL", "birthday", "friends", "fcmTokens"], (d) => {
+            const u = d.data();
+            userDocs[d.id] = {
+                email: (0, adminTally_1.memberText)(u.email, 254), name: (0, adminTally_1.memberText)(u.name, 100), photoURL: (0, adminTally_1.memberText)(u.photoURL, 2048), birthday: (0, adminTally_1.memberText)(u.birthday, 32),
+                friends: Array.isArray(u.friends) ? u.friends.length : 0,
+                pushEnabled: Array.isArray(u.fcmTokens) && u.fcmTokens.length > 0,
+            };
+        }),
         db.collection("profiles").select("name", "photoURL", "birthday").limit(5000).get(),
         db.collection("groups").select("members").limit(5000).get(),
         db.collection("events").select("ownerId").limit(8000).get(),
         db.collection("admins").select().get(),
     ]);
     const authUsers = authResult.users;
-    const userDocs = {};
-    usersSnap.forEach((d) => { userDocs[d.id] = d.data(); });
     const profileDocs = {};
     profilesSnap.forEach((d) => { profileDocs[d.id] = d.data(); });
     const groupCount = {};
@@ -1889,14 +1865,17 @@ exports.adminListProfiles = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
             createdAt: ((_c = u.metadata) === null || _c === void 0 ? void 0 : _c.creationTime) || null,
             lastSignInAt: ((_d = u.metadata) === null || _d === void 0 ? void 0 : _d.lastSignInTime) || null,
             birthday: fs.birthday || pr.birthday || null,
-            friends: Array.isArray(fs.friends) ? fs.friends.length : 0,
+            friends: fs.friends || 0,
             groups: (0, adminTally_1.countOf)(groupCount, u.uid),
             events: (0, adminTally_1.countOf)(eventCount, u.uid),
-            pushEnabled: Array.isArray(fs.fcmTokens) && fs.fcmTokens.length > 0,
+            pushEnabled: fs.pushEnabled === true,
             isAdmin: adminUids.has(u.uid),
         };
     }).sort((a, b) => (new Date(b.createdAt || 0).getTime()) - (new Date(a.createdAt || 0).getTime()));
-    return { profiles, count: profiles.length, truncated: authResult.truncated };
+    // Cut short by the time budget, or by a cap on the reads that count each person's groups and events.
+    const truncated = authResult.truncated || !usersDone ||
+        profilesSnap.size >= 5000 || groupsSnap.size >= 5000 || eventsSnap.size >= 8000;
+    return { profiles, count: profiles.length, truncated };
 });
 // Current admins with display details.
 exports.adminListAdmins = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
@@ -2238,36 +2217,49 @@ exports.adminGetUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK 
         };
     }
     catch ( /* auth user may be gone */_f) { /* auth user may be gone */ }
-    // Their own two documents whole (one each); of their groups, events, games and cards only the
-    // fields shown or counted below — up to 1400 documents, each of which they could pad (see adminGetStats).
-    const [userDoc, profileDoc, groupsSnap, eventsSnap, gamesSnap, assetsSnap, adminSnap] = await Promise.all([
-        db.doc(`users/${uid}`).get(),
+    // Of their own two documents and of their groups, events, games and cards only the fields shown or
+    // counted below (see adminGetStats). Their events are counted, and ten are read for the list, with
+    // the two fields the rules keep to one value each (a title, a day). Whether one is a task and its
+    // state come from queries over those ten that bring only references: a member of the group can make
+    // `isTask` anything on a group event, and its owner `taskStatus` on a personal one (adminRead.ts).
+    const events = db.collection("events");
+    const ownEvents = events.where("ownerId", "==", uid);
+    const [[userDoc], profileDoc, groupsSnap, eventsTotal, recentSnap, gamesSnap, assetsSnap, adminSnap] = await Promise.all([
+        db.getAll(db.doc(`users/${uid}`), { fieldMask: ["name", "birthday", "fcmTokens", "friends"] }),
         db.doc(`profiles/${uid}`).get(),
         db.collection("groups").where("members", "array-contains", uid).select("name", "members").limit(200).get(),
-        db.collection("events").where("ownerId", "==", uid).select("title", "date", "isTask", "taskStatus").limit(500).get(),
+        (0, adminRead_1.howMany)(ownEvents),
+        ownEvents.select("title", "date").limit(10).get(),
         db.collection("games").where("createdBy", "==", uid).select().limit(200).get(),
         db.collection("assets").where("ownerId", "==", uid).select().limit(500).get(),
         db.doc(`admins/${uid}`).get(),
     ]);
+    const ids = recentSnap.docs.map((d) => d.id);
+    const among = () => events.where(firestore_2.FieldPath.documentId(), "in", ids);
+    const [taskIds, ...statusIds] = ids.length === 0 ? [] : (await Promise.all([
+        among().where("isTask", "==", true).select().get(),
+        ...adminRead_1.TASK_STATUSES.map((s) => among().where("taskStatus", "==", s).select().get()),
+    ])).map((s) => new Set(s.docs.map((d) => d.id)));
     const ud = userDoc.data() || {};
     return {
         uid, auth: authRec, isAdmin: adminSnap.exists,
         isProtected: adminSnap.exists || BOOTSTRAP_ADMIN_EMAILS.includes(((authRec === null || authRec === void 0 ? void 0 : authRec.email) || "").toLowerCase()),
-        name: ud.name || ((_e = profileDoc.data()) === null || _e === void 0 ? void 0 : _e.name) || (authRec === null || authRec === void 0 ? void 0 : authRec.displayName) || null,
-        birthday: ud.birthday || null,
+        name: (0, adminTally_1.memberText)(ud.name, 100) || ((_e = profileDoc.data()) === null || _e === void 0 ? void 0 : _e.name) || (authRec === null || authRec === void 0 ? void 0 : authRec.displayName) || null,
+        birthday: (0, adminTally_1.memberText)(ud.birthday, 32) || null,
         pushEnabled: Array.isArray(ud.fcmTokens) && ud.fcmTokens.length > 0,
-        friends: Array.isArray(ud.friends) ? ud.friends.map((f) => ({ uid: f === null || f === void 0 ? void 0 : f.uid, name: f === null || f === void 0 ? void 0 : f.name, email: f === null || f === void 0 ? void 0 : f.email })) : [],
+        friends: Array.isArray(ud.friends) ? ud.friends.map((f) => ({ uid: (0, adminTally_1.memberText)(f === null || f === void 0 ? void 0 : f.uid, 128), name: (0, adminTally_1.memberText)(f === null || f === void 0 ? void 0 : f.name, 80), email: (0, adminTally_1.memberText)(f === null || f === void 0 ? void 0 : f.email, 254) })) : [],
         groups: groupsSnap.docs.map((d) => ({ id: d.id, name: d.data().name || "Group", members: (d.data().members || []).length })),
-        counts: { groups: groupsSnap.size, events: eventsSnap.size, games: gamesSnap.size, assets: assetsSnap.size },
-        recentEvents: eventsSnap.docs.slice(0, 10).map((d) => {
+        counts: { groups: groupsSnap.size, events: eventsTotal, games: gamesSnap.size, assets: assetsSnap.size },
+        recentEvents: recentSnap.docs.map((d) => {
+            var _a;
             const e = d.data();
             // Text only, as the Admin screen renders them: a member's event could hold anything until 08.10.2026.
             return {
                 id: d.id,
-                title: typeof e.title === "string" && e.title ? e.title : "(untitled)",
-                date: typeof e.date === "string" ? e.date : null,
-                isTask: !!e.isTask,
-                taskStatus: typeof e.taskStatus === "string" && e.taskStatus ? e.taskStatus : null,
+                title: typeof e.title === "string" && e.title ? (0, adminTally_1.clip)(e.title, 200) : "(untitled)",
+                date: typeof e.date === "string" ? (0, adminTally_1.clip)(e.date, 32) : null,
+                isTask: (taskIds === null || taskIds === void 0 ? void 0 : taskIds.has(d.id)) === true,
+                taskStatus: (_a = adminRead_1.TASK_STATUSES.find((_, i) => { var _a; return (_a = statusIds[i]) === null || _a === void 0 ? void 0 : _a.has(d.id); })) !== null && _a !== void 0 ? _a : null,
             };
         }),
     };
@@ -2423,11 +2415,18 @@ exports.adminGetGrowth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
     // Only a time is a time (adminTally.ts): a member's event or game could hold anything, and one that
     // only looked like a time threw here and took the whole chart down (10.10.2026).
     const tsOf = adminTally_1.timeMs;
-    // Only the time each was made (see adminGetStats).
-    const [authRes, eventsSnap, gamesSnap] = await Promise.all([
+    // Only the time each was made, and only within the window (see adminGetStats). An event's
+    // `createdAt` is the client's ISO text, which the rules leave alone, so its days are COUNTED, one
+    // range of text per day (adminRead.ts); one that is a Firestore time, and every game's (the rules
+    // keep it one), is read by a range on that kind, which brings nothing but times.
+    const since = firestore_2.Timestamp.fromMillis(cutoff);
+    const eventsCol = db.collection("events");
+    const dayKeys = Object.keys(events);
+    const [authRes, eventDays, eventTimesSnap, gamesSnap] = await Promise.all([
         listAllAuthUsers(),
-        db.collection("events").select("createdAt").limit(8000).get(),
-        db.collection("games").select("createdAt").limit(5000).get(),
+        Promise.all(dayKeys.map((k) => (0, adminRead_1.howMany)(eventsCol.where("createdAt", ">=", k).where("createdAt", "<", dayKey(Date.parse(k) + dayMs))))),
+        eventsCol.where("createdAt", ">=", since).select("createdAt").limit(8000).get(),
+        db.collection("games").where("createdAt", ">=", since).select("createdAt").limit(5000).get(),
     ]);
     authRes.users.forEach((u) => {
         var _a;
@@ -2438,12 +2437,13 @@ exports.adminGetGrowth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
                 signups[k]++;
         }
     });
-    eventsSnap.forEach((d) => { const t = tsOf(d.data().createdAt); if (t >= cutoff) {
+    dayKeys.forEach((k, i) => { events[k] += eventDays[i]; });
+    eventTimesSnap.forEach((d) => { const t = tsOf(d.get("createdAt")); if (t >= cutoff) {
         const k = dayKey(t);
         if (k in events)
             events[k]++;
     } });
-    gamesSnap.forEach((d) => { const t = tsOf(d.data().createdAt); if (t >= cutoff) {
+    gamesSnap.forEach((d) => { const t = tsOf(d.get("createdAt")); if (t >= cutoff) {
         const k = dayKey(t);
         if (k in games)
             games[k]++;

@@ -287,11 +287,24 @@ service cloud.firestore {
     // megabyte of text a hundred times over, ran those reads out of memory for everybody. Judged on the
     // keys a write sets, so nothing already stored blocks an unrelated write. What the app writes: a
     // zone name, a language code ('ro-RO'), and push tokens of about 160 characters, one per browser.
+    //
+    // And what the Admin reads of every person, ten a page (29.10.2026, functions/src/adminRead.ts): a
+    // name, an address, a picture and a birthday are each text or nothing — never a list or a map (a list
+    // of a million nulls is about 100 MB once decoded), nor bytes or a time, which the screen cannot show
+    // and the callable's wire turns into one key a byte. Kinds only, no lengths: the installed APK writes
+    // the name as typed and the address Google gives (functions/src/adminTally.ts cuts what is kept). The
+    // friends list is the server's alone (functions/src/friendship.ts): neither the web nor the APK
+    // writes it, and its entries are maps, whose size no rule can bound.
     function userReadFieldsOk(d, keys) {
       return (!keys.hasAny(['timezone']) || evOptText(d.get('timezone', null), 64))
         && (!keys.hasAny(['language']) || evOptText(d.get('language', null), 16))
         && (!keys.hasAny(['fcmTokens']) || (evList(d.get('fcmTokens', null), 500)
-            && (d.get('fcmTokens', null) == null || d.fcmTokens.join(',').size() <= 200000)));
+            && (d.get('fcmTokens', null) == null || d.fcmTokens.join(',').size() <= 200000)))
+        && (!keys.hasAny(['name']) || d.get('name', null) == null || d.name is string)
+        && (!keys.hasAny(['email']) || d.get('email', null) == null || d.email is string)
+        && (!keys.hasAny(['photoURL']) || d.get('photoURL', null) == null || d.photoURL is string)
+        && (!keys.hasAny(['birthday']) || d.get('birthday', null) == null || d.birthday is string)
+        && !keys.hasAny(['friends']);
     }
     match /users/{userId} {
       allow read, delete: if isOwner(userId);

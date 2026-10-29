@@ -26,7 +26,8 @@ describe('one list, three places that must agree', () => {
 
   it("and exactly what the server's classifier may return", () => {
     const src = read('functions/src/index.ts');
-    const list = /const validCategories = \[([^\]]*)\]/.exec(src)![1];
+    // One list on the server since 29.10.2026: the classifier and the Admin statistics both count by it.
+    const list = /const EVENT_CATEGORIES = \[([^\]]*)\]/.exec(src)![1];
     const serverIds = [...list.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
     expect(serverIds).toEqual([...EVENT_CATEGORY_IDS]);
   });

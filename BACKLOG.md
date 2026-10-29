@@ -203,10 +203,18 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     - **Știut, mic:** o grămadă de evenimente trecute ale unui membru poate tot umple privirea înapoi (300) și
       ascunde o călătorie începută mai devreme; seriile pot fi înghesuite la fel (500). Rezumatul spune atunci
       că e tăiat.
-  - **Statisticile din Admin (10.10, parțial):** citesc acum doar câmpurile numărate, deci descrierile,
-    checklist-urile, tablele de joc și notele nu mai vin. Câmpurile numărate pot fi însă umflate și ele: un
-    eveniment personal nu are niciun câmp verificat, iar categoria unui card nu are plafon. Doar adminul vede.
-    Remediul: `count()` pentru prezențe și plafoane în reguli.
+  - **Statisticile din Admin: reparate pe 29.10** (`functions/src/adminRead.ts`, 5.5). Tot ce spune doar „e
+    pus” sau „are o valoare a aplicației” se numără (`count()`), fără niciun document citit. Ce trebuie citit
+    (categoria unui card, numele și lista de prieteni ale unui om) vine câte 10 pe pagină, cu un buget de 20 s
+    care spune `truncated`, și se păstrează tăiat la o lungime. Regulile din `users` țin numele, adresa, poza
+    și ziua de naștere la câte o valoare, iar lista de prieteni o scrie doar serverul. `notifyUsers` taie
+    `type` la 60. Ce a rămas, deliberat:
+    - **O categorie de eveniment, un tip sau o stare de joc care nu sunt ale aplicației** apar la „other” /
+      „unknown”, nu sub numele lor (măsurat pe live: niciuna).
+    - **Peste buget** (vreo 1600 de carduri sau de oameni, la ~120 ms pe pagină), defalcările sunt parțiale și o
+      spun; totalurile rămân exacte.
+    - **Grupurile, membrii lor, proprietarii evenimentelor și ai cheltuielilor, tipul notificărilor** se citesc
+      ca înainte, dintr-o bucată: le mărginesc regulile sau le scrie serverul.
 - **Ce a rămas după evenimente, carduri și cheltuieli (08.10; tipul câmpurilor afișate e închis):**
   - **Elementele unui checklist și zilele de excepție nu sunt judecate de reguli** (regulile n-au bucle).
     Web-ul le citește prin normalizare. Un element vechi cu `id` care nu e text primește pe ecran un id
@@ -247,7 +255,7 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   Cererile de prietenie și provocările Warlord au cotă zilnică (`notif_usage`); `onGameCreated` nu are.
   De ales limita: implicit aceeași cotă zilnică. Decizia lui Andrei.
 - **`notifyUsers` scrie orice text în clopoțelul altui membru** (fără push): titlu până la 200 de
-  caractere, text până la 500 și orice cheie de titlu, cu cota zilnică de notificări. APK-ul afișează
+  caractere, text până la 500 și orice cheie de titlu (tipul, până la 60, din 29.10), cu cota zilnică de notificări. APK-ul afișează
   titlul scris. Clientul îl folosește pentru sarcinile atribuite. Închiderea cere o listă de chei și
   textul compus pe server. De decis dacă merită.
 - **Serverul citește orice `invalid-argument` de la FCM ca token mort** și îl șterge

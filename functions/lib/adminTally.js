@@ -17,6 +17,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.wireKey = wireKey;
 exports.inc = inc;
 exports.countOf = countOf;
+exports.withRest = withRest;
+exports.clip = clip;
+exports.memberText = memberText;
 exports.timeMs = timeMs;
 /**
  * The key a breakdown is counted under: the text as it is, unless the wire or an object cannot carry
@@ -45,6 +48,42 @@ function countOf(obj, key) {
         return 0;
     const k = wireKey(key);
     return Object.prototype.hasOwnProperty.call(obj, k) ? obj[k] : 0;
+}
+/**
+ * A breakdown from counts of the values the app writes: the documents none of them matched (`total`
+ * minus their sum, when that is more than 0) are added under `rest`, and a value counted 0 times has no
+ * line, as when the documents themselves were tallied (29.10.2026, adminRead.ts).
+ */
+function withRest(counts, total, rest) {
+    const out = {};
+    let sum = 0;
+    for (const [k, n] of Object.entries(counts)) {
+        sum += n;
+        if (n > 0)
+            out[k] = n;
+    }
+    const left = total - sum;
+    if (left > 0)
+        out[rest] = (Object.prototype.hasOwnProperty.call(out, rest) ? out[rest] : 0) + left;
+    return out;
+}
+/**
+ * Text cut to `max` characters; anything else as it is. For a value a member wrote that the Admin keeps
+ * or sends on — a name, a category used as a key — which the rules keep to one value but not to a length.
+ * What is cut is a copy: a slice of a long string points at the whole of it, and V8 keeps the whole
+ * alive for as long as the slice is kept (review of 29.10.2026, measured: a hundred slices of a megabyte
+ * each held 100 MB).
+ */
+function clip(v, max) {
+    return typeof v === "string" && v.length > max ? v.slice(0, max).split("").join("") : v;
+}
+/**
+ * A member's text as the Admin keeps and sends it: cut to `max`, or null when it is not text. A name or a
+ * birthday stored as bytes or a time would reach the screen as an object it cannot render, and bytes
+ * become one key a byte on the callable's wire (review of 29.10.2026).
+ */
+function memberText(v, max) {
+    return typeof v === "string" ? clip(v, max) : null;
 }
 /** A stored time in epoch milliseconds — an ISO string or a Firestore time — or 0 for anything else. */
 function timeMs(v) {

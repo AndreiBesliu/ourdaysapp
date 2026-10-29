@@ -57,6 +57,9 @@ beforeEach(async () => {
   await db.doc('games/x2').set({ groupId: 'g1', gameType: { toString: 0 }, status: '__proto__', createdAt: t });
   await db.doc('assets/a1').set({ ownerId: ADMIN, category: 'toString', name: 'Card' });
   await db.doc('assets/a2').set({ ownerId: ADMIN, category: 7, name: 'Card 2' });
+  await db.doc('assets/a3').set({ ownerId: ADMIN, category: 'hasOwnProperty', name: 'Card 3' });
+  await db.doc('assets/a4').set({ ownerId: ADMIN, category: '@type', name: 'Card 4' });
+  await db.doc('notifications/n1').set({ userId: ADMIN, read: false, type: '__proto__' });
 });
 
 describe('the Admin statistics on values a member could write', () => {
@@ -75,10 +78,13 @@ describe('the Admin statistics on values a member could write', () => {
     expect(text).toContain('"[__proto__]":1');
     expect(text).toContain('"[toString]":1');
     // Each breakdown whole: the awkward keys in brackets, the values that are not text in the fallback.
-    expect(res.events.byCategory).toEqual({ '[hasOwnProperty]': 1, other: 1 });
-    expect(res.games.byStatus).toEqual({ '[@type]': 1, '[__proto__]': 1 });
+    // The events' categories and the games' types and states are counted since 29.10.2026, one count
+    // per value the app writes, so a value that is not one of those is in the fallback too.
+    expect(res.events.byCategory).toEqual({ other: 2 });
+    expect(res.games.byStatus).toEqual({ unknown: 2 });
     expect(res.games.byType).toEqual({ 'tic-tac-toe': 1, unknown: 1 });
-    expect(res.assets.byCategory).toEqual({ '[toString]': 1, Uncategorized: 1 });
+    expect(res.assets.byCategory).toEqual({ '[toString]': 1, Uncategorized: 1, '[hasOwnProperty]': 1, '[@type]': 1 });
+    expect(res.notifications.byType).toEqual({ '[__proto__]': 1 });
   });
 
   it('the growth chart arrives, a time that is not one counted nowhere', async () => {

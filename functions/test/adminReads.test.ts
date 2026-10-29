@@ -31,7 +31,8 @@ const ask = (f: Callable, data: unknown = {}) =>
 /**
  * The paths of every document a QUERY fetched with its `pad` during `call` — whether or not the code
  * then read it: a read that only counts (`snap.size`) fetches whole documents all the same. A single
- * document read by its path (the person's own two, in adminGetUser) is not a query, and is whole on purpose.
+ * document read by its path (the person's own two, in adminGetUser) is not a query; what those bring is
+ * pinned in adminReadBounds.test.ts, with the numbers that are now counted rather than read (29.10.2026).
  */
 async function padsSeen(call: () => Promise<unknown>): Promise<string[]> {
   const seen: string[] = [];
@@ -82,10 +83,10 @@ beforeEach(async () => {
   b.set(db.doc('groups/g1'), { name: 'Family', ownerId: ADMIN, members: [ADMIN, U1], ...PAD });
   b.set(db.doc('groups/g2'), { name: 'Solo', ownerId: U1, members: [U1], ...PAD });
   b.set(db.doc('events/e1'), {
-    ownerId: U1, groupId: 'g1', isTask: true, taskStatus: 'completed', recurrenceRule: { freq: 'daily' },
+    ownerId: U1, groupId: 'g1', isTask: true, taskStatus: 'completed', recurrenceRule: { frequency: 'daily' },
     reminderMinutes: 0, rsvpEnabled: true, categoryId: 'chores', createdAt: iso, title: 'Clean', date: '2026-10-10', ...PAD,
   });
-  b.set(db.doc('events/e2'), { ownerId: U1, isTask: true, taskStatus: 'pending', categoryId: 'chores', createdAt: iso, title: 'Shop', ...PAD });
+  b.set(db.doc('events/e2'), { ownerId: U1, isTask: true, taskStatus: 'started', categoryId: 'chores', createdAt: iso, title: 'Shop', ...PAD });
   b.set(db.doc('events/e3'), { ownerId: ADMIN, createdAt: iso, ...PAD });
   b.set(db.doc('games/x1'), { groupId: 'g1', gameType: 'tic-tac-toe', status: 'playing', finalized: true, createdAt: now, createdBy: U1, ...PAD });
   b.set(db.doc('games/x2'), { groupId: 'g1', gameType: 'rummy-45', status: 'finished', createdAt: now, createdBy: ADMIN, ...PAD });
@@ -182,7 +183,7 @@ describe('one person', () => {
     expect(r.groups).toEqual(expect.arrayContaining([{ id: 'g1', name: 'Family', members: 2 }, { id: 'g2', name: 'Solo', members: 1 }]));
     expect(r.recentEvents).toEqual(expect.arrayContaining([
       { id: 'e1', title: 'Clean', date: '2026-10-10', isTask: true, taskStatus: 'completed' },
-      { id: 'e2', title: 'Shop', date: null, isTask: true, taskStatus: 'pending' },
+      { id: 'e2', title: 'Shop', date: null, isTask: true, taskStatus: 'started' },
     ]));
   });
 });

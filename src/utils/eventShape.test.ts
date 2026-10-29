@@ -141,8 +141,9 @@ describe('the server’s door uses it', () => {
   it('the AI checklist and the Admin screen read an event’s text only as text', () => {
     expect(index).toContain('const title = typeof data.title === "string" ? data.title : "";');
     expect(index).toContain('const description = typeof data.description === "string" ? data.description : "";');
-    expect(index).toContain('title: typeof e.title === "string" && e.title ? e.title : "(untitled)",');
-    expect(index).toContain('taskStatus: typeof e.taskStatus === "string" && e.taskStatus ? e.taskStatus : null,');
+    expect(index).toContain('title: typeof e.title === "string" && e.title ? clip(e.title, 200) : "(untitled)",');
+    // Since 29.10.2026 the state is not read at all: it is one of the app's, found by a query over the ten.
+    expect(index).toContain('taskStatus: TASK_STATUSES.find((_, i) => statusIds[i]?.has(d.id)) ?? null,');
   });
 });
 

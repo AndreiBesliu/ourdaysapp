@@ -13916,3 +13916,84 @@ globală, care e mărginită. Ramura rămâne ca referință.
 Decizia e trecută în BACKLOG, la 5.3, și în predare. Pe live rămâne citirea globală a memento-urilor, care
 e mărginită. Ramura `reminders-per-owner` (`3eb2442`) rămâne ca referință, nepublicată. Limitarea la
 scriere nu se începe până nu o cere Andrei.
+
+## 2026-10-29 · 5.5: ce citește Admin din ce scriu membrii nu mai poate fi umflat (Task Started)
+
+**Prompt (Andrei):** „continua cu altceva” (după parcarea lui 5.3).
+**Model:** Claude Opus 5.5.
+**Ce e** (BACKLOG §2, „Statisticile din Admin”, ultimul punct din lista predării care nu cere o decizie a lui
+Andrei). Din 10.10, citirile din Admin iau doar câmpurile numărate (`select`), dar câmpurile numărate pot fi
+umflate: `isTask`, `categoryId` și `taskStatus` pe un eveniment personal, `status` pe un joc, `read` pe o
+notificare (doar destinatarul o scrie, netipat), numele și ziua de naștere din `users`, lista de prieteni.
+Până la 1 MiB fiecare, sau o listă de un milion de null-uri (~100 MB decodată). Câteva sute fac panoul să
+cadă din lipsă de memorie la fiecare deschidere. Doar adminul vede.
+**Măsurat pe live înainte (cheia de citire, doar numere):** fiecare cifră a statisticilor, citită din documente
+și numărată cu `count()`: 21 de forme, toate egale, fără niciun index nou (inclusiv intervalul pe liste,
+`fcmTokens > []`). La fel interogările noi din detaliile unui om și din graficul de creștere.
+**Plan:**
+- tot ce spune doar „e pus” sau „are o valoare a aplicației” se NUMĂRĂ (`count()`), fără niciun document citit;
+- ce trebuie citit (categoria unui card, numele unui om, lista de prieteni) vine câte 10 pe pagină, cu un buget
+  de timp care spune `truncated`, iar ce se păstrează e tăiat la o lungime;
+- regulile din `users`: numele, adresa, poza și ziua de naștere sunt câte o valoare (nu liste sau hărți), iar
+  lista de prieteni o scrie doar serverul (nici web-ul, nici APK-ul nu o scriu, verificat în bundle);
+- `notifyUsers` taie `type` la 60 de caractere.
+
+## 2026-10-29 · 5.5: ce citește Admin din ce scriu membrii nu mai poate fi umflat (Task Completed)
+
+**Prompt (Andrei):** „continua cu altceva”.
+**Model:** Claude Opus 5.5.
+
+**Ce s-a schimbat:**
+- **`functions/src/adminRead.ts` (nou):** `howMany` (un `count()`, fără niciun document citit), `breakdown` (câte un
+  `count()` pe fiecare valoare a aplicației, restul la fallback, prin `withRest`) și `readPaged` (pagini de 10 prin
+  `forEachDoc`, cu un buget de 20 s care spune `truncated`).
+- **`adminGetStats`:** evenimentele, jocurile, cererile și invitațiile nu se mai citesc deloc; prezențele din `users`
+  (zi de naștere, poză, push, prieteni) și „necitite” se numără. Se mai citesc: membrii grupurilor (mărginiți de reguli),
+  tipul notificărilor (scris de server), listele de prieteni și categoriile cardurilor (pe pagini, cu buget). Bannerul
+  „Large dataset” se aprinde și când alt panou citește doar primele 8000 de evenimente, 5000 de jocuri sau 2000 de grupuri.
+- **`adminListProfiles`:** documentul fiecărui om, pe pagini, cu buget; numele, adresa, poza și ziua se păstrează doar ca
+  text, tăiat (`memberText`). `truncated` spune și bugetul, și plafoanele.
+- **`adminGetUser`:** documentul omului cu `fieldMask`; evenimentele numărate; 10 citite cu titlul și ziua; dacă e task și
+  starea vin din interogări de referințe peste cele 10 (`documentId in`), cu stările `none`, `not-started`, `started`,
+  `completed`.
+- **`adminGetGrowth`:** zilele evenimentelor se numără (30 de intervale de text pe `createdAt`); timpurile Firestore și
+  jocurile se citesc doar în fereastră.
+- **`notifyUsers`:** `type` tăiat la 60 (gol = „info”).
+- **`firestore.rules`, `users`:** numele, adresa, poza și ziua de naștere sunt text sau nimic (nu liste, hărți, bytes,
+  timp); `friends` nu-l poate scrie niciun client. Verificat în bundle-ul APK-ului (9 mai) și în web: niciunul nu scrie
+  altceva acolo, iar `friends` nu-l scrie niciunul.
+- **`clip` copiază ce taie** (o felie dintr-un șir lung ținea viu tot șirul, în V8); `EVENT_CATEGORIES` e o singură listă
+  pe server (clasificatorul și statisticile).
+
+**Măsurat pe live (cheia de citire, doar numere):** 21 de cifre ale statisticilor, citite și numărate: toate egale, fără
+index nou; detaliile unui om și graficul de creștere, egale; 289 de notificări, cel mai lung `type` 9, `read` mereu boolean.
+
+**Probe:**
+- `functions/test/adminReadBounds.test.ts` (nou, 12 teste): urmărește fiecare document adus de o interogare sau de un
+  `getAll` în timpul apelului. Statisticile nu aduc nimic din evenimente, jocuri, cereri, invitații; restul doar câmpurile
+  mărginite, câte 10 pe pagină. Bugetul depășit spune `truncated` și păstrează totalurile exacte. Câmpurile care nu sunt
+  text se întorc goale. Controale în fixturi: liste goale, text gol, un task întors în eveniment cu starea „completed”.
+- `rules-tests/adminReadUserFields.test.ts` (nou): refuzurile pe toate felurile care nu sunt text și pe `friends`, plus
+  scrierile web și APK copiate din bundle, care trec.
+- Pe codul vechi pică exact cele 14 teste care trebuie; cele 7 care trec sunt scrierile aplicațiilor.
+- **Mutații: 34 din 34 prinse** (22 pe schimbare, 12 pe reparațiile recenziei), cu control verde înainte și restaurare
+  verificată prin hash. Singurul supraviețuitor din prima rundă era o clamă moartă în `withRest`, scoasă.
+
+**Recenzia cu agenți** (3 lentile + 14 verificatori, 17 agenți, **2,13 M tokeni** măsurați, anunțat ~1 M): 6 constatări
+confirmate, din care 2 identice, toate reparate:
+1. regula lăsa bytes sau timp în nume și ziua de naștere, iar serverul le trimitea mai departe (un `Bytes` de 1 MB = un
+   obiect cu un milion de chei pe fir; un timp pica ecranul Admin);
+2. `clip` nu elibera nimic: 50 de nume de 1 MB tăiate la 100 țineau 73 MB (măsurat);
+3. plafoanele din lista de oameni și din grupuri nu mai aprindeau bannerul;
+4. starea `not-started`, pe care o primește orice task nou, lipsea din detaliile unui om;
+5. fixturile nu deosebeau `> []` de `!= null` și „completed” fără task.
+8 constatări infirmate de verificatori.
+
+**Știut, nedovedit de un test:** plafoanele din `truncated`-ul listei de oameni (5000 de grupuri, 8000 de evenimente) nu au
+probă proprie (ar cere mii de documente); bannerul statisticilor, care le acoperă, o are (2000 de grupuri).
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2681), build, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46),
+`test:rules` întreg (1127). `functions/lib` reconstruit.
+- **Prinsă de porți, nu de testele țintite:** prima formă a ajutorului se numea `textOf`, ca unul deja importat în
+  `index.ts` (răspunsul modelului, `aiLedger`). Vitest nu verifică tipurile și a luat-o pe a mea, deci testele Admin
+  erau verzi, iar rezumatul AI pica (15 teste pe emulator); `tsc` o refuza. Redenumită `memberText`, porțile rerulate.
