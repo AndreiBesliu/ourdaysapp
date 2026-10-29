@@ -101,17 +101,39 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
         - o tăietură e roșie și numără proprietarii tăiați, dar ceilalți nu pierd nimic;
         - destinatarii (proprietarul și asignații) rămân pe evenimentul proprietarului, deci un cont care
           inundă își consumă doar propria cotă.
-        - **Cost:** 5 interogări pe proprietar și rulare, adică vreo 11 500 de citiri pe zi la 8 conturi (sub
-          pragul gratuit de 50 000) și vreo 1,4 M pe zi la 1000.
+        - **Cost (corectat de recenzia din 29.10):** 6 citiri pe proprietar și rulare, parcurgerea inclusă,
+          adică vreo 14 100 pe zi la 8 conturi (sub pragul gratuit de 50 000) și vreo 1,7 M pe zi la 1000.
       - **B, amânată:** `reminderIndex` scris de un trigger la fiecare eveniment, cu momentul următorului
         memento, și un plafon pe proprietar.
         - Scalează cu memento-urile scadente, dar cere: un trigger pe evenimente și unul pe fusul din
           `users`, mutarea momentului după fiecare trimitere, o completare inițială și un plafon pe proprietar
           ținut la scriere.
         - De luat când A devine prea scumpă sau prea lentă, pe la ~1000 de conturi.
-      - **Urmează (segmentul 2):** A, cu teste pe emulator (un proprietar care inundă nu taie alt proprietar;
-        plafonul și timpul pe proprietar; ordinea rotită; un proprietar fără document în `users`), fără
-        index nou.
+      - **Segmentul 2 (29.10): A e scrisă, dar NU e pe `main` și NU e publicată.** Stă pe ramura
+        `reminders-per-owner` (`28bde4f`), cu porțile verzi (unit 2674, emulator 1111) și 7 teste noi. Testul
+        de inundare pică pe codul vechi.
+        - **Recenzia cu agenți** (12 agenți, 1,81 M tokeni) a găsit patru probleme reale. Azi nu e afectat
+          nimic: pe live sunt 3 proprietari.
+          1. **Scara.** Proprietarii se găsesc câte unul, iar fiecare cere 5 interogări la rând, toate în
+             termenul comun de 30 s. Funcțiile rulează în **us-central1**, iar Firestore e în
+             **europe-central2**, deci o interogare ia ~120 ms. Pe la ~250 de proprietari nu mai pleacă
+             niciun memento; citirea globală ducea 1000. **Reparația:** parcurgerea pe intervale de `ownerId`,
+             în paralel, cu timpul ei, și termenul citirilor pornit după ea.
+          2. **Opt conturi care își umplu citirile** țin toți cei 8 lucrători până la termen și îi taie pe toți
+             cei de după (înainte ajungea unul). **Reparația:** fiecare proprietar primește întâi o primă
+             porție mică (~100 de evenimente pe citire); abia apoi cei grei își continuă citirea, pe același
+             `seen`, în bugetul lor.
+          3. **Un membru al grupului umple cota altui membru** prin `createEventOverride`: documentul nou
+             primește `ownerId` al părintelui, iar data și ziua le alege apelantul. **Reparația:** cota pe
+             `groupId` pentru evenimentele de grup și pe `ownerId` doar pentru cele personale, plus
+             `createEventOverride` refuzat când părintele nu e o serie sau ziua nu e o apariție a ei.
+          4. **Rotirea cu un pas** taie același proprietar mai multe rulări la rând, iar un memento are doar 3
+             rulări. **Reparația:** pasul de n/3.
+          - **Plus:** două teste adaptate lasă un mutant să trăiască (bugetul propriu al citirii de serii și
+            al rezervei); remedierile sunt în raportul recenziei.
+        - **Urmează (segmentul 3):** cele patru reparații pe ramură, apoi o recenzie nouă, apoi `main` și
+          publicarea. Alternativa e B, care ar avea nevoie de aceleași garanții (cota pe grup și pe
+          proprietar, prima porție).
     - **Seriile încheiate nu mai sunt citite: reparat pe 16.10.** Interogarea seriilor are acum o limită de jos pe
       `date`, pe frecvență (`lookbackMsFor`: 400 de zile, 5×366 pentru anual), și una de sus la capătul ferestrei.
       Cere indexul compus (`recurrenceRule.frequency`, `date`), adăugat în `firestore.indexes.json`.
@@ -299,6 +321,13 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     greșeală ar da 404 pe orice link direct de pe live. E prea mult risc pentru un caz de rollback.
     Se reia cu un test pe emulatorul de hosting ȘI o verificare pe live imediat după deploy.
 - **Warlord** (repo-ul Warlord, nu aici): 44 de PNG-uri, 28 MB, 800–900 kB fiecare → WebP.
+- **Funcțiile programate și callable rulează în us-central1, iar baza e în europe-central2** (verificat pe
+  29.10 în logul de publicare: `sendDueReminders(us-central1)`; triggerele Firestore sunt în europe-central2).
+  Nu e setată nicio regiune, așa că fiecare citire a unui job traversează Atlanticul. Recenzia din 29.10 a
+  estimat ~120 ms pe interogare, nemăsurat încă. Pe memento-uri azi costă puțin (câteva interogări pe rulare),
+  dar devine limita oricărei citiri pe proprietar (5.3). Mutarea înseamnă funcții noi: un callable devine
+  public doar la creare, iar clientul primește alte URL-uri. **De măsurat întâi:** timpul unei pagini din
+  `REMINDERS_RUN`.
 - **Node 22 în Cloud Functions:** învechit din **30.04.2027**, scos din uz pe **31.10.2027**. Trecerea
   la Node 24 înainte de prima dată.
 - **Fereastra de deploy și taburile vechi.** Regulile noi întâlnesc, până la hosting, clientul web

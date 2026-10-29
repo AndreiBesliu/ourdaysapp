@@ -13812,3 +13812,50 @@ Listele și hărțile sunt mărginite din `f3706d2` (17.10). Rămân, deliberat,
 APK-ul scrie text liber.
 
 **Urmează segmentul 2:** implementarea lui A, cu teste pe emulator. Nimic de publicat în segmentul ăsta.
+
+## 2026-10-29 · 5.3, segmentul 2: citirea pe proprietar, scrisă și recenzată, neintegrată (Task Started)
+
+**Prompt (Andrei):** „Da, continuă”.
+**Model:** Claude Opus 5.5.
+
+Varianta A din segmentul 1.
+- Proprietarii se găsesc din evenimente: o parcurgere pe `ownerId`, un document pe proprietar.
+- Fiecare proprietar are interogările de azi, filtrate pe el, cu plafonul și timpul lui; 8 proprietari în
+  paralel, ordinea rotită, totul într-un termen comun de 30 s.
+
+## 2026-10-29 · 5.3, segmentul 2: citirea pe proprietar, scrisă și recenzată, neintegrată (Task Completed)
+
+**Prompt (Andrei):** „Da, continuă”.
+**Model:** Claude Opus 5.5.
+
+**Scris pe ramura `reminders-per-owner` (`28bde4f`, urcată), NU pe `main`, și nepublicat.**
+- **Porți verzi:** unit 2674, emulator 1111.
+- **Teste noi** (`remindersPerOwner.test.ts`):
+  - inundarea la plafonul implicit, prin jobul adevărat;
+  - timpul fiecărui proprietar și termenul comun;
+  - parcurgerea proprietarilor și plafonul ei;
+  - rotirea;
+  - același rezultat cu 1 sau cu 8 proprietari în paralel.
+- **Pe codul vechi, testul de inundare pică** din motivul corect: s-au citit 5000 de evenimente ale lui
+  Mallory, iar memento-ul Alicei a fost pierdut.
+- **Testele vechi adaptate:** cele care spionau citirile recunosc parcurgerea (doar `ownerId`), iar cele de
+  timp primesc termenul comun infinit.
+- **Formele noi probate pe live:** merg fără index.
+
+**Recenzia cu agenți** (12 agenți, 1,81 M tokeni măsurați, față de 1,2–1,4 M estimați) a găsit patru
+probleme reale, de aceea codul nu e pe `main`. Detaliile și reparațiile sunt în BACKLOG, la 5.3.
+1. **Scara.** Parcurgerea e secvențială și consumă din termenul citirilor. La ~120 ms pe interogare (funcțiile
+   în us-central1, baza în europe-central2), pe la ~250 de proprietari nu mai pleacă niciun memento. Citirea
+   globală ducea 1000.
+2. **8 conturi care își umplu citirile** țin toți lucrătorii până la termen.
+3. **Un membru al grupului umple cota altui membru** prin `createEventOverride`. Nu e o regresie, dar
+   contrazice garanția scrisă.
+4. **Rotirea cu un pas** taie același proprietar mai multe rulări la rând.
+- **Plus:** două teste adaptate lasă un mutant să trăiască; costul real e de 6 citiri pe proprietar.
+
+**Pe live azi nu e afectat nimic:** 3 proprietari, iar codul publicat e cel vechi.
+
+**BACKLOG:** 5.3 are acum constatările și reparațiile, cu costul corectat. E un punct nou în §3: regiunea
+funcțiilor (us-central1, departe de bază).
+
+**Urmează segmentul 3:** cele patru reparații pe ramură, o recenzie nouă, apoi `main` și publicarea.
