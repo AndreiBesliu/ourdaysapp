@@ -14146,3 +14146,16 @@ arcade-ul primește o barieră proprie; `check-split` refuză întoarcerea lor �
 
 **Porți:** `tsc -b`, `lint-gate`, `npm test` (2707), build, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46),
 `test:rules` (1127).
+
+## 2026-10-29 · Bundle A publicat pe live: funcțiile (neschimbate), apoi hosting-ul (Task Completed)
+
+**Prompt (Andrei):** „A: ferestrele” (publicarea fără întrebare, după regula din 17.10).
+**Model:** Claude Opus 5.5.
+
+- `deploy --only functions,hosting` de la `7dc475a`: funcțiile, toate 55 „Skipped (No changes detected)”; hosting-ul, cu
+  `tree-clean` și `check-split` verzi în predeploy, release complet.
+- **Verificat pe live după:** pagina cere intrarea construită local (`index-CDx85aoT.js`) și cele 6 bucăți de pornire,
+  fără nicio fereastră; bucățile ferestrelor se servesc (200: adăugat 96.958, detalii 36.055, arcade 91.464, cod 69.319,
+  invitație 13.308 octeți); intrarea nu conține marcajele drag-and-drop-ului, ale parserului sau ale codurilor;
+  `errorLogs` neschimbat; memento-urile au rulat „ok” după.
+- Ecranele din spatele login-ului nu le pot deschide eu: punctul e sus în `OWNER_VERIFY.md`.
