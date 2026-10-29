@@ -87,10 +87,31 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
       rescrie acum, push-ul pleacă a doua oară).
     - **Aglomerarea e acum vizibilă, nu imposibilă:** peste 5000 de evenimente pe interogare (ale tuturor
       conturilor la un loc) sau peste 15 s de citire pe interogare, rularea e roșie la fiecare 5 minute, iar
-      memento-urile de după tăietură se pierd. Câteva zeci de evenimente umflate ajung la limita de timp. Închiderea cere citirea
-      pe proprietar: un index scris de server la fiecare eveniment (`reminderIndex`, cu momentul următorului
-      memento), din care jobul citește doar ce e scadent, cu un plafon pe proprietar. Cost: o scriere de
-      trigger la fiecare eveniment; câștig: citiri proporționale cu memento-urile scadente, nu cu evenimentele.
+      memento-urile de după tăietură se pierd. Câteva zeci de evenimente umflate ajung la limita de timp.
+      **Proiectat pe 29.10 (5.3, segmentul 1): citirea PE PROPRIETAR, varianta A.**
+      - **Măsurat pe live:** 8 conturi, 34 de evenimente, 3 proprietari, 2 evenimente cu memento, 1 serie.
+        Toți proprietarii au document în `users` și cont în Auth. Formele pe proprietar merg fără index nou:
+        (`ownerId`, interval pe `date`) din indexul (`ownerId`, `date`), deja publicat; (`ownerId`,
+        `recurrenceRule.frequency in [f]`, `date >=`) prin combinarea lui cu (`recurrenceRule.frequency`,
+        `date`).
+      - **A, aleasă (implicitul):**
+        - proprietarii vin din Auth (`listAllAuthUsers`), adevărul despre conturi;
+        - pentru fiecare: interogarea datată și cele 4 intervale de serii de azi, filtrate pe `ownerId`;
+        - plafon și timp pe proprietar, câțiva proprietari în paralel, ordinea rotită de la o rulare la alta;
+        - o tăietură e roșie și numără proprietarii tăiați, dar ceilalți nu pierd nimic;
+        - destinatarii (proprietarul și asignații) rămân pe evenimentul proprietarului, deci un cont care
+          inundă își consumă doar propria cotă.
+        - **Cost:** 5 interogări pe proprietar și rulare, adică vreo 11 500 de citiri pe zi la 8 conturi (sub
+          pragul gratuit de 50 000) și vreo 1,4 M pe zi la 1000.
+      - **B, amânată:** `reminderIndex` scris de un trigger la fiecare eveniment, cu momentul următorului
+        memento, și un plafon pe proprietar.
+        - Scalează cu memento-urile scadente, dar cere: un trigger pe evenimente și unul pe fusul din
+          `users`, mutarea momentului după fiecare trimitere, o completare inițială și un plafon pe proprietar
+          ținut la scriere.
+        - De luat când A devine prea scumpă sau prea lentă, pe la ~1000 de conturi.
+      - **Urmează (segmentul 2):** A, cu teste pe emulator (un proprietar care inundă nu taie alt proprietar;
+        plafonul și timpul pe proprietar; ordinea rotită; un proprietar fără document în `users`), fără
+        index nou.
     - **Seriile încheiate nu mai sunt citite: reparat pe 16.10.** Interogarea seriilor are acum o limită de jos pe
       `date`, pe frecvență (`lookbackMsFor`: 400 de zile, 5×366 pentru anual), și una de sus la capătul ferestrei.
       Cere indexul compus (`recurrenceRule.frequency`, `date`), adăugat în `firestore.indexes.json`.
@@ -101,10 +122,13 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
       - **La `firestore:indexes` se răspunde „Nu”** la ștergerea indexurilor care există doar pe live (CLAUDE.md).
       - **Recenzia cu agenți: făcută pe 17.10,** reparată în `c60463e` (un interval pe frecvență, calea de
         rezervă în aceeași citire).
-    - **Evenimentele personale nu au niciun câmp verificat de reguli:** câmpurile citite de memento-uri
-      (`recurrenceExceptions`, `assigneeIds`, `title`) pot fi umflate. Paginile de 10 țin memoria, dar câteva
-      zeci de astfel de evenimente consumă bugetul de timp. Remediul: plafoane în reguli și pentru crearea
-      personală (verificate întâi pe APK).
+    - **Evenimentele personale: listele și hărțile citite în bloc sunt mărginite din 17.10 (`f3706d2`,
+      `bulkReadOk`, verificat pe 29.10).** La crearea personală, excepțiile au cel mult 500 de valori simple,
+      câmpurile citite de memento-uri nu pot fi liste sau hărți, iar asignații sunt doar autorul (cel mult
+      200). La actualizare se aplică aceleași reguli ca la grup. Rămân, deliberat, textele lungi (`title`
+      până la 1 MiB): APK-ul scrie text liber fără limită, deci regula judecă tipul, nu lungimea. Câteva zeci
+      de titluri umflate pot încă mânca timpul unei rulări; le mărginește doar citirea pe proprietar (punctul
+      de mai sus).
   - **Ștergerea contului și a grupului: reparată pe 16.10.** Citesc acum doar referințele (`select()`) sau doar
     câmpurile pe care le folosește fiecare pas, câte 10 documente pe pagină (`batchDelete.ts`, `pageOf`).
     Grupurile citite pe drum vin doar cu `members` și `ownerId`, iar în `deleteGroupCascade` doar cu `ownerId`.

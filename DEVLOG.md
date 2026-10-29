@@ -13777,3 +13777,38 @@ Publicat cu `--project live --non-interactive`, de pe un arbore curat (`2c5dac4`
 **De făcut de Andrei:** npm e stricat pe mașina asta (vezi intrarea de azi despre id-ul documentului).
 Repararea lui Node, din programul de instalare (Repair) sau printr-o reinstalare, îl readuce. Până atunci,
 porțile și publicarea merg doar prin înlocuitorii din scratchpad.
+
+## 2026-10-29 · 5.3, memento-urile citite pe proprietar: segmentul 1, proiectarea (Task Started)
+
+**Prompt (Andrei):** „continua”.
+**Model:** Claude Opus 5.5.
+
+Predarea (§5) pune 5.3 după 5.1 și 5.2, ambele închise. Consumul săptămânii era 60%, cu resetare pe 31.10,
+așa că segmentul ăsta e fără agenți: măsurători pe live, apoi o decizie scrisă.
+
+## 2026-10-29 · 5.3, memento-urile citite pe proprietar: segmentul 1, proiectarea (Task Completed)
+
+**Prompt (Andrei):** „continua”.
+**Model:** Claude Opus 5.5.
+
+**Măsurat pe live** (cheia de citire, doar numere):
+- 8 conturi și 34 de evenimente, 3 proprietari;
+- 2 evenimente cu memento, 1 serie;
+- toți proprietarii au document în `users` și cont în Auth.
+- **Formele pe proprietar merg fără index nou:**
+  - interogarea datată pe proprietar, prin indexul (`ownerId`, `date`), deja publicat;
+  - intervalul de serii pe proprietar și frecvență, prin combinarea acelui index cu (`recurrenceRule.frequency`,
+    `date`).
+
+**Decizia** (BACKLOG, punctul despre aglomerare): **varianta A, citirea pe proprietar.**
+- Proprietarii se iau din Auth. Fiecare are interogările de azi, filtrate pe el, cu plafon și timp propriu.
+- Un cont care inundă își consumă doar propria cotă.
+- Costul e de vreo 11 500 de citiri pe zi la 8 conturi.
+- **B (`reminderIndex`, indexul scris de server) e amânată** până pe la ~1000 de conturi. Cere două triggere,
+  mutarea momentului după fiecare trimitere, o completare inițială și un plafon ținut la scriere.
+
+**BACKLOG:** rândul despre evenimentele personale („niciun câmp verificat de reguli”) era rămas în urmă.
+Listele și hărțile sunt mărginite din `f3706d2` (17.10). Rămân, deliberat, doar textele lungi, pentru că
+APK-ul scrie text liber.
+
+**Urmează segmentul 2:** implementarea lui A, cu teste pe emulator. Nimic de publicat în segmentul ăsta.
