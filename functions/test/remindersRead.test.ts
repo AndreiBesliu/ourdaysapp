@@ -104,11 +104,12 @@ async function fetched(call: () => Promise<unknown>): Promise<Array<{ path: stri
   return seen;
 }
 /**
- * A document the owners' scan brought (`findOwners`, 29.10.2026): one an owner, only `ownerId`. Every read
- * of the computation brings `date` too (both its queries filter on it), so the two cannot be confused.
+ * A document the scans for owners and groups brought (`findKeys`, 29.10.2026): one a value, only `ownerId`
+ * or only `groupId`. Every read of the computation brings `date` too (its queries filter on it), so the
+ * two cannot be confused.
  */
-const ownerScan = (keys: string[]) => keys.length === 1 && keys[0] === 'ownerId';
-/** What the computation read: the events, not the owners' scan. */
+const ownerScan = (keys: string[]) => keys.length === 1 && (keys[0] === 'ownerId' || keys[0] === 'groupId');
+/** What the computation read: the events, not the scans. */
 const onEvents = (rows: Array<{ path: string; keys: string[] }>) => rows.filter((f) => f.path.startsWith('events/') && !ownerScan(f.keys));
 
 describe('what the job reads', () => {
@@ -196,7 +197,7 @@ describe('what the job reads', () => {
 
   it('runs with the time and memory it states', () => {
     const ep = (mod.sendDueReminders as unknown as { __endpoint: { timeoutSeconds?: number; availableMemoryMb?: number } }).__endpoint;
-    expect(ep.timeoutSeconds).toBeGreaterThanOrEqual((2 * mod.READ_BUDGET_MS) / 1000 + 60);
+    expect(ep.timeoutSeconds).toBeGreaterThanOrEqual((mod.SCAN_BUDGET_MS + mod.READS_DEADLINE_MS) / 1000 + 60);
     expect(ep.availableMemoryMb).toBeGreaterThanOrEqual(512);
   });
 });
@@ -226,10 +227,11 @@ describe('a read that cannot finish says so', () => {
   }, 180_000);
 
   it('out of time, the same — and each owner’s read has its own time', async () => {
-    await seed({ ...many('c', 30, () => dueEvent(MALLORY)), series: dueSeries(ALICE), dentist: dueEvent(ALICE) });
+    await seed({ ...many('c', 30, () => dueEvent(MALLORY)), mseries: dueSeries(MALLORY), series: dueSeries(ALICE), dentist: dueEvent(ALICE) });
     // Each page of Mallory's events moves the clock ten seconds on: her dated read is past its fifteen
-    // seconds after two pages. Owners one at a time, so the clock moves only inside her reads, whoever
-    // goes first; the whole reading's deadline out of the way, so this is each read's own time.
+    // seconds after two pages, and her series read (its own read, beside it) still brings her series.
+    // Shares one at a time, so the clock moves only inside hers, whoever goes first; the whole reading's
+    // deadline out of the way, so this is each read's own time.
     let t = 0;
     const realGet = Query.prototype.get;
     vi.spyOn(Query.prototype, 'get').mockImplementation(async function (this: Query, ...args: unknown[]) {
@@ -240,9 +242,10 @@ describe('a read that cannot finish says so', () => {
     const counts = mod.emptyCounts();
     await mod.remindDue(db, Date.now(), counts, { page: 4, concurrency: 1, clock: () => t, readsDeadlineMs: Number.POSITIVE_INFINITY });
     vi.restoreAllMocks();
-    // Mallory's two pages (8), then Alice's event and series, each read in its own time.
-    expect(counts).toMatchObject({ cut: 1, read: 8 + 2 });
+    // Mallory's two pages (8) and her series, then Alice's event and series, each read in its own time.
+    expect(counts).toMatchObject({ cut: 1, read: 8 + 1 + 2 });
     expect(mod.reminderOutcome(counts).failed).toBeGreaterThan(0);
+    expect(await sentFor('mseries')).toBe(true);
     expect(await sentFor('series')).toBe(true);
     expect(await sentFor('dentist')).toBe(true);
   }, 120_000);
@@ -478,7 +481,8 @@ describe('the series query reaches back as far as a series can still run (16.10.
     const refused = refuseBoundedSeries(missingIndex);
     const counts = mod.emptyCounts();
     const read = new Set(onEvents(await fetched(() => mod.remindDue(db, Date.now(), counts))).map((f) => f.path));
-    expect(refused.n).toBe(1);
+    // Each of the share's four ranges, asked side by side (29.10.2026), is refused once; then the fallback.
+    expect(refused.n).toBe(4);
     expect(await sentFor('series')).toBe(true);
     expect(read).toEqual(new Set(['events/series', 'events/ended']));
     expect(counts).toMatchObject({ cut: 0, seriesUnbounded: 1 });
@@ -514,10 +518,14 @@ describe('the series query reaches back as far as a series can still run (16.10.
     expect(exact).toMatchObject({ cut: 0, read: 4 });
   }, 120_000);
 
-  it('one time for all of its ranges: past it, the next is not read, and the run says it stopped', async () => {
-    await seed({ weekly: series('weekly', at(FROM - 100 * DAY)), yearly: series('yearly', at(FROM - 1000 * DAY)) });
-    // The clock stands still until a page has brought a series, then is a minute on: the range that
-    // brought it is read, and the next look stops the read, whichever range comes next.
+  it('one time for all of its ranges: past it, none reads another page, and the run says it stopped', async () => {
+    await seed({
+      ...many('w', 3, () => series('weekly', at(FROM - 100 * DAY))),
+      ...many('y', 3, () => series('yearly', at(FROM - 1000 * DAY))),
+    });
+    // The ranges run side by side (29.10.2026), each asking its first page at once. The clock stands still
+    // until a page has brought a series, then is a minute on: each range has its first page, and the next
+    // look of every range stops the read.
     let found = 0;
     const realGet = Query.prototype.get;
     vi.spyOn(Query.prototype, 'get').mockImplementation(async function (this: Query, ...args: unknown[]) {
@@ -527,10 +535,10 @@ describe('the series query reaches back as far as a series can still run (16.10.
     } as never);
     const counts = mod.emptyCounts();
     // The whole reading's deadline out of the way: this is the series read's own time.
-    await mod.remindDue(db, NOW, counts, { clock: () => (found ? 60_000 : 0), budgetMs: 15_000, readsDeadlineMs: Number.POSITIVE_INFINITY });
+    await mod.remindDue(db, NOW, counts, { page: 1, clock: () => (found ? 60_000 : 0), budgetMs: 15_000, readsDeadlineMs: Number.POSITIVE_INFINITY });
     vi.restoreAllMocks();
-    expect(counts).toMatchObject({ cut: 1, read: 1 });
-    expect(found).toBe(1);
+    expect(counts).toMatchObject({ cut: 1, read: 2 });
+    expect(found).toBe(2);
   }, 120_000);
 
   // The index refused after a page of the bounded read (it went away in the middle of a run): the fallback
@@ -567,7 +575,9 @@ describe('the series query reaches back as far as a series can still run (16.10.
     const refused = refuseAfterFirstPage();
     const late = mod.emptyCounts();
     // The clock stands still until the refusal, then is a minute on: the read is past its fifteen seconds.
-    await mod.remindDue(db, Date.now(), late, { page: 2, clock: () => (refused.n ? 60_000 : 0), budgetMs: 15_000 });
+    // The whole reading's deadline out of the way (review, 29.10.2026): this is the read's own time, which
+    // the fallback goes on with — a fallback with a fresh time would read the third series.
+    await mod.remindDue(db, Date.now(), late, { page: 2, clock: () => (refused.n ? 60_000 : 0), budgetMs: 15_000, readsDeadlineMs: Number.POSITIVE_INFINITY });
     expect(late).toMatchObject({ seriesUnbounded: 1, cut: 1, read: 2 });
     // A cap of 2: the first page fills it, and the third series, found by the fallback, is one past it.
     const capped = mod.emptyCounts();
@@ -595,7 +605,8 @@ describe('the series query reaches back as far as a series can still run (16.10.
     const refused = refuseBoundedSeries(missingIndex);
     const counts = mod.emptyCounts();
     await mod.remindDue(db, Date.now(), counts);
-    expect(refused.n).toBe(1);
+    // Each of the share's four ranges, asked side by side (29.10.2026), is refused once; then the fallback.
+    expect(refused.n).toBe(4);
     expect(counts.seriesUnbounded).toBe(1);
     expect(await sentFor('daily')).toBe(true);
     expect(await sentFor('yearly')).toBe(true);

@@ -1,9 +1,10 @@
 // functions/test/remindersPerOwner.test.ts
 //
-// Reminders read owner by owner (29.10.2026, BACKLOG 5.3). Until then the job read every account's events
-// together, under one cap and one time: one account's flood reached them first and every reminder behind
-// it was lost, for everybody. Now each owner's events are read with that owner's own cap and time, inside
-// one deadline for the whole reading, and a flood costs only the account that made it.
+// Reminders read share by share (29.10.2026, BACKLOG 5.3): a group's events, and each owner's personal ones.
+// Until then the job read every account's events together, under one cap and one time: one account's flood
+// reached them first and every reminder behind it was lost, for everybody. Now each share is read with its
+// own cap and time, every share gets a first turn before any gets a second, all inside one deadline for the
+// whole reading, and a flood costs the share it was written into.
 // Run against the emulators through `npm run test:rules`, through the real job where it matters.
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -47,7 +48,8 @@ const many = (prefix: string, n: number, make: (i: number) => Record<string, unk
 const sentFor = async (eventId: string) => (await db.doc(`reminder_log/${eventId}__${dayOf(dueAt())}`).get()).exists;
 const runJob = () => (mod.sendDueReminders as unknown as { run: (e: unknown) => Promise<void> }).run(EVENT);
 const marker = async () => (await db.doc('jobRuns/sendDueReminders').get()).data();
-const ownerScan = (d: admin.firestore.QueryDocumentSnapshot) => { const k = Object.keys(d.data()); return k.length === 1 && k[0] === 'ownerId'; };
+/** A document the scans for owners and groups brought: one a value, only `ownerId` or only `groupId`. */
+const ownerScan = (d: admin.firestore.QueryDocumentSnapshot) => { const k = Object.keys(d.data()); return k.length === 1 && (k[0] === 'ownerId' || k[0] === 'groupId'); };
 
 /** A clock that moves `step` on every page of the computation's reads (not the owners' scan). */
 function pagedClock(step: number) {
@@ -151,14 +153,18 @@ describe('the owners', () => {
     expect(await sentFor('second')).toBe(true);
   }, 120_000);
 
-  it('take turns: each run starts one owner on, and reads every owner once', () => {
-    const owners = ['a', 'b', 'c'];
+  it('take turns: the start moves a third of the ring a run, and every share is read once', () => {
     const slot = mod.RUN_EVERY_MS;
-    const base = 999 * slot; // a run at the start of a slot whose number is a multiple of 3
-    const firsts = [0, 1, 2, 3].map((k) => mod.ownerTurn(owners, base + k * slot + 17)[0]);
-    expect(firsts).toEqual(['a', 'b', 'c', 'a']);
-    for (let k = 0; k < 3; k++) expect([...mod.ownerTurn(owners, base + k * slot)].sort()).toEqual(owners);
-    expect(mod.ownerTurn([], base)).toEqual([]);
+    const at = (k: number) => 999 * slot + k * slot + 17; // a slot whose number is a multiple of 9
+    // Nine shares: three runs see one reminder, and their starts are three apart, so the tails a deadline
+    // cuts in those runs do not overlap (review, 29.10.2026: moved one a run, the same share was cut run
+    // after run).
+    const nine = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'];
+    expect([0, 1, 2].map((k) => mod.ownerTurn(nine, at(k))[0])).toEqual(['a', 'd', 'g']);
+    for (let k = 0; k < 9; k++) expect([...mod.ownerTurn(nine, at(k))].sort()).toEqual(nine);
+    // Few shares: a step of one, as before.
+    expect([0, 1, 2, 3].map((k) => mod.ownerTurn(['a', 'b', 'c'], at(k))[0])).toEqual(['a', 'b', 'c', 'a']);
+    expect(mod.ownerTurn([], at(0))).toEqual([]);
   });
 
   it('read one at a time or eight at a time, the same events, the same reminders', async () => {
@@ -173,5 +179,81 @@ describe('the owners', () => {
     const pick = (c: typeof one) => ({ owners: c.owners, read: c.read, candidates: c.candidates, occurrences: c.occurrences, due: c.due, cut: c.cut });
     expect(pick(eight)).toEqual(pick(one));
     expect(pick(one)).toMatchObject({ owners: 3, read: 19, due: 3, cut: 0 });
+  }, 120_000);
+});
+
+describe('every share gets a first turn before any gets a second', () => {
+  /** A `now` for which this run reads `first` ahead of the other owner; a run one slot on still sees the reminder. */
+  const nowWithFirst = (first: string, owners: string[]) => {
+    const now = Date.now();
+    return mod.ownerTurn([...owners].sort(), now)[0] === first ? now : now + mod.RUN_EVERY_MS;
+  };
+
+  it('a share that would read until the deadline does not hold the worker: the share behind it is read', async () => {
+    await seed({ ...many('md', 40, () => filler(MALLORY)), dentist: dueEvent(ALICE) });
+    const now = nowWithFirst(MALLORY, [ALICE, MALLORY]);
+    // One worker, as many slow shares fill many; every page five seconds; a read's own time out of the way,
+    // so Mallory could read until the deadline (25 s). Without the first turn she does, and Alice is cut
+    // without a read; with it, Alice is read after Mallory's first eight events, and Mallory goes on after.
+    const clock = pagedClock(5_000);
+    const counts = mod.emptyCounts();
+    await mod.remindDue(db, now, counts, {
+      page: 4, concurrency: 1, firstShare: 8, clock: () => clock.t, budgetMs: Number.POSITIVE_INFINITY,
+      readsDeadlineMs: 25_000, sendBudgetMs: 0,
+    });
+    vi.restoreAllMocks();
+    expect(counts).toMatchObject({ owners: 2, cut: 1, due: 1 });
+  }, 120_000);
+
+  it('the second turn goes on with the time the first took, not a new fifteen seconds', async () => {
+    await seed({ ...many('md', 20, () => filler(MALLORY)), dentist: dueEvent(ALICE) });
+    const now = nowWithFirst(MALLORY, [ALICE, MALLORY]);
+    // Every page five seconds. First turn: Mallory's two pages (8 events, 10 s), Alice's page. Second turn:
+    // Mallory has five seconds left, one page, then she is past her fifteen.
+    const clock = pagedClock(5_000);
+    const counts = mod.emptyCounts();
+    await mod.remindDue(db, now, counts, {
+      page: 4, concurrency: 1, firstShare: 8, clock: () => clock.t, readsDeadlineMs: Number.POSITIVE_INFINITY,
+    });
+    vi.restoreAllMocks();
+    expect(counts).toMatchObject({ cut: 1, read: 12 + 1, sent: 1 });
+  }, 120_000);
+});
+
+describe('a group is a share of its own', () => {
+  const G = 'g-po-family';
+  const H = 'g-po-other';
+
+  it('events written into a group fill that group’s share: not its members’ personal ones, nor another group’s', async () => {
+    // What a member can write into another member's name: edits of an occurrence of Alice's group series
+    // (`createEventOverride` gives them her owner and her group), as many as the member asks for.
+    await seed({
+      ...many('!edit', 30, () => ({ ...filler(ALICE), groupId: G, overrideOfParent: 'alice-series', overrideDate: dayOf(Date.now()) })),
+      dentist: dueEvent(ALICE),
+      other: dueEvent(ALICE, { groupId: H }),
+      inG: dueEvent(MALLORY, { groupId: G }),
+    });
+    const counts = mod.emptyCounts();
+    await mod.remindDue(db, Date.now(), counts, { maxCandidates: 10 });
+    // Shares: Alice's and Mallory's personal ones, G and H. Only G is past its cap.
+    expect(counts).toMatchObject({ owners: 2, groups: 2, cut: 1 });
+    expect(await sentFor('dentist')).toBe(true);
+    expect(await sentFor('other')).toBe(true);
+  }, 120_000);
+
+  it('groups are found from the events, one document each; personal events are no group', async () => {
+    await seed({ a: dueEvent(ALICE, { groupId: G }), b: dueEvent(MALLORY, { groupId: H }), c: dueEvent(MALLORY) });
+    const groupsScanned: string[] = [];
+    const realGet = Query.prototype.get;
+    vi.spyOn(Query.prototype, 'get').mockImplementation(async function (this: Query, ...args: unknown[]) {
+      const snap = await (realGet as (...a: unknown[]) => Promise<admin.firestore.QuerySnapshot>).apply(this, args);
+      for (const d of snap.docs) if (ownerScan(d) && Object.keys(d.data())[0] === 'groupId') groupsScanned.push(d.get('groupId'));
+      return snap;
+    } as never);
+    const counts = mod.emptyCounts();
+    await mod.remindDue(db, Date.now(), counts);
+    vi.restoreAllMocks();
+    expect(groupsScanned.sort()).toEqual([G, H]);
+    expect(counts).toMatchObject({ owners: 2, groups: 2, cut: 0, due: 3, sent: 3 });
   }, 120_000);
 });

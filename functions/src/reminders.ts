@@ -43,8 +43,9 @@
 //   * each query has its own cap and its own time; past either the run stops reading and is RED —
 //     an abuse becomes a problem in Admin → Health instead of quietly costing other people their
 //     reminders;
-//   * and since 29.10.2026 they are read OWNER BY OWNER, each owner with that cap and that time of
-//     their own, so a flood costs only the account that made it (see `remindDue`).
+//   * and since 29.10.2026 they are read SHARE BY SHARE — a group's events, an owner's personal ones —
+//     each with that cap and that time of its own, every share a first turn before any a second, so a
+//     flood costs the share it was written into (see `remindDue`).
 // An edited occurrence keeps its series' original day from being reminded through the series' own
 // exceptions: `createEventOverride` adds the day to them with every edit. The edit document itself
 // (`expandInWindow`'s second dedupe) matters only for edits made before that, none on live; past a
@@ -94,23 +95,43 @@ const MAX_LEAD_DAYS = 31;
 const WINDOW_MS = 15 * 60 * 1000;
 
 /**
- * Events read per owner, read (dated, series) and run, at most. Measured on live on 12.10.2026: 2 in the
- * window and 1 series, out of 34 events. A family app is hundreds; this is that with room, and it bounds
- * what one account can make every run read (and what the project pays for it). Whichever comes first,
- * this or READ_BUDGET_MS, is the limit — at a page every ~50 ms, the time; REMINDERS_RUN logs the reads'.
+ * Events read per share (a group's events, or one owner's personal ones), read (dated, series) and run, at
+ * most. Measured on live on 12.10.2026: 2 in the window and 1 series, out of 34 events. A family app is
+ * hundreds; this is that with room, and it bounds what one account can make every run read (and what the
+ * project pays for it). Whichever comes first, this or READ_BUDGET_MS, is the limit.
  */
 export const MAX_CANDIDATES = 5000;
-/** How long each of an owner's two reads may take. Past it, as past the cap: stop, and the run is red. */
+/**
+ * How long each of a share's two reads may take, counted over both its turns. The two run side by side.
+ * Past it, as past the cap: stop, and the run is red.
+ */
 export const READ_BUDGET_MS = 15_000;
 /**
- * The whole reading, every owner's: past it, an owner not yet read, or not done, is cut like one past
- * its cap. The two reads' time, as before reading went owner by owner, so the sending still fits.
+ * The whole reading, every share's, from when the shares are found: past it, a share not yet read, or not
+ * done, is cut like one past its cap. The two reads' time, as before reading went share by share, so the
+ * sending still fits in the function's time.
  */
 export const READS_DEADLINE_MS = 2 * READ_BUDGET_MS;
-/** Owners read at the same time. */
-export const OWNER_CONCURRENCY = 8;
-/** Owners found per run, at most; past it the run is red. Each costs five queries a run (BACKLOG, 5.3). */
+/** How long finding the shares may take, before the reading's deadline starts. */
+export const SCAN_BUDGET_MS = 10_000;
+/**
+ * Events each read takes in its FIRST turn. Every share gets its first turn before any share gets a second,
+ * so a few shares that fill their reads to the cap or the time cannot hold every worker until the deadline
+ * and cut the shares behind them (review, 29.10.2026: eight accounts did). A family's window is well under it.
+ */
+export const FIRST_SHARE = 100;
+/** Shares read at the same time. With a page at ~120 ms (functions in us-central1, Firestore in europe-central2). */
+export const SHARE_CONCURRENCY = 16;
+/** Owners, and groups, found per run, at most each; past it the run is red. A share costs six reads a run. */
 export const MAX_OWNERS = 1000;
+/**
+ * Where the scans for owners and groups split, so that they run side by side rather than one value after
+ * another (review, 29.10.2026: one after another, a few hundred owners took the whole reading's time). The
+ * ids are Firebase's: letters and digits. Any other string still falls in one of the ranges.
+ */
+export const SCAN_BOUNDS = ["", "4", "8", "D", "H", "L", "P", "T", "X", "b", "f", "j", "n", "r", "v", "z"] as const;
+/** The runs that see one reminder: WINDOW_MS over RUN_EVERY_MS (both below). */
+const RUNS_PER_REMINDER = 3;
 /**
  * Events per page. What one page holds, padded, is ten times what one event can — and a list of a
  * million nulls, which fits in a document, is tens of megabytes once decoded.
@@ -145,13 +166,13 @@ export const SEND_BUDGET_MS = 60_000;
 export const STALE_CLAIM_MS = RUN_EVERY_MS - LATE_RUN_SLACK_MS;
 
 export type ReminderCounts = {
-  /** Owners found, whose events were read each on their own. */
-  owners: number;
+  /** Owners and groups found: each owner's personal events, and each group's, are a share read on its own. */
+  owners: number; groups: number;
   /** Events read, and how many of them could not be the app's (no id or date it writes). */
   read: number; skipped: number;
   /**
-   * Owners whose read stopped before its end (past their cap, their time, or the deadline), plus one
-   * when the owners themselves could not all be found. Any is red; nobody else's reminders are lost.
+   * Shares whose read stopped before its end (past their cap, their time, or the deadline), plus one for
+   * each scan, of owners or of groups, that could not find them all. Any is red.
    */
   cut: number;
   /** How long each read took, for the log line: the page latency on live, measured. */
@@ -171,7 +192,7 @@ export type ReminderCounts = {
 };
 
 export const emptyCounts = (): ReminderCounts => ({
-  owners: 0, read: 0, skipped: 0, cut: 0, datedMs: 0, seriesMs: 0, candidates: 0, occurrences: 0, due: 0,
+  owners: 0, groups: 0, read: 0, skipped: 0, cut: 0, datedMs: 0, seriesMs: 0, candidates: 0, occurrences: 0, due: 0,
   deferred: 0, dropped: 0, retried: 0, seriesUnbounded: 0,
   sent: 0, dupes: 0, rows: 0, pushed: 0, failed: 0,
 });
@@ -210,56 +231,77 @@ const alreadyExists = (err: unknown): boolean => {
 };
 
 export interface RemindOptions {
-  /** Per owner and read. */
+  /** Per share and read. */
   maxCandidates?: number;
-  /** Per owner and read. */
+  /** Per share and read, over both its turns. */
   budgetMs?: number;
-  /** The whole reading. */
+  /** The whole reading, from when the shares are found. */
   readsDeadlineMs?: number;
+  scanBudgetMs?: number;
+  /** Events a read takes in its first turn. */
+  firstShare?: number;
   concurrency?: number;
+  /** Owners, and groups, found at most each. */
   maxOwners?: number;
   page?: number;
   sendBudgetMs?: number;
-  /** The run's clock, for the read and send budgets; the tests drive it. */
+  /** The run's clock, for the scan, read and send budgets; the tests drive it. */
   clock?: () => number;
 }
 
 type Candidate = EventDoc & Record<string, unknown>;
 
 /**
- * The owners, in the order this run reads them: from a place that moves one owner every run, so that
- * when there are more owners than run at once, a slow one is not always ahead of the same others.
+ * The shares, in the order this run reads them. The start moves a third of the ring every run: a reminder
+ * is seen by three runs, and when a run cuts the tail of the queue, consecutive runs then cut different
+ * tails, so no share is cut in all three unless a run reads less than a third (review, 29.10.2026: moved
+ * one a run, the same share was cut run after run).
  */
-export function ownerTurn<T>(owners: readonly T[], now: number): T[] {
-  if (owners.length === 0) return [];
-  const start = Math.floor(now / RUN_EVERY_MS) % owners.length;
-  return [...owners.slice(start), ...owners.slice(0, start)];
+export function ownerTurn<T>(shares: readonly T[], now: number): T[] {
+  const n = shares.length;
+  if (n === 0) return [];
+  const step = Math.ceil(n / RUNS_PER_REMINDER);
+  const start = ((Math.floor(now / RUN_EVERY_MS) % n) * step) % n;
+  return [...shares.slice(start), ...shares.slice(0, start)];
 }
 
 /**
- * Every value of `ownerId` on an event, one document each: in `ownerId` order, the next past the last
- * found. Exactly the owners there are, whether their account has a `users` document or not, and an
- * owner costs one read however many events they have. `cut` when the time ran out, the cap was reached
- * with more to find, or a value came back that the cursor cannot get past.
+ * Every string value of `field` on an event, one document each: the ranges of SCAN_BOUNDS side by side,
+ * each in order, the next past the last found. Exactly the owners (or groups) there are, whether their
+ * account has a `users` document or not; a value costs one read however many events carry it. A range on a
+ * string skips null, so the groups' scan finds no "group" for personal events. `cut` when the time ran
+ * out, the cap was reached with more to find, or a value came back that the cursor cannot get past.
  */
-export async function findOwners(
+export async function findKeys(
   events: FirebaseFirestore.Query,
-  maxOwners: number,
+  field: "ownerId" | "groupId",
+  maxKeys: number,
   outOfTime: () => boolean,
-): Promise<{ owners: unknown[]; cut: boolean }> {
-  const base = events.orderBy("ownerId").select("ownerId").limit(1);
-  const owners: unknown[] = [];
-  let snap = await base.get();
-  while (!snap.empty) {
-    const owner = snap.docs[0].get("ownerId");
-    if (owners.length > 0 && JSON.stringify(owner) === JSON.stringify(owners[owners.length - 1])) {
-      return { owners, cut: true };
+): Promise<{ keys: string[]; cut: boolean }> {
+  const perRange: string[][] = SCAN_BOUNDS.map(() => []);
+  let found = 0;
+  let cut = false;
+  await Promise.all(SCAN_BOUNDS.map(async (lo, i) => {
+    const hi = SCAN_BOUNDS[i + 1];
+    let base = events.where(field, ">=", lo);
+    if (hi !== undefined) base = base.where(field, "<", hi);
+    base = base.orderBy(field).select(field).limit(1);
+    let last: string | undefined;
+    for (;;) {
+      if (cut) return;
+      const snap = await (last === undefined ? base : base.startAfter(last)).get();
+      if (snap.empty) return;
+      const key = snap.docs[0].get(field);
+      if (typeof key !== "string" || key === last || found >= maxKeys || outOfTime()) {
+        cut = true;
+        return;
+      }
+      found += 1;
+      perRange[i].push(key);
+      last = key;
     }
-    if (owners.length >= maxOwners || outOfTime()) return { owners, cut: true };
-    owners.push(owner);
-    snap = await base.startAfter(owner).get();
-  }
-  return { owners, cut: false };
+  }));
+  return { keys: perRange.flat(), cut };
 }
 
 /**
@@ -276,7 +318,9 @@ export async function remindDue(
   const maxCandidates = opts.maxCandidates ?? MAX_CANDIDATES;
   const budgetMs = opts.budgetMs ?? READ_BUDGET_MS;
   const readsDeadlineMs = opts.readsDeadlineMs ?? READS_DEADLINE_MS;
-  const concurrency = Math.max(1, opts.concurrency ?? OWNER_CONCURRENCY);
+  const scanBudgetMs = opts.scanBudgetMs ?? SCAN_BUDGET_MS;
+  const firstShare = opts.firstShare ?? FIRST_SHARE;
+  const concurrency = Math.max(1, opts.concurrency ?? SHARE_CONCURRENCY);
   const maxOwners = opts.maxOwners ?? MAX_OWNERS;
   const page = opts.page ?? READ_PAGE;
   const sendBudgetMs = opts.sendBudgetMs ?? SEND_BUDGET_MS;
@@ -296,14 +340,24 @@ export async function remindDue(
   //     (`SERIES_REACH_DAYS`: 31 days, 365, 367, 1828) — and not after the lookahead. Until then every
   //     run read every series ever made.
   //
-  // OWNER BY OWNER since 29.10.2026 (BACKLOG, 5.3): the same queries, each filtered on one owner, with
-  // that owner's own cap and time. Read with everybody's, one account's flood reached the cap or the
-  // time first and cut everybody's reminders behind it; now it spends its own share, and the run is red
-  // for that owner alone. The owners come from the events (`findOwners`). A few are read at a time, from
-  // a place that moves every run (`ownerTurn`), all inside one deadline. A reminder's recipients (the
-  // owner and the assignees) stay on its owner's event, so an account cannot spend anybody else's share
-  // by naming them. No new index: (ownerId, date) is the AI sources', and the series' shape is served by
-  // merging it with (recurrenceRule.frequency, date) — both measured on live that day.
+  // SHARE BY SHARE since 29.10.2026 (BACKLOG, 5.3). Read with everybody's, one account's flood reached the
+  // cap or the time first and cut everybody's reminders behind it. Now the events are read in shares, each
+  // with its own cap and time, and a flood spends the share it was written into:
+  //   * a GROUP's events are one share (`groupId ==`): only its members write there, the server's edits of
+  //     an occurrence (`createEventOverride`) included — those carry the parent's owner, so shares by owner
+  //     alone let a member fill another member's (review, 29.10.2026);
+  //   * an owner's PERSONAL events are another (`ownerId ==`, `groupId == null`). Every writer writes the
+  //     null, the installed APK included, and no event on live lacked it that day; one that did would not
+  //     be read.
+  // The owners and groups are found from the events (`findKeys`), over ranges of their ids side by side,
+  // in their own time. Every share gets a first turn (`FIRST_SHARE` events a read) before any gets a second,
+  // which goes on from where the first stopped: a few shares that fill their reads cannot hold every worker
+  // until the deadline. Within a share the dated read and the series' four ranges run side by side, so a
+  // share with little in it costs one round trip: with the functions in us-central1 and the database in
+  // europe-central2, read one after another, a few hundred owners took the whole reading's time (review,
+  // 29.10.2026). A reminder's recipients stay on its event, so naming people spends nobody's share. No new
+  // index: (ownerId, date), (groupId, date) and (recurrenceRule.frequency, date) serve every shape, measured
+  // on live that day.
   const fromDay = dayString(now - 2 * 86_400_000);
   const toDay = dayString(now + MAX_LEAD_DAYS * 86_400_000);
   const byId = new Map<string, Candidate>();
@@ -314,108 +368,168 @@ export async function remindDue(
     else counts.skipped += 1;
   };
 
-  /** One read: when it started and what it has read, so that a fallback continues it rather than starting over. */
-  type Read = { started: number; seen: Set<string> };
-  const startRead = (): Read => ({ started: clock(), seen: new Set<string>() });
-  // The whole reading's deadline, every owner's.
-  const readsEnd = clock() + readsDeadlineMs;
-  const outOfTime = (): boolean => clock() >= readsEnd;
-
-  /**
-   * Reads queries in turn, each to its end, page by page, or to the cap or the time: true when it
-   * stopped short. One budget and one cap for the queries of one read, so the dated read and the series
-   * read each have their own full share — the series read's fallback included (review, 17.10.2026: a
-   * refusal after a page started it over, counting twice, with a second budget and a second cap). One
-   * read is one owner's; the deadline is everybody's.
-   */
-  const readAll = async (read: Read, ...bases: FirebaseFirestore.Query[]): Promise<boolean> => {
-    const { started, seen } = read;
-    for (const base of bases) {
-      let last: QueryDocumentSnapshot | null = null;
-      // This query's own documents, for the guard below; not `seen`, which also holds what an earlier
-      // query of the read brought. A fallback reads those again, and that is progress, not a page coming
-      // back: judged on `seen`, its first page stopped the read (red) before the rest was reached.
-      const here = new Set<string>();
-      for (;;) {
-        const t = clock();
-        if (t - started >= budgetMs || t >= readsEnd) return true;
-        // One past the cap, to tell "exactly the cap" from "more than it".
-        const want = Math.min(page, maxCandidates + 1 - seen.size);
-        const snap = await (last ? base.startAfter(last) : base).limit(want).get();
-        let fresh = 0;
-        for (const d of snap.docs) {
-          // A cursor on a value longer than Firestore indexes (1500 bytes) can repeat a page.
-          if (here.has(d.id)) continue;
-          here.add(d.id);
-          fresh += 1;
-          // Read already by an earlier query of this read: once is enough, and counted once.
-          if (seen.has(d.id)) continue;
-          if (seen.size >= maxCandidates) return true;
-          seen.add(d.id);
-          counts.read += 1;
-          keep(d);
-        }
-        if (snap.size < want) break;
-        // A full page with nothing new would be read again for ever: stop, and say so.
-        if (fresh === 0) return true;
-        last = snap.docs[snap.docs.length - 1];
-      }
-    }
-    return false;
-  };
   const events = db.collection("events");
-  const dated = (owner: unknown) => events
-    .where("ownerId", "==", owner)
+  type Share = { kind: "owner" | "group"; key: string };
+  const inShare = (s: Share): FirebaseFirestore.Query => s.kind === "group"
+    ? events.where("groupId", "==", s.key)
+    : events.where("ownerId", "==", s.key).where("groupId", "==", null);
+  const dated = (s: Share) => inShare(s)
     .where("date", ">=", `${fromDay}T00:00:00.000Z`)
     .where("date", "<=", `${toDay}T23:59:59.999Z`)
     .select(...REMINDER_FIELDS);
   // One frequency a range (`in` of one, the shape measured on live), each from its own reach back.
-  const series = (owner: unknown, freq: Frequency) => events
-    .where("ownerId", "==", owner)
+  const series = (s: Share, freq: Frequency) => inShare(s)
     .where("recurrenceRule.frequency", "in", [freq])
     .where("date", ">=", seriesFrom(fromDay, freq))
     .where("date", "<=", `${toDay}T23:59:59.999Z`)
     .select(...REMINDER_FIELDS);
+  // When a range's index is missing, or still being built (it throws rather than returning less): every
+  // series of the share, however old, as before 16.10.2026, by equalities alone, and the run says so.
+  const allSeries = (s: Share) => inShare(s)
+    .where("recurrenceRule.frequency", "in", [...FREQUENCIES])
+    .select(...REMINDER_FIELDS);
 
-  const found = await findOwners(events, maxOwners, outOfTime);
-  counts.owners = found.owners.length;
-  let ownersCut = found.cut ? 1 : 0;
+  // ── the shares ──
+  const scanEnd = clock() + scanBudgetMs;
+  const scanOutOfTime = (): boolean => clock() >= scanEnd;
+  const [owners, groups] = await Promise.all([
+    findKeys(events, "ownerId", maxOwners, scanOutOfTime),
+    findKeys(events, "groupId", maxOwners, scanOutOfTime),
+  ]);
+  counts.owners = owners.keys.length;
+  counts.groups = groups.keys.length;
+  let cut = (owners.cut ? 1 : 0) + (groups.cut ? 1 : 0);
+  const shares: Share[] = [
+    ...owners.keys.map((key) => ({ kind: "owner" as const, key })),
+    ...groups.keys.map((key) => ({ kind: "group" as const, key })),
+  ];
 
-  /** One owner's two reads, each with its own cap and time, inside the deadline. */
-  const readOwner = async (owner: unknown): Promise<void> => {
-    if (outOfTime()) {
-      ownersCut += 1;
-      return;
-    }
-    let t0 = Date.now();
-    const datedCut = await readAll(startRead(), dated(owner));
-    counts.datedMs += Date.now() - t0;
-    t0 = Date.now();
-    const seriesRead = startRead();
-    let seriesCut: boolean;
+  // ── the reads ──
+  // The whole reading's deadline, every share's, from here: the scan had its own time.
+  const readsEnd = clock() + readsDeadlineMs;
+  const outOfTime = (): boolean => clock() >= readsEnd;
+
+  /** A query's place: where its next page starts, and what it has brought (for the guard below). */
+  type Cursor = { base: FirebaseFirestore.Query; last: QueryDocumentSnapshot | null; here: Set<string>; done: boolean };
+  /**
+   * One read across its turns: its queries' places, what it has read, how long it has taken. "more" when
+   * it stopped at its turn's share with more to read; "cut" past its cap, its time, the deadline, or at a
+   * page that came back; "done" at the end of every query.
+   */
+  type Read = {
+    queries: Cursor[]; seen: Set<string>; spent: number; state: "more" | "done" | "cut";
+    fallback?: FirebaseFirestore.Query; ms: "datedMs" | "seriesMs";
+  };
+  const cursor = (base: FirebaseFirestore.Query): Cursor => ({ base, last: null, here: new Set<string>(), done: false });
+  const newRead = (ms: Read["ms"], bases: FirebaseFirestore.Query[], fallback?: FirebaseFirestore.Query): Read =>
+    ({ queries: bases.map(cursor), seen: new Set<string>(), spent: 0, state: "more", fallback, ms });
+
+  /**
+   * Reads on from where `read` stopped, its queries side by side, until each is done, the read is cut, or it
+   * has taken `share` events this turn. One time and one cap for all of a read's queries and both its turns,
+   * the fallback included (review, 17.10.2026: a refusal after a page started it over, counting twice, with
+   * a second budget and a second cap).
+   */
+  const readOn = async (read: Read, share: number): Promise<void> => {
+    const started = clock() - read.spent;
+    const t0 = Date.now();
+    let taken = 0;
+    let stop: "more" | "cut" | null = null;
+    let refused = false;
+    const errors: unknown[] = [];
+    const run = async (q: Cursor): Promise<void> => {
+      while (!q.done && stop === null) {
+        const t = clock();
+        if (t - started >= budgetMs || t >= readsEnd) {
+          stop = "cut";
+          return;
+        }
+        if (taken >= share) {
+          stop = "more";
+          return;
+        }
+        // One past the cap, to tell "exactly the cap" from "more than it".
+        const want = Math.min(page, maxCandidates + 1 - read.seen.size);
+        let snap: FirebaseFirestore.QuerySnapshot;
+        try {
+          snap = await (q.last ? q.base.startAfter(q.last) : q.base).limit(want).get();
+        } catch (err) {
+          if (read.fallback && missingIndex(err)) refused = true;
+          else errors.push(err);
+          return;
+        }
+        let fresh = 0;
+        for (const d of snap.docs) {
+          // A cursor on a value longer than Firestore indexes (1500 bytes) can repeat a page.
+          if (q.here.has(d.id)) continue;
+          q.here.add(d.id);
+          fresh += 1;
+          // Read already by another query of this read (or before a fallback): once, and counted once.
+          if (read.seen.has(d.id)) continue;
+          if (read.seen.size >= maxCandidates) {
+            stop = "cut";
+            return;
+          }
+          read.seen.add(d.id);
+          taken += 1;
+          counts.read += 1;
+          keep(d);
+        }
+        if (snap.size < want) {
+          q.done = true;
+          return;
+        }
+        // A full page with nothing new would be read again for ever: stop, and say so.
+        if (fresh === 0) {
+          stop = "cut";
+          return;
+        }
+        q.last = snap.docs[snap.docs.length - 1];
+      }
+    };
     try {
-      seriesCut = await readAll(seriesRead, ...FREQUENCIES.map((f) => series(owner, f)));
-    } catch (err) {
-      // A shape whose index is missing, or still being built, throws rather than returning less.
-      // Then: every series of this owner, however old, as before 16.10.2026, and the run says so.
-      // Inside the same read, should the refusal come after a page: its time, its cap, its count.
-      if (!missingIndex(err)) throw err;
-      counts.seriesUnbounded = 1;
-      seriesCut = await readAll(seriesRead, events
-        .where("ownerId", "==", owner)
-        .where("recurrenceRule.frequency", "in", [...FREQUENCIES])
-        .select(...REMINDER_FIELDS));
+      for (;;) {
+        await Promise.all(read.queries.map(run));
+        if (errors.length > 0) throw errors[0];
+        if (!refused || !read.fallback) break;
+        // A range refused, perhaps after a page: the fallback goes on with this read's time, cap and count.
+        counts.seriesUnbounded = 1;
+        read.queries = [cursor(read.fallback)];
+        read.fallback = undefined;
+        refused = false;
+      }
+      read.state = stop ?? (read.queries.every((q) => q.done) ? "done" : "more");
+    } finally {
+      read.spent = clock() - started;
+      counts[read.ms] += Date.now() - t0;
     }
-    counts.seriesMs += Date.now() - t0;
-    if (datedCut || seriesCut) ownersCut += 1;
   };
 
-  const queue = ownerTurn(found.owners, now);
-  let next = 0;
-  await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
-    while (next < queue.length) await readOwner(queue[next++]);
-  }));
-  counts.cut = ownersCut;
+  const reads = new Map<Share, Read[]>(shares.map((s) => [s, [
+    newRead("datedMs", [dated(s)]),
+    newRead("seriesMs", FREQUENCIES.map((f) => series(s, f)), allSeries(s)),
+  ]]));
+  /** A share's turn: its reads that have more, side by side, each to `share` events. */
+  const turn = async (s: Share, share: number): Promise<void> => {
+    const open = (reads.get(s) ?? []).filter((r) => r.state === "more");
+    if (open.length === 0) return;
+    if (outOfTime()) {
+      for (const r of open) r.state = "cut";
+      return;
+    }
+    await Promise.all(open.map((r) => readOn(r, share)));
+  };
+  const pool = async (list: Share[], share: number): Promise<void> => {
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(concurrency, list.length) }, async () => {
+      while (next < list.length) await turn(list[next++], share);
+    }));
+  };
+  const queue = ownerTurn(shares, now);
+  await pool(queue, firstShare);
+  await pool(queue.filter((s) => (reads.get(s) ?? []).some((r) => r.state === "more")), Number.POSITIVE_INFINITY);
+  for (const s of shares) if ((reads.get(s) ?? []).some((r) => r.state !== "done")) cut += 1;
+  counts.cut = cut;
 
   const docs = [...byId.values()];
   counts.candidates = docs.length;
