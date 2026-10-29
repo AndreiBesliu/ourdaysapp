@@ -349,8 +349,14 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   când e deschisă; `check-split` refuză întoarcerea lor). Măsurat pe TOT ce se încarcă la pornire (intrarea și
   importurile ei statice, din manifest), nu doar pe chunk-ul principal: 1.785.125 → 1.692.709 octeți, gzip
   524.186 → 505.873. Cifra veche de „1.145 kB” era doar a chunk-ului principal; lângă el se încarcă la
-  pornire și `serverActions-*.js` (~520–566 kB). Candidații următori: `GroupChatWidget` (importat de
-  `CalendarHome`) și ce ține `serverActions-*.js` la pornire, de măsurat întâi.
+  pornire și `serverActions-*.js` (~520–566 kB). **Ferestrele calendarului sunt la cerere tot din 29.10**
+  (adăugat, detaliile evenimentului, arcade-ul, montate de la prima deschidere): pornirea 1.693.025 →
+  1.374.848 octeți, gzip 505.995 → 420.727; drag-and-drop-ul și `chrono-node` au ieșit și ele.
+  - **Măsurat pe 29.10 (sourcemap-uri), ce mai e la pornire:** `serverActions-*.js` e Firebase de care calendarul
+    are nevoie (Firestore 270 kB, Auth 88, webchannel 52); mutabile doar Storage (32) și Messaging (12).
+  - **Candidații următori, de ales de Andrei:** traducerile (216 kB, toate cele 6 limbi la pornire; doar limba
+    omului și engleza ar scoate ~145 kB, dar `t()` e sincron); framer-motion (124 kB, o singură animație în
+    `CalendarGrid`, înlocuibilă cu CSS, cere ochii lui Andrei); `GroupChatWidget` (33 kB).
 - **Hosting răspunde cu `index.html` la un `/assets/*.js` lipsă**, cu cache imutabil pe un an (măsurat
   pe live).
   - **Ce nu se strică:** un tab vechi după un deploy vede tot „versiune nouă”; Chrome, Firefox și

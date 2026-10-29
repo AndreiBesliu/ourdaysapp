@@ -14089,3 +14089,60 @@ toate confirmate (2 dubluri), toate reparate:
   intrarea nu conține marcajele bibliotecilor; `errorLogs` neschimbat (bancul de dev nu a scris nimic: App Check l-a
   refuzat); memento-urile au rulat „ok” după.
 - Ecranele din spatele login-ului nu le pot deschide eu: punctul e sus în `OWNER_VERIFY.md`.
+
+## 2026-10-29 · Bundle A: ferestrele calendarului încărcate la cerere (Task Started)
+
+**Prompt (Andrei):** „E ok” (la „Măsor ce ține `serverActions` (~520 kB) la pornire, ca felie următoare?”), apoi, după
+măsurătoare, „A: ferestrele”.
+**Model:** Claude Opus 5.5.
+**Măsurat întâi** (construcție cu sourcemap-uri, fiecare octet de la pornire atribuit modulului lui): din 1,69 MB,
+`serverActions-*.js` (521 kB) e aproape tot Firebase de care calendarul are nevoie la pornire (Firestore 270, Auth 88,
+webchannel 52; mutabile doar Storage 32 și Messaging 12). Țintele mari erau altele: traducerile (216 kB, toate cele 6
+limbi), framer-motion (124 kB, doar `CalendarGrid`), drag-and-drop (93 kB), arcade-ul (80 kB), fereastra de adăugat cu
+parserul de date (94 kB), fereastra evenimentului (30 kB). Andrei a ales A.
+**Plan:** fereastra de adăugat, fereastra evenimentului și arcade-ul, montate de la prima deschidere și păstrate apoi
+(cum erau păstrate închise), din bucăți proprii aduse cât aplicația stă; o încărcare eșuată încercată din nou;
+arcade-ul primește o barieră proprie; `check-split` refuză întoarcerea lor și a drag-and-drop-ului și a parserului.
+
+## 2026-10-29 · Bundle A: ferestrele calendarului încărcate la cerere (Task Completed)
+
+**Prompt (Andrei):** „A: ferestrele”.
+**Model:** Claude Opus 5.5.
+
+**Ce s-a schimbat:**
+- **`CalendarHome`:** fereastra de adăugat, fereastra evenimentului și arcade-ul sunt `React.lazy` (încărcătorii în
+  `src/utils/lazyParts.ts`), montate de la prima deschidere și păstrate apoi (`src/hooks/useOpenedOnce.ts`, un zăvor
+  pus în timpul randării, deci fereastra apare în aceeași randare care o deschide). Erau păstrate montate și închise;
+  înainte de prima deschidere țineau doar starea inițială, deci nimic din ce se vede nu se schimbă.
+- **Arcade-ul are o barieră proprie** (n-avea niciuna); cheia pe grup a trecut pe barieră.
+- **`ErrorBoundary`:** fallback-ul poate fi o funcție care află dacă a picat o bucată (`chunk`); ferestrele de adăugat și
+  a evenimentului spun atunci „verifică conexiunea, apoi reîncarcă” (`windowCouldNotOpen`, nou, 6 limbi), iar la o eroare
+  a evenimentului, ca înainte, că nu a putut fi afișat.
+- **`App.tsx`** aduce toate bucățile la cerere cât aplicația stă (`LAZY_PARTS`).
+- **`check-split`** cere cele trei ferestre ca bucăți proprii și refuză în pornire marcajele drag-and-drop-ului și ale
+  parserului de date.
+
+**Măsurat (tot ce se încarcă la pornire):** 1.693.025 → 1.374.869 octeți (−18,8 %), gzip 505.995 → 420.728.
+
+**Probe:**
+- **Banc temporar construit ca în producție** (ferestrele reale, fără cont): bucățile cerute abia la clic; formularul de
+  adăugat, fereastra evenimentului cu checklist-ul trăgabil și arcade-ul s-au deschis; nicio eroare în consolă.
+- `src/screens/lazyWindows.test.tsx` (nou, 12): zăvorul; fiecare fereastră în bariera ei, deschisă de starea ei; bariera
+  arcade-ului reîncearcă la următoarea deschidere; fallback-urile după tipul eșecului; nimic din pornire nu importă direct
+  o fereastră sau bibliotecile lor; toate bucățile aduse din timp.
+- `src/components/lazyClient.test.tsx` (nou, 5): pe un root REAL de client React, cu un DOM minimal: o bucată care nu se
+  încarcă ajunge la barieră cu O SINGURĂ încărcare și e raportată; codul cardului arată numărul.
+- **Mutații: 10 + 6, toate prinse** (inclusiv cele trei de structură propuse de recenzie).
+
+**Recenzia cu agenți** (2 lentile + 4 verificatori, 6 agenți, **0,91 M tokeni**): 2 constatări confirmate:
+1. **(gravă) prima formă a reîncercării (`lazyRetry`) făcea buclă:** înlocuia lazy-ul în `.catch`-ul propriei încărcări,
+   iar învelișul din `Suspense` îl citea pe cel nou la fiecare reîncercare, deci bucata se cerea la nesfârșit și eroarea nu
+   ajungea la barieră. Testele mele randau pe server, care nu reîncearcă. **Reparat:** `React.lazy` simplu, plus testul pe
+   client, care pică pe forma cu înveliș (4 și 33 de încărcări). Verificatorul a spus că bucla e și pe live, în
+   `LazyAssetBarcode` (`326b801`); **testul pe client arată că nu**: acolo elementul era creat în afara `Suspense`, deci React
+   reîncerca lazy-ul vechi, respins, iar numărul apărea după o singură încărcare. Și acela e acum `React.lazy` simplu.
+2. **(mică) testele pe sursă verificau texte, nu structura:** fereastra scoasă din barieră, `resetOn`-ul arcade-ului șters
+   sau `isOpen` legat de zăvor treceau; acum pică.
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2707), build, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46),
+`test:rules` (1127).

@@ -15,21 +15,21 @@
 
 ---
 
-## 🆕 Codurile cardurilor și fereastra de invitație se încarcă la cerere (29.10) — PUBLICAT pe 29.10
+## 🆕 Ferestrele calendarului și codurile cardurilor se încarcă la cerere (29.10) — PUBLICAT pe 29.10
 
-**Fapt:** bibliotecile care desenează codurile de bare și QR nu mai stau în ce încarcă oricine la pornire; vin când se
-arată un cod sau se deschide invitația, și sunt aduse din timp cât aplicația stă. Ce se încarcă la pornire a scăzut cu
-92 kB (gzip 18 kB). Am probat codurile într-o pagină de banc, construită ca în producție; ecranele din spatele login-ului
-nu le pot deschide eu.
+**Fapt:** fereastra de adăugat, fereastra unui eveniment, arcade-ul, invitația și codurile cardurilor nu mai stau în ce
+încarcă oricine la pornire; vin când le deschizi și sunt aduse din timp cât aplicația stă. Pornirea a scăzut în total de
+la 1,79 MB la 1,37 MB (gzip de la 524 kB la 421 kB). Le-am probat într-o pagină de banc, construită ca în producție;
+ecranele din spatele login-ului nu le pot deschide eu.
 
-- [ ] **Un eveniment cu un card legat, și unul cu un card pe un rând de checklist; apoi „Invite” la un grup** (2 minute,
-      pe telefon dacă poți)
-      - **Cum arată bine:** codul cardului apare ca înainte (o clipă poate fi un loc gol de înălțimea lui); fereastra de
-        invitație se deschide, cu QR-ul linkului.
-      - **Ce e greșit:** în locul codului, numărul cardului cu „The code could not be loaded…” deși ai semnal, sau „The
-        invitation window could not be loaded”. Spune-mi; eroarea e și în Admin → Health.
-      - **Ce se strică dacă nu te uiți:** dacă e ceva greșit, la casă se vede numărul în loc de cod (se poate citi sau
-        tasta); restul aplicației nu depinde de asta.
+- [ ] **„+” (adaugă), un eveniment cu un card legat și unul cu un card pe un rând de checklist, editarea din detalii,
+      arcade-ul, „Invite”** (3 minute, pe telefon dacă poți)
+      - **Cum arată bine:** totul se deschide ca înainte (prima dată poate dura o clipă în plus); codul cardului apare;
+        checklist-ul se poate reordona trăgând; QR-ul invitației apare.
+      - **Ce e greșit:** o fereastră care nu se deschide deloc, „This window could not be opened…” deși ai semnal, sau în
+        locul codului numărul cardului cu „The code could not be loaded…”. Spune-mi; eroarea e și în Admin → Health.
+      - **Ce se strică dacă nu te uiți:** dacă e ceva greșit, o fereastră spune să reîncarci pagina (iar la casă se vede
+        numărul în loc de cod, care se poate citi sau tasta); calendarul însuși nu depinde de asta.
 
 ---
 

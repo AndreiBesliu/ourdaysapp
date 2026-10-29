@@ -19,7 +19,8 @@ function goodBuild() {
     const file = `assets/${s.split('/').pop().replace('.tsx', '')}-x.js`;
     manifest[s] = { file, isDynamicEntry: true, imports: ['_jsx-runtime.js'] };
     code[file] = s.includes('Wallet') ? 'new Html5Qrcode(el)'
-      : s.includes('AssetBarcode') ? 'class InvalidElementException{} throw Error("bad rs block")' : 'screen';
+      : s.includes('AssetBarcode') ? 'class InvalidElementException{} throw Error("bad rs block")'
+      : s.includes('AddEventModal') ? 'data-rfd-draggable-id tag("parser/ENCasualDateParser")' : 'screen';
   }
   return { manifest, code };
 }
@@ -52,15 +53,17 @@ describe('the split guard', () => {
   });
 
   it('refuses either code library in boot code (29.10.2026: the event and invitation windows carried them)', () => {
-    for (const [marker, what] of [['InvalidElementException', /JsBarcode .* is in the boot set/], ['bad rs block', /QR encoder .* is in the boot set/]]) {
+    for (const [marker, what] of [['InvalidElementException', /JsBarcode .* is in the boot set/], ['bad rs block', /QR encoder .* is in the boot set/],
+      ['data-rfd-draggable-id', /drag-and-drop .* is in the boot set/], ['parser/ENCasualDateParser', /date parser .* is in the boot set/]]) {
       const b = goodBuild();
       b.code['assets/index-a.js'] += ` ${marker}`;
       expect(splitProblems(b).fatal.join(), marker).toMatch(what);
     }
   });
 
-  it('refuses the card code or the invitation window pulled back into boot', () => {
-    for (const s of ['src/components/AssetBarcode.tsx', 'src/components/InviteFamilyModal.tsx']) {
+  it('refuses the card code or any of the calendar’s windows pulled back into boot', () => {
+    for (const s of ['src/components/AssetBarcode.tsx', 'src/components/InviteFamilyModal.tsx', 'src/components/AddEventModal.tsx',
+      'src/components/EventDetailsModal.tsx', 'src/components/games/GamesHubModal.tsx']) {
       const b = goodBuild();
       b.manifest['index.html'].imports.push(s);
       expect(splitProblems(b).fatal.join(), s).toMatch(/is in the boot set/);

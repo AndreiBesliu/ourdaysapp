@@ -16,8 +16,11 @@ interface Props {
    * For a boundary around ONE part of a screen: what that part shows instead, while the rest of
    * the app keeps working. Without it, the app-wide recovery screen. (06.10.2026: a game opened in
    * the arcade, whose data any member of the group can write, took the whole app down with it.)
+   * As a function it is told whether what failed was a chunk that could not load (29.10.2026: the
+   * calendar's windows load on demand) — no signal, or a tab older than a deploy — so the part can
+   * say "reload" instead of "this could not be shown".
    */
-  fallback?: React.ReactNode;
+  fallback?: React.ReactNode | ((failure: { chunk: boolean }) => React.ReactNode);
   /** What the crash is reported as. The app-wide boundary is 'ErrorBoundary'. */
   context?: string;
   /**
@@ -78,7 +81,10 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   }
 
   render() {
-    if (this.state.hasError && this.props.fallback !== undefined) return this.props.fallback;
+    if (this.state.hasError && this.props.fallback !== undefined) {
+      const { fallback } = this.props;
+      return typeof fallback === 'function' ? fallback({ chunk: this.state.staleChunk }) : fallback;
+    }
     if (this.state.hasError) {
       // A class component cannot call the hook, and this one has to render while the tree below
       // it is broken — so it reads the store directly rather than depending on a provider that

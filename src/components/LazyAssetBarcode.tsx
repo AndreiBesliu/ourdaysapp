@@ -11,10 +11,11 @@
 // 'StaleChunk'), and the rest of the window keeps working. The app fetches the chunk while idle
 // (App.tsx), so this is the rare case, not the first visit.
 //
-// A failed load is not kept (review of 29.10.2026): React.lazy keeps a rejection for good, so the
-// lazy is replaced when its load fails, and the next time the window opens the chunk is asked for
-// again. Where the browser itself keeps the failed fetch until a reload, the line under the number
-// is what helps.
+// A failed load stays failed until the page is reloaded, which the line under the number says. React.lazy
+// keeps a rejection, and so do browsers that keep a failed module fetch; a lazy swapped for a fresh one
+// when its load fails never let the failure reach the boundary at all — React re-rendered the swapped
+// lazy on every retry, so the chunk was asked for in a loop and the spinner never gave way to the number
+// (review of 29.10.2026, reproduced on a real client root; lazyAssetBarcode.test.tsx holds it).
 //
 // The Wallet screen and the offline Cards page import AssetBarcode directly: the first is already a
 // chunk of its own, and the second is a separate build that must work with nothing fetched.
@@ -34,8 +35,7 @@ const PLACEHOLDER = { lg: 'min-h-[120px]', md: 'min-h-[100px]', sm: 'min-h-[64px
 
 /** A code drawn by whatever `load` brings, with the placeholder and the number around it. */
 export function lazyCode(load: LoadCode) {
-  const retrying: LoadCode = () => load().catch((e: unknown) => { Code = lazy(retrying); throw e; });
-  let Code = lazy(retrying);
+  const Code = lazy(load);
   return function LazyCode(props: Props) {
     const size = props.size ?? 'lg';
     return (

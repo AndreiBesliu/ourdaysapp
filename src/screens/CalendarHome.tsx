@@ -11,8 +11,6 @@ import { vapidKeyProblem } from '../utils/webPush';
 import { Calendar as CalendarIcon, Users, User, Settings, Plus, Check, X, Wallet, UserPlus, Clock, CheckCircle2, Wrench, Gamepad2, ShoppingCart, Repeat, Menu, ShieldCheck, Swords, ClipboardList, MessageCircle } from 'lucide-react';
 import CalendarGrid from '../components/CalendarGrid';
 import DayTimeline from '../components/DayTimeline';
-import AddEventModal from '../components/AddEventModal';
-import EventDetailsModal from '../components/EventDetailsModal';
 import CreateGroupModal from '../components/CreateGroupModal';
 import LeaveGroupModal from '../components/LeaveGroupModal';
 import GroupSettingsModal from '../components/GroupSettingsModal';
@@ -20,17 +18,25 @@ import NotificationsDropdown from '../components/NotificationsDropdown';
 import VerifyEmailBanner from '../components/VerifyEmailBanner';
 import { useVerifiedEmail } from '../hooks/useVerifiedEmail';
 import GroupChatWidget from '../components/GroupChatWidget';
-import GamesHubModal from '../components/games/GamesHubModal';
 import { bannerPlayerIds, gameTypeName } from '../components/games/gameTypeName';
 import { withGroupName } from '../utils/groupName';
 import ErrorBoundary from '../components/ErrorBoundary';
 import RecurringEventsPanel from '../components/RecurringEventsPanel';
 import CouldNotShow from '../components/CouldNotShow';
 import { normaliseEvent } from '../utils/eventDoc';
-import { loadInviteFamilyModal } from '../utils/lazyParts';
+import { loadAddEventModal, loadEventDetailsModal, loadGamesHubModal, loadInviteFamilyModal } from '../utils/lazyParts';
+import { useOpenedOnce } from '../hooks/useOpenedOnce';
 
-// Its own chunk since 29.10.2026, with the QR library its link carries: opened a few times, ever,
-// per group. Fetched while the app is idle (App.tsx), so the first open does not wait for it.
+// The windows are chunks of their own since 29.10.2026, with what only they use: drag-and-drop
+// (checklists, rummy), the date parser of the add form, the arcade, the invitation's QR library.
+// About 300 kB that every person loaded at boot and parsed before the calendar showed. Fetched while
+// the app is idle (App.tsx), so a first open does not wait for them. A chunk that cannot load reaches
+// the window's boundary, which says to reload (a plain React.lazy: one swapped for a fresh lazy when
+// its load failed made React ask for the chunk in a loop and never show the boundary, review of
+// 29.10.2026).
+const AddEventModal = lazy(loadAddEventModal);
+const EventDetailsModal = lazy(loadEventDetailsModal);
+const GamesHubModal = lazy(loadGamesHubModal);
 const InviteFamilyModal = lazy(loadInviteFamilyModal);
 import { useNavigate } from 'react-router-dom';
 import { useThemeStore } from '../store';
@@ -78,6 +84,10 @@ export default function CalendarHome() {
   const [overviewModalType, setOverviewModalType] = useState<'total' | 'pending' | 'completed' | null>(null);
   const [isGroupSettingsOpen, setIsGroupSettingsOpen] = useState(false);
   const [isGamesHubOpen, setIsGamesHubOpen] = useState(false);
+  // The three windows kept mounted while shut are mounted from their first open (useOpenedOnce.ts).
+  const addEverOpened = useOpenedOnce(isAddModalOpen);
+  const detailsEverOpened = useOpenedOnce(selectedEvent !== null);
+  const gamesEverOpened = useOpenedOnce(isGamesHubOpen);
   const [loadedUserMap, setUserMap] = useState<Record<string, any>>({});
   // The signed-in person's own document, LIVE — see utils/ownUserDoc.ts. `undefined` until the
   // listener first answers.
@@ -1149,24 +1159,30 @@ export default function CalendarHome() {
       )}
 
       {/* Add Event Modal — the windows stay mounted while shut, so their boundaries try again on the
-          next open instead of remounting (which would drop the form's state). */}
+          next open instead of remounting (which would drop the form's state). Mounted from the first
+          open, when its chunk is asked for; until it arrives, nothing, as before it opened. A chunk
+          that cannot load is caught by the same boundary. */}
       <ErrorBoundary
         context="AddEventModal"
         resetOn={`${isAddModalOpen}-${eventToEdit?.id ?? 'new'}`}
-        fallback={isAddModalOpen
-          ? <CouldNotShow messageKey="eventCouldNotShow" onClose={() => { setIsAddModalOpen(false); setEventToEdit(null); setInitialTemplate(null); }} />
+        fallback={({ chunk }) => isAddModalOpen
+          ? <CouldNotShow messageKey={chunk ? 'windowCouldNotOpen' : 'eventCouldNotShow'} onClose={() => { setIsAddModalOpen(false); setEventToEdit(null); setInitialTemplate(null); }} />
           : null}
       >
-      <AddEventModal 
-        isOpen={isAddModalOpen} 
-        onClose={() => { setIsAddModalOpen(false); setEventToEdit(null); setInitialTemplate(null); }} 
-        selectedDate={selectedDate} 
-        editEvent={eventToEdit}
-        initialTemplate={initialTemplate}
-        userMap={userMap}
-        activeGroupId={activeGroupId}
-        groups={groups}
-      />
+      {addEverOpened && (
+        <Suspense fallback={null}>
+          <AddEventModal
+            isOpen={isAddModalOpen}
+            onClose={() => { setIsAddModalOpen(false); setEventToEdit(null); setInitialTemplate(null); }}
+            selectedDate={selectedDate}
+            editEvent={eventToEdit}
+            initialTemplate={initialTemplate}
+            userMap={userMap}
+            activeGroupId={activeGroupId}
+            groups={groups}
+          />
+        </Suspense>
+      )}
       </ErrorBoundary>
 
       {/* Overview Modal */}
@@ -1270,21 +1286,25 @@ export default function CalendarHome() {
       <ErrorBoundary
         context="EventDetailsModal"
         resetOn={selectedEvent?.id ?? null}
-        fallback={selectedEvent
-          ? <CouldNotShow messageKey="eventCouldNotShow" onClose={() => setSelectedEvent(null)} />
+        fallback={({ chunk }) => selectedEvent
+          ? <CouldNotShow messageKey={chunk ? 'windowCouldNotOpen' : 'eventCouldNotShow'} onClose={() => setSelectedEvent(null)} />
           : null}
       >
-      <EventDetailsModal
-        isOpen={selectedEvent !== null}
-        onClose={() => setSelectedEvent(null)}
-        event={selectedEvent}
-        userMap={eventUserMap}
-        groups={groups}
-        onEdit={() => {
-          setEventToEdit(selectedEvent);
-          setIsAddModalOpen(true);
-        }}
-      />
+      {detailsEverOpened && (
+        <Suspense fallback={null}>
+          <EventDetailsModal
+            isOpen={selectedEvent !== null}
+            onClose={() => setSelectedEvent(null)}
+            event={selectedEvent}
+            userMap={eventUserMap}
+            groups={groups}
+            onEdit={() => {
+              setEventToEdit(selectedEvent);
+              setIsAddModalOpen(true);
+            }}
+          />
+        </Suspense>
+      )}
       </ErrorBoundary>
 
       {/* Invite Group Modal: mounted only while open (it renders nothing when closed), so its chunk
@@ -1341,20 +1361,34 @@ export default function CalendarHome() {
         onLeaveOrDelete={() => { setIsGroupSettingsOpen(false); setIsLeaveGroupModalOpen(true); }}
       />
 
-      <GamesHubModal
-        // Same again: the hub is hidden rather than unmounted, and its active games, leaderboard
-        // and in-progress game are per GROUP.
-        // Namespaced too, even though only one of the two needs to change to break the
-        // collision: leaving this bare would make the behaviour depend on JSX source order, so
-        // reordering the file would silently move the leak here.
-        key={`games-${activeGroupId}`}
-        isOpen={isGamesHubOpen}
-        onClose={() => setIsGamesHubOpen(false)}
-        groupId={activeGroupId !== 'personal' ? activeGroupId : ''}
-        groupName={groups.find(g => g.id === activeGroupId)?.name || ''}
-        userMap={userMap}
-        selectedDate={selectedDate}
-      />
+      {/* The arcade, mounted from its first open like the windows above. Until 29.10.2026 it had no
+          boundary of its own: one now, since its chunk can fail to load as well as its code fail. */}
+      {gamesEverOpened && (
+        <ErrorBoundary
+          key={`games-${activeGroupId}`}
+          context="GamesHubModal"
+          resetOn={isGamesHubOpen}
+          fallback={isGamesHubOpen
+            ? <CouldNotShow messageKey="windowCouldNotOpen" onClose={() => setIsGamesHubOpen(false)} />
+            : null}
+        >
+          <Suspense fallback={null}>
+            <GamesHubModal
+              // Same again: the hub is hidden rather than unmounted, and its active games, leaderboard
+              // and in-progress game are per GROUP. The key is on the boundary around it now (the
+              // outermost element of this child), namespaced, even though only one of the two needs to
+              // change to break the collision with the chat's: leaving it bare would make the behaviour
+              // depend on JSX source order, so reordering the file would silently move the leak here.
+              isOpen={isGamesHubOpen}
+              onClose={() => setIsGamesHubOpen(false)}
+              groupId={activeGroupId !== 'personal' ? activeGroupId : ''}
+              groupName={groups.find(g => g.id === activeGroupId)?.name || ''}
+              userMap={userMap}
+              selectedDate={selectedDate}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )}
 
       <ErrorBoundary
         context="RecurringEventsPanel"
