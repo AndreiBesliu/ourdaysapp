@@ -15,6 +15,25 @@
 
 ---
 
+## 🆕 Admin: ce scriu membrii nu mai poate bloca panoul (29.10) — PUBLICAT pe 29.10 (funcțiile, apoi regulile)
+
+**Fapt:** statisticile din Admin numără acum cu `count()` tot ce un membru ar putea umfla, iar ce trebuie citit (categoriile
+cardurilor, numele și prietenii oamenilor) vine câte 10 pe pagină. Înainte de schimbare am comparat pe live fiecare cifră,
+citită și numărată: toate egale. Pe live e totul verde după publicare (regulile identice cu arborele, memento-urile ok, nicio
+eroare). Panoul Admin nu-l pot deschide eu (cere login), deci de la tine e nevoie de o privire.
+
+- [ ] **Admin → Overview, Users, un om deschis, Growth** (2 minute)
+      - **Cum arată bine:** cifrele de azi — 34 de evenimente, 15 task-uri, 8 conturi, 18 jocuri, 13 invitații; lista de
+        oameni cu numele, poza și ziua lor; la un om deschis, evenimentele cu starea task-ului (`not-started`, `started`,
+        `completed`); graficul cu ultimele 30 de zile. Fără bannerul galben „Large dataset”.
+      - **Ce e greșit:** un panou gol sau „Some data failed to load” (o funcție a căzut; eroarea e în Admin → Health), un om
+        fără nume deși are unul, sau un task fără stare.
+      - **Și în aplicație:** în Settings, numele și ziua de naștere se salvează ca înainte (regula nouă din `users` cere ca
+        ele să fie text, cum le scriu deja web-ul și APK-ul).
+      - **Ce se strică dacă nu te uiți:** dacă e ceva greșit, doar panoul Admin; datele și ecranele celorlalți nu depind de el.
+
+---
+
 ## 🆕 AI-ul trece pe Claude Opus 5.5 (26.09) — PUBLICAT pe 27.09 și probat. Ce a rămas: pașii 4, 5, 6
 
 **Fapte:**

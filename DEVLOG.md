@@ -13997,3 +13997,18 @@ probă proprie (ar cere mii de documente); bannerul statisticilor, care le acope
 - **Prinsă de porți, nu de testele țintite:** prima formă a ajutorului se numea `textOf`, ca unul deja importat în
   `index.ts` (răspunsul modelului, `aiLedger`). Vitest nu verifică tipurile și a luat-o pe a mea, deci testele Admin
   erau verzi, iar rezumatul AI pica (15 teste pe emulator); `tsc` o refuza. Redenumită `memberText`, porțile rerulate.
+
+## 2026-10-29 · 5.5 publicat pe live: funcțiile, apoi regulile (Task Completed)
+
+**Prompt (Andrei):** „continua cu altceva” (publicarea fără întrebare, după regula din 17.10).
+**Model:** Claude Opus 5.5.
+
+- **Funcțiile** de la `99ae10a`: 55 din 55 actualizate (între ele `adminGetStats`, `adminListProfiles`, `adminGetUser`,
+  `adminGetGrowth`, `notifyUsers`). **Regulile:** compilate și eliberate. Hosting-ul nu s-a schimbat.
+- **Două porniri refuzate înainte, fără nimic publicat:** (1) din Git Bash, un PATH cu `C:\...` după `:` a făcut ca
+  hook-ul `predeploy` să nu găsească `node`; (2) garda `tree-clean` a refuzat de două ori fiindcă `functions/lib/reminders.js`
+  apărea „modificat” după rebuild, cu diff-ul gol (`core.autocrlf`). Diff-ul citit, intrarea din index reîmprospătată
+  (`git add`, nimic pus în commit), apoi publicat din PowerShell.
+- **Verificat pe live după:** regulile publicate sunt identice, octet cu octet, cu `firestore.rules` din arbore; memento-urile
+  au rulat „ok” la 2 minute după, fără eșecuri la rând; în `errorLogs`, niciun rând nou (cel mai nou are 22 de zile).
+- **Admin nu-l pot deschide eu:** punctul e în `OWNER_VERIFY.md`, sus.
