@@ -14075,3 +14075,17 @@ toate confirmate (2 dubluri), toate reparate:
 
 **Porți:** `tsc -b`, `lint-gate`, `npm test` (2694), build, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46),
 `test:rules` (1127).
+
+## 2026-10-29 · Bundle publicat pe live: funcțiile (neschimbate), apoi hosting-ul (Task Completed)
+
+**Prompt (Andrei):** „Da, bundle-ul” (publicarea fără întrebare, după regula din 17.10).
+**Model:** Claude Opus 5.5.
+
+- `deploy --only functions,hosting` de la `326b801`: funcțiile, toate 55 „Skipped (No changes detected)” (pe live erau
+  deja ale lui `99ae10a`); funcțiile au intrat în comandă ca ordinea functions → hosting din CLAUDE.md să rămână, nu
+  „hosting singur”. Hosting: `tree-clean` și `check-split` verzi în predeploy, 72 de fișiere, release complet.
+- **Verificat pe live după:** pagina cere intrarea construită local (`index-D7MXRJ7-.js`) și exact cele 4 bucăți de
+  pornire, fără `AssetBarcode` sau `InviteFamilyModal`; cele două bucăți noi se servesc (200, 69.314 și 13.311 octeți);
+  intrarea nu conține marcajele bibliotecilor; `errorLogs` neschimbat (bancul de dev nu a scris nimic: App Check l-a
+  refuzat); memento-urile au rulat „ok” după.
+- Ecranele din spatele login-ului nu le pot deschide eu: punctul e sus în `OWNER_VERIFY.md`.
