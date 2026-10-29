@@ -2156,7 +2156,7 @@ export const adminGetHealth = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, asy
   ]);
   const scanned = errSnap.docs.map((d) => {
     const e = d.data();
-    return { id: d.id, ...e, createdAt: e.createdAt?.toDate?.()?.toISOString?.() || null };
+    return { ...e, id: d.id, createdAt: e.createdAt?.toDate?.()?.toISOString?.() || null };
   });
   // Eighty logged errors is rarely eighty problems. The list answers "what happened last"; the
   // groups answer "what is wrong", which is the question somebody opening this screen actually has.
@@ -2283,7 +2283,7 @@ export const adminSetErrorStatus = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   const snap = await db.collection("errorLogs").orderBy("createdAt", "desc").limit(ERROR_SCAN_LIMIT).get();
   const scanned = snap.docs.map((d) => {
     const e = d.data();
-    return { id: d.id, ...e, createdAt: e.createdAt?.toDate?.()?.toISOString?.() || null };
+    return { ...e, id: d.id, createdAt: e.createdAt?.toDate?.()?.toISOString?.() || null };
   });
   const byKey = new Map(groupErrors(scanned as any).map((g) => [g.key, g]));
 
@@ -3191,7 +3191,7 @@ export const adminGetAiSpend = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, as
   // A day whose read fails becomes `null`, not an empty array — absent and zero are different
   // answers, and `complete` below is what lets the screen say which it is showing.
   const readDay = (path: string) => db.collection(path).get()
-    .then((s) => s.docs.map((x) => ({ id: x.id, ...(x.data() as Record<string, unknown>) })))
+    .then((s) => s.docs.map((x) => ({ ...(x.data() as Record<string, unknown>), id: x.id })))
     .catch((err) => { console.error("aiSpend day read failed", path, err?.message || err); return null; });
 
   const [featureDays, userDays, modelDays] = await Promise.all([

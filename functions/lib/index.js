@@ -2052,7 +2052,7 @@ exports.adminGetHealth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
     const scanned = errSnap.docs.map((d) => {
         var _a, _b, _c, _d;
         const e = d.data();
-        return Object.assign(Object.assign({ id: d.id }, e), { createdAt: ((_d = (_c = (_b = (_a = e.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString) === null || _d === void 0 ? void 0 : _d.call(_c)) || null });
+        return Object.assign(Object.assign({}, e), { id: d.id, createdAt: ((_d = (_c = (_b = (_a = e.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString) === null || _d === void 0 ? void 0 : _d.call(_c)) || null });
     });
     // Eighty logged errors is rarely eighty problems. The list answers "what happened last"; the
     // groups answer "what is wrong", which is the question somebody opening this screen actually has.
@@ -2177,7 +2177,7 @@ exports.adminSetErrorStatus = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
     const scanned = snap.docs.map((d) => {
         var _a, _b, _c, _d;
         const e = d.data();
-        return Object.assign(Object.assign({ id: d.id }, e), { createdAt: ((_d = (_c = (_b = (_a = e.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString) === null || _d === void 0 ? void 0 : _d.call(_c)) || null });
+        return Object.assign(Object.assign({}, e), { id: d.id, createdAt: ((_d = (_c = (_b = (_a = e.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString) === null || _d === void 0 ? void 0 : _d.call(_c)) || null });
     });
     const byKey = new Map((0, errorGrouping_1.groupErrors)(scanned).map((g) => [g.key, g]));
     const now = new Date().toISOString();
@@ -3071,7 +3071,7 @@ exports.adminGetAiSpend = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHE
     // A day whose read fails becomes `null`, not an empty array — absent and zero are different
     // answers, and `complete` below is what lets the screen say which it is showing.
     const readDay = (path) => db.collection(path).get()
-        .then((s) => s.docs.map((x) => (Object.assign({ id: x.id }, x.data()))))
+        .then((s) => s.docs.map((x) => (Object.assign(Object.assign({}, x.data()), { id: x.id }))))
         .catch((err) => { console.error("aiSpend day read failed", path, (err === null || err === void 0 ? void 0 : err.message) || err); return null; });
     const [featureDays, userDays, modelDays] = await Promise.all([
         Promise.all(days.map((d) => readDay(`aiSpendDaily/${d}/features`))),

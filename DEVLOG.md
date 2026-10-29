@@ -13648,3 +13648,47 @@ Publicat cu `--project live --non-interactive`, de pe un arbore curat (`b2c2ebe`
 08:20 UTC, `ok`, fără eșecuri la rând și fără „series read without their index”.
 
 Rezumatul AI și previzualizarea Period Log ordonează acum evenimentele unei zile după document.
+
+## 2026-10-29 · Pe server, id-ul e al documentului (Task Started)
+
+**Prompt (Andrei):** „neata”, apoi „continua”.
+**Model:** Claude Opus 5.5.
+
+Sarcina rămasă din 18.10: `aiSources.ts` construia `{ id: doc.id, ...data }`, așa că un câmp `id` stocat
+înlocuia id-ul documentului. `expandInWindow` ordonează de pe 18.10 evenimentele unei zile după acel id.
+Regula pentru client există din 06.10 (`src/utils/documentIdFirst.test.ts`), dar scana doar `src/` și doar
+forma într-un pas.
+
+## 2026-10-29 · Pe server, id-ul e al documentului (Task Completed)
+
+**Prompt (Andrei):** „continua”.
+**Model:** Claude Opus 5.5.
+
+**Scanerul** (`documentIdFirst.test.ts`) prinde acum orice `{ id: <x>.id, ...` și citește și
+`functions/src`. Pică pe fiecare loc, cu fișierul și linia. Pe codul vechi a găsit 8 locuri pe server, nu
+5 cât numărasem pe 18.10:
+- `aiSources.ts:99`;
+- `errorDigest.ts:60`;
+- `games.ts:194`, `:220`, `:222`;
+- `index.ts:2159`, `:2286` (listele de erori din admin), `:3194` (cheltuiala AI pe zile).
+
+Toate au acum datele întâi și id-ul documentului la urmă. Pe client nu era niciunul.
+
+**Testul de comportament** `functions/test/aiSourcesDocumentId.test.ts` (emulator): trei evenimente care
+pretind alt id ies cu id-ul documentului lor și în ordinea documentelor. Pică pe `aiSources.ts` vechi.
+
+**Măsurat pe live înainte** (cheia de citire, doar numere): niciun document cu câmpul `id`.
+- `events`: 34 de documente;
+- `games`: 18;
+- `errorLogs`: 114;
+- subcolecțiile `aiSpendDaily` (`features`, `users`, `models`): 19, 20 și 4.
+
+Schimbarea nu modifică nimic pe datele de azi. Expirarea jocurilor nu citește deloc `id`.
+
+**Mașina:** npm e stricat. În `C:\Program Files\nodejs\node_modules\npm` a rămas doar `npmrc`, deci `npm` și
+`npx` nu pornesc. Porțile au rulat cu uneltele proiectului pornite direct cu `node`. Pentru `test:rules` și
+pentru `predeploy` am folosit înlocuitori `npx`/`npm` din scratchpad, în afara repo-ului, puși doar în PATH-ul
+rulărilor mele. Ei trimit la `vitest`/`tsc`/`vite` din `node_modules` și la `firebase-tools` instalat global.
+
+**Porți:** `tsc -b`, `lint-gate`, unit (2673), `test:tz` (46), build (cele două config-uri + `stamp-offline`),
+split guard, offline guard, emulator (1104). `functions/lib` reconstruit.

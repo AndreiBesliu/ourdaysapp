@@ -156,7 +156,7 @@ async function sweepIdleGames(db, now, counts, skipped, opts = {}) {
         const snap = await q.get();
         counts.scanned += snap.size;
         for (const d of snap.docs) {
-            const refusal = (0, gameSession_1.expiryRefusal)(Object.assign({ id: d.id }, d.data()), now);
+            const refusal = (0, gameSession_1.expiryRefusal)(Object.assign(Object.assign({}, d.data()), { id: d.id }), now);
             if (refusal !== null) {
                 skipped[refusal] = (skipped[refusal] || 0) + 1;
                 unclosable.delete(d.id);
@@ -183,9 +183,9 @@ async function sweepIdleGames(db, now, counts, skipped, opts = {}) {
                     const data = fresh.data();
                     if (!data)
                         return false;
-                    if ((0, gameSession_1.expiryRefusal)(Object.assign({ id: fresh.id }, data), Date.now()) !== null)
+                    if ((0, gameSession_1.expiryRefusal)(Object.assign(Object.assign({}, data), { id: fresh.id }), Date.now()) !== null)
                         return false;
-                    tx.update(d.ref, Object.assign(Object.assign({}, (0, gameSession_1.closedSessionFields)(Object.assign({ id: fresh.id }, data), true)), { endedAt: firestore_1.FieldValue.serverTimestamp() }));
+                    tx.update(d.ref, Object.assign(Object.assign({}, (0, gameSession_1.closedSessionFields)(Object.assign(Object.assign({}, data), { id: fresh.id }), true)), { endedAt: firestore_1.FieldValue.serverTimestamp() }));
                     return true;
                 });
                 if (wrote)

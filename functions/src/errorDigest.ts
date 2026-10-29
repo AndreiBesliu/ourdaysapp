@@ -57,7 +57,7 @@ export const logErrorDigest = onSchedule(
 
     const scanned = snap.docs.map((d) => {
       const e = d.data();
-      return { id: d.id, ...e, createdAt: e.createdAt?.toDate?.()?.toISOString?.() || null };
+      return { ...e, id: d.id, createdAt: e.createdAt?.toDate?.()?.toISOString?.() || null };
     });
 
     const grouped = groupErrors(scanned as never);

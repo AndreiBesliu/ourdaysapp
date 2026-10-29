@@ -79,7 +79,8 @@ async function fetchEvents(scope, period, budget) {
             complete = false;
         for (const doc of snap.docs) {
             const data = doc.data();
-            byId.set(doc.id, Object.assign({ id: doc.id }, data));
+            // The document's id last: a stored field named `id` must not replace it (documentIdFirst.test.ts).
+            byId.set(doc.id, Object.assign(Object.assign({}, data), { id: doc.id }));
         }
     }
     const visible = [...byId.values()].filter((ev) => (0, aiVisibility_2.maySee)(ev, uid) && !(0, aiVisibility_2.isPendingInvite)(ev, uid));

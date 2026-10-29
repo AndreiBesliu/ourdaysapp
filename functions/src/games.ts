@@ -191,7 +191,7 @@ export async function sweepIdleGames(
     counts.scanned += snap.size;
 
     for (const d of snap.docs) {
-      const refusal: ExpiryRefusal | null = expiryRefusal({ id: d.id, ...d.data() }, now);
+      const refusal: ExpiryRefusal | null = expiryRefusal({ ...d.data(), id: d.id }, now);
       if (refusal !== null) {
         skipped[refusal] = (skipped[refusal] || 0) + 1;
         unclosable.delete(d.id);
@@ -217,9 +217,9 @@ export async function sweepIdleGames(
           const fresh = await tx.get(d.ref);
           const data = fresh.data();
           if (!data) return false;
-          if (expiryRefusal({ id: fresh.id, ...data }, Date.now()) !== null) return false;
+          if (expiryRefusal({ ...data, id: fresh.id }, Date.now()) !== null) return false;
           tx.update(d.ref, {
-            ...closedSessionFields({ id: fresh.id, ...data }, true),
+            ...closedSessionFields({ ...data, id: fresh.id }, true),
             endedAt: FieldValue.serverTimestamp(),
           });
           return true;

@@ -96,7 +96,8 @@ export async function fetchEvents(scope: Scope, period: Period, budget: number):
     if (snap.size >= perQuery) complete = false;
     for (const doc of snap.docs) {
       const data = doc.data() as Record<string, unknown>;
-      byId.set(doc.id, { id: doc.id, ...data });
+      // The document's id last: a stored field named `id` must not replace it (documentIdFirst.test.ts).
+      byId.set(doc.id, { ...data, id: doc.id });
     }
   }
 

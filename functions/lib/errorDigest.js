@@ -53,7 +53,7 @@ exports.logErrorDigest = (0, scheduler_1.onSchedule)(
     const scanned = snap.docs.map((d) => {
         var _a, _b, _c, _d;
         const e = d.data();
-        return Object.assign(Object.assign({ id: d.id }, e), { createdAt: ((_d = (_c = (_b = (_a = e.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString) === null || _d === void 0 ? void 0 : _d.call(_c)) || null });
+        return Object.assign(Object.assign({}, e), { id: d.id, createdAt: ((_d = (_c = (_b = (_a = e.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString) === null || _d === void 0 ? void 0 : _d.call(_c)) || null });
     });
     const grouped = (0, errorGrouping_1.groupErrors)(scanned);
     const head = grouped.slice(0, MAX_GROUPS);
