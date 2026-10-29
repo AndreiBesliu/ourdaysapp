@@ -13745,3 +13745,17 @@ comparație în plus (`parentEventId` neschimbat), toate trec peste, oriunde ar 
 
 **Porți:** `tsc -b`, `lint-gate`, unit (2674), `test:tz` (46), build, split guard, offline guard, emulator (1104).
 `functions/lib` reconstruit.
+
+## 2026-10-29 · Publicarea pe live: id-ul documentului pe server și marcajele de apariție (Task Started)
+
+**Prompt (Andrei):** „continua”. Regula din 17.10: se publică și pe live, cu porțile înainte și după, apoi
+se raportează.
+**Model:** Claude Opus 5.5.
+
+Pleacă `3ae83a0` și `7411f26`, cu CI verde pe ambele. Ordinea:
+1. funcțiile;
+2. hosting-ul (`index-CY0TuEbO.js`, față de `index-iRdNJZrV.js` pe live).
+
+Regulile, indexurile și Storage-ul sunt neschimbate față de ultima publicare. npm e stricat pe mașină, așa
+că `firebase-tools` pornește direct cu `node`, iar `predeploy` folosește înlocuitorul de `npm` din
+scratchpad.
