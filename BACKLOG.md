@@ -161,6 +161,9 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
           de pe `main` devine mărginită prin construcție, iar o inundare nu mai e posibilă.
         - **Starea de azi:** pe live rămâne citirea globală (mărginită; roșie la abuz, cu memento-urile
           pierdute pentru toți). Ramura `reminders-per-owner` rămâne ca referință și NU se publică.
+        - **PARCAT de Andrei pe 29.10** („lasă-le așa deocamdată”): nu se începe nici limitarea la scriere,
+          nici altă variantă, până nu o cere el. Motivul: riscul e mic pentru o aplicație de familie cu 8
+          conturi, iar un abuz se vede (rularea e roșie în Admin → Health).
     - **Seriile încheiate nu mai sunt citite: reparat pe 16.10.** Interogarea seriilor are acum o limită de jos pe
       `date`, pe frecvență (`lookbackMsFor`: 400 de zile, 5×366 pentru anual), și una de sus la capătul ferestrei.
       Cere indexul compus (`recurrenceRule.frequency`, `date`), adăugat în `firestore.indexes.json`.

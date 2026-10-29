@@ -13907,3 +13907,12 @@ crea, ținute de un numărător al serverului și verificate de reguli (BACKLOG 
 globală, care e mărginită. Ramura rămâne ca referință.
 
 **Cost total al agenților pe 5.3:** 3,86 M tokeni (1,81 + 2,05).
+
+## 2026-10-29 · 5.3 parcat (Task Completed)
+
+**Prompt (Andrei):** „Lasa le asa deocamdata”.
+**Model:** Claude Opus 5.5.
+
+Decizia e trecută în BACKLOG, la 5.3, și în predare. Pe live rămâne citirea globală a memento-urilor, care
+e mărginită. Ramura `reminders-per-owner` (`3eb2442`) rămâne ca referință, nepublicată. Limitarea la
+scriere nu se începe până nu o cere Andrei.
