@@ -42,7 +42,9 @@
 //     request, and what it had already received stayed in memory for minutes (review, 12.10);
 //   * each query has its own cap and its own time; past either the run stops reading and is RED —
 //     an abuse becomes a problem in Admin → Health instead of quietly costing other people their
-//     reminders. Making it impossible needs reading by owner: BACKLOG.
+//     reminders;
+//   * and since 29.10.2026 they are read OWNER BY OWNER, each owner with that cap and that time of
+//     their own, so a flood costs only the account that made it (see `remindDue`).
 // An edited occurrence keeps its series' original day from being reminded through the series' own
 // exceptions: `createEventOverride` adds the day to them with every edit. The edit document itself
 // (`expandInWindow`'s second dedupe) matters only for edits made before that, none on live; past a
@@ -92,14 +94,23 @@ const MAX_LEAD_DAYS = 31;
 const WINDOW_MS = 15 * 60 * 1000;
 
 /**
- * Events read per query and run, at most. Measured on live on 12.10.2026: 2 in the window and 1
- * series, out of 34 events. A family app is hundreds; this is that with room, and it bounds what one
- * account can make every run read (and what the project pays for it). Whichever comes first, this or
- * READ_BUDGET_MS, is the limit — at a page every ~50 ms, the time; REMINDERS_RUN logs each read's.
+ * Events read per owner, read (dated, series) and run, at most. Measured on live on 12.10.2026: 2 in the
+ * window and 1 series, out of 34 events. A family app is hundreds; this is that with room, and it bounds
+ * what one account can make every run read (and what the project pays for it). Whichever comes first,
+ * this or READ_BUDGET_MS, is the limit — at a page every ~50 ms, the time; REMINDERS_RUN logs the reads'.
  */
 export const MAX_CANDIDATES = 5000;
-/** How long each query may take to read. Past it, as past the cap: stop, and the run is red. */
+/** How long each of an owner's two reads may take. Past it, as past the cap: stop, and the run is red. */
 export const READ_BUDGET_MS = 15_000;
+/**
+ * The whole reading, every owner's: past it, an owner not yet read, or not done, is cut like one past
+ * its cap. The two reads' time, as before reading went owner by owner, so the sending still fits.
+ */
+export const READS_DEADLINE_MS = 2 * READ_BUDGET_MS;
+/** Owners read at the same time. */
+export const OWNER_CONCURRENCY = 8;
+/** Owners found per run, at most; past it the run is red. Each costs five queries a run (BACKLOG, 5.3). */
+export const MAX_OWNERS = 1000;
 /**
  * Events per page. What one page holds, padded, is ten times what one event can — and a list of a
  * million nulls, which fits in a document, is tens of megabytes once decoded.
@@ -134,9 +145,14 @@ export const SEND_BUDGET_MS = 60_000;
 export const STALE_CLAIM_MS = RUN_EVERY_MS - LATE_RUN_SLACK_MS;
 
 export type ReminderCounts = {
+  /** Owners found, whose events were read each on their own. */
+  owners: number;
   /** Events read, and how many of them could not be the app's (no id or date it writes). */
   read: number; skipped: number;
-  /** 1 when a query stopped before its end: past the cap or the time. */
+  /**
+   * Owners whose read stopped before its end (past their cap, their time, or the deadline), plus one
+   * when the owners themselves could not all be found. Any is red; nobody else's reminders are lost.
+   */
   cut: number;
   /** How long each read took, for the log line: the page latency on live, measured. */
   datedMs: number; seriesMs: number;
@@ -155,7 +171,7 @@ export type ReminderCounts = {
 };
 
 export const emptyCounts = (): ReminderCounts => ({
-  read: 0, skipped: 0, cut: 0, datedMs: 0, seriesMs: 0, candidates: 0, occurrences: 0, due: 0,
+  owners: 0, read: 0, skipped: 0, cut: 0, datedMs: 0, seriesMs: 0, candidates: 0, occurrences: 0, due: 0,
   deferred: 0, dropped: 0, retried: 0, seriesUnbounded: 0,
   sent: 0, dupes: 0, rows: 0, pushed: 0, failed: 0,
 });
@@ -194,15 +210,57 @@ const alreadyExists = (err: unknown): boolean => {
 };
 
 export interface RemindOptions {
+  /** Per owner and read. */
   maxCandidates?: number;
+  /** Per owner and read. */
   budgetMs?: number;
+  /** The whole reading. */
+  readsDeadlineMs?: number;
+  concurrency?: number;
+  maxOwners?: number;
   page?: number;
   sendBudgetMs?: number;
-  /** The run's clock, for the read budget; the tests drive it. */
+  /** The run's clock, for the read and send budgets; the tests drive it. */
   clock?: () => number;
 }
 
 type Candidate = EventDoc & Record<string, unknown>;
+
+/**
+ * The owners, in the order this run reads them: from a place that moves one owner every run, so that
+ * when there are more owners than run at once, a slow one is not always ahead of the same others.
+ */
+export function ownerTurn<T>(owners: readonly T[], now: number): T[] {
+  if (owners.length === 0) return [];
+  const start = Math.floor(now / RUN_EVERY_MS) % owners.length;
+  return [...owners.slice(start), ...owners.slice(0, start)];
+}
+
+/**
+ * Every value of `ownerId` on an event, one document each: in `ownerId` order, the next past the last
+ * found. Exactly the owners there are, whether their account has a `users` document or not, and an
+ * owner costs one read however many events they have. `cut` when the time ran out, the cap was reached
+ * with more to find, or a value came back that the cursor cannot get past.
+ */
+export async function findOwners(
+  events: FirebaseFirestore.Query,
+  maxOwners: number,
+  outOfTime: () => boolean,
+): Promise<{ owners: unknown[]; cut: boolean }> {
+  const base = events.orderBy("ownerId").select("ownerId").limit(1);
+  const owners: unknown[] = [];
+  let snap = await base.get();
+  while (!snap.empty) {
+    const owner = snap.docs[0].get("ownerId");
+    if (owners.length > 0 && JSON.stringify(owner) === JSON.stringify(owners[owners.length - 1])) {
+      return { owners, cut: true };
+    }
+    if (owners.length >= maxOwners || outOfTime()) return { owners, cut: true };
+    owners.push(owner);
+    snap = await base.startAfter(owner).get();
+  }
+  return { owners, cut: false };
+}
 
 /**
  * Find and send the reminders due in (now − WINDOW_MS, now]. `now` is also the run's start, written in
@@ -217,6 +275,9 @@ export async function remindDue(
 ): Promise<void> {
   const maxCandidates = opts.maxCandidates ?? MAX_CANDIDATES;
   const budgetMs = opts.budgetMs ?? READ_BUDGET_MS;
+  const readsDeadlineMs = opts.readsDeadlineMs ?? READS_DEADLINE_MS;
+  const concurrency = Math.max(1, opts.concurrency ?? OWNER_CONCURRENCY);
+  const maxOwners = opts.maxOwners ?? MAX_OWNERS;
   const page = opts.page ?? READ_PAGE;
   const sendBudgetMs = opts.sendBudgetMs ?? SEND_BUDGET_MS;
   const clock = opts.clock ?? Date.now;
@@ -234,6 +295,15 @@ export async function remindDue(
   //     counted from its start (recurrenceCore.ts), so it began at most its frequency's reach before
   //     (`SERIES_REACH_DAYS`: 31 days, 365, 367, 1828) — and not after the lookahead. Until then every
   //     run read every series ever made.
+  //
+  // OWNER BY OWNER since 29.10.2026 (BACKLOG, 5.3): the same queries, each filtered on one owner, with
+  // that owner's own cap and time. Read with everybody's, one account's flood reached the cap or the
+  // time first and cut everybody's reminders behind it; now it spends its own share, and the run is red
+  // for that owner alone. The owners come from the events (`findOwners`). A few are read at a time, from
+  // a place that moves every run (`ownerTurn`), all inside one deadline. A reminder's recipients (the
+  // owner and the assignees) stay on its owner's event, so an account cannot spend anybody else's share
+  // by naming them. No new index: (ownerId, date) is the AI sources', and the series' shape is served by
+  // merging it with (recurrenceRule.frequency, date) — both measured on live that day.
   const fromDay = dayString(now - 2 * 86_400_000);
   const toDay = dayString(now + MAX_LEAD_DAYS * 86_400_000);
   const byId = new Map<string, Candidate>();
@@ -247,12 +317,16 @@ export async function remindDue(
   /** One read: when it started and what it has read, so that a fallback continues it rather than starting over. */
   type Read = { started: number; seen: Set<string> };
   const startRead = (): Read => ({ started: clock(), seen: new Set<string>() });
+  // The whole reading's deadline, every owner's.
+  const readsEnd = clock() + readsDeadlineMs;
+  const outOfTime = (): boolean => clock() >= readsEnd;
 
   /**
    * Reads queries in turn, each to its end, page by page, or to the cap or the time: true when it
    * stopped short. One budget and one cap for the queries of one read, so the dated read and the series
    * read each have their own full share — the series read's fallback included (review, 17.10.2026: a
-   * refusal after a page started it over, counting twice, with a second budget and a second cap).
+   * refusal after a page started it over, counting twice, with a second budget and a second cap). One
+   * read is one owner's; the deadline is everybody's.
    */
   const readAll = async (read: Read, ...bases: FirebaseFirestore.Query[]): Promise<boolean> => {
     const { started, seen } = read;
@@ -263,7 +337,8 @@ export async function remindDue(
       // back: judged on `seen`, its first page stopped the read (red) before the rest was reached.
       const here = new Set<string>();
       for (;;) {
-        if (clock() - started >= budgetMs) return true;
+        const t = clock();
+        if (t - started >= budgetMs || t >= readsEnd) return true;
         // One past the cap, to tell "exactly the cap" from "more than it".
         const want = Math.min(page, maxCandidates + 1 - seen.size);
         const snap = await (last ? base.startAfter(last) : base).limit(want).get();
@@ -289,36 +364,58 @@ export async function remindDue(
     return false;
   };
   const events = db.collection("events");
-  let t0 = Date.now();
-  const datedCut = await readAll(startRead(), events
+  const dated = (owner: unknown) => events
+    .where("ownerId", "==", owner)
     .where("date", ">=", `${fromDay}T00:00:00.000Z`)
     .where("date", "<=", `${toDay}T23:59:59.999Z`)
-    .select(...REMINDER_FIELDS));
-  counts.datedMs = Date.now() - t0;
-  t0 = Date.now();
+    .select(...REMINDER_FIELDS);
   // One frequency a range (`in` of one, the shape measured on live), each from its own reach back.
-  const series = (freq: Frequency) => events
+  const series = (owner: unknown, freq: Frequency) => events
+    .where("ownerId", "==", owner)
     .where("recurrenceRule.frequency", "in", [freq])
     .where("date", ">=", seriesFrom(fromDay, freq))
     .where("date", "<=", `${toDay}T23:59:59.999Z`)
     .select(...REMINDER_FIELDS);
-  const seriesRead = startRead();
-  let seriesCut: boolean;
-  try {
-    seriesCut = await readAll(seriesRead, ...FREQUENCIES.map(series));
-  } catch (err) {
-    // The ranges need the composite index (`recurrenceRule.frequency`, `date`), which is built for
-    // minutes after it is published, and a query without its index throws rather than returning less.
-    // Until it is there: every series, however old, as before 16.10.2026, and the run says so. Inside
-    // the same read, should the refusal come after a page: its time, its cap, its count.
-    if (!missingIndex(err)) throw err;
-    counts.seriesUnbounded = 1;
-    seriesCut = await readAll(seriesRead, events
-      .where("recurrenceRule.frequency", "in", [...FREQUENCIES])
-      .select(...REMINDER_FIELDS));
-  }
-  counts.seriesMs = Date.now() - t0;
-  counts.cut = datedCut || seriesCut ? 1 : 0;
+
+  const found = await findOwners(events, maxOwners, outOfTime);
+  counts.owners = found.owners.length;
+  let ownersCut = found.cut ? 1 : 0;
+
+  /** One owner's two reads, each with its own cap and time, inside the deadline. */
+  const readOwner = async (owner: unknown): Promise<void> => {
+    if (outOfTime()) {
+      ownersCut += 1;
+      return;
+    }
+    let t0 = Date.now();
+    const datedCut = await readAll(startRead(), dated(owner));
+    counts.datedMs += Date.now() - t0;
+    t0 = Date.now();
+    const seriesRead = startRead();
+    let seriesCut: boolean;
+    try {
+      seriesCut = await readAll(seriesRead, ...FREQUENCIES.map((f) => series(owner, f)));
+    } catch (err) {
+      // A shape whose index is missing, or still being built, throws rather than returning less.
+      // Then: every series of this owner, however old, as before 16.10.2026, and the run says so.
+      // Inside the same read, should the refusal come after a page: its time, its cap, its count.
+      if (!missingIndex(err)) throw err;
+      counts.seriesUnbounded = 1;
+      seriesCut = await readAll(seriesRead, events
+        .where("ownerId", "==", owner)
+        .where("recurrenceRule.frequency", "in", [...FREQUENCIES])
+        .select(...REMINDER_FIELDS));
+    }
+    counts.seriesMs += Date.now() - t0;
+    if (datedCut || seriesCut) ownersCut += 1;
+  };
+
+  const queue = ownerTurn(found.owners, now);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+    while (next < queue.length) await readOwner(queue[next++]);
+  }));
+  counts.cut = ownersCut;
 
   const docs = [...byId.values()];
   counts.candidates = docs.length;

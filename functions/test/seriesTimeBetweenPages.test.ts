@@ -56,11 +56,15 @@ function countPages(refuseBounded = false) {
       throw Object.assign(new Error('9 FAILED_PRECONDITION: The query requires an index.'), { code: 9 });
     }
     const snap = await (realGet as (...a: unknown[]) => Promise<admin.firestore.QuerySnapshot>).apply(this, args);
-    if (snap.docs.some((d) => d.ref.path.startsWith('events/'))) pages.n += 1;
+    // Not the owners' scan (29.10.2026): one document an owner, with only `ownerId`.
+    const scan = (d: admin.firestore.QueryDocumentSnapshot) => { const k = Object.keys(d.data()); return k.length === 1 && k[0] === 'ownerId'; };
+    if (snap.docs.some((d) => d.ref.path.startsWith('events/') && !scan(d))) pages.n += 1;
     return snap;
   } as never);
   return pages;
 }
+/** Each read's own time, with the whole reading's deadline out of the way. */
+const OWN_TIME = { budgetMs: 15_000, readsDeadlineMs: Number.POSITIVE_INFINITY };
 
 it('the dated read: the clock passes its time after the first page, and the second is not read', async () => {
   const today = `${dayOf(Date.now())}T00:00:00.000Z`;
@@ -68,7 +72,7 @@ it('the dated read: the clock passes its time after the first page, and the seco
   const pages = countPages();
   const counts = mod.emptyCounts();
   // The clock stands still until a page has brought events, then is a minute on.
-  await mod.remindDue(db, Date.now(), counts, { page: 4, budgetMs: 15_000, clock: () => (pages.n ? 60_000 : 0) });
+  await mod.remindDue(db, Date.now(), counts, { page: 4, ...OWN_TIME, clock: () => (pages.n ? 60_000 : 0) });
   vi.restoreAllMocks();
   expect(pages.n).toBe(1);
   expect(counts).toMatchObject({ read: 4, cut: 1 });
@@ -79,7 +83,7 @@ it('the fallback, one query over every series: past its time after a page, it st
   await seed(Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`s${i}`, { ownerId: MALLORY, groupId: null, title: 's', date: old, recurrenceRule: { frequency: 'weekly' } }])));
   const pages = countPages(true);
   const counts = mod.emptyCounts();
-  await mod.remindDue(db, Date.now(), counts, { page: 2, budgetMs: 15_000, clock: () => (pages.n ? 60_000 : 0) });
+  await mod.remindDue(db, Date.now(), counts, { page: 2, ...OWN_TIME, clock: () => (pages.n ? 60_000 : 0) });
   vi.restoreAllMocks();
   expect(pages.n).toBe(1);
   expect(counts).toMatchObject({ seriesUnbounded: 1, read: 2, cut: 1 });

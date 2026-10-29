@@ -103,7 +103,13 @@ async function fetched(call: () => Promise<unknown>): Promise<Array<{ path: stri
   try { await call(); } finally { vi.restoreAllMocks(); }
   return seen;
 }
-const onEvents = (rows: Array<{ path: string; keys: string[] }>) => rows.filter((f) => f.path.startsWith('events/'));
+/**
+ * A document the owners' scan brought (`findOwners`, 29.10.2026): one an owner, only `ownerId`. Every read
+ * of the computation brings `date` too (both its queries filter on it), so the two cannot be confused.
+ */
+const ownerScan = (keys: string[]) => keys.length === 1 && keys[0] === 'ownerId';
+/** What the computation read: the events, not the owners' scan. */
+const onEvents = (rows: Array<{ path: string; keys: string[] }>) => rows.filter((f) => f.path.startsWith('events/') && !ownerScan(f.keys));
 
 describe('what the job reads', () => {
   it('only the fields the reminder is computed from, in pages', async () => {
@@ -144,7 +150,7 @@ describe('what the job reads', () => {
     const rules: unknown[] = [];
     vi.spyOn(Query.prototype, 'get').mockImplementation(async function (this: Query, ...args: unknown[]) {
       const snap = await (realGet as (...a: unknown[]) => Promise<admin.firestore.QuerySnapshot>).apply(this, args);
-      for (const d of snap.docs) if (d.id === 'ruled') rules.push(d.data().recurrenceRule);
+      for (const d of snap.docs) if (d.id === 'ruled' && !ownerScan(Object.keys(d.data()))) rules.push(d.data().recurrenceRule);
       return snap;
     } as never);
     await runJob();
@@ -196,16 +202,18 @@ describe('what the job reads', () => {
 });
 
 describe('a read that cannot finish says so', () => {
-  it('past the candidate cap, the run stops reading and turns red', async () => {
+  it('past the candidate cap, the owner’s read stops and the run turns red; the other owner’s does not', async () => {
     await seed({ ...many('c', 30, () => ({ ...dueEvent(MALLORY), reminderMinutes: null })), dentist: dueEvent(ALICE) });
     const counts = mod.emptyCounts();
     await mod.remindDue(db, Date.now(), counts, { maxCandidates: 10, page: 4 });
-    expect(counts).toMatchObject({ cut: 1, read: 10 });
+    // The cap is each owner's (29.10.2026): Mallory's ten, and Alice's one, read and reminded.
+    expect(counts).toMatchObject({ owners: 2, cut: 1, read: 11 });
+    expect(await sentFor('dentist')).toBe(true);
     expect(mod.reminderOutcome(counts).failed).toBeGreaterThan(0);
     expect(mod.reminderOutcome(counts).detail).toContain('stopped early 1');
     // Exactly the cap is not past it.
     const exact = mod.emptyCounts();
-    await mod.remindDue(db, Date.now(), exact, { maxCandidates: 31, page: 4 });
+    await mod.remindDue(db, Date.now(), exact, { maxCandidates: 30, page: 4 });
     expect(exact).toMatchObject({ cut: 0, read: 31 });
   }, 120_000);
 
@@ -217,15 +225,26 @@ describe('a read that cannot finish says so', () => {
     expect(m!.detail).toContain('stopped early 1');
   }, 180_000);
 
-  it('out of time, the same — and each query has its own time', async () => {
-    await seed({ ...many('c', 30, () => dueEvent(MALLORY)), series: dueSeries(ALICE) });
+  it('out of time, the same — and each owner’s read has its own time', async () => {
+    await seed({ ...many('c', 30, () => dueEvent(MALLORY)), series: dueSeries(ALICE), dentist: dueEvent(ALICE) });
+    // Each page of Mallory's events moves the clock ten seconds on: her dated read is past its fifteen
+    // seconds after two pages. Owners one at a time, so the clock moves only inside her reads, whoever
+    // goes first; the whole reading's deadline out of the way, so this is each read's own time.
+    let t = 0;
+    const realGet = Query.prototype.get;
+    vi.spyOn(Query.prototype, 'get').mockImplementation(async function (this: Query, ...args: unknown[]) {
+      const snap = await (realGet as (...a: unknown[]) => Promise<admin.firestore.QuerySnapshot>).apply(this, args);
+      if (snap.docs.some((d) => d.id.startsWith('c') && !ownerScan(Object.keys(d.data())))) t += 10_000;
+      return snap;
+    } as never);
     const counts = mod.emptyCounts();
-    let looks = 0;
-    // The dated read starts at 0 and is out of time at its first look; the series read starts later
-    // and has its own fifteen seconds.
-    await mod.remindDue(db, Date.now(), counts, { clock: () => (looks++ === 0 ? 0 : 60_000) });
-    expect(counts).toMatchObject({ cut: 1, candidates: 1 });
+    await mod.remindDue(db, Date.now(), counts, { page: 4, concurrency: 1, clock: () => t, readsDeadlineMs: Number.POSITIVE_INFINITY });
+    vi.restoreAllMocks();
+    // Mallory's two pages (8), then Alice's event and series, each read in its own time.
+    expect(counts).toMatchObject({ cut: 1, read: 8 + 2 });
+    expect(mod.reminderOutcome(counts).failed).toBeGreaterThan(0);
     expect(await sentFor('series')).toBe(true);
+    expect(await sentFor('dentist')).toBe(true);
   }, 120_000);
 });
 
@@ -238,7 +257,7 @@ describe('a page that comes back the same', () => {
     let pages = 0;
     vi.spyOn(Query.prototype, 'get').mockImplementation(async function (this: Query, ...args: unknown[]) {
       const snap = await (realGet as (...a: unknown[]) => Promise<admin.firestore.QuerySnapshot>).apply(this, args);
-      if (!snap.docs.some((d) => d.ref.path.startsWith('events/r'))) return snap;
+      if (!snap.docs.some((d) => d.ref.path.startsWith('events/r') && !ownerScan(Object.keys(d.data())))) return snap;
       pages += 1;
       first ??= snap;
       return first;
@@ -503,11 +522,12 @@ describe('the series query reaches back as far as a series can still run (16.10.
     const realGet = Query.prototype.get;
     vi.spyOn(Query.prototype, 'get').mockImplementation(async function (this: Query, ...args: unknown[]) {
       const snap = await (realGet as (...a: unknown[]) => Promise<admin.firestore.QuerySnapshot>).apply(this, args);
-      if (snap.docs.some((d) => d.ref.path.startsWith('events/'))) found += 1;
+      if (snap.docs.some((d) => d.ref.path.startsWith('events/') && !ownerScan(Object.keys(d.data())))) found += 1;
       return snap;
     } as never);
     const counts = mod.emptyCounts();
-    await mod.remindDue(db, NOW, counts, { clock: () => (found ? 60_000 : 0), budgetMs: 15_000 });
+    // The whole reading's deadline out of the way: this is the series read's own time.
+    await mod.remindDue(db, NOW, counts, { clock: () => (found ? 60_000 : 0), budgetMs: 15_000, readsDeadlineMs: Number.POSITIVE_INFINITY });
     vi.restoreAllMocks();
     expect(counts).toMatchObject({ cut: 1, read: 1 });
     expect(found).toBe(1);
