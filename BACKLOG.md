@@ -131,9 +131,36 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
              rulări. **Reparația:** pasul de n/3.
           - **Plus:** două teste adaptate lasă un mutant să trăiască (bugetul propriu al citirii de serii și
             al rezervei); remedierile sunt în raportul recenziei.
-        - **Urmează (segmentul 3):** cele patru reparații pe ramură, apoi o recenzie nouă, apoi `main` și
-          publicarea. Alternativa e B, care ar avea nevoie de aceleași garanții (cota pe grup și pe
-          proprietar, prima porție).
+        - **Segmentul 3 (29.10): reparațiile sunt pe ramură (`3eb2442`), porțile verzi, dar tot NU pe
+          `main`.** Ce s-a schimbat:
+          - cote pe grup (`groupId`) și personale (`ownerId` + `groupId == null`);
+          - o primă porție de 100 de evenimente pe citire pentru toți, apoi a doua tură, care continuă de unde
+            a rămas, cu timpul consumat;
+          - parcurgerea pe 16 intervale în paralel, cu timpul ei;
+          - citirile unei cote în paralel;
+          - rotirea cu pasul n/3.
+          - **Probe:** 5 mutanți, fiecare prins de testul lui; emulator 1115; simulat la 120 ms, 1000 de
+            proprietari în 19 s.
+        - **Recenzia a doua** (12 agenți, 2,05 M tokeni) a găsit 10 probleme reale, dintre care trei grave:
+          1. **Nicio limită pe toată rularea.** Plafoanele sunt pe cotă, iar un cont își face oricâte grupuri
+             (= cote). Simulat: un cont cu 32 de grupuri face o rulare să citească ~185 000 de documente; cu
+             câmpuri lungi, ~600 MB, peste cei 512 MiB ai funcției, deci nimeni nu mai primește memento-uri.
+             Costul ajunge la ~54 M de citiri pe zi. Codul publicat se oprea la 10 000 de candidați.
+          2. **Grupurile unui atacator, cu id-uri alese să sorteze primele,** opresc găsirea grupurilor altora.
+          3. **Parcurgerea proprietarilor nu ajunge la 1000 în timp,** fără atacator: intervalele de id-uri
+             sunt inegale.
+          - **Plus:** costul pe live e de ~10 ori cel al codului publicat (32 de interogări goale pe rulare
+            pentru capetele intervalelor); 80 de pagini în zbor în loc de una; un asignat poate umple o cotă
+            personală prin `createEventOverride`; nicio probă nu exercită cele 16 intervale; a doua tură nu are
+            limită pe cotă.
+        - **Concluzia (29.10):** nicio schemă care doar CITEȘTE mai corect nu poate izola pe toată lumea cu
+          memorie și cost mărginite cât timp un cont își face gratuit oricâte cote (grupuri, conturi). Orice
+          buget total îl consumă cineva cu destule cote, iar fără buget total memoria și costul nu au margine.
+          **Remediul e la SCRIERE:** limite pe cont, câte evenimente și câte grupuri poate crea, ținute de un
+          numărător scris de server și verificat de reguli (`get()` pe numărător). Atunci citirea globală
+          de pe `main` devine mărginită prin construcție, iar o inundare nu mai e posibilă.
+        - **Starea de azi:** pe live rămâne citirea globală (mărginită; roșie la abuz, cu memento-urile
+          pierdute pentru toți). Ramura `reminders-per-owner` rămâne ca referință și NU se publică.
     - **Seriile încheiate nu mai sunt citite: reparat pe 16.10.** Interogarea seriilor are acum o limită de jos pe
       `date`, pe frecvență (`lookbackMsFor`: 400 de zile, 5×366 pentru anual), și una de sus la capătul ferestrei.
       Cere indexul compus (`recurrenceRule.frequency`, `date`), adăugat în `firestore.indexes.json`.

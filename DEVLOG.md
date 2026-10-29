@@ -13859,3 +13859,51 @@ probleme reale, de aceea codul nu e pe `main`. Detaliile și reparațiile sunt �
 funcțiilor (us-central1, departe de bază).
 
 **Urmează segmentul 3:** cele patru reparații pe ramură, o recenzie nouă, apoi `main` și publicarea.
+
+## 2026-10-29 · 5.3, segmentul 3: reparațiile pe ramură; recenzia a doua arată că remediul e la scriere (Task Started)
+
+**Prompt (Andrei):** „Repară pe ramură”.
+**Model:** Claude Opus 5.5.
+
+Cele patru reparații cerute de prima recenzie, pe ramura `reminders-per-owner`.
+
+## 2026-10-29 · 5.3, segmentul 3: reparațiile pe ramură; recenzia a doua arată că remediul e la scriere (Task Completed)
+
+**Prompt (Andrei):** „Repară pe ramură”.
+**Model:** Claude Opus 5.5.
+
+**Pe ramură (`3eb2442`, urcată), NU pe `main`, nepublicat.**
+- **Ce s-a schimbat:**
+  - cotele: grupul (`groupId`), apoi evenimentele personale ale fiecărui proprietar (`ownerId` +
+    `groupId == null`). Măsurat pe live: niciun eveniment fără câmpul `groupId`, iar toți scriitorii pun
+    `null`;
+  - prima porție de 100 de evenimente pe citire pentru toate cotele, apoi a doua tură, care continuă
+    cursorul și timpul;
+  - găsirea proprietarilor și a grupurilor pe 16 intervale în paralel, cu timpul ei (10 s), iar termenul
+    citirilor pornește după;
+  - citirea datată și cele 4 intervale de serii ale unei cote merg în paralel;
+  - rotirea cu pasul n/3.
+- **Teste:** cele două teste slăbite sunt reparate; 4 teste noi (prima porție, a doua tură, cota de grup,
+  parcurgerea grupurilor).
+- **5 mutanți, fiecare prins de testul lui:** fără primă porție; a doua tură cu timp nou; rezerva cu timp
+  nou; pasul 1; cota personală fără `groupId == null`.
+- **Porți:** unit 2674, `test:tz` 46, build, emulator 1115.
+- **Simulat la 120 ms pe interogare:** 1000 de proprietari citiți în 19 s; 8, 32 și 100 de conturi care
+  inundă se taie doar pe ele.
+
+**Recenzia a doua** (12 agenți, 2,05 M tokeni măsurați) a găsit 10 probleme reale.
+1. **Nicio limită pe toată rularea.** Plafoanele sunt pe cotă, iar un cont își face oricâte grupuri.
+   Simulat: un cont cu 32 de grupuri face o rulare să citească ~185 000 de documente; cu câmpuri lungi,
+   peste memoria funcției, deci nimeni nu mai primește memento-uri. Costul: ~54 M de citiri pe zi.
+2. **Grupurile atacatorului, cu id-uri care sortează primele,** opresc găsirea grupurilor altora.
+3. **Parcurgerea nu ajunge la 1000 de proprietari** cu intervalele inegale.
+- **Plus:** costul pe live e de ~10 ori cel al codului publicat, iar cifra mea de 14 100 de citiri pe zi
+  era greșită (lipseau cele 32 de interogări goale pe rulare); 80 de pagini în zbor; un asignat poate umple
+  o cotă personală; cele 16 intervale nu au nicio probă.
+
+**Concluzia:** cât timp un cont își face gratuit oricâte cote, o citire mai corectă nu poate izola pe toată
+lumea cu memorie și cost mărginite. Remediul e la scriere: limite pe cont, câte evenimente și grupuri poate
+crea, ținute de un numărător al serverului și verificate de reguli (BACKLOG 5.3). Pe live rămâne citirea
+globală, care e mărginită. Ramura rămâne ca referință.
+
+**Cost total al agenților pe 5.3:** 3,86 M tokeni (1,81 + 2,05).
