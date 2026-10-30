@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { bannerPlayerIds, gameTypeName, ownEntry } from './gameTypeName';
 import { ARCADE_GAME_TYPES, gameTitleOf, SERVER_OWNED_GAME } from '../../utils/gameSession';
-import { t } from '../../utils/i18n';
+import { t } from '../../utils/i18nAll';
 
 const LANGS = ['en-US', 'ro-RO', 'fr-FR', 'es-ES', 'it-IT', 'de-DE'];
 const ODD: unknown[] = ['FREE PIZZA', 'tictactoe', '', 'constructor', '__proto__', 'toString', 42, null, undefined, {}, ['tic-tac-toe']];

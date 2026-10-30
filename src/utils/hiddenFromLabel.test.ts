@@ -7,7 +7,7 @@
 // This pins that no language asks the old question again.
 
 import { describe, it, expect } from 'vitest';
-import { t } from './i18n';
+import { t } from './i18nAll';
 
 // The app's own codes. An unknown code falls back to English, which would pass every assertion
 // below for five languages at once — the first version of this test did exactly that.

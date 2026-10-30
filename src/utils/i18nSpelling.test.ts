@@ -18,7 +18,7 @@
 // than the gap it was meant to close.
 
 import { describe, it, expect } from 'vitest';
-import { translations } from './i18n';
+import { translations } from './i18nAll';
 
 /** word (lowercase, matched whole) → what it should have been */
 const NEVER_UNACCENTED: Record<string, Record<string, string>> = {

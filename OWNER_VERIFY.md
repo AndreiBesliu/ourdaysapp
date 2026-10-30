@@ -15,6 +15,21 @@
 
 ---
 
+## 🆕 Limbile, altele decât engleza și româna, se încarcă la cerere (30.10) — PUBLICAT pe 30.10
+
+**Fapt:** franceza, spaniola, italiana și germana nu mai stau în ce încarcă oricine la pornire; vin doar pentru cine
+citește aplicația în ele. Am probat pe construcția de producție (login-ul în franceză, pagina offline în germană). Pentru
+tine, în română, nu se schimbă nimic.
+
+- [ ] **Settings → limba: alege Français, apoi înapoi Română** (1 minut)
+      - **Cum arată bine:** după o clipă aplicația e în franceză; înapoi în română, imediat. La reîncărcare rămâne limba
+        aleasă.
+      - **Ce e greșit:** limba nu se schimbă, sau o pagină amestecă engleza cu franceza. Spune-mi.
+      - **Ce se strică dacă nu te uiți:** doar cine folosește franceza, spaniola, italiana sau germana ar putea vedea
+        aplicația în engleză.
+
+---
+
 ## 🆕 Ferestrele calendarului și codurile cardurilor se încarcă la cerere (29.10) — PUBLICAT pe 29.10
 
 **Fapt:** fereastra de adăugat, fereastra unui eveniment, arcade-ul, invitația și codurile cardurilor nu mai stau în ce

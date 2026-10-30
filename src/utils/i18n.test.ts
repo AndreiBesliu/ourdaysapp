@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { translations, t } from './i18n';
+import { translations, t } from './i18nAll';
 
 const LANGS = ['en-US', 'ro-RO', 'fr-FR', 'es-ES', 'it-IT', 'de-DE'];
 
@@ -87,12 +87,23 @@ describe('t() itself', () => {
   });
 });
 
+/**
+ * i18n.ts and the four language files (src/utils/lang/, since 30.10.2026), read as the one file they
+ * were: one `'<lang>': {` block per language, its keys four spaces in.
+ */
+function i18nSource(): string {
+  return [readFileSync(join(__dirname, 'i18n.ts'), 'utf8'), ...['fr-FR', 'es-ES', 'it-IT', 'de-DE'].map((lang) =>
+    readFileSync(join(__dirname, 'lang', `${lang}.ts`), 'utf8')
+      .replace('const dictionary: Dictionary = {', `  '${lang}': {`)
+      .replace(/^  ([A-Za-z0-9_]+):/gm, '    $1:'))].join(String.fromCharCode(10));
+}
+
 describe('the source file, not just the object it builds', () => {
   // A duplicate key is INVISIBLE to every check above: the object literal simply keeps the last
   // one, so counts match, no value is empty, and the app silently uses whichever definition came
   // second. It happened while writing these very keys — four names already existed, with proper
   // diacritics, and the ASCII copies added later would have won. Only the source shows it.
-  const src = readFileSync(join(__dirname, 'i18n.ts'), 'utf8');
+  const src = i18nSource();
 
   it('defines no key twice inside a language block', () => {
     const dups: string[] = [];

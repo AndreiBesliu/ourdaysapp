@@ -20,7 +20,8 @@ function goodBuild() {
     manifest[s] = { file, isDynamicEntry: true, imports: ['_jsx-runtime.js'] };
     code[file] = s.includes('Wallet') ? 'new Html5Qrcode(el)'
       : s.includes('AssetBarcode') ? 'class InvalidElementException{} throw Error("bad rs block")'
-      : s.includes('AddEventModal') ? 'data-rfd-draggable-id tag("parser/ENCasualDateParser")' : 'screen';
+      : s.includes('AddEventModal') ? 'data-rfd-draggable-id tag("parser/ENCasualDateParser")'
+      : s.includes('Settings') ? '"Partager avec le groupe" "TAREAS PENDIENTES" "Panoramica di oggi" "AUSSTEHENDE AUFGABEN"' : 'screen';
   }
   return { manifest, code };
 }
@@ -54,7 +55,9 @@ describe('the split guard', () => {
 
   it('refuses either code library in boot code (29.10.2026: the event and invitation windows carried them)', () => {
     for (const [marker, what] of [['InvalidElementException', /JsBarcode .* is in the boot set/], ['bad rs block', /QR encoder .* is in the boot set/],
-      ['data-rfd-draggable-id', /drag-and-drop .* is in the boot set/], ['parser/ENCasualDateParser', /date parser .* is in the boot set/]]) {
+      ['data-rfd-draggable-id', /drag-and-drop .* is in the boot set/], ['parser/ENCasualDateParser', /date parser .* is in the boot set/],
+      ['Partager avec le groupe', /French .* is in the boot set/], ['TAREAS PENDIENTES', /Spanish .* is in the boot set/],
+      ['Panoramica di oggi', /Italian .* is in the boot set/], ['AUSSTEHENDE AUFGABEN', /German .* is in the boot set/]]) {
       const b = goodBuild();
       b.code['assets/index-a.js'] += ` ${marker}`;
       expect(splitProblems(b).fatal.join(), marker).toMatch(what);

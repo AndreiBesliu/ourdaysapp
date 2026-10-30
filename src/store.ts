@@ -3,6 +3,7 @@ import { localZone } from './utils/eventTime';
 // The remembered language (and why it is remembered at all): utils/languagePref.ts, shared with the
 // offline Cards page.
 import { LANG_KEY, rememberedLanguage } from './utils/languagePref';
+import { isLanguageReady, loadLanguage } from './utils/i18n';
 
 // Remembered locally for the same reason the language is: it is needed to render times on
 // the very first paint, before the user document has been read.
@@ -71,18 +72,47 @@ const DEFAULT_THEME = {
   hapticsEnabled: true,
 };
 
+// ── The language shown is always one whose words are here (30.10.2026) ──────────────────────────
+//
+// Four of the six languages load on demand (utils/i18n.ts). `language` is what every screen renders
+// with, so it only ever holds a READY one: asked for another — at boot from this device's memory, from
+// the profile after sign-in, from Settings — the store keeps the current one, loads the new one and
+// switches when it arrives, so nobody sees a screen half in English. The last ask wins. One that cannot
+// load (no signal) leaves the current language; the choice is still remembered, and tried again at the
+// next start.
+let asked: string | undefined;
+
+function ask(language: string, apply: (language: string) => void): Promise<void> {
+  asked = language;
+  if (isLanguageReady(language)) {
+    apply(language);
+    return Promise.resolve();
+  }
+  return loadLanguage(language).then((ok) => { if (ok && asked === language) apply(language); });
+}
+
+const bootLanguage = rememberedLanguage();
+
 export const useThemeStore = create<ThemeState>((set) => ({
   ...DEFAULT_THEME,
-  language: rememberedLanguage(),
+  language: isLanguageReady(bootLanguage) ? bootLanguage : 'en-US',
   timezone: rememberedZone(),
   setTheme: (color, isDark) => set({ primaryColor: color, isDarkMode: isDark }),
   setAdvancedTheme: (theme) => {
     remember(theme.language);
     rememberZone(theme.timezone);
-    set((state) => ({ ...state, ...theme }));
+    const { language, ...rest } = theme;
+    set((state) => ({ ...state, ...rest }));
+    if (language !== undefined) void ask(language, (ready) => set({ language: ready }));
   },
   // The LANGUAGE deliberately survives. It is the one preference that belongs to the device and
   // the person reading the login screen, not to the session — resetting it would drop whoever is
   // about to sign in back to English on the way there.
   resetTheme: () => set({ ...DEFAULT_THEME }),
 }));
+
+/**
+ * Settles once the language this device remembers is the one shown, or could not load. main.tsx waits
+ * for it, briefly, before the first paint, so a French reader does not see the app in English first.
+ */
+export const bootLanguageReady: Promise<void> = ask(bootLanguage, (ready) => useThemeStore.setState({ language: ready }));

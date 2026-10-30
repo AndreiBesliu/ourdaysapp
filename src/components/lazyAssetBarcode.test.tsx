@@ -10,7 +10,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import LazyAssetBarcode, { lazyCode } from './LazyAssetBarcode';
 import CodeNumber from './CodeNumber';
-import { t } from '../utils/i18n';
+import { t } from '../utils/i18nAll';
 
 describe('while the code loads', () => {
   it('a quiet placeholder of about the code’s height, at each of the three sizes', () => {

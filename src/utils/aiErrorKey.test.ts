@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { aiErrorKey } from './aiErrorKey';
-import { translations } from './i18n';
+import { translations } from './i18nAll';
 
 describe('recognising the refusals the server states', () => {
   it('maps each budget code to its key', () => {

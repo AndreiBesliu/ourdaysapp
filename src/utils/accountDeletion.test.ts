@@ -9,7 +9,7 @@ import {
   markAccountDeleted, mayBeGone, onDeletedInAnotherTab, reauthErrorKey, reauthMethod, serverErrorKey,
   takeAccountDeletedNotice, tellOtherTabs, type DeletionSteps,
 } from './accountDeletion';
-import { t } from './i18n';
+import { t } from './i18nAll';
 
 const fail = (code: string, details?: unknown) => Object.assign(new Error(code), { code, details });
 

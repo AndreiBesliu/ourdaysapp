@@ -354,9 +354,12 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   1.374.848 octeți, gzip 505.995 → 420.727; drag-and-drop-ul și `chrono-node` au ieșit și ele.
   - **Măsurat pe 29.10 (sourcemap-uri), ce mai e la pornire:** `serverActions-*.js` e Firebase de care calendarul
     are nevoie (Firestore 270 kB, Auth 88, webchannel 52); mutabile doar Storage (32) și Messaging (12).
-  - **Candidații următori, de ales de Andrei:** traducerile (216 kB, toate cele 6 limbi la pornire; doar limba
-    omului și engleza ar scoate ~145 kB, dar `t()` e sincron); framer-motion (124 kB, o singură animație în
-    `CalendarGrid`, înlocuibilă cu CSS, cere ochii lui Andrei); `GroupChatWidget` (33 kB).
+  - **Limbile la cerere din 30.10:** engleza și româna rămân la pornire, franceza, spaniola, italiana și germana
+    au fiecare bucata lor (`src/utils/lang/`); store-ul arată doar o limbă încărcată. Pornirea 1.374.869 →
+    1.201.795 octeți, gzip 420.728 → 366.025. **Recenzia cu agenți NU s-a făcut** (limita săptămânală la 94 %);
+    de făcut după resetare.
+  - **Candidații următori, de ales de Andrei:** framer-motion (124 kB, o singură animație în `CalendarGrid`,
+    înlocuibilă cu CSS, cere ochii lui Andrei); `GroupChatWidget` (33 kB); Firebase Storage și Messaging (44 kB).
 - **Hosting răspunde cu `index.html` la un `/assets/*.js` lipsă**, cu cache imutabil pe un an (măsurat
   pe live).
   - **Ce nu se strică:** un tab vechi după un deploy vede tot „versiune nouă”; Chrome, Firefox și

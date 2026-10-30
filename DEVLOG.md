@@ -14159,3 +14159,55 @@ arcade-ul primește o barieră proprie; `check-split` refuză întoarcerea lor �
   invitație 13.308 octeți); intrarea nu conține marcajele drag-and-drop-ului, ale parserului sau ale codurilor;
   `errorLogs` neschimbat; memento-urile au rulat „ok” după.
 - Ecranele din spatele login-ului nu le pot deschide eu: punctul e sus în `OWNER_VERIFY.md`.
+
+## 2026-10-30 · Bundle C: doar engleza și româna la pornire, celelalte limbi la cerere (Task Started)
+
+**Prompt (Andrei):** „C: limbile” (la „Care felie urmează?”, cu C: „doar limba ta și engleza la pornire, celelalte la
+cerere”).
+**Model:** Claude Opus 5.5.
+**Ce e** (BACKLOG §3): toate cele 6 limbi stau în ce încarcă oricine la pornire (`i18n.ts`, ~216 kB minificat, plus
+localizările `date-fns` ale tuturor). Un om folosește una.
+**Plan:**
+- `i18n.ts` păstrează engleza (rezerva oricărei chei) și româna; franceza, spaniola, italiana și germana pleacă fiecare în
+  fișierul ei, cu localizarea ei de date, încărcate la cerere (`loadLanguage`);
+- store-ul ține ca limbă doar o limbă încărcată: o cerere pentru alta o încarcă întâi și o aplică după (ultima cerere
+  câștigă), oricine ar cere-o (pornirea, profilul din Firestore, Settings);
+- la pornire, prima randare așteaptă limba omului, cu o limită, ca să nu apară întâi în engleză;
+- pagina offline a cardurilor și testele le iau pe toate (`i18nAll.ts`): pagina offline trebuie să meargă fără nimic adus;
+- `check-split` refuză întoarcerea celor patru limbi în pornire.
+
+## 2026-10-30 · Bundle C: doar engleza și româna la pornire, celelalte limbi la cerere (Task Completed)
+
+**Prompt (Andrei):** „C: limbile”.
+**Model:** Claude Opus 5.5.
+
+**Ce s-a schimbat:**
+- **`src/utils/i18n.ts`** ține engleza și româna; franceza, spaniola, italiana și germana sunt în `src/utils/lang/`,
+  fiecare cu localizarea ei `date-fns`, aduse prin `loadLanguage` (o singură încărcare pe limbă; o limbă necunoscută sau
+  o bucată care nu vine dau `false`). Despărțirea a fost verificată cheie cu cheie față de `HEAD`: 6 limbi × 785 de chei,
+  aceleași valori, aceeași ordine.
+- **`store.ts`:** `language` ține doar o limbă încărcată. Cerută alta (la pornire din memoria dispozitivului, din profil
+  după login, din Settings), rămâne cea curentă până vine cea nouă; ultima cerere câștigă; alegerea se ține minte imediat.
+- **`main.tsx`:** prima randare așteaptă limba omului, cel mult 1,5 s, apoi pornește în engleză și schimbă când vine.
+- **Pagina offline a cardurilor** le ia pe toate (`src/utils/i18nAll.ts`): se deschide fără nimic adus. Testele care
+  verifică toate limbile citesc tot de acolo (prin `t()` ar fi trecut și fără traducere, pe rezerva engleză).
+- **`check-split`** refuză în pornire un text care există doar în fiecare dintre cele patru limbi.
+
+**Măsurat (tot ce se încarcă la pornire):** 1.374.869 → 1.201.795 octeți (−12,6 %), gzip 420.728 → 366.025. Față de
+29.10 dimineața: 1.785.125 → 1.201.795 (−32,7 %), gzip 524.186 → 366.025.
+
+**Probe:**
+- **Construcția de producție în browser:** fără limbă memorată nu se cere nicio bucată de limbă; cu franceza, doar
+  `fr-FR-*.js`, iar login-ul e în franceză; cu româna, nicio bucată; pagina offline, cu germana, e în germană fără niciun
+  fișier adus.
+- `src/utils/langOnDemand.test.ts` (nou, 11): ce poartă pornirea; încărcarea (cuvintele și datele; o limbă necunoscută,
+  inclusiv `constructor`); ce vede omul la pornire, la o cerere nouă, la două cereri la rând, la o limbă care nu vine.
+- Testele care citesc sursa traducerilor (chei duble, alfabetele cu diacritice, cheile notificărilor) citesc acum și
+  fișierele limbilor.
+- **Mutații: 9 din 9 prinse.**
+
+**Recenzia cu agenți NU s-a făcut:** limita săptămânală a contului era la 94 % (resetare pe 31.10), iar o recenzie costă
+~0,9 M tokeni. De făcut după resetare (trecut în BACKLOG).
+
+**Porți:** `tsc -b`, `lint-gate`, `npm test` (2718), build, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46),
+`test:rules` (1127).

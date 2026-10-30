@@ -1,4 +1,7 @@
 // src/offline/main.tsx — entry of the offline Cards page (built by vite.offline.config.ts).
+// Every language, registered before anything renders: this page opens with nothing fetched, so it
+// cannot load the person's language on demand the way the app does (src/utils/i18nAll.ts).
+import '../utils/i18nAll';
 import { createRoot } from 'react-dom/client';
 import './offline.css';
 import OfflineCards from './OfflineCards';

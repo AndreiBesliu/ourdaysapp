@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { REPEAT_CHOICES, isRepeatChoice, ruleForRepeatChoice, repeatLabelKey, draftFieldsForRepeat, repeatFromDraft } from './recurrence';
 import { isFrequency } from './recurrenceCore';
-import { translations } from './i18n';
+import { translations } from './i18nAll';
 
 describe('the repeat dropdown', () => {
   it('maps every choice to the rule it stores', () => {

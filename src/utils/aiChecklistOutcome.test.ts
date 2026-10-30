@@ -31,7 +31,7 @@ import {
   CHECKLIST_ERROR,
 } from '../../functions/src/aiChecklistOutcome';
 import { checklistReasonKey, checklistWorthRetrying } from './aiErrorKey';
-import { translations } from './i18n';
+import { translations } from './i18nAll';
 
 describe('which reason gets recorded', () => {
   it('prefers the reason we stated over anything inferred', () => {

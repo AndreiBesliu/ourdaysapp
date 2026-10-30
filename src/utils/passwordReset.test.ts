@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { resetOutcome, RESET_MESSAGE_KEY, emailLanguage } from './passwordReset';
-import { translations } from './i18n';
+import { translations } from './i18nAll';
 
 describe('resetOutcome', () => {
   it('success is "sent"', () => {

@@ -33,6 +33,12 @@ export const HEAVY = [
   // boot through the add and details windows (and the rummy game) until 29.10.2026.
   { what: 'drag-and-drop (@hello-pangea/dnd)', marker: 'data-rfd-draggable-id' },
   { what: 'the date parser (chrono-node)', marker: 'parser/ENCasualDateParser' },
+  // A string only each language has (30.10.2026): the four loaded on demand, with English and Romanian
+  // left in boot (src/utils/i18n.ts).
+  { what: 'French (src/utils/lang/fr-FR.ts)', marker: 'Partager avec le groupe' },
+  { what: 'Spanish (src/utils/lang/es-ES.ts)', marker: 'TAREAS PENDIENTES' },
+  { what: 'Italian (src/utils/lang/it-IT.ts)', marker: 'Panoramica di oggi' },
+  { what: 'German (src/utils/lang/de-DE.ts)', marker: 'AUSSTEHENDE AUFGABEN' },
 ];
 
 /** File names loaded at boot: the single entry chunk and everything it statically imports. */

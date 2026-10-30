@@ -23,7 +23,7 @@ import { join } from 'node:path';
 import {
   NOTIFY_LANGS, NOTIFY_STRINGS, normaliseLang, renderNotify,
 } from '../../functions/src/notifyStrings';
-import { translations } from './i18n';
+import { translations } from './i18nAll';
 
 const APP_LANGS = Object.keys(translations);
 
@@ -126,14 +126,25 @@ describe('normaliseLang', () => {
   });
 });
 
+/**
+ * i18n.ts and the four language files (src/utils/lang/, since 30.10.2026), read as the one file they
+ * were: one `'<lang>': {` block per language, its keys four spaces in.
+ */
+function i18nSource(): string {
+  return [readFileSync(join(__dirname, 'i18n.ts'), 'utf8'), ...['fr-FR', 'es-ES', 'it-IT', 'de-DE'].map((lang) =>
+    readFileSync(join(__dirname, 'lang', `${lang}.ts`), 'utf8')
+      .replace('const dictionary: Dictionary = {', `  '${lang}': {`)
+      .replace(/^  ([A-Za-z0-9_]+):/gm, '    $1:'))].join(String.fromCharCode(10));
+}
+
 describe('the keys the app renders are really in the app file', () => {
   it('reads them out of i18n.ts as source, not just the built object', () => {
     // The built object silently keeps the LAST of any duplicate key, which is how five duplicated
     // keys once passed a parity test. Reading the source means a duplicate is visible.
-    const src = readFileSync(join(__dirname, 'i18n.ts'), 'utf8');
+    const src = i18nSource();
     for (const key of Object.keys(NOTIFY_STRINGS)) {
       const hits = src.split('\n').filter((l) => new RegExp(`^\\s*${key}:`).test(l)).length;
-      expect(hits, `${key} appears ${hits} times in i18n.ts; expected one per language`).toBe(NOTIFY_LANGS.length);
+      expect(hits, `${key} appears ${hits} times in i18n.ts and lang/; expected one per language`).toBe(NOTIFY_LANGS.length);
     }
   });
 });

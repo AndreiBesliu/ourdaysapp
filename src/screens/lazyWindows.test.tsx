@@ -13,7 +13,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { latchOpened, useOpenedOnce } from '../hooks/useOpenedOnce';
 import { LAZY_PARTS } from '../utils/lazyParts';
-import { t } from '../utils/i18n';
+import { t } from '../utils/i18nAll';
 
 const read = (p: string) => readFileSync(p, 'utf8');
 const HOME = read('src/screens/CalendarHome.tsx');
