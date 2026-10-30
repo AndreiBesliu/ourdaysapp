@@ -14211,3 +14211,14 @@ localizările `date-fns` ale tuturor). Un om folosește una.
 
 **Porți:** `tsc -b`, `lint-gate`, `npm test` (2718), build, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46),
 `test:rules` (1127).
+
+## 2026-10-30 · Bundle C publicat pe live: funcțiile (neschimbate), apoi hosting-ul (Task Completed)
+
+**Prompt (Andrei):** „C: limbile” (publicarea fără întrebare, după regula din 17.10).
+**Model:** Claude Opus 5.5.
+
+- `deploy --only functions,hosting` de la `0365fbc`: funcțiile, toate 55 „Skipped (No changes detected)”; hosting-ul, cu
+  `tree-clean` și `check-split` verzi, release complet.
+- **Verificat pe live după:** pagina cere intrarea construită local (`index-B_R27F5B.js`) și cele 6 bucăți de pornire,
+  fără nicio limbă la cerere; cele patru limbi se servesc separat (200, 42–45 kB fiecare); intrarea nu conține textele lor;
+  pagina offline le are; `errorLogs` neschimbat; memento-urile „ok” după.
