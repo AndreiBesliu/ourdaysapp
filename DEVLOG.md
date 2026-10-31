@@ -14409,3 +14409,28 @@ Andrei (APK-ul cheamă callable-urile din us-central1). Nimic schimbat în cod.
      Eventarc.
 - **Porți:** `tsc -b`, `lint-gate`, `npm test` (2736; la fel fără cheia Firebase, ca pe CI), build, `check-split`,
   `check-offline`, `check-bundle`, `test:tz` (46), `test:rules` (1131).
+
+## 2026-10-31 · Funcțiile mutate în europe-central2: publicat pe live și verificat (Task Completed)
+
+**Prompt (Andrei):** „Da, mută-le” (publicarea fără întrebare, după regula din 17.10).
+**Model:** Claude Opus 5.5.
+
+- **Pasul 1** (14:55–14:57 UTC, `deploy --only "functions:<cele șase>" --force`): `onMessageCreated`, `onGameCreated`,
+  `autoSuggestChecklist`, `sendDueReminders`, `expireIdleGames` și `logErrorDigest` create în europe-central2, apoi copiile
+  din us-central1 șterse. Fără „Skipping deletes”; fereastra cu ambele copii a durat aproximativ un minut.
+- **Pasul 2** (14:59–15:03, `deploy --only "functions,hosting"`, fără `--force`): 42 de callable-uri create în
+  europe-central2, 49 de funcții actualizate, 6 sărite (cele de la pasul 1), nicio ștergere; apoi hosting-ul, release
+  complet. Prima încercare a pasului 1 se oprise în predeploy, înaintea oricărei operații (`npm` stricat pe mașină):
+  publicarea cere înlocuitorul `npxshim` în PATH.
+- **Verificat pe live după:**
+  - `functions:list`: 97 de funcții, toate `nodejs24`; 42 de callable-uri în fiecare regiune; niciun job sau trigger
+    în us-central1.
+  - Proba CORS (OPTIONS) pe fiecare callable: **42/42 publice în europe-central2 și 42/42 în us-central1**.
+  - Marcajele: memento-urile și `expireIdleGames` au rulat „ok” din Europa la 15:00 (fără eșecuri). `logErrorDigest`
+    rulează următoarea dată la 18:00 UTC.
+  - Intrarea servită e cea construită local (`index-CX0_et9D.js`) și cheamă `europe-central2`.
+  - `errorLogs`: 0 rânduri de la 14:55. CI verde pe `8e88ee7`.
+- **Latența** (`REMINDERS_RUN`): o interogare 114 / 54 / 31 ms (prima e pornire la rece), citirea seriilor 141 / 98 / 79 ms.
+  Înainte: 165–188 ms și 842–892 ms. Măsurată pe trei rulări.
+- **OWNER_VERIFY:** o acțiune pe web care trece prin server (Admin, o invitație sau AI-ul), fiindcă un callable cu login
+  nu-l pot chema eu.

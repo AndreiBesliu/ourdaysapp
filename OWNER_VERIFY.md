@@ -15,6 +15,21 @@
 
 ---
 
+## 🆕 Funcțiile rulează în Europa, lângă baza de date (31.10) — PUBLICAT pe 31.10
+
+**Fapt:** funcțiile au trecut din SUA (us-central1) în europe-central2, unde e și baza de date. Memento-urile citesc
+acum seriile în ~80–140 ms, față de ~850 ms. Aplicația web cheamă Europa. **APK-ul instalat cheamă în continuare
+copiile din SUA**, care rămân până când nu mai folosește nimeni un APK construit înainte de 31.10. Proba mea arată
+toate cele 42 de funcții publice în ambele regiuni, dar o funcție cu login n-o pot chema eu.
+
+- [ ] **Pe web, ceva care trece prin server: Admin → panoul se încarcă; sau o invitație, sau AI-ul pe un eveniment**
+      (1 minut).
+      - **Cum arată bine:** merge ca înainte, poate puțin mai repede.
+      - **Ce e greșit:** o eroare „internal” sau un panou care nu se încarcă. Ar însemna că o funcție din Europa nu
+        răspunde, iar web-ul nu are altă cale (APK-ul are).
+
+---
+
 ## 🆕 Calendarul fără framer-motion: animația lunii și glisarea refăcute (31.10) — PUBLICAT pe 31.10
 
 **Fapt:** biblioteca de animații (124 kB, încărcată la pornire doar pentru calendar) a ieșit; animația și glisarea sunt

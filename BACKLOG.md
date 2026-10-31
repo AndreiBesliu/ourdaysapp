@@ -381,6 +381,8 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   - **MUTATE pe 31.10** („Da, mută-le”): toate funcțiile rulează în europe-central2, iar aplicația web le cheamă de acolo
     (`FUNCTIONS_REGION` în `src/firebase.ts`). **Callable-urile au și o copie în us-central1** (`CALLABLE_REGIONS` în
     `functions/src/globalOptions.ts`), pentru APK-ul instalat, care le cheamă de acolo.
+  - **Măsurat după mutare** (`REMINDERS_RUN`, primele trei rulări din Europa, 15:00–15:10): o interogare 114 / 54 / 31 ms
+    (prima e pornire la rece), citirea seriilor 141 / 98 / 79 ms. Înainte: 165–188 ms și 842–892 ms.
   - **Rămas de făcut:** copiile din us-central1 se pot șterge când niciun APK vechi nu mai e folosit (un APK construit după
     31.10 cheamă Europa). Ce se strică dacă se șterg prea devreme: în APK-ul vechi nu mai merge nimic din ce trece prin
     server (AI, invitații, chat direct, ștergerea contului, Warlord PvP).
