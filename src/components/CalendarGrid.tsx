@@ -2,7 +2,7 @@ import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, en
 import { ChevronLeft, ChevronRight, CheckCircle2, X, Plus, Clock, ChevronUp, ChevronDown, ThumbsUp, HelpCircle, ThumbsDown } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { auth } from '../firebase';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useHorizontalSwipe } from '../hooks/useHorizontalSwipe';
 import { useDialog } from '../hooks/useDialog';
 import { modalDepth } from '../utils/dialogStack';
 import { useThemeStore } from '../store';
@@ -35,10 +35,6 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
   });
 
   const [direction, setDirection] = useState<number>(0);
-  const swipeConfidenceThreshold = 10000;
-  const swipePower = (offset: number, velocity: number) => {
-    return Math.abs(offset) * velocity;
-  };
 
   const nextPeriod = () => {
     setDirection(1);
@@ -51,6 +47,9 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
     }
   };
   
+  // Declared before prevPeriod's body runs, used only in event handlers.
+  const swipe = useHorizontalSwipe(() => nextPeriod(), () => prevPeriod());
+
   const prevPeriod = () => {
     setDirection(-1);
     if (isWeekView) {
@@ -62,28 +61,6 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
     }
   };
 
-  const variants = {
-    enter: (direction: number) => ({
-      x: direction > 0 ? '100%' : '-100%',
-      opacity: 0,
-      position: 'absolute' as const,
-      width: '100%'
-    }),
-    center: {
-      zIndex: 1,
-      x: 0,
-      opacity: 1,
-      position: 'relative' as const,
-      width: '100%'
-    },
-    exit: (direction: number) => ({
-      zIndex: 0,
-      x: direction > 0 ? '-100%' : '100%',
-      opacity: 0,
-      position: 'absolute' as const,
-      width: '100%'
-    })
-  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -306,36 +283,16 @@ export default function CalendarGrid({ currentDate, setCurrentDate, selectedDate
       days = [];
     }
     return (
-      <AnimatePresence initial={false} custom={direction}>
-        <motion.div
-          key={currentDate.toString()}
-          custom={direction}
-          variants={variants}
-          initial="enter"
-          animate="center"
-          exit="exit"
-          transition={{
-            x: { type: "spring", stiffness: 300, damping: 30 },
-            opacity: { duration: 0.2 }
-          }}
-          drag="x"
-          dragDirectionLock={true}
-          dragConstraints={{ left: 0, right: 0 }}
-          dragElastic={1}
-          onDragEnd={(_, { offset, velocity }) => {
-            const swipe = swipePower(offset.x, velocity.x);
-
-            if (swipe < -swipeConfidenceThreshold || offset.x < -50) {
-              nextPeriod();
-            } else if (swipe > swipeConfidenceThreshold || offset.x > 50) {
-              prevPeriod();
-            }
-          }}
-          className="border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900 shadow-sm"
-        >
-          {rows}
-        </motion.div>
-      </AnimatePresence>
+      // Keyed by the period, so a new month mounts and slides in from its side (index.css); swiped with
+      // pointer events (useHorizontalSwipe.ts). framer-motion did both until 31.10.2026.
+      <div
+        key={currentDate.toString()}
+        {...swipe}
+        style={{ touchAction: 'pan-y' }}
+        className={`border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden bg-white dark:bg-zinc-900 shadow-sm ${direction > 0 ? 'ourdays-slide-next' : direction < 0 ? 'ourdays-slide-prev' : ''}`}
+      >
+        {rows}
+      </div>
     );
   };
 

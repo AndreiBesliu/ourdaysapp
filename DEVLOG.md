@@ -14253,3 +14253,33 @@ toate mici, toate reparate; 2 infirmate.
   `tree-clean` și `check-split` verzi.
 - **Verificat pe live după:** pagina cere intrarea construită local (`index-Dhz1at20.js`), care conține codul nou;
   `errorLogs` neschimbat; memento-urile „ok”.
+
+## 2026-10-31 · Bundle B: framer-motion înlocuit cu CSS în calendar (Task Started)
+
+**Prompt (Andrei):** „B: framer-motion”.
+**Model:** Claude Opus 5.5.
+**Ce e:** framer-motion (~124 kB minificat, la pornire) servește o singură componentă, `CalendarGrid`: luna nouă intră
+glisând, iar luna se schimbă trăgând cu degetul (sau cu mausul).
+**Plan:** animația de intrare în CSS (din dreapta sau din stânga, oprită sub „mișcare redusă”); glisarea cu evenimente de
+pointer, cu aceleași praguri (50 px, sau o glisare rapidă) și cu orizontala dominantă, ca derularea verticală să rămână
+liberă; un clic de după o glisare nu deschide ziua. **Diferența vizibilă:** luna veche nu mai iese glisând (dispare), iar
+grila nu mai urmează degetul în timpul tragerii. Andrei o vede cu ochii lui (OWNER_VERIFY).
+
+## 2026-10-31 · Bundle B: framer-motion înlocuit cu CSS în calendar (Task Completed)
+
+**Prompt (Andrei):** „B: framer-motion”.
+**Model:** Claude Opus 5.5.
+
+- **`CalendarGrid`:** luna nouă intră din partea ei printr-o clasă CSS (`ourdays-slide-next` / `-prev`, `index.css`,
+  oprită sub „mișcare redusă”, nu la prima afișare); glisarea vine din `src/hooks/useHorizontalSwipe.ts` (pragurile lui
+  framer: 50 px sau |distanță| × viteză peste 10 000, orizontala dominantă; `touch-action: pan-y`; clicul de după o
+  glisare nu deschide ziua). framer-motion nu mai e importat nicăieri în aplicație (Warlord nu-l folosea).
+- **Diferența vizibilă:** luna veche nu mai iese glisând, iar grila nu mai urmează degetul în timpul tragerii.
+- **Măsurat (tot ce se încarcă la pornire):** 1.201.795 → 1.078.030 octeți (−10,3 %), gzip 366.025 → 326.364. Față de 29.10
+  dimineața: 1.785.125 → 1.078.030 (−39,6 %), gzip 524.186 → 326.364.
+- **Probe:** `src/hooks/useHorizontalSwipe.test.ts` (nou, 6): decizia glisării pe praguri, scroll vs glisare, un tap, timp
+  zero; nimic din aplicație nu importă framer-motion; grila și CSS-ul. **Fără banc vizual și fără recenzie cu agenți**
+  (contextul sesiunii era aproape plin): Andrei verifică animația și glisarea (OWNER_VERIFY).
+- `framer-motion` a rămas în `package.json` (npm stricat pe mașină); de scos la prima instalare.
+- **Porți:** `tsc -b`, `lint-gate`, `npm test` (2729), build, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46),
+  `test:rules` (1127).

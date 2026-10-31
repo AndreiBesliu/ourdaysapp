@@ -358,8 +358,11 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     au fiecare bucata lor (`src/utils/lang/`); store-ul arată doar o limbă încărcată. Pornirea 1.374.869 →
     1.201.795 octeți, gzip 420.728 → 366.025. Recenzia cu agenți făcută pe 31.10 (0,84 M): o bucată de limbă care
     nu se încarcă e acum raportată și nu mai poate lăsa pagina albă; selectorul din Settings arată limba cerută.
-  - **Candidații următori, de ales de Andrei:** framer-motion (124 kB, o singură animație în `CalendarGrid`,
-    înlocuibilă cu CSS, cere ochii lui Andrei); `GroupChatWidget` (33 kB); Firebase Storage și Messaging (44 kB).
+  - **framer-motion scos din 31.10:** animația lunii în CSS, glisarea cu evenimente de pointer (`useHorizontalSwipe`).
+    Pornirea 1.201.795 → 1.078.030 octeți, gzip 366.025 → 326.364. Pachetul a rămas în `package.json` (npm e stricat pe
+    mașină); de scos la prima instalare. **Fără recenzie cu agenți și fără banc vizual** (contextul sesiunii plin): Andrei
+    verifică animația și glisarea (OWNER_VERIFY).
+  - **Candidații următori, de ales de Andrei:** `GroupChatWidget` (33 kB); Firebase Storage și Messaging (44 kB).
 - **Hosting răspunde cu `index.html` la un `/assets/*.js` lipsă**, cu cache imutabil pe un an (măsurat
   pe live).
   - **Ce nu se strică:** un tab vechi după un deploy vede tot „versiune nouă”; Chrome, Firefox și

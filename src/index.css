@@ -106,3 +106,19 @@
 .ourdays-fade-in {
   animation: ourdays-fade-in 200ms ease-out both;
 }
+
+/* The calendar's next or previous month slides in from its side (31.10.2026; framer-motion's spring did this
+   until then, the only use of that library). Not on the first paint: the class comes with a direction. */
+@keyframes ourdays-slide-from-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes ourdays-slide-from-left {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.ourdays-slide-next { animation: ourdays-slide-from-right 300ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.ourdays-slide-prev { animation: ourdays-slide-from-left 300ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .ourdays-slide-next, .ourdays-slide-prev { animation: none; }
+}

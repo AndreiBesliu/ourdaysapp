@@ -15,6 +15,20 @@
 
 ---
 
+## 🆕 Calendarul fără framer-motion: animația lunii și glisarea refăcute (31.10) — PUBLICAT pe 31.10
+
+**Fapt:** biblioteca de animații (124 kB, încărcată la pornire doar pentru calendar) a ieșit; animația și glisarea sunt
+refăcute. Pe asta n-am văzut-o cu ochii mei: e singura schimbare vizuală din zilele astea.
+
+- [ ] **Calendarul: săgețile ‹ ›, apoi glisare stânga/dreapta pe telefon** (2 minute)
+      - **Cum arată bine:** luna următoare intră din dreapta, cea anterioară din stânga; glisarea schimbă luna; derularea
+        în sus și în jos pe telefon merge ca înainte; o atingere pe o zi o deschide, o glisare nu.
+      - **Diferența știută:** luna veche nu mai iese glisând, iar grila nu mai urmează degetul în timpul tragerii. Dacă îți
+        lipsește, spune-mi și o refac în CSS.
+      - **Ce e greșit:** glisarea nu schimbă luna, pagina nu se mai derulează pe telefon, sau o glisare deschide o zi.
+
+---
+
 ## 🆕 Limbile, altele decât engleza și româna, se încarcă la cerere (30.10) — PUBLICAT pe 30.10
 
 **Fapt:** franceza, spaniola, italiana și germana nu mai stau în ce încarcă oricine la pornire; vin doar pentru cine
