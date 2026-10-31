@@ -14243,3 +14243,13 @@ toate mici, toate reparate; 2 infirmate.
 - **Mutații: 6 din 6 prinse** (inclusiv cei doi care supraviețuiau).
 - **Porți:** `tsc -b`, `lint-gate`, `npm test` (2723), build, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46),
   `test:rules` (1127).
+
+## 2026-10-31 · Reparațiile recenziei limbilor publicate pe live (Task Completed)
+
+**Prompt (Andrei):** „Da, după resetare” (publicarea fără întrebare, după regula din 17.10).
+**Model:** Claude Opus 5.5.
+
+- `deploy --only functions,hosting` de la `a927017`: funcțiile, toate 55 „Skipped (No changes detected)”; hosting-ul, cu
+  `tree-clean` și `check-split` verzi.
+- **Verificat pe live după:** pagina cere intrarea construită local (`index-Dhz1at20.js`), care conține codul nou;
+  `errorLogs` neschimbat; memento-urile „ok”.
