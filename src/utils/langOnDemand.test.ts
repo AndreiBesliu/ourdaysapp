@@ -8,6 +8,10 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+// Each test loads a fresh copy of the store and real language modules (800 lines each): under the full
+// suite that took past the default 5 s once (31.10.2026), so the limit is the time a real load can take.
+vi.setConfig({ testTimeout: 20_000 });
+
 const reportError = vi.fn();
 vi.mock('../reportError', () => ({ reportError: (...a: unknown[]) => reportError(...a) }));
 

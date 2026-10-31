@@ -381,8 +381,8 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   dar devine limita oricărei citiri pe proprietar (5.3). Mutarea înseamnă funcții noi: un callable devine
   public doar la creare, iar clientul primește alte URL-uri. **De măsurat întâi:** timpul unei pagini din
   `REMINDERS_RUN`.
-- **Node 22 în Cloud Functions:** învechit din **30.04.2027**, scos din uz pe **31.10.2027**. Trecerea
-  la Node 24 înainte de prima dată.
+- **Node 24 în Cloud Functions din 31.10.2026** (`engines.node`, CI pe 24). Node 24 iese din uz pe 30.04.2028.
+  `@types/node` a rămas pe 22 (npm stricat pe mașină); de urcat la prima instalare.
 - **Fereastra de deploy și taburile vechi.** Regulile noi întâlnesc, până la hosting, clientul web
   vechi: o editare de ocurență fără `apply` se pierde, clopoțelul arată chei brute de i18n, oglinda
   `profiles` cu data completă e refuzată. De aceea **hosting imediat după reguli**. Un tab rămas

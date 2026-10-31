@@ -14323,3 +14323,12 @@ grila nu mai urmează degetul în timpul tragerii. Andrei o vede cu ochii lui (O
    toate scenariile de mai sus; 4 mutanți, fiecare prins de testul lui.
 - **Porți:** `tsc -b`, `lint-gate`, `npm test` (2734, și fără cheia Firebase, ca pe CI), build, `check-split`,
   `check-offline`, `check-bundle`, `test:tz`, `test:rules` (1127).
+
+## 2026-10-31 · Funcțiile pe Node 24 (Task Started)
+
+**Prompt (Andrei):** „Node 24”.
+**Model:** Claude Opus 5.5.
+**Ce e:** funcțiile rulau pe Node 22 (iese din uz pe 30.04.2027). `firebase-tools` 15.18 are Node 24 ca GA (iese din uz pe
+30.04.2028). Se schimbă `engines.node` din `functions/package.json` (de acolo își ia publicarea runtime-ul) și versiunea din
+CI; `@types/node` rămâne pe 22 (npm stricat; sunt doar tipuri). Apoi publicarea tuturor funcțiilor și verificarea pe live:
+runtime-ul fiecăreia, marcajele joburilor, erorile.

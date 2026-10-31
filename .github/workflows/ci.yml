@@ -21,7 +21,7 @@ jobs:
         with:
           # 22, the Cloud Functions runtime since 24.09.2026. Node 20 is decommissioned there on
           # 30.10.2026, after which functions on it can no longer even be deployed.
-          node-version: '22'
+          node-version: '24'
           cache: npm
 
       - name: Install
