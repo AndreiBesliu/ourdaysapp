@@ -20,7 +20,8 @@
 **Fapt:** biblioteca de animații (124 kB, încărcată la pornire doar pentru calendar) a ieșit; animația și glisarea sunt
 refăcute. Pe asta n-am văzut-o cu ochii mei: e singura schimbare vizuală din zilele astea.
 
-- [ ] **Calendarul: săgețile ‹ ›, apoi glisare stânga/dreapta pe telefon** (2 minute)
+- [x] **Calendarul: săgețile ‹ ›, apoi glisare stânga/dreapta pe telefon** (2 minute) — *verificat de tine pe
+      telefon pe 31.10: „arată ok glisarea”.*
       - **Cum arată bine:** luna următoare intră din dreapta, cea anterioară din stânga; glisarea schimbă luna; derularea
         în sus și în jos pe telefon merge ca înainte; o atingere pe o zi o deschide, o glisare nu.
       - **Diferența știută:** luna veche nu mai iese glisând, iar grila nu mai urmează degetul în timpul tragerii. Dacă îți
