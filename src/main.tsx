@@ -15,4 +15,5 @@ onDeletedInAnotherTab(window, () => window.location.replace('/login'))
 const start = () => createRoot(document.getElementById('root')!).render(
     <App />
 )
-void Promise.race([bootLanguageReady, new Promise<void>((resolve) => setTimeout(resolve, 1500))]).then(start)
+// `start` on either outcome: a language that fails must not leave the page blank (review of 30.10.2026).
+void Promise.race([bootLanguageReady, new Promise<void>((resolve) => setTimeout(resolve, 1500))]).then(start, start)

@@ -356,8 +356,8 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     are nevoie (Firestore 270 kB, Auth 88, webchannel 52); mutabile doar Storage (32) și Messaging (12).
   - **Limbile la cerere din 30.10:** engleza și româna rămân la pornire, franceza, spaniola, italiana și germana
     au fiecare bucata lor (`src/utils/lang/`); store-ul arată doar o limbă încărcată. Pornirea 1.374.869 →
-    1.201.795 octeți, gzip 420.728 → 366.025. **Recenzia cu agenți NU s-a făcut** (limita săptămânală la 94 %);
-    de făcut după resetare.
+    1.201.795 octeți, gzip 420.728 → 366.025. Recenzia cu agenți făcută pe 31.10 (0,84 M): o bucată de limbă care
+    nu se încarcă e acum raportată și nu mai poate lăsa pagina albă; selectorul din Settings arată limba cerută.
   - **Candidații următori, de ales de Andrei:** framer-motion (124 kB, o singură animație în `CalendarGrid`,
     înlocuibilă cu CSS, cere ochii lui Andrei); `GroupChatWidget` (33 kB); Firebase Storage și Messaging (44 kB).
 - **Hosting răspunde cu `index.html` la un `/assets/*.js` lipsă**, cu cache imutabil pe un an (măsurat

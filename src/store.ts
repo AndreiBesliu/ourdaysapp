@@ -3,7 +3,8 @@ import { localZone } from './utils/eventTime';
 // The remembered language (and why it is remembered at all): utils/languagePref.ts, shared with the
 // offline Cards page.
 import { LANG_KEY, rememberedLanguage } from './utils/languagePref';
-import { isLanguageReady, loadLanguage } from './utils/i18n';
+import { isLanguageReady, languageFailure, loadLanguage } from './utils/i18n';
+import { isStaleChunkError } from './utils/appVersion';
 
 // Remembered locally for the same reason the language is: it is needed to render times on
 // the very first paint, before the user document has been read.
@@ -43,6 +44,8 @@ interface ThemeState {
   backgroundOverlay?: number;
   overlayColor?: string | null;
   language?: string;
+  /** The language asked for and still loading (Settings shows it, so a second pick can undo the first). */
+  requestedLanguage?: string;
   /** IANA zone. Event wall-clock times and reminders are resolved against it. */
   timezone?: string;
   soundEnabled: boolean;
@@ -82,13 +85,38 @@ const DEFAULT_THEME = {
 // next start.
 let asked: string | undefined;
 
-function ask(language: string, apply: (language: string) => void): Promise<void> {
+function ask(language: string, set: (change: Partial<ThemeState>) => void): Promise<void> {
   asked = language;
   if (isLanguageReady(language)) {
-    apply(language);
+    set({ language, requestedLanguage: undefined });
     return Promise.resolve();
   }
-  return loadLanguage(language).then((ok) => { if (ok && asked === language) apply(language); });
+  set({ requestedLanguage: language });
+  return loadLanguage(language).then((ok) => {
+    if (asked !== language) return;
+    if (ok) {
+      set({ language, requestedLanguage: undefined });
+      return;
+    }
+    set({ requestedLanguage: undefined });
+    reportLanguageFailure(language);
+  });
+}
+
+/**
+ * A language chunk that could not load is reported (review of 30.10.2026): a tab older than a deploy
+ * asks for a chunk that is gone, and nothing else would say so. Loaded only then, so the store does not
+ * carry Firebase into everything that imports it.
+ */
+function reportLanguageFailure(language: string): void {
+  const error = languageFailure(language);
+  if (error === undefined) return; // a language the app does not have: nothing failed
+  const message = error instanceof Error ? error.message : String(error);
+  void import('./reportError')
+    .then(({ reportError }) => reportError(`Language ${language} could not load: ${message}`, {
+      context: isStaleChunkError(message) ? 'StaleChunk' : 'LanguageLoad',
+    }))
+    .catch(() => {});
 }
 
 const bootLanguage = rememberedLanguage();
@@ -103,7 +131,7 @@ export const useThemeStore = create<ThemeState>((set) => ({
     rememberZone(theme.timezone);
     const { language, ...rest } = theme;
     set((state) => ({ ...state, ...rest }));
-    if (language !== undefined) void ask(language, (ready) => set({ language: ready }));
+    if (language !== undefined) void ask(language, set);
   },
   // The LANGUAGE deliberately survives. It is the one preference that belongs to the device and
   // the person reading the login screen, not to the session — resetting it would drop whoever is
@@ -115,4 +143,4 @@ export const useThemeStore = create<ThemeState>((set) => ({
  * Settles once the language this device remembers is the one shown, or could not load. main.tsx waits
  * for it, briefly, before the first paint, so a French reader does not see the app in English first.
  */
-export const bootLanguageReady: Promise<void> = ask(bootLanguage, (ready) => useThemeStore.setState({ language: ready }));
+export const bootLanguageReady: Promise<void> = ask(bootLanguage, (change) => useThemeStore.setState(change));

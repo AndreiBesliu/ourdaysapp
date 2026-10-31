@@ -1625,6 +1625,12 @@ export function registerLanguage(lang: string, mod: LanguageModule): void {
 }
 
 const pending: Record<string, Promise<boolean>> = {};
+const failed: Record<string, unknown> = {};
+
+/** Why `lang`'s last load failed (a chunk older than a deploy, no signal), or undefined. store.ts reports it. */
+export function languageFailure(lang: string): unknown {
+  return Object.prototype.hasOwnProperty.call(failed, lang) ? failed[lang] : undefined;
+}
 
 /**
  * Make `lang` ready: true once it is, false for a language the app does not have or a chunk that could
@@ -1636,8 +1642,8 @@ export function loadLanguage(lang: string): Promise<boolean> {
   if (!load) return Promise.resolve(false);
   if (!pending[lang]) {
     pending[lang] = load().then(
-      (mod) => { registerLanguage(lang, mod); return true; },
-      () => { delete pending[lang]; return false; },
+      (mod) => { delete failed[lang]; registerLanguage(lang, mod); return true; },
+      (error: unknown) => { delete pending[lang]; failed[lang] = error; return false; },
     );
   }
   return pending[lang];

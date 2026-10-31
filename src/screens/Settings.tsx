@@ -66,7 +66,7 @@ function hexToHSL(hex: string): string {
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { primaryColor, isDarkMode, customThemeIsDark, backgroundColor, overlayColor, soundEnabled, hapticsEnabled, setTheme, backgroundImage, backgroundOverlay, language, setAdvancedTheme, timezone } = useThemeStore();
+  const { primaryColor, isDarkMode, customThemeIsDark, backgroundColor, overlayColor, soundEnabled, hapticsEnabled, setTheme, backgroundImage, backgroundOverlay, language, requestedLanguage, setAdvancedTheme, timezone } = useThemeStore();
 
   // Only rendered when the derivation DISAGREES with the toggle, or when neither text colour can
   // reach AA on this background — a note that appears always would stop being read.
@@ -419,7 +419,8 @@ export default function Settings() {
                 <p className="text-sm text-zinc-500">{t('chooseLanguageHint', language)}</p>
               </div>
               <select 
-                value={language || 'en-US'}
+                // The language asked for while it loads (store.ts): picking the old one again then undoes it.
+                value={requestedLanguage || language || 'en-US'}
                 onChange={(e) => handleAdvancedThemeUpdate({ language: e.target.value })}
                 className="bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2"
               >

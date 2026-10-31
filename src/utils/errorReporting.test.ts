@@ -94,7 +94,9 @@ describe('every failure has a way off the device', () => {
     const missing = files
       .filter((f) => !EXEMPT.includes(f.rel))
       .filter((f) => /\breportError\s*\(/.test(f.src))
-      .filter((f) => !/from ['"][^'"]*reportError['"]/.test(f.src))
+      // Imported statically, or loaded where it is needed (store.ts, 30.10.2026: so everything that imports
+      // the store does not carry Firebase) — either way the module's function, never the DOM global.
+      .filter((f) => !/(?:from |import\()['"][^'"]*reportError['"]/.test(f.src))
       .map((f) => f.rel);
     expect(missing, 'these call reportError without importing it — that is the DOM global').toEqual([]);
   });

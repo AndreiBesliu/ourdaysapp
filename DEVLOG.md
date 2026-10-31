@@ -14222,3 +14222,24 @@ localizările `date-fns` ale tuturor). Un om folosește una.
 - **Verificat pe live după:** pagina cere intrarea construită local (`index-B_R27F5B.js`) și cele 6 bucăți de pornire,
   fără nicio limbă la cerere; cele patru limbi se servesc separat (200, 42–45 kB fiecare); intrarea nu conține textele lor;
   pagina offline le are; `errorLogs` neschimbat; memento-urile „ok” după.
+
+## 2026-10-31 · Recenzia limbilor la cerere (după resetarea limitei) (Task Completed)
+
+**Prompt (Andrei):** „Da, după resetare” (la „Fac recenzia cu agenți pe limbi după resetarea de mâine?”).
+**Model:** Claude Opus 5.5.
+
+**Recenzia cu agenți** pe `0365fbc` (2 lentile + 5 verificatori, 7 agenți, **0,84 M tokeni**): 3 constatări confirmate,
+toate mici, toate reparate; 2 infirmate.
+1. **O bucată de limbă care nu se încarcă** (un tab rămas deschis peste o publicare: Hosting răspunde cu HTML) lăsa tăcut
+   limba veche. Acum eroarea se ține (`languageFailure`) și se raportează din store (`StaleChunk` sau `LanguageLoad`),
+   printr-un import dinamic al raportorului, ca store-ul să nu care Firebase după el.
+2. **Selectorul din Settings** revenea la limba veche cât se încărca cea nouă; alegând-o din nou ca să renunțe, nu pleca
+   nicio schimbare, iar limba abandonată se aplica totuși. Acum store-ul ține `requestedLanguage`, pe care selectorul îl
+   arată, deci a doua alegere devine ultima cerere.
+3. **Niciun test pentru o bucată care eșuează:** doi mutanți treceau, unul lăsa pagina albă (`main.tsx` nu pornea la o
+   promisiune respinsă). Acum `main.tsx` pornește oricum (`.then(start, start)`), iar `langOnDemand.test.ts` face bucata
+   franceză să cadă o dată: aplicația pornește, rămâne în engleză, raportează, iar următoarea cerere o încarcă.
+- Plasa „fișierul care raportează a importat raportorul” (`errorReporting.test.ts`) recunoaște acum și importul dinamic.
+- **Mutații: 6 din 6 prinse** (inclusiv cei doi care supraviețuiau).
+- **Porți:** `tsc -b`, `lint-gate`, `npm test` (2723), build, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46),
+  `test:rules` (1127).

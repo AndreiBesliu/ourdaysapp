@@ -8,6 +8,9 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const reportError = vi.fn();
+vi.mock('../reportError', () => ({ reportError: (...a: unknown[]) => reportError(...a) }));
+
 const read = (p: string) => readFileSync(p, 'utf8');
 const ON_DEMAND = ['fr-FR', 'es-ES', 'it-IT', 'de-DE'];
 
@@ -24,7 +27,17 @@ async function freshApp(remembered: string | null) {
   const { useThemeStore, bootLanguageReady } = await import('../store');
   return { i18n, useThemeStore, bootLanguageReady, remembered: () => store['ourdays.language'] };
 }
-afterEach(() => { vi.unstubAllGlobals(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.doUnmock('./lang/fr-FR'); reportError.mockReset(); });
+
+const STALE = 'Failed to fetch dynamically imported module: /assets/fr-FR-old.js';
+/** French whose chunk fails `failures` times, then loads (a tab older than a deploy, or no signal). */
+function frenchFailing(failures: number) {
+  let left = failures;
+  vi.doMock('./lang/fr-FR', async (importOriginal) => {
+    if (left > 0) { left -= 1; throw new TypeError(STALE); }
+    return importOriginal();
+  });
+}
 
 describe('what boot carries', () => {
   it('English and Romanian only; the other four are each a module of their own, loaded by import()', () => {
@@ -111,7 +124,56 @@ describe('what a person sees', () => {
 
   it('the first paint waits for the language, but not past 1.5 s', () => {
     const main = read('src/main.tsx');
-    expect(main).toMatch(/Promise\.race\(\[bootLanguageReady, new Promise<void>\(\(resolve\) => setTimeout\(resolve, 1500\)\)\]\)\.then\(start\)/);
+    expect(main).toMatch(/Promise\.race\(\[bootLanguageReady, new Promise<void>\(\(resolve\) => setTimeout\(resolve, 1500\)\)\]\)\.then\(start, start\)/);
     expect(main).not.toMatch(/^await /m);
+  });
+});
+
+describe('a language whose chunk cannot load (review of 30.10.2026)', () => {
+  it('at boot: the app still starts (no blank page), stays in English, and the failure is reported', async () => {
+    frenchFailing(1);
+    const { useThemeStore, bootLanguageReady } = await freshApp('fr-FR');
+    await expect(bootLanguageReady).resolves.toBeUndefined();
+    expect(useThemeStore.getState()).toMatchObject({ language: 'en-US', requestedLanguage: undefined });
+    await vi.waitFor(() => expect(reportError).toHaveBeenCalledTimes(1));
+    // Vitest wraps a mocked module's failure in its own words; in a browser the message is the engine's
+    // ("Failed to fetch dynamically imported module"), which the same rule reads as a stale chunk.
+    const [message, opts] = reportError.mock.calls[0] as [string, { context: string }];
+    expect(message.startsWith('Language fr-FR could not load: ')).toBe(true);
+    const { isStaleChunkError } = await import('./appVersion');
+    expect(opts.context).toBe(isStaleChunkError(message) ? 'StaleChunk' : 'LanguageLoad');
+    expect(isStaleChunkError(`Language fr-FR could not load: ${STALE}`)).toBe(true);
+  });
+
+  it('the next ask loads it again, and then it is shown', async () => {
+    frenchFailing(1);
+    const { useThemeStore, i18n } = await freshApp('en-US');
+    expect(await i18n.loadLanguage('fr-FR')).toBe(false);
+    useThemeStore.getState().setAdvancedTheme({ language: 'fr-FR' });
+    await vi.waitFor(() => expect(useThemeStore.getState().language).toBe('fr-FR'));
+  });
+
+  it('a language the app does not have is not reported: nothing failed', async () => {
+    const { useThemeStore } = await freshApp('ro-RO');
+    useThemeStore.getState().setAdvancedTheme({ language: 'xx-XX' });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(reportError).not.toHaveBeenCalled();
+  });
+});
+
+describe('Settings, while a language loads (review of 30.10.2026)', () => {
+  it('shows the language asked for, and picking the old one again undoes it for good', async () => {
+    const { useThemeStore, i18n } = await freshApp('en-US');
+    useThemeStore.getState().setAdvancedTheme({ language: 'de-DE' });
+    expect(useThemeStore.getState()).toMatchObject({ language: 'en-US', requestedLanguage: 'de-DE' });
+    useThemeStore.getState().setAdvancedTheme({ language: 'en-US' });
+    expect(useThemeStore.getState()).toMatchObject({ language: 'en-US', requestedLanguage: undefined });
+    await i18n.loadLanguage('de-DE');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(useThemeStore.getState()).toMatchObject({ language: 'en-US', requestedLanguage: undefined });
+  });
+
+  it('the select reads the asked-for language first', () => {
+    expect(read('src/screens/Settings.tsx')).toContain("value={requestedLanguage || language || 'en-US'}");
   });
 });
