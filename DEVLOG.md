@@ -14283,3 +14283,12 @@ grila nu mai urmează degetul în timpul tragerii. Andrei o vede cu ochii lui (O
 - `framer-motion` a rămas în `package.json` (npm stricat pe mașină); de scos la prima instalare.
 - **Porți:** `tsc -b`, `lint-gate`, `npm test` (2729), build, `check-split`, `check-offline`, `check-bundle`, `test:tz` (46),
   `test:rules` (1127).
+
+## 2026-10-31 · Bundle B publicat pe live: funcțiile (neschimbate), apoi hosting-ul (Task Completed)
+
+**Prompt (Andrei):** „B: framer-motion” (publicarea fără întrebare, după regula din 17.10).
+**Model:** Claude Opus 5.5.
+
+- `deploy --only functions,hosting` de la `9186586`: funcțiile, toate 55 „Skipped (No changes detected)”; hosting-ul,
+  release complet. Pe live: intrarea construită local (`index-b7vVoF3m.js`), cu animația CSS; `errorLogs` neschimbat;
+  memento-urile „ok”. Animația și glisarea le verifică Andrei (OWNER_VERIFY, sus).
