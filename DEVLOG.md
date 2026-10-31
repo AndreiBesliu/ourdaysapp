@@ -14356,3 +14356,56 @@ runtime-ul fiecăreia, marcajele joburilor, erorile.
 Din jurnalele `REMINDERS_RUN` de pe live (8 rulări, la 5 minute): o interogare **165–188 ms**; citirea seriilor, 4 interogări
 la rând, **842–892 ms**. Estimarea din recenzia din 29.10 era ~120 ms. Trecut în BACKLOG §3, cu decizia mutării regiunii la
 Andrei (APK-ul cheamă callable-urile din us-central1). Nimic schimbat în cod.
+
+## 2026-10-31 · Funcțiile mutate în europe-central2, lângă baza de date (Task Started)
+
+**Prompt (Andrei):** „Da, mută-le” (la „Mut funcțiile în Europa, păstrând copiile din SUA pentru APK?”).
+**Model:** Claude Opus 5.5.
+**Ce e:** baza de date e în europe-central2, iar funcțiile rulau în us-central1: o interogare 165–188 ms, citirea seriilor
+842–892 ms (măsurat azi pe live). **Plan:**
+- regiunea implicită a tuturor funcțiilor devine europe-central2 (`setGlobalOptions`);
+- callable-urile rulează în AMBELE regiuni (`CALLABLE_REGIONS`): APK-ul instalat are bundle-ul înghețat și le cheamă din
+  us-central1, iar o copie ștearsă l-ar strica;
+- joburile programate și triggerele rulează într-o SINGURĂ regiune: un job în două ar trimite fiecare memento de două ori;
+- aplicația web cheamă funcțiile din europe-central2 (`FUNCTIONS_REGION`, o singură constantă);
+- se mută din us-central1 trei triggere (`onMessageCreated`, `onGameCreated`, `autoSuggestChecklist`) și trei joburi
+  (`sendDueReminders`, `expireIdleGames`, `logErrorDigest`). Celelalte triggere erau deja în europe-central2;
+- **publicarea în doi pași:** CLI-ul creează întâi copia nouă și o șterge pe cea veche abia după ce TOATE creările reușesc
+  (`fabricator.js`), iar între ele un trigger rulează de două ori. Întâi doar cele șase (fereastră scurtă), apoi restul,
+  apoi hosting-ul (aplicația web cheamă callable-urile din Europa, deci ele trebuie să existe înainte).
+
+## 2026-10-31 · Funcțiile mutate în europe-central2: codul, recenzia, porțile (Task Completed)
+
+**Prompt (Andrei):** „Da, mută-le”.
+**Model:** Claude Opus 5.5.
+
+- **Codul:** `setGlobalOptions({ region: "europe-central2" })`; cele 42 de callable-uri au `region: CALLABLE_REGIONS`
+  (europe-central2 + us-central1, pentru APK-ul instalat); joburile și triggerele iau regiunea globală. Aplicația web cheamă
+  funcțiile prin `getFunctions(app, FUNCTIONS_REGION)`, în toate cele patru module care le cheamă (42 de nume, identice cu
+  cele 42 de pe server). La `AI_CALLABLE_OPTS`, `region` e ULTIMUL: `AI_FUNCTION_OPTS` intră și în triggerul checklist-ului,
+  iar o regiune pusă acolo nu mai poate scoate callable-urile AI din us-central1.
+- **Corectură la intrarea „Task Started”:** motivul „un job în două regiuni ar trimite fiecare memento de două ori” e
+  FALS. Memento-urile se deduplică singure (`reminder_log`: `create` + tranzacție, iar a doua rulare primește „skip”).
+  Dublarea reală e la triggere: `onMessageCreated` nu are cheie de rând, deci trimite două notificări și scrie două rânduri
+  în clopoțel la fiecare mesaj; `autoSuggestChecklist` face două apeluri Claude plătite și scrie două checklist-uri;
+  `onGameCreated` anunță jocul de două ori. Corectat în cod, CLAUDE.md și BACKLOG.
+- **Recenzia cu agenți** (4 lentile + 12 verificatori, 16 agenți, **1,89 M tokeni**): 12 constatări, 9 confirmate (toate mici
+  după verificare), 3 respinse. Niciuna nu strica ce se publică. Reparate:
+  1. **Plasa pe sursă era oarbă:** regexul pentru joburi nu se potrivea cu niciun `onSchedule` (opțiunile vin după
+     comentarii), nu vedea o regiune pusă după `document: "a/{b}"` și nici una venită printr-un spread; clientul citea
+     patru fișiere numite. Acum `functions/test/regions.test.ts` citește `__endpoint` din `lib/` (ce citește publicarea,
+     ca `globalOptions.test.ts`), iar `src/utils/functionsRegion.test.ts` parcurge tot `src/`. **Mutanți: 8 din 8
+     prinși**: regiunea globală schimbată; un job în us-central1; un callable doar în Europa; `AI_CALLABLE_OPTS` fără
+     regiune; în client, un apel fără regiune și unul fără `app`; constanta schimbată; un modul nou cu `getFunctions(app)`.
+     Alți 2 sunt VOID: TypeScript refuză deja o listă de regiuni pe un trigger Firestore.
+  2. **Motivul fals din documente** (mai sus) și regula pentru un callable NOU: APK-ul cheamă doar callable-urile care
+     existau la construirea lui, deci copia din SUA a unuia nou nu servește pe nimeni. Se păstrează ca regula să fie una.
+  3. **Procedura de publicare:** valorile lui `--only` între ghilimele. Pasul 1 la o oră liniștită, departe de :00 UTC.
+     Dacă pasul 1 scrie „Skipping deletes”, se rezolvă înainte de pasul 2. Dacă o creare de callable în Europa pică, NU se
+     reia pur și simplu: o reluare devine actualizare, iar actualizarea nu dă niciodată `allUsers` pe `run.invoker`, deci
+     callable-ul ar rămâne privat (403 pentru orice om). Se șterge întâi copia picată. După publicare, o probă CORS
+     (OPTIONS) pe fiecare callable, în ambele regiuni: 204 = public, 403 = privat. Pe copiile din SUA de azi: 42/42.
+  4. **În BACKLOG, independent de regiune:** `autoSuggestChecklist` nu e idempotent la livrarea „cel puțin o dată” a
+     Eventarc.
+- **Porți:** `tsc -b`, `lint-gate`, `npm test` (2736; la fel fără cheia Firebase, ca pe CI), build, `check-split`,
+  `check-offline`, `check-bundle`, `test:tz` (46), `test:rules` (1131).

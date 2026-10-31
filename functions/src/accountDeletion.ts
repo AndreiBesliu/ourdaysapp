@@ -89,6 +89,7 @@
 //   * The name kept on conversations is read before the profile goes, and written once.
 
 import { createHash } from "node:crypto";
+import { CALLABLE_REGIONS } from "./globalOptions";
 import * as admin from "firebase-admin";
 // The modular entry, not `admin.firestore.FieldValue`: under the functions emulator the namespace loses
 // its statics (undefined there, the same objects in production), and this deletion was first run end to
@@ -646,7 +647,7 @@ export async function deleteAccountData(uid: string, by: string): Promise<Accoun
  * is paid only while a deletion runs, and an account is deleted once.
  */
 export const DELETION_MEMORY = "2GiB" as const;
-export const deleteMyAccount = onCall({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540, memory: DELETION_MEMORY }, async (request) => {
+export const deleteMyAccount = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540, memory: DELETION_MEMORY }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
   if (!signedInRecently(request.auth?.token?.auth_time, Math.floor(Date.now() / 1000))) {

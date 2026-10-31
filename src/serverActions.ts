@@ -1,5 +1,5 @@
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { app } from "./firebase";
+import { app, FUNCTIONS_REGION } from "./firebase";
 
 // Server-side actions that create documents owned by ANOTHER user — these can't
 // be client writes anymore (Firestore now requires ownerId == auth.uid on
@@ -21,7 +21,7 @@ export async function createEventOverride(params: {
   data: Record<string, unknown>;
   apply?: boolean;
 }): Promise<string> {
-  const fn = httpsCallable(getFunctions(app), "createEventOverride");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "createEventOverride");
   const res = await fn(params);
   return (res.data as { id: string }).id;
 }
@@ -33,7 +33,7 @@ export async function transferAssetCopy(params: {
   /** "copy" keeps the original with you; "move" hands it over and deletes yours. */
   mode?: 'copy' | 'move';
 }): Promise<void> {
-  const fn = httpsCallable(getFunctions(app), "transferAssetCopy");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "transferAssetCopy");
   await fn(params);
 }
 
@@ -46,7 +46,7 @@ export async function deleteGroupCascade(params: {
   groupId: string;
   keepEventIds?: string[];
 }): Promise<{ deleted: number; freed: number; invites: number; messages: number }> {
-  const fn = httpsCallable(getFunctions(app), "deleteGroupCascade");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "deleteGroupCascade");
   const res = await fn(params);
   return res.data as { deleted: number; freed: number; invites: number; messages: number };
 }
@@ -56,7 +56,7 @@ export async function respondToFriendRequest(params: {
   requestId: string;
   accept: boolean;
 }): Promise<void> {
-  const fn = httpsCallable(getFunctions(app), "respondToFriendRequest");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "respondToFriendRequest");
   await fn(params);
 }
 
@@ -71,7 +71,7 @@ export async function createWarlordChallenge(params: {
   unitIds: string[];
   combatants: unknown[];
 }): Promise<{ gameId: string }> {
-  const fn = httpsCallable(getFunctions(app), "createWarlordChallenge");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "createWarlordChallenge");
   return (await fn(params)).data as { gameId: string };
 }
 
@@ -82,7 +82,7 @@ export async function acceptWarlordChallenge(params: {
   unitIds: string[];
   combatants: unknown[]; // DeployCombatantClaim[] — validated server-side
 }): Promise<void> {
-  const fn = httpsCallable(getFunctions(app), "acceptWarlordChallenge");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "acceptWarlordChallenge");
   await fn(params);
 }
 
@@ -92,59 +92,59 @@ export async function submitWarlordCommand(params: {
   gameId: string;
   command: unknown; // Command — validated & rebuilt server-side
 }): Promise<{ applied: boolean; finished: boolean }> {
-  const fn = httpsCallable(getFunctions(app), "submitWarlordCommand");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "submitWarlordCommand");
   return (await fn(params)).data as { applied: boolean; finished: boolean };
 }
 
 // Retreat (= concede) an active battle, or decline/cancel a waiting challenge.
 export async function forfeitWarlordBattle(gameId: string): Promise<void> {
-  const fn = httpsCallable(getFunctions(app), "forfeitWarlordBattle");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "forfeitWarlordBattle");
   await fn({ gameId });
 }
 
 // Claim the win when the opponent has stopped playing (server checks the elapsed time).
 export async function claimWarlordTimeout(gameId: string): Promise<void> {
-  const fn = httpsCallable(getFunctions(app), "claimWarlordTimeout");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "claimWarlordTimeout");
   await fn({ gameId });
 }
 
 // Remove a friend (mutual — edits both users' friend lists).
 export async function removeFriend(friendUid: string): Promise<void> {
-  const fn = httpsCallable(getFunctions(app), "removeFriend");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "removeFriend");
   await fn({ friendUid });
 }
 
 // Accept a group invite (adds you to the group's members — a non-member can't
 // do that under the groups rules, so it runs server-side).
 export async function acceptGroupInvite(inviteId: string): Promise<void> {
-  const fn = httpsCallable(getFunctions(app), "acceptGroupInvite");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "acceptGroupInvite");
   await fn({ inviteId });
 }
 
 // ── Admin backend (all server-gated by assertAdmin) ──
 export async function adminCheck(): Promise<boolean> {
-  const fn = httpsCallable(getFunctions(app), "adminCheck");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminCheck");
   const res = await fn({});
   return (res.data as { isAdmin?: boolean })?.isAdmin === true;
 }
 export async function adminGetStats(): Promise<any> {
-  const fn = httpsCallable(getFunctions(app), "adminGetStats");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminGetStats");
   return (await fn({})).data;
 }
 export async function adminListProfiles(): Promise<{ profiles: any[]; count: number }> {
-  const fn = httpsCallable(getFunctions(app), "adminListProfiles");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminListProfiles");
   return (await fn({})).data as { profiles: any[]; count: number };
 }
 export async function adminListAdmins(): Promise<{ admins: any[] }> {
-  const fn = httpsCallable(getFunctions(app), "adminListAdmins");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminListAdmins");
   return (await fn({})).data as { admins: any[] };
 }
 export async function adminSetAdmin(params: { uid?: string; email?: string; makeAdmin: boolean }): Promise<void> {
-  const fn = httpsCallable(getFunctions(app), "adminSetAdmin");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminSetAdmin");
   await fn(params);
 }
 export async function adminGetHealth(): Promise<any> {
-  const fn = httpsCallable(getFunctions(app), "adminGetHealth");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminGetHealth");
   return (await fn({})).data;
 }
 export interface ErrorStatusResult {
@@ -157,30 +157,30 @@ export async function adminSetErrorStatus(
   fingerprints: string[], status: 'new' | 'seen' | 'resolved',
   opts?: { note?: string; onlyIfClaimHolds?: boolean },
 ): Promise<ErrorStatusResult> {
-  const fn = httpsCallable(getFunctions(app), "adminSetErrorStatus");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminSetErrorStatus");
   return (await fn({
     fingerprints, status, note: opts?.note, onlyIfClaimHolds: opts?.onlyIfClaimHolds === true,
   })).data as ErrorStatusResult;
 }
 export async function adminGetUser(uid: string): Promise<any> {
-  const fn = httpsCallable(getFunctions(app), "adminGetUser");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminGetUser");
   return (await fn({ uid })).data;
 }
 export async function adminModerateUser(uid: string, action: 'enable' | 'disable' | 'forceVerify' | 'delete'): Promise<any> {
   // A delete runs the whole account cascade (accountDeletion.ts): the client waits as long as it may run.
-  const fn = httpsCallable(getFunctions(app), "adminModerateUser", { timeout: 560_000 });
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminModerateUser", { timeout: 560_000 });
   return (await fn({ uid, action })).data;
 }
 export async function adminBroadcast(params: { target: string; title: string; body?: string }): Promise<{ created: number; pushed?: number; pruned?: number }> {
-  const fn = httpsCallable(getFunctions(app), "adminBroadcast");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminBroadcast");
   return (await fn(params)).data as { created: number };
 }
 export async function adminListGroups(): Promise<{ groups: any[] }> {
-  const fn = httpsCallable(getFunctions(app), "adminListGroups");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminListGroups");
   return (await fn({})).data as { groups: any[] };
 }
 export async function adminGetGrowth(): Promise<any> {
-  const fn = httpsCallable(getFunctions(app), "adminGetGrowth");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminGetGrowth");
   return (await fn({})).data;
 }
 
@@ -236,7 +236,7 @@ export interface ScopePreview {
 export async function aiPreviewScope(
   input: { from: string; to: string } | { year: number; month: number },
 ): Promise<ScopePreview> {
-  const fn = httpsCallable(getFunctions(app), "aiPreviewScope");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "aiPreviewScope");
   return (await fn(input)).data as ScopePreview;
 }
 
@@ -281,7 +281,7 @@ export interface AiSpend {
 }
 
 export async function adminGetAiSpend(days: 7 | 30 = 30): Promise<AiSpend> {
-  const fn = httpsCallable(getFunctions(app), "adminGetAiSpend");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminGetAiSpend");
   return (await fn({ days })).data as AiSpend;
 }
 
@@ -332,7 +332,7 @@ export interface AiConfig {
 }
 
 export async function adminGetAiConfig(): Promise<AiConfig> {
-  const fn = httpsCallable(getFunctions(app), "adminGetAiConfig");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminGetAiConfig");
   return (await fn({})).data as AiConfig;
 }
 
@@ -349,7 +349,7 @@ export async function adminSetAiConfig(
 ): Promise<{
   saved: AiConfigFields; previous: AiConfigFields; clamped: string[]; actor: 'owner' | 'admin';
 }> {
-  const fn = httpsCallable(getFunctions(app), "adminSetAiConfig");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminSetAiConfig");
   return (await fn(input)).data as {
     saved: AiConfigFields; previous: AiConfigFields; clamped: string[]; actor: 'owner' | 'admin';
   };
@@ -366,7 +366,7 @@ export interface AiLedgerRow {
 export async function adminGetAiLedger(
   input: { date?: string; uid?: string } = {},
 ): Promise<{ date: string; rows: AiLedgerRow[]; truncated: boolean }> {
-  const fn = httpsCallable(getFunctions(app), "adminGetAiLedger");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminGetAiLedger");
   return (await fn(input)).data as { date: string; rows: AiLedgerRow[]; truncated: boolean };
 }
 
@@ -379,7 +379,7 @@ export async function adminBackfillExpenses(apply = false): Promise<{
   wouldSetOwnerOnly: number; wouldSetOwnerAndGroup: number;
   ambiguous: { id: string; paidBy: string; groups: number }[]; applied: number;
 }> {
-  const fn = httpsCallable(getFunctions(app), "adminBackfillExpenses");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminBackfillExpenses");
   return (await fn({ apply })).data as any;
 }
 // ── Invite links ──────────────────────────────────────────────────────────────
@@ -405,7 +405,7 @@ export interface InviteLinkRow {
 export async function createGroupInviteLink(params: {
   groupId?: string | null; days?: number;
 }): Promise<{ code: string; maxUses: number; days: number; groupName: string | null }> {
-  const fn = httpsCallable(getFunctions(app), "createGroupInviteLink");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "createGroupInviteLink");
   return (await fn(params)).data as any;
 }
 
@@ -419,7 +419,7 @@ export async function peekGroupInviteLink(code: string): Promise<{
   valid: boolean; reason: string | null; alreadyJoined: boolean;
   groupName: string | null; invitedBy: string | null;
 }> {
-  const fn = httpsCallable(getFunctions(app), "peekGroupInviteLink");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "peekGroupInviteLink");
   return (await fn({ code })).data as any;
 }
 
@@ -433,19 +433,19 @@ export async function redeemGroupInviteLink(code: string): Promise<{
   status: 'accepted' | 'already' | 'member'; groupId: string | null; groupName: string | null;
   invitedBy: string; joinedGroup: boolean;
 }> {
-  const fn = httpsCallable(getFunctions(app), "redeemGroupInviteLink");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "redeemGroupInviteLink");
   return (await fn({ code })).data as any;
 }
 
 /** Withdraw a link. Redemptions already made stand — this only stops further ones. */
 export async function revokeGroupInviteLink(code: string): Promise<void> {
-  const fn = httpsCallable(getFunctions(app), "revokeGroupInviteLink");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "revokeGroupInviteLink");
   await fn({ code });
 }
 
 /** The caller's own links, newest first. */
 export async function listMyInviteLinks(groupId?: string | null): Promise<InviteLinkRow[]> {
-  const fn = httpsCallable(getFunctions(app), "listMyInviteLinks");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "listMyInviteLinks");
   const res = (await fn({ groupId: groupId ?? null })).data as { links: InviteLinkRow[] };
   return res.links || [];
 }
@@ -453,7 +453,7 @@ export async function listMyInviteLinks(groupId?: string | null): Promise<Invite
 // Clients cannot create one: `chats` denies create outright, because the question that decides
 // it — are these two friends, or in a group together — cannot be asked in a Firestore rule.
 export async function openDirectChat(otherUid: string): Promise<{ chatId: string; created: boolean }> {
-  const fn = httpsCallable(getFunctions(app), "openDirectChat");
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "openDirectChat");
   return (await fn({ otherUid })).data as { chatId: string; created: boolean };
 }
 
@@ -462,6 +462,6 @@ export async function openDirectChat(otherUid: string): Promise<{ chatId: string
 // the last five minutes. It may take a while for a large account, so the client waits as long as the
 // function may run: the SDK's default 70 s would report a failure while the deletion carried on.
 export async function deleteMyAccount(): Promise<void> {
-  const fn = httpsCallable(getFunctions(app), "deleteMyAccount", { timeout: 560_000 });
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "deleteMyAccount", { timeout: 560_000 });
   await fn({});
 }

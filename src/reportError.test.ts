@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 const sent: Array<{ message: string; stack: string | null; url: string | null; context: string | null }> = [];
-vi.mock('./firebase', () => ({ app: {}, auth: { currentUser: { uid: 'uid-test' } } }));
+vi.mock('./firebase', () => ({ app: {}, FUNCTIONS_REGION: 'europe-central2', auth: { currentUser: { uid: 'uid-test' } } }));
 vi.mock('firebase/functions', () => ({
   getFunctions: () => ({}),
   httpsCallable: () => (payload: (typeof sent)[number]) => { sent.push(payload); return Promise.resolve(); },

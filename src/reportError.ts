@@ -1,5 +1,5 @@
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { app, auth } from './firebase';
+import { app, FUNCTIONS_REGION, auth } from './firebase';
 import { describeThrown } from './utils/describeThrown';
 
 const seen = new Map<string, number>();
@@ -22,7 +22,7 @@ export function reportError(message: string, opts?: { stack?: string; context?: 
     seen.set(key, now);
     windowCount++;
     if (seen.size > 50) { for (const [k, t] of seen) if (now - t > 30000) seen.delete(k); }
-    httpsCallable(getFunctions(app), 'logClientError')({
+    httpsCallable(getFunctions(app, FUNCTIONS_REGION), 'logClientError')({
       message: String(message || 'Unknown error'),
       stack: opts?.stack || null,
       url: typeof window !== 'undefined' ? window.location.pathname : null,

@@ -35,6 +35,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = exports.LINK_USES = exports.LINK_DEFAULT_DAYS = exports.LINK_MAX_DAYS_CAP = void 0;
 const https_1 = require("firebase-functions/v2/https");
+const globalOptions_1 = require("./globalOptions");
 const admin = require("firebase-admin");
 const firestore_1 = require("firebase-admin/firestore");
 const crypto = require("crypto");
@@ -73,7 +74,7 @@ const clampInt = (v, fallback, min, max) => {
 function newCode() {
     return crypto.randomBytes(16).toString("base64url");
 }
-exports.createGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.createGroupInviteLink = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c, _d, _e, _f;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)
@@ -130,7 +131,7 @@ exports.createGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
  * returns only what a poster would put on the invitation: who, and which group. Never the member
  * list, never the creator's uid or email.
  */
-exports.peekGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.peekGroupInviteLink = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c, _d, _e, _f;
     const { code } = request.data || {};
     if (typeof code !== "string" || !code || code.length > 64) {
@@ -173,7 +174,7 @@ exports.peekGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
         invitedBy: d.createdByName || null,
     };
 });
-exports.redeemGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.redeemGroupInviteLink = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     const email = (((_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.email) || "").toLowerCase();
@@ -293,7 +294,7 @@ exports.redeemGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
     };
 });
 /** Withdraw a link. Only its creator, and never destructive — redemptions already made stand. */
-exports.revokeGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.revokeGroupInviteLink = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)
@@ -317,7 +318,7 @@ exports.revokeGroupInviteLink = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_A
     return { revoked: true };
 });
 /** The caller's own links, newest first, so the invite screen can show and withdraw them. */
-exports.listMyInviteLinks = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.listMyInviteLinks = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)

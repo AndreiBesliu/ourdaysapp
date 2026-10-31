@@ -33,6 +33,7 @@
 // in the group you certainly know.
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { CALLABLE_REGIONS } from "./globalOptions";
 import * as admin from "firebase-admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import * as crypto from "crypto";
@@ -75,7 +76,7 @@ function newCode(): string {
   return crypto.randomBytes(16).toString("base64url");
 }
 
-export const createGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+export const createGroupInviteLink = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
 
@@ -136,7 +137,7 @@ export const createGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK
  * returns only what a poster would put on the invitation: who, and which group. Never the member
  * list, never the creator's uid or email.
  */
-export const peekGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+export const peekGroupInviteLink = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const { code } = request.data || {};
   if (typeof code !== "string" || !code || code.length > 64) {
     throw new HttpsError("invalid-argument", "A code is required.");
@@ -178,7 +179,7 @@ export const peekGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }
   };
 });
 
-export const redeemGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+export const redeemGroupInviteLink = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const uid = request.auth?.uid;
   const email = (request.auth?.token?.email || "").toLowerCase();
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
@@ -299,7 +300,7 @@ export const redeemGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK
 });
 
 /** Withdraw a link. Only its creator, and never destructive — redemptions already made stand. */
-export const revokeGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+export const revokeGroupInviteLink = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
   const { code } = request.data || {};
@@ -321,7 +322,7 @@ export const revokeGroupInviteLink = onCall({ enforceAppCheck: ENFORCE_APP_CHECK
 });
 
 /** The caller's own links, newest first, so the invite screen can show and withdraw them. */
-export const listMyInviteLinks = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+export const listMyInviteLinks = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
   const { groupId } = request.data || {};

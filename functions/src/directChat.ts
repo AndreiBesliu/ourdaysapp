@@ -26,6 +26,7 @@
 // So clients cannot create a chat at all. They ask for one.
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { CALLABLE_REGIONS } from "./globalOptions";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
@@ -71,7 +72,7 @@ async function listsAsFriend(db: admin.firestore.Firestore, owner: string, other
   return Array.isArray(friends) && friends.some((f) => f && f.uid === other);
 }
 
-export const openDirectChat = onCall({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+export const openDirectChat = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
 

@@ -17,6 +17,10 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 
+// Where the web app calls the functions (31.10.2026): next to the database, in europe-central2. The callables
+// also stay in us-central1 for the installed APK (functions/src/globalOptions.ts, CALLABLE_REGIONS).
+export const FUNCTIONS_REGION = 'europe-central2';
+
 // ── App Check ──
 // Attests that requests come from our genuine app, protecting Firestore,
 // Storage and the callable AI functions from abuse. Only initialised when a

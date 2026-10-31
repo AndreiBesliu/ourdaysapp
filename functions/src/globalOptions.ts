@@ -19,4 +19,15 @@ import { setGlobalOptions } from "firebase-functions/v2";
 // far above what eight people need, and low enough to cap a runaway.
 export const MAX_INSTANCES = 10;
 
-setGlobalOptions({ maxInstances: MAX_INSTANCES });
+// The region (31.10.2026): the database is in europe-central2, and until now every function ran in us-central1,
+// so each query crossed the Atlantic (measured on live: 165–188 ms a query; the reminders' series read, 4 queries,
+// 842–892 ms). Everything runs next to the database now. The callables ALSO stay in us-central1 (CALLABLE_REGIONS):
+// the installed APK runs a frozen bundle that calls them there, and the web app calls europe-central2
+// (src/firebase.ts, FUNCTIONS_REGION). Scheduled jobs and triggers run in one region only: a trigger with a
+// second copy fires twice per document (two pushes per chat message, two paid Claude calls and two checklists
+// per AI event, two announcements per game; the reminders dedupe themselves). functions/test/regions.test.ts
+// holds all of it on the compiled endpoints.
+export const REGION = "europe-central2";
+export const CALLABLE_REGIONS = [REGION, "us-central1"];
+
+setGlobalOptions({ maxInstances: MAX_INSTANCES, region: REGION });

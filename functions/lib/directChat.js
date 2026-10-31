@@ -29,6 +29,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.onDirectMessageCreated = exports.openDirectChat = void 0;
 exports.directChatId = directChatId;
 const https_1 = require("firebase-functions/v2/https");
+const globalOptions_1 = require("./globalOptions");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 const firestore_2 = require("firebase-admin/firestore");
@@ -71,7 +72,7 @@ async function listsAsFriend(db, owner, other) {
     const friends = (_a = snap.data()) === null || _a === void 0 ? void 0 : _a.friends;
     return Array.isArray(friends) && friends.some((f) => f && f.uid === other);
 }
-exports.openDirectChat = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.openDirectChat = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)

@@ -174,8 +174,8 @@ describe('the admin\u2019s door', () => {
   it('waits as long as the deletion may run, like the person\u2019s own', () => {
     const a = parse('serverActions.ts');
     const call = a.calls('httpsCallable').map((c) => c.getText(a.sf));
-    expect(call).toContain('httpsCallable(getFunctions(app), "adminModerateUser", { timeout: 560_000 })');
-    expect(call).toContain('httpsCallable(getFunctions(app), "deleteMyAccount", { timeout: 560_000 })');
+    expect(call).toContain('httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminModerateUser", { timeout: 560_000 })');
+    expect(call).toContain('httpsCallable(getFunctions(app, FUNCTIONS_REGION), "deleteMyAccount", { timeout: 560_000 })');
   });
 });
 

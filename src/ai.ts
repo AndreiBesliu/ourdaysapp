@@ -1,6 +1,6 @@
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { reportError } from './reportError';
-import { app } from "./firebase";
+import { app, FUNCTIONS_REGION } from "./firebase";
 import { useThemeStore } from "./store";
 import { t } from "./utils/i18n";
 import { aiErrorKey } from "./utils/aiErrorKey";
@@ -19,7 +19,7 @@ export function aiErrorMessage(error: any): string {
 }
 
 export async function generateChecklistForTask(title: string, description: string): Promise<string[]> {
-  const functions = getFunctions(app);
+  const functions = getFunctions(app, FUNCTIONS_REGION);
   const generateAIChecklist = httpsCallable(functions, 'generateAIChecklist');
   const language = useThemeStore.getState().language || 'en-US';
   
@@ -47,7 +47,7 @@ export async function generateChecklistForTask(title: string, description: strin
 }
 
 export async function suggestEventCategoryAI(title: string, description: string = ''): Promise<string> {
-  const functions = getFunctions(app);
+  const functions = getFunctions(app, FUNCTIONS_REGION);
   const suggestEventCategory = httpsCallable(functions, 'suggestEventCategory');
   
   try {
@@ -72,7 +72,7 @@ export async function suggestEventCategoryAI(title: string, description: string 
  * one that was missed.
  */
 export async function generateGroupDigestAI(groupId: string): Promise<{ digest: string; truncated: boolean }> {
-  const functions = getFunctions(app);
+  const functions = getFunctions(app, FUNCTIONS_REGION);
   const generateGroupDigest = httpsCallable(functions, 'generateGroupDigest');
   const language = useThemeStore.getState().language || 'en-US';
 
@@ -89,7 +89,7 @@ export async function generateGroupDigestAI(groupId: string): Promise<{ digest: 
 
 export async function suggestAssetForTextAI(text: string, assets: any[]): Promise<string | null> {
   if (!text || assets.length === 0) return null;
-  const functions = getFunctions(app);
+  const functions = getFunctions(app, FUNCTIONS_REGION);
   const suggestAsset = httpsCallable(functions, 'suggestAssetForText');
   
   const availableAssets = assets.map(a => ({ id: a.id, name: a.name }));

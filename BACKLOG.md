@@ -377,9 +377,19 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Funcțiile rulează în us-central1, baza în europe-central2: MĂSURAT pe 31.10** (jurnalele `REMINDERS_RUN`, 8 rulări):
   o interogare durează **165–188 ms**, iar citirea seriilor (4 interogări la rând) **842–892 ms** (~210 ms fiecare). Azi o
   rulare de memento-uri citește în ~1 s, deci nu e o problemă de funcționare; dar fiecare callable chemat din România face
-  drumul peste Atlantic de două ori (omul → SUA, apoi SUA → baza din Europa la fiecare interogare). **Decizia lui Andrei:**
-  mutarea în europe-central2 ar tăia mult din asta, dar înseamnă funcții noi (alte URL-uri pentru client), iar **APK-ul
-  instalat cheamă callable-urile din us-central1**: ele ar trebui păstrate cât timp mai e folosit APK-ul.
+  drumul peste Atlantic de două ori (omul → SUA, apoi SUA → baza din Europa la fiecare interogare).
+  - **MUTATE pe 31.10** („Da, mută-le”): toate funcțiile rulează în europe-central2, iar aplicația web le cheamă de acolo
+    (`FUNCTIONS_REGION` în `src/firebase.ts`). **Callable-urile au și o copie în us-central1** (`CALLABLE_REGIONS` în
+    `functions/src/globalOptions.ts`), pentru APK-ul instalat, care le cheamă de acolo.
+  - **Rămas de făcut:** copiile din us-central1 se pot șterge când niciun APK vechi nu mai e folosit (un APK construit după
+    31.10 cheamă Europa). Ce se strică dacă se șterg prea devreme: în APK-ul vechi nu mai merge nimic din ce trece prin
+    server (AI, invitații, chat direct, ștergerea contului, Warlord PvP).
+  - `functions/test/regions.test.ts` (pe `__endpoint`) refuză un callable fără ambele regiuni și un job sau trigger cu
+    regiune proprie; `src/utils/functionsRegion.test.ts` refuză orice `getFunctions(` din `src/` fără `FUNCTIONS_REGION`.
+  - **De întărit (din recenzia din 31.10), independent de regiune:** `autoSuggestChecklist` nu e idempotent. Eventarc
+    livrează „cel puțin o dată”, deci o livrare repetată plătește încă un apel Claude, consumă încă o unitate din cota
+    zilnică și adaugă un al doilea set de puncte (id-uri noi, `arrayUnion` nu le unește). Reparația: scrierea într-o
+    tranzacție care recitește evenimentul și scoate `ai_assistant` din `assigneeIds` în aceeași scriere.
 - **Node 24 în Cloud Functions din 31.10.2026** (`engines.node`, CI pe 24). Node 24 iese din uz pe 30.04.2028.
   `@types/node` a rămas pe 22 (npm stricat pe mașină); de urcat la prima instalare.
 - **Fereastra de deploy și taburile vechi.** Regulile noi întâlnesc, până la hosting, clientul web

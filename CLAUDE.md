@@ -47,6 +47,18 @@ React + TypeScript + Vite + Tailwind, Firebase (Auth, Firestore, Functions, Host
   memento-uri în zilele pe care seria le sare, fără ca utilizatorul să aibă ce șterge. Ordinea rămâne
   **functions → hosting**. Hosting singur doar cu acordul explicit al lui Andrei, spus în aceste
   cuvinte.
+- **Regiunea funcțiilor (din 31.10): europe-central2**, lângă baza de date (`setGlobalOptions` în
+  `functions/src/globalOptions.ts`). Aplicația web le cheamă prin `getFunctions(app, FUNCTIONS_REGION)`, niciodată
+  `getFunctions(app)`, care înseamnă us-central1.
+  - **Un callable nou primește `region: CALLABLE_REGIONS`**, ca regula să fie una singură. APK-ul instalat cheamă doar
+    callable-urile care existau când a fost construit (31.10), deci copia din SUA a unuia nou nu servește pe nimeni. Toate
+    copiile din SUA pleacă odată, când `"us-central1"` iese din `CALLABLE_REGIONS`.
+  - **Un job sau un trigger NU primește regiune proprie.** Cu o a doua copie, un trigger rulează de două ori pentru
+    fiecare document: două notificări la fiecare mesaj de chat (`onMessageCreated`), două apeluri Claude plătite și două
+    checklist-uri la fiecare eveniment AI (`autoSuggestChecklist`), două anunțuri la fiecare joc. Memento-urile NU sunt
+    motivul: se deduplică singure (`reminder_log`).
+  - `functions/test/regions.test.ts` le ține pe primele două pe `__endpoint` (ce citește publicarea);
+    `src/utils/functionsRegion.test.ts` ține clientul (orice `getFunctions(` din `src/`).
 - **Joburile programate (din 27.09) lasă marcaje de rulare**, citite în Admin → Health → „Scheduled
   jobs”. Un job care nu pornește nu lasă nicio eroare, iar memento-urile sunt singura funcție care
   lucrează când nu are nimeni aplicația deschisă.

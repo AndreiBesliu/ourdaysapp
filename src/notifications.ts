@@ -1,5 +1,5 @@
 import { getFunctions, httpsCallable } from "firebase/functions";
-import { app } from "./firebase";
+import { app, FUNCTIONS_REGION } from "./firebase";
 import { reportError } from "./reportError";
 
 // Create in-app notifications for other users via the server-side `notifyUsers`
@@ -21,7 +21,7 @@ export async function notifyUsers(params: {
   param?: string;
 }): Promise<void> {
   try {
-    const fn = httpsCallable(getFunctions(app), "notifyUsers");
+    const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "notifyUsers");
     await fn(params);
   } catch (e) {
     // Best-effort by design — a failed notification must not break the save that triggered it —

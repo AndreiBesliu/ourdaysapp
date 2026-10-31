@@ -5,6 +5,7 @@ exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminSetAiCon
 // FIRST, before anything that defines a function: the global options apply only to functions
 // defined after them. See globalOptions.ts.
 require("./globalOptions");
+const globalOptions_1 = require("./globalOptions");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
@@ -107,8 +108,10 @@ const AI_SERVICE_ACCOUNT = (0, params_1.defineString)("AI_SERVICE_ACCOUNT", { de
  * function would not start.
  */
 const AI_FUNCTION_OPTS = { serviceAccount: AI_SERVICE_ACCOUNT, timeoutSeconds: 120, secrets: [] };
-/** The four AI callables. */
-const AI_CALLABLE_OPTS = Object.assign({ enforceAppCheck: ENFORCE_APP_CHECK }, AI_FUNCTION_OPTS);
+/** The four AI callables. `region` LAST: AI_FUNCTION_OPTS is also spread into the checklist trigger, and a region
+ * added there must not take the callables out of us-central1, where the installed APK calls them (review of
+ * 31.10.2026). */
+const AI_CALLABLE_OPTS = Object.assign(Object.assign({ enforceAppCheck: ENFORCE_APP_CHECK }, AI_FUNCTION_OPTS), { region: globalOptions_1.CALLABLE_REGIONS });
 // Require a signed-in caller and apply a basic per-user daily quota on the AI
 // callables to curb abuse / runaway model cost. The `ai_usage` collection is
 // written only by the Admin SDK here (clients have no matching rule → denied).
@@ -1034,7 +1037,7 @@ exports.suggestAssetForText = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (reque
 // create). They call this instead: it requires auth, only lets you notify users
 // you SHARE A GROUP with, rate-limits per sender, and writes via the Admin SDK
 // with a server-set `createdBy`/`createdAt`.
-exports.notifyUsers = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.notifyUsers = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid) {
@@ -1125,7 +1128,7 @@ const OVERRIDE_FIELDS = [
     // question and dropped every answer, silently, on the write that created the override.
     "rsvpEnabled", "rsvps", "visibleTo", "hiddenFrom",
 ];
-exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.createEventOverride = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c, _d;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid) {
@@ -1325,7 +1328,7 @@ exports.createEventOverride = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
 // So it moves here, where the Admin SDK can see the whole group at once. Note what this does NOT
 // do: other members' events are RE-PARENTED to personal, never deleted. Losing the group should
 // not lose their data, and the owner was never entitled to delete it.
-exports.deleteGroupCascade = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.deleteGroupCascade = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid) {
@@ -1360,7 +1363,7 @@ exports.deleteGroupCascade = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_
 // requires ownerId == auth.uid). The caller must own the source asset and share
 // a group with the recipient; the copy is duplicated server-side from the
 // (already-updated) original so its data is authoritative.
-exports.transferAssetCopy = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.transferAssetCopy = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid) {
@@ -1412,7 +1415,7 @@ exports.transferAssetCopy = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
 // request's recipient (matched by uid or email). On accept, both users get a
 // `{uid,name,email}` entry for the other (email lives on the owner-only user
 // doc, not the public profile, so we resolve it here) and the sender is notified.
-exports.respondToFriendRequest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.respondToFriendRequest = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c, _d, _e;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     const email = (((_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.email) || "").toLowerCase();
@@ -1502,7 +1505,7 @@ exports.respondToFriendRequest = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_
 // docs server-side. Guarded so a caller can only unfriend someone they are
 // ACTUALLY friends with (no forced writes to arbitrary strangers' docs) and run
 // in a transaction to avoid clobbering a concurrent friends-array update.
-exports.removeFriend = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.removeFriend = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid) {
@@ -1550,7 +1553,7 @@ exports.removeFriend = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK 
 // denied. Acceptance therefore goes through this callable (Admin SDK): it
 // validates the caller is the invite's recipient (by uid or email) and that the
 // invite is pending, then adds them to the group and marks the invite accepted.
-exports.acceptGroupInvite = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.acceptGroupInvite = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c, _d, _e;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     const email = (((_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.email) || "").toLowerCase();
@@ -1669,7 +1672,7 @@ const chunk = (arr, size) => {
 // `deleteQueryInBatches` and the Storage delete live in batchDelete.ts since 04.10.2026.
 // `logServerError` lives in errorLog.ts since 25.09.2026, with the one writer every row goes through.
 // Is the current caller an admin? (Non-throwing for non-admins.)
-exports.adminCheck = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminCheck = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
     if (!((_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid)) {
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
@@ -1683,7 +1686,7 @@ exports.adminCheck = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK },
     }
 });
 // Detailed platform statistics across every collection + Firebase Auth.
-exports.adminGetStats = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminGetStats = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     await assertAdmin(request);
     const db = admin.firestore();
     const now = Date.now();
@@ -1817,7 +1820,7 @@ exports.adminGetStats = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
     };
 });
 // All user profiles — Firebase Auth merged with Firestore + per-user activity.
-exports.adminListProfiles = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminListProfiles = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     await assertAdmin(request);
     const db = admin.firestore();
     // Only the fields shown or counted below (see adminGetStats). A person writes their own user
@@ -1878,7 +1881,7 @@ exports.adminListProfiles = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
     return { profiles, count: profiles.length, truncated };
 });
 // Current admins with display details.
-exports.adminListAdmins = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminListAdmins = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     await assertAdmin(request);
     const db = admin.firestore();
     const snap = await db.collection("admins").get();
@@ -1906,7 +1909,7 @@ exports.adminListAdmins = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHE
 });
 // Grant or revoke admin (admin-only). Accepts a uid or an email. Last-admin
 // protected; the bootstrap owner re-provisions on next call so can't be locked out.
-exports.adminSetAdmin = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminSetAdmin = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     const callerUid = await assertAdmin(request);
     const { uid, email, makeAdmin } = request.data || {};
     if (typeof makeAdmin !== "boolean" || (!uid && !email)) {
@@ -1954,7 +1957,7 @@ exports.adminSetAdmin = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK
 // ── Error monitoring ──
 // Clients report captured errors here (rate-limited); the Admin SDK writes the
 // `errorLogs` collection so clients can't write it directly.
-exports.logClientError = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.logClientError = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c, _d, _e, _f;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     const { message, stack, url, context } = request.data || {};
@@ -2010,7 +2013,7 @@ async function readErrorStates(db, keys) {
     return (key) => byKey.get(key) || null;
 }
 // Health / observability: recent errors + AI & notification usage.
-exports.adminGetHealth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminGetHealth = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     await assertAdmin(request);
     const db = admin.firestore();
     const today = new Date().toISOString().slice(0, 10);
@@ -2139,7 +2142,7 @@ exports.adminGetHealth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
  * produce an error anybody would notice — it quietly disables the check, which is the worst kind of
  * defect this panel could have.
  */
-exports.adminSetErrorStatus = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminSetErrorStatus = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     const uid = await assertAdmin(request);
     const { fingerprints, status, note, onlyIfClaimHolds } = request.data || {};
     if (!(0, errorState_1.isErrorStatus)(status)) {
@@ -2199,7 +2202,7 @@ exports.adminSetErrorStatus = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP
     return { ok: true, written, skipped: keys.length - written, refused };
 });
 // Full detail for one user (drill-down).
-exports.adminGetUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminGetUser = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c, _d, _e;
     await assertAdmin(request);
     const { uid } = request.data || {};
@@ -2268,7 +2271,7 @@ exports.adminGetUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK 
 // caller themselves are protected from disable/delete.
 // The deletion runs the whole account cascade, the same as `deleteMyAccount`, and gets its time and its
 // memory: the account an admin deletes may be a hostile one, which wrote its own documents to be heavy.
-exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540, memory: accountDeletion_1.DELETION_MEMORY }, async (request) => {
+exports.adminModerateUser = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540, memory: accountDeletion_1.DELETION_MEMORY }, async (request) => {
     const callerUid = await assertAdmin(request);
     const { uid, action } = request.data || {};
     if (!uid || typeof uid !== "string" || uid.includes("/"))
@@ -2322,7 +2325,7 @@ exports.adminModerateUser = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_C
     throw new https_1.HttpsError("invalid-argument", "Unknown action.");
 });
 // ── Broadcast a notification to all users or one group (admin-only) ──
-exports.adminBroadcast = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminBroadcast = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
     const callerUid = await assertAdmin(request);
     const { target, title, body } = request.data || {};
@@ -2369,7 +2372,7 @@ exports.adminBroadcast = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
     return { ok: true, created, pushed, pruned };
 });
 // ── All groups with per-group activity (admin-only) ──
-exports.adminListGroups = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminListGroups = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     await assertAdmin(request);
     const db = admin.firestore();
     // Only the fields shown or counted below (see adminGetStats).
@@ -2395,7 +2398,7 @@ exports.adminListGroups = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHE
     return { groups };
 });
 // ── Growth over the last 30 days (signups / events / games) ──
-exports.adminGetGrowth = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminGetGrowth = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     await assertAdmin(request);
     const db = admin.firestore();
     const days = 30;
@@ -2505,7 +2508,7 @@ function requireGameId(data) {
 // Defender locks in their deployment; the server validates BOTH payloads, generates
 // the seed (unknowable before both armies are committed), builds the authoritative
 // initial BattleState and flips the doc to 'playing'.
-exports.acceptWarlordChallenge = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.acceptWarlordChallenge = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)
@@ -2584,7 +2587,7 @@ exports.acceptWarlordChallenge = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_
 // here and stored in the Admin-only `warlordDeploys/{gameId}` doc so the opponent
 // cannot read it before committing their own; the public game doc stays army-free
 // while 'waiting'. (Client cannot create warlord docs directly — rules deny it.)
-exports.createWarlordChallenge = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.createWarlordChallenge = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)
@@ -2687,7 +2690,7 @@ async function recordWarlordResult(winnerUid, loserUid) {
 // Apply one battle command. The seat check + the pure engine are the entire
 // authority: an illegal command is rejected (applied:false, nothing persisted —
 // the engine's skip path consumes no rng, so dropping it is determinism-safe).
-exports.submitWarlordCommand = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.submitWarlordCommand = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)
@@ -2750,7 +2753,7 @@ exports.submitWarlordCommand = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_AP
     return result;
 });
 // Retreat (= concede) an active battle, or decline/cancel a waiting challenge.
-exports.forfeitWarlordBattle = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.forfeitWarlordBattle = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)
@@ -2808,7 +2811,7 @@ exports.forfeitWarlordBattle = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_AP
 // every new deployment — an opponent who simply walks away would permanently
 // confiscate part of your army, with "retreat" (a self-inflicted loss) as the only exit.
 // Only the WAITING player may claim, and only after the timeout has actually elapsed.
-exports.claimWarlordTimeout = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.claimWarlordTimeout = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)
@@ -2954,7 +2957,7 @@ exports.onWarlordBattleUpdated = (0, firestore_1.onDocumentUpdated)("games/{game
 // fetchers accept, and it uses its OWN quota bucket: the shared `ai_usage` bucket is already
 // split between five callables, and letting a preview eat it would starve the checklist and
 // the category suggestion by lunchtime.
-exports.aiPreviewScope = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.aiPreviewScope = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid) {
@@ -3035,7 +3038,7 @@ exports.aiPreviewScope = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHEC
 // Reads the rollups written beside every ledger row. Aggregates first, drill-down second:
 // a per-row list is the thing you reach for once you already know WHICH day and WHICH
 // feature is spending, and reading a month of rows to find that out is itself a cost.
-exports.adminGetAiSpend = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminGetAiSpend = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     await assertAdmin(request);
     const db = admin.firestore();
     // The window is CHOSEN from a fixed set, never taken from the wire. Each day costs one read per
@@ -3124,7 +3127,7 @@ exports.adminGetAiSpend = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHE
  * present an incomplete history as a full one, the document's own stamp is compared with the
  * newest log row and the disagreement is reported.
  */
-exports.adminGetAiConfig = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminGetAiConfig = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c, _d;
     await assertAdmin(request);
     const db = admin.firestore();
@@ -3185,7 +3188,7 @@ exports.adminGetAiConfig = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CH
  * The document and its log row go in ONE batch, and it is not best-effort: a configuration change
  * that cannot be recorded should not happen.
  */
-exports.adminSetAiConfig = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminSetAiConfig = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c, _d;
     const uid = await assertAdmin(request);
     const db = admin.firestore();
@@ -3292,7 +3295,7 @@ exports.adminSetAiConfig = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CH
     return { saved: to, previous: from, clamped: clamped.clamped, actor };
 });
 /** Row-level drill-down, filtered. Never returns prompt or response text — there is none. */
-exports.adminGetAiLedger = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminGetAiLedger = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     await assertAdmin(request);
     const { date, uid } = (request.data || {});
     const day = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)
@@ -3356,7 +3359,7 @@ exports.adminGetAiLedger = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CH
  * whose author belongs to several groups is reported as AMBIGUOUS and left alone. Assigning it
  * would put someone's private spending into a group ledger on a coin toss.
  */
-exports.adminBackfillExpenses = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+exports.adminBackfillExpenses = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     await assertAdmin(request);
     const apply = (request.data || {}).apply === true;
     const db = admin.firestore();

@@ -99,6 +99,7 @@ exports.storagePathOf = storagePathOf;
 exports.filesShownBy = filesShownBy;
 exports.deleteAccountData = deleteAccountData;
 const node_crypto_1 = require("node:crypto");
+const globalOptions_1 = require("./globalOptions");
 const admin = require("firebase-admin");
 // The modular entry, not `admin.firestore.FieldValue`: under the functions emulator the namespace loses
 // its statics (undefined there, the same objects in production), and this deletion was first run end to
@@ -663,7 +664,7 @@ async function deleteAccountData(uid, by) {
  * is paid only while a deletion runs, and an account is deleted once.
  */
 exports.DELETION_MEMORY = "2GiB";
-exports.deleteMyAccount = (0, https_1.onCall)({ enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540, memory: exports.DELETION_MEMORY }, async (request) => {
+exports.deleteMyAccount = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK, timeoutSeconds: 540, memory: exports.DELETION_MEMORY }, async (request) => {
     var _a, _b, _c;
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)
