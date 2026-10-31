@@ -5,7 +5,11 @@
 // part a build cannot show: what a person sees while the chunk loads and when it cannot load. What boot
 // imports, and the calendar's windows, are held in src/screens/lazyWindows.test.ts.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// The wrapper's boundary reports through reportError, which imports Firebase; CI has no Firebase key, and
+// the import alone threw there (auth/invalid-api-key) and failed the whole file (red since 326b801).
+vi.mock('../reportError', () => ({ reportError: () => {} }));
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import LazyAssetBarcode, { lazyCode } from './LazyAssetBarcode';

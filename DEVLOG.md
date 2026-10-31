@@ -14292,3 +14292,16 @@ grila nu mai urmează degetul în timpul tragerii. Andrei o vede cu ochii lui (O
 - `deploy --only functions,hosting` de la `9186586`: funcțiile, toate 55 „Skipped (No changes detected)”; hosting-ul,
   release complet. Pe live: intrarea construită local (`index-b7vVoF3m.js`), cu animația CSS; `errorLogs` neschimbat;
   memento-urile „ok”. Animația și glisarea le verifică Andrei (OWNER_VERIFY, sus).
+
+## 2026-10-31 · CI roșu de la `326b801`: un test importa Firebase fără cheie (Task Completed)
+
+**Prompt (Andrei):** „Verifica cu github, ca totul sa fie urcat”.
+**Model:** Claude Opus 5.5.
+
+- **Urcat:** `main` local = `origin/main` (`bbb3fca`), arbore curat.
+- **Dar CI-ul era roșu pe ultimele 10 commit-uri, de la `326b801`** (prima felie de bundle): `lazyAssetBarcode.test.tsx`
+  importa `ErrorBoundary` → `reportError` → `firebase.ts`, care aruncă `auth/invalid-api-key` la import pe CI (fără
+  `.env`); local, cu `.env`, trecea. Porțile mele locale nu puteau vedea asta.
+- **Reparat:** testul mock-uiește `reportError`, ca `ErrorBoundary.test.ts` și `lazyClient.test.tsx`. Verificat cum rulează
+  CI-ul: toată suita cu `VITE_FIREBASE_API_KEY=` gol, 200 de fișiere, 2729 de teste, verde.
+- Nimic de pe live nu e atins: era doar testul.
