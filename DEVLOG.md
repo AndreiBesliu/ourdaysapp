@@ -14305,3 +14305,21 @@ grila nu mai urmează degetul în timpul tragerii. Andrei o vede cu ochii lui (O
 - **Reparat:** testul mock-uiește `reportError`, ca `ErrorBoundary.test.ts` și `lazyClient.test.tsx`. Verificat cum rulează
   CI-ul: toată suita cu `VITE_FIREBASE_API_KEY=` gol, 200 de fișiere, 2729 de teste, verde.
 - Nimic de pe live nu e atins: era doar testul.
+
+## 2026-10-31 · Recenzia felei framer-motion: prima atingere de după o glisare se pierdea (Task Completed)
+
+**Prompt (Andrei):** „Node 24” (la „Ce iau după recenzie?”; recenzia pe framer-motion întâi, cum era stabilit).
+**Model:** Claude Opus 5.5.
+
+**Recenzia cu agenți** pe `9186586` (1 lentilă + 4 verificatori, 5 agenți, **0,49 M tokeni**): 4 constatări, toate confirmate.
+1. **(gravă, pe live de la `9186586`) prima atingere pe o zi după o glisare se pierdea:** semnul „tocmai s-a glisat” se
+   ștergea doar la următorul clic, iar pe telefon o glisare se termină de obicei fără clic. Andrei a văzut glisarea mergând;
+   a doua atingere deschidea ziua. Acum fiecare apăsare pornește curat.
+2. **(mică) două degete:** al doilea suprascria startul primului, iar ridicarea unuia se citea ca glisare. Acum contează
+   doar pointerul principal, iar un al doilea anulează gestul.
+3. **(mică) mausul eliberat în afara grilei** lăsa startul în urmă pentru o eliberare ulterioară (glisare fantomă). Acum
+   ieșirea din grilă încheie gestul.
+4. **(mică) testele verificau doar decizia și sursa.** Gestul e acum `createSwipeTracker`, cod simplu, testat fără DOM pe
+   toate scenariile de mai sus; 4 mutanți, fiecare prins de testul lui.
+- **Porți:** `tsc -b`, `lint-gate`, `npm test` (2734, și fără cheia Firebase, ca pe CI), build, `check-split`,
+  `check-offline`, `check-bundle`, `test:tz`, `test:rules` (1127).

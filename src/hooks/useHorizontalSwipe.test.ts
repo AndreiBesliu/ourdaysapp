@@ -5,8 +5,8 @@
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { swipeDirection } from './useHorizontalSwipe';
+import { describe, expect, it, vi } from 'vitest';
+import { createSwipeTracker, swipeDirection } from './useHorizontalSwipe';
 
 describe('swipeDirection', () => {
   it('left is the next period, right the previous one, past 50 px whatever the speed', () => {
@@ -33,6 +33,56 @@ describe('swipeDirection', () => {
     // Time counts as at least 1 ms: 3 px is 3 × 3 000 = 9 000, under the line; 4 px is 4 × 4 000 = 16 000.
     expect(swipeDirection(-3, 1, 0)).toBeNull();
     expect(swipeDirection(-4, 1, 0)).toBe('next');
+  });
+});
+
+describe('the gesture (review of 31.10.2026)', () => {
+  let time = 0;
+  const at = (x: number, y = 0, id = 1, isPrimary = true) => ({ button: 0, clientX: x, clientY: y, timeStamp: (time += 300), pointerId: id, isPrimary });
+  const click = () => ({ stopPropagation: vi.fn(), preventDefault: vi.fn() });
+  const make = () => { const next = vi.fn(); const prev = vi.fn(); return { next, prev, t: createSwipeTracker({ next, prev }) }; };
+
+  it('a swipe that ends with no click does not swallow the next tap on a day', () => {
+    const { next, t } = make();
+    t.onPointerDown(at(200)); t.onPointerUp(at(120));
+    expect(next).toHaveBeenCalledTimes(1);
+    t.onPointerDown(at(150)); t.onPointerUp(at(150));
+    const c = click(); t.onClickCapture(c);
+    expect(c.stopPropagation).not.toHaveBeenCalled();
+  });
+
+  it('the click that ends a swipe is swallowed, once', () => {
+    const { t } = make();
+    t.onPointerDown(at(200)); t.onPointerUp(at(120));
+    const ending = click(); t.onClickCapture(ending);
+    expect(ending.stopPropagation).toHaveBeenCalled();
+    const later = click(); t.onClickCapture(later);
+    expect(later.stopPropagation).not.toHaveBeenCalled();
+  });
+
+  it('a second finger is not a swipe, and it cancels the first one', () => {
+    const { next, prev, t } = make();
+    t.onPointerDown(at(150, 0, 1)); t.onPointerDown(at(230, 0, 2, false));
+    t.onPointerUp(at(150, 0, 1)); t.onPointerUp(at(70, 0, 2, false));
+    expect(next).not.toHaveBeenCalled();
+    expect(prev).not.toHaveBeenCalled();
+  });
+
+  it('leaving the grid or a cancel ends the gesture: no phantom swipe from an old press', () => {
+    const { next, t } = make();
+    t.onPointerDown(at(200)); t.onPointerLeave();
+    t.onPointerUp(at(100));
+    t.onPointerDown(at(200)); t.onPointerCancel();
+    t.onPointerUp(at(100));
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('a release of another pointer does not end this gesture', () => {
+    const { next, t } = make();
+    t.onPointerDown(at(200, 0, 7)); t.onPointerUp(at(100, 0, 8));
+    expect(next).not.toHaveBeenCalled();
+    t.onPointerUp(at(100, 0, 7));
+    expect(next).toHaveBeenCalledTimes(1);
   });
 });
 
