@@ -14332,3 +14332,18 @@ grila nu mai urmează degetul în timpul tragerii. Andrei o vede cu ochii lui (O
 30.04.2028). Se schimbă `engines.node` din `functions/package.json` (de acolo își ia publicarea runtime-ul) și versiunea din
 CI; `@types/node` rămâne pe 22 (npm stricat; sunt doar tipuri). Apoi publicarea tuturor funcțiilor și verificarea pe live:
 runtime-ul fiecăreia, marcajele joburilor, erorile.
+
+## 2026-10-31 · Funcțiile pe Node 24 (Task Completed)
+
+**Prompt (Andrei):** „Node 24”.
+**Model:** Claude Opus 5.5.
+
+- `engines.node` 24 în `functions/package.json`, CI pe Node 24 (`71b1b5c`). Porți: `tsc -b`, `lint-gate`, `npm test` (2734;
+  testul limbilor are acum 20 s, după un timeout sub sarcina suitei complete), build, verificările de bundle, `test:tz`,
+  `test:rules` (1127).
+- **Publicat** (`deploy --only functions,hosting`): **55 din 55 de funcții actualizate pe Node.js 24**, confirmat cu
+  `functions:list` (55 × `nodejs24`); hosting-ul, release complet.
+- **Verificat pe live după:** memento-urile au rulat „ok” pe noul runtime (marcajul de după publicare, fără eșecuri);
+  `errorLogs` neschimbat.
+- Tot azi, înainte: recenzia felei framer-motion (prima atingere de după o glisare se pierdea) reparată și publicată
+  (`537337d`); CI verde pe ea.
