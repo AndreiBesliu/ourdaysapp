@@ -14347,3 +14347,12 @@ runtime-ul fiecăreia, marcajele joburilor, erorile.
   `errorLogs` neschimbat.
 - Tot azi, înainte: recenzia felei framer-motion (prima atingere de după o glisare se pierdea) reparată și publicată
   (`537337d`); CI verde pe ea.
+
+## 2026-10-31 · Măsurat: latența funcțiilor (us-central1) față de baza de date (europe-central2) (Task Completed)
+
+**Prompt (Andrei):** „continua”.
+**Model:** Claude Opus 5.5.
+
+Din jurnalele `REMINDERS_RUN` de pe live (8 rulări, la 5 minute): o interogare **165–188 ms**; citirea seriilor, 4 interogări
+la rând, **842–892 ms**. Estimarea din recenzia din 29.10 era ~120 ms. Trecut în BACKLOG §3, cu decizia mutării regiunii la
+Andrei (APK-ul cheamă callable-urile din us-central1). Nimic schimbat în cod.

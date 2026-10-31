@@ -374,13 +374,12 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     greșeală ar da 404 pe orice link direct de pe live. E prea mult risc pentru un caz de rollback.
     Se reia cu un test pe emulatorul de hosting ȘI o verificare pe live imediat după deploy.
 - **Warlord** (repo-ul Warlord, nu aici): 44 de PNG-uri, 28 MB, 800–900 kB fiecare → WebP.
-- **Funcțiile programate și callable rulează în us-central1, iar baza e în europe-central2** (verificat pe
-  29.10 în logul de publicare: `sendDueReminders(us-central1)`; triggerele Firestore sunt în europe-central2).
-  Nu e setată nicio regiune, așa că fiecare citire a unui job traversează Atlanticul. Recenzia din 29.10 a
-  estimat ~120 ms pe interogare, nemăsurat încă. Pe memento-uri azi costă puțin (câteva interogări pe rulare),
-  dar devine limita oricărei citiri pe proprietar (5.3). Mutarea înseamnă funcții noi: un callable devine
-  public doar la creare, iar clientul primește alte URL-uri. **De măsurat întâi:** timpul unei pagini din
-  `REMINDERS_RUN`.
+- **Funcțiile rulează în us-central1, baza în europe-central2: MĂSURAT pe 31.10** (jurnalele `REMINDERS_RUN`, 8 rulări):
+  o interogare durează **165–188 ms**, iar citirea seriilor (4 interogări la rând) **842–892 ms** (~210 ms fiecare). Azi o
+  rulare de memento-uri citește în ~1 s, deci nu e o problemă de funcționare; dar fiecare callable chemat din România face
+  drumul peste Atlantic de două ori (omul → SUA, apoi SUA → baza din Europa la fiecare interogare). **Decizia lui Andrei:**
+  mutarea în europe-central2 ar tăia mult din asta, dar înseamnă funcții noi (alte URL-uri pentru client), iar **APK-ul
+  instalat cheamă callable-urile din us-central1**: ele ar trebui păstrate cât timp mai e folosit APK-ul.
 - **Node 24 în Cloud Functions din 31.10.2026** (`engines.node`, CI pe 24). Node 24 iese din uz pe 30.04.2028.
   `@types/node` a rămas pe 22 (npm stricat pe mașină); de urcat la prima instalare.
 - **Fereastra de deploy și taburile vechi.** Regulile noi întâlnesc, până la hosting, clientul web
