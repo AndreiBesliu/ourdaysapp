@@ -14610,3 +14610,56 @@ Felia următoare din BACKLOG §2, fără decizii ale lui Andrei: cinci locuri î
   - memento-urile după publicare: rulare ok la ~14:10 UTC, după publicarea terminată la 14:05:38, 0 eșecuri la rând.
 - **Nevăzut de mine:** un push refuzat de FCM pe live (verificarea fără livrare) și un plafon atins pe live: nu se pot
   provoca fără un token stricat sau o eroare reală; sunt probate pe emulator.
+
+## 2026-11-01 · Push-ul: ce nu ajunge la nimeni, și grupurile peste 500 de tokenuri (Task Started)
+
+**Prompt (Andrei):** „Yes, push leftovers” (la „Fac acum cele două puncte de push rămase în BACKLOG?”).
+**Model:** Claude Opus 5.5.
+
+Cele două puncte lăsate de felia de dinainte, din `functions/src/notify.ts`:
+- un push care nu ajunge la nimeni din alt motiv decât adrese moarte nu lasă nicio urmă în afară de jurnalul funcției;
+- un grup de limbă cu peste 500 de tokenuri face `sendEachForMulticast` să arunce, deci nu primește nimeni.
+
+## 2026-11-01 · Push-ul: ce nu ajunge la nimeni, și grupurile peste 500 de tokenuri (Task Completed)
+
+**Prompt (Andrei):** „Yes, push leftovers”.
+**Model:** Claude Opus 5.5.
+
+- **Felii de 500** (`functions/src/notify.ts`, `FCM_BATCH`): un grup de limbă se trimite în felii de câte 500 de
+  tokenuri; peste 500, un singur apel arunca și nu primea nimeni (regula lasă 500 de tokenuri pe cont). Toate feliile
+  au același mesaj, deci verdictul despre tokenuri le citește ca o singură trimitere.
+- **O felie care aruncă:** se scrie în jurnalul funcției; tokenurile ei nu sunt judecate (`SEND_THREW`). La o sesiune
+  HTTP/2 căzută (GOAWAY), rezultatele reale pe care le dă firebase-admin (`pendingBatchResponse`) sunt cele judecate,
+  dar numai când răspund pentru fiecare token al feliei.
+- **Un push care nu ajunge la nimeni** din alt motiv decât adrese moarte (credențiale, cotă, o pană, o felie care
+  aruncă) scrie un rând de eroare: `push reached none of N tokens: <coduri>` (`unreachedCodes`):
+  - codurile se scriu cu spații în loc de cratime (`codeWords`): amprenta din Health citește orice șir de 20+ caractere
+    ca un id, iar codurile lungi ale FCM s-ar fi contopit într-un singur grup;
+  - tipul push-ului și limba stau în stivă, pe care amprenta o lasă afară: o defecțiune, un grup;
+  - când grupul de limbă e al unui singur om: cel mult un rând pe zi pentru el și pentru defecțiunea aceea
+    (`push_unreached/{uid}`, șters cu contul); un apel care aruncă nu trece prin poarta asta.
+- **Un token din două conturi** (dispozitiv comun) e tăiat din amândouă, iar rândul nu mai numește doar ultimul.
+- **Un uid de destinatar cu `/`** nu mai primește nimic (`isPlainDocId`).
+- **Recenzia** (6 agenți, 0,74 M tokeni): 5 constatări, toate reale, reparate:
+  - un dispozitiv care eșuează mereu ar fi scris un rând la fiecare push primit;
+  - codurile lungi contopite în amprentă;
+  - GOAWAY raportat ca „n-a ajuns”;
+  - tokenul comun atribuit ultimului;
+  - testul feliilor compara doar notificarea.
+- **Reverificarea** (1 agent, 0,24 M): toate închise; 7 lucruri noi, mici, reparate:
+  - poarta cheiată pe om și defecțiune, nu doar pe om;
+  - 2 încercări pentru tranzacția porții;
+  - niciun semn pentru un cont șters între timp;
+  - linia de consolă fixată de un test;
+  - o variabilă nefolosită;
+  - `functions/lib` construit.
+  CRLF-ul: git normalizează (diff-ul are doar rândurile schimbate).
+- **Mutanți:** 18 pe schimbare, într-o clonă din afara Drive, cu control verde înainte și după: 12 prinși + 2 VOID
+  refăcuți + 1 supraviețuitor (poarta care nu se mai redeschide a doua zi), prins după testul adăugat; runda a doua
+  6/6.
+- **Porți:**
+  - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
+  - `npm test` (2795), `test:tz` (46), `test:rules` (1225);
+  - funcțiile construite, cu `functions/lib` în același commit.
+- **BACKLOG:** cele două puncte marcate REPARAT. Rămas, deliberat: un token care eșuează mereu fără să fie dovedit mort
+  rămâne în cont (un rând pe zi pentru omul acela); remediul ar fi tăierea după K zile de eșec.

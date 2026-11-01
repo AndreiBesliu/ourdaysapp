@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { isPlainDocId } from '../../functions/src/docId';
 import { digestMessageLine, digestText } from '../../functions/src/digestMessages';
-import { deadTokens, dryRunVerdict } from '../../functions/src/pushTokens';
+import { FCM_BATCH, SEND_THREW, codeWords, deadTokens, dryRunVerdict, unreachedCodes } from '../../functions/src/pushTokens';
 import { CLAIM_SKEW_MS, SERVER_ERROR_DAILY_CAP, capMarkerMessage, capStep, newestClaim } from '../../functions/src/errorCap';
 import { fingerprint } from '../../functions/src/errorGrouping';
 import { ERROR_FIXES } from '../../functions/src/errorFixes';
@@ -164,10 +164,44 @@ describe('deadTokens: what one send proved about each address', () => {
     }
   });
 
+  it('unreachedCodes: a push that reached nobody, and not because its addresses are gone', () => {
+    const auth = { success: false, code: 'messaging/third-party-auth-error' };
+    const busy = { success: false, code: 'messaging/server-unavailable' };
+    // Anything delivered: nothing to report.
+    expect(unreachedCodes([ok, auth], [])).toBeNull();
+    // Every failure an address proved dead: nothing to report either.
+    expect(unreachedCodes([gone, refused], [0, 1])).toBeNull();
+    expect(unreachedCodes([], [])).toBeNull();
+    // The rest: the codes, sorted and once each; a dead address beside them does not count.
+    expect(unreachedCodes([busy, auth, busy, gone], [3])).toEqual(['messaging/server-unavailable', 'messaging/third-party-auth-error']);
+    expect(unreachedCodes([refused], [])).toEqual(['messaging/invalid-argument']);
+    expect(unreachedCodes([{ success: false, code: SEND_THREW }, gone], [1])).toEqual([SEND_THREW]);
+    expect(unreachedCodes([{ success: false }, { success: false, code: '' }], [])).toEqual(['unknown']);
+  });
+
+  it('the row keeps each failure code in the Health key: FCM’s long codes do not collapse into one <id>', () => {
+    const key = (c: string) => fingerprint(`push reached none of 1 tokens: ${codeWords([c])}`, 'notify:push');
+    const codes = ['messaging/mismatched-credential', 'messaging/third-party-auth-error', 'messaging/message-rate-exceeded',
+      'messaging/authentication-error', 'messaging/payload-size-limit-exceeded', 'messaging/server-unavailable',
+      'messaging/internal-error', 'messaging/invalid-argument', SEND_THREW];
+    expect(new Set(codes.map(key)).size).toBe(codes.length);
+    expect(codeWords(['messaging/third-party-auth-error', 'messaging/internal-error']))
+      .toBe('messaging/third party auth error, messaging/internal error');
+  });
+
+  it('a slice that threw says nothing about its addresses: no token goes, no dry run is asked', () => {
+    expect(deadTokens([{ success: false, code: SEND_THREW }])).toEqual({ dead: [], unproven: false });
+    expect(deadTokens([{ success: false, code: SEND_THREW }], true)).toEqual({ dead: [], unproven: false });
+    expect(FCM_BATCH).toBe(500);
+  });
+
   it('notify() takes its verdict from here and keeps no list of its own', () => {
     const notify = source('notify.ts');
     expect(notify).toContain('deadTokens(results)');
     expect(notify).toContain('deadTokens(results, true)');
+    expect(notify).toContain('unreachedCodes(results, verdict.dead)');
+    expect(notify).toContain('codeWords(unreached)');
+    expect(notify).toContain('tokens.slice(i, i + FCM_BATCH)');
     expect(notify).not.toMatch(/code\.includes\("invalid-argument"\)/);
   });
 });

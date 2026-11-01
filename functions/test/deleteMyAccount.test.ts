@@ -197,6 +197,7 @@ beforeEach(async () => {
   await db.doc(`aiSpendDaily/2026-10-01/users/${ANA}`).set({ calls: 1 });
   await db.doc(`ai_budget/${GONE}`).set({ microUsd: 5 });
   await db.doc(`ai_preview_usage/${GONE}`).set({ count: 1 });
+  await db.doc(`push_unreached/${GONE}`).set({ day: '2026-11-01', failures: ['messaging/server unavailable'] });
   await db.collection('errorLogs').add({ uid: GONE, email: EMAIL, message: 'm', source: 'client' });
 
   for (const p of [...KEPT_FILES, ...GONE_FILES]) await put(p);
@@ -312,7 +313,7 @@ describe('everything else', () => {
     for (const path of [
       `users/${GONE}`, `profiles/${GONE}`, 'assets/a-gone', 'expenses/x1', 'notifications/n1', 'games/gm1',
       'warlordDeploys/gm1', `warlordPlayers/${GONE}`, `warlordDomains/${GONE}`, `ai_budget/${GONE}`,
-      `ai_preview_usage/${GONE}`, 'friend_requests/fr1', 'friend_requests/fr2', 'friend_requests/fr3',
+      `ai_preview_usage/${GONE}`, `push_unreached/${GONE}`, 'friend_requests/fr1', 'friend_requests/fr2', 'friend_requests/fr3',
       `aiSpendDaily/2026-10-01/users/${GONE}`,
     ]) expect(await exists(path), path).toBe(false);
     for (const path of ['expenses/x2', 'notifications/n2', 'assets/a-gift', `aiSpendDaily/2026-10-01/users/${ANA}`, 'aiSpendDaily/2026-10-01'])

@@ -25,7 +25,7 @@
 // reinstall, a cleared site — each adds one and none is ever removed. Every send then spends
 // calls on addresses that can never arrive. Pruning happens here, once, for every caller.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_LANG = void 0;
+exports.DEFAULT_LANG = exports.PUSH_UNREACHED = void 0;
 exports.notify = notify;
 const crypto_1 = require("crypto");
 const admin = require("firebase-admin");
@@ -34,6 +34,7 @@ const notifyStrings_1 = require("./notifyStrings");
 Object.defineProperty(exports, "DEFAULT_LANG", { enumerable: true, get: function () { return notifyStrings_1.DEFAULT_LANG; } });
 const pushText_1 = require("./pushText");
 const pushTokens_1 = require("./pushTokens");
+const docId_1 = require("./docId");
 const errorLog_1 = require("./errorLog");
 /** The longest title, in the bell AND in the push (pushText.ts says why the push needs one). */
 const CAP = 200;
@@ -43,6 +44,41 @@ const BODY_CAP = 500;
 const APP_ORIGIN = "https://our-days-2a939.web.app";
 /** Where a push is validated without being delivered (a dry run): no app subscribes to it. */
 const PAYLOAD_CHECK_TOPIC = "payload-check";
+/**
+ * One document per person, `{ day, failures }`: the UTC day, and the failures (their codes, as the row
+ * writes them) for which notify() has written an error row that day about a push that reached none of that
+ * person's devices. Deleted with the account (accountDeletion.ts); no rule matches it.
+ */
+exports.PUSH_UNREACHED = "push_unreached";
+/**
+ * Whether this is the first push today that reached none of `uid`'s devices for THIS failure: one row a
+ * day per person and failure, the rest in Cloud Logging. A device that fails every push but is never proved
+ * dead (an old web-push subscription refused for its credentials, say) would otherwise write a row for every
+ * push its owner gets, every day, until it filled the Health panel (the review, 01.11.2026); a different
+ * failure the same day still gets its row (the re-verification). Fail-open: a decision that cannot be made
+ * writes the row, so one retry is all it is worth inside a reminders run.
+ */
+async function firstUnreachedToday(db, uid, failure) {
+    const day = new Date().toISOString().slice(0, 10);
+    try {
+        const ref = db.doc(`${exports.PUSH_UNREACHED}/${uid}`);
+        const userRef = db.doc(`users/${uid}`);
+        return await db.runTransaction(async (tx) => {
+            const [mark, user] = await tx.getAll(ref, userRef);
+            const marked = mark.get("failures");
+            const seen = mark.get("day") === day && Array.isArray(marked) ? marked : [];
+            if (seen.includes(failure))
+                return false;
+            // Not for an account deleted meanwhile: the mark would outlive the deletion that removes it.
+            if (user.exists)
+                tx.set(ref, { day, failures: [...seen, failure].slice(-20) });
+            return true;
+        }, { maxAttempts: 2 });
+    }
+    catch (_a) {
+        return true;
+    }
+}
 /**
  * The bell row of `rowKey` for one recipient. A hash, so that no length or character of either part
  * can make it an invalid id: a reminder's recipients come from an event's assignees, which members write.
@@ -56,10 +92,11 @@ const rowIdFor = (rowKey, uid) => (0, crypto_1.createHash)("sha256").update(rowK
  * roll that back. Call it after the transaction commits.
  */
 async function notify(spec) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e;
     const db = admin.firestore();
     const targets = [...new Set(spec.userIds)]
-        .filter((u) => typeof u === "string" && u && (spec.includeActor || u !== spec.createdBy))
+        // A uid is ONE path segment: it becomes `users/<it>` (docId.ts).
+        .filter((u) => (0, docId_1.isPlainDocId)(u) && (spec.includeActor || u !== spec.createdBy))
         .slice(0, 50);
     if (targets.length === 0)
         return { rows: 0, pushed: 0, pruned: 0 };
@@ -99,10 +136,11 @@ async function notify(spec) {
             continue;
         // The annotation is load-bearing: an inline `{ tokens: [] }` infers `never[]`, so the push
         // below is a type error rather than a list.
-        const bucket = (_a = byLang.get(r.lang)) !== null && _a !== void 0 ? _a : { tokens: [], owners: new Map() };
+        const bucket = (_a = byLang.get(r.lang)) !== null && _a !== void 0 ? _a : { tokens: [], owners: new Map(), uids: new Set() };
+        bucket.uids.add(r.uid);
         for (const tok of r.tokens) {
             bucket.tokens.push(tok);
-            bucket.owners.set(tok, r.uid);
+            bucket.owners.set(tok, ((_b = bucket.owners.get(tok)) !== null && _b !== void 0 ? _b : new Set()).add(r.uid));
         }
         byLang.set(r.lang, bucket);
     }
@@ -111,7 +149,7 @@ async function notify(spec) {
     // minute apart both show. A tap opens the app at the route the caller asked for; before this,
     // a tap did nothing — the payload carried no link and the worker set none.
     const tag = `${spec.type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const route = (_b = spec.data) === null || _b === void 0 ? void 0 : _b.route;
+    const route = (_c = spec.data) === null || _c === void 0 ? void 0 : _c.route;
     const link = APP_ORIGIN + (typeof route === "string" && route.startsWith("/") ? route : "/");
     let pushed = 0;
     const deadByUser = new Map();
@@ -130,20 +168,52 @@ async function notify(spec) {
             },
         };
         try {
-            const res = await admin.messaging().sendEachForMulticast(Object.assign({ tokens }, message));
-            pushed += res.successCount;
+            // In slices of what one call takes. Over 500 tokens a single call throws, and nobody in the bucket
+            // got the push; the rules let one account hold 500. Every slice carries the same message, so the
+            // verdict below still reads them all as one send. A slice that throws stands as failures that say
+            // nothing, about the addresses or about the message.
+            const results = [];
+            let threw = undefined;
+            for (let i = 0; i < tokens.length; i += pushTokens_1.FCM_BATCH) {
+                const slice = tokens.slice(i, i + pushTokens_1.FCM_BATCH);
+                try {
+                    const res = await admin.messaging().sendEachForMulticast(Object.assign({ tokens: slice }, message));
+                    pushed += res.successCount;
+                    results.push(...res.responses.map((r) => {
+                        var _a;
+                        return ({
+                            success: r.success,
+                            code: (_a = r.error) === null || _a === void 0 ? void 0 : _a.code,
+                        });
+                    }));
+                }
+                catch (err) {
+                    console.error("notify: a push slice threw", spec.type, lang, slice.length, err);
+                    if (threw === undefined)
+                        threw = err !== null && err !== void 0 ? err : new Error("send failed");
+                    const pending = err === null || err === void 0 ? void 0 : err.pendingBatchResponse;
+                    const late = pending ? await Promise.resolve(pending).catch(() => null) : null;
+                    if (late && Array.isArray(late.responses) && late.responses.length === slice.length) {
+                        pushed += late.responses.filter((r) => r.success).length;
+                        results.push(...late.responses.map((r) => {
+                            var _a;
+                            return ({
+                                success: r.success,
+                                code: (_a = r.error) === null || _a === void 0 ? void 0 : _a.code,
+                            });
+                        }));
+                    }
+                    else {
+                        results.push(...slice.map(() => ({ success: false, code: pushTokens_1.SEND_THREW })));
+                    }
+                }
+            }
             // The report every previous sender threw away. Only an answer about the ADDRESS costs somebody
             // their token. A quota, a timeout or a transient server error must not, or one bad minute on
             // Google's side would silently unsubscribe the whole family; nor may a refused MESSAGE, which
             // FCM reports with the same code as a malformed token (pushTokens.ts).
-            const results = res.responses.map((r) => {
-                var _a;
-                return ({
-                    success: r.success,
-                    code: (_a = r.error) === null || _a === void 0 ? void 0 : _a.code,
-                });
-            });
             let verdict = (0, pushTokens_1.deadTokens)(results);
+            let reported = false;
             if (verdict.unproven) {
                 // Nothing was delivered to say the message is fine. FCM validates it without delivering it
                 // (`dryRun`), to a topic, which needs no subscriber and reaches nobody.
@@ -157,6 +227,7 @@ async function notify(spec) {
                 }
                 else if (said === "refused") {
                     // Nobody else hears about a push that reached no one: the caller never fails (see below).
+                    reported = true;
                     await (0, errorLog_1.logServerError)(`push "${spec.type}" refused for all ${tokens.length} tokens as invalid-argument, and a dry run ` +
                         `of the same message too: ${String((dryRun === null || dryRun === void 0 ? void 0 : dryRun.message) || dryRun).slice(0, 300)}; no token was removed`, "notify:push");
                 }
@@ -165,10 +236,25 @@ async function notify(spec) {
                 }
             }
             for (const i of verdict.dead) {
-                const owner = bucket.owners.get(tokens[i]);
-                if (!owner)
-                    continue;
-                deadByUser.set(owner, [...((_c = deadByUser.get(owner)) !== null && _c !== void 0 ? _c : []), tokens[i]]);
+                for (const owner of (_d = bucket.owners.get(tokens[i])) !== null && _d !== void 0 ? _d : []) {
+                    deadByUser.set(owner, [...((_e = deadByUser.get(owner)) !== null && _e !== void 0 ? _e : []), tokens[i]]);
+                }
+            }
+            // Reached nobody, and not because its addresses are gone: say so where somebody looks. One failure,
+            // one group: the push's type and language go in the stack, which the panel's key leaves out. With
+            // the person's uid when the bucket is one person's, and then once a day for them.
+            const unreached = reported ? null : (0, pushTokens_1.unreachedCodes)(results, verdict.dead);
+            if (unreached) {
+                const one = bucket.uids.size === 1 ? [...bucket.uids][0] : null;
+                const message = `push reached none of ${tokens.length} tokens: ${(0, pushTokens_1.codeWords)(unreached)}` +
+                    (threw === undefined ? "" : ` (${String((threw === null || threw === void 0 ? void 0 : threw.message) || threw).slice(0, 300)})`);
+                // A call that threw is not one person's device: it always gets its row (the daily cap bounds it).
+                if (one !== null && threw === undefined && !(await firstUnreachedToday(db, one, (0, pushTokens_1.codeWords)(unreached)))) {
+                    console.error("notify:", message, spec.type, one);
+                }
+                else {
+                    await (0, errorLog_1.logServerError)(message, "notify:push", Object.assign(Object.assign({}, (one !== null ? { uid: one } : {})), { stack: `push type: ${spec.type}, language: ${lang}` }));
+                }
             }
         }
         catch (err) {

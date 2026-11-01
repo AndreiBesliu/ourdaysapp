@@ -629,6 +629,8 @@ async function deleteAccountData(uid, by) {
     await Promise.all([
         "users", "profiles", "admins",
         "ai_usage", "ai_preview_usage", "ai_budget", "notif_usage", "error_usage", "warlord_challenge_usage",
+        // The day notify() last reported a push that reached none of their devices (notify.ts).
+        "push_unreached",
         // The world roster and the cloud kingdom. Clients cannot delete either, and the roster is
         // readable by everyone signed in, so a deleted account would linger in the player directory.
         "warlordPlayers", "warlordDomains",

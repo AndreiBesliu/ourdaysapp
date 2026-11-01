@@ -53,6 +53,40 @@ export function deadTokens(results: readonly SendResult[], messageValid = false)
   return { dead, unproven: !proven && refused > 0 };
 }
 
+/** The most tokens one multicast takes (firebase-admin's FCM_MAX_BATCH_SIZE): past it, the call throws. */
+export const FCM_BATCH = 500;
+
+/** Stands for each token of a slice whose call threw: it says nothing about the address or the message. */
+export const SEND_THREW = "notify/send-threw";
+
+/**
+ * A push that reached NOBODY for a reason other than dead addresses: the failure codes, sorted and
+ * distinct. `null` when anything was delivered, or when every failure was an address proved dead.
+ *
+ * Before this, such a push left no trace but the function's log: FCM credentials gone wrong, a quota,
+ * an outage, a field the SDK refuses before sending, a call that threw. Every push in the app could stop
+ * and the Health panel would stay green (the review, 01.11.2026).
+ */
+export function unreachedCodes(results: readonly SendResult[], dead: readonly number[]): string[] | null {
+  if (results.some((r) => r.success)) return null;
+  const proved = new Set(dead);
+  const codes = new Set<string>();
+  results.forEach((r, i) => {
+    if (!proved.has(i)) codes.add(typeof r.code === "string" && r.code ? r.code : "unknown");
+  });
+  return codes.size > 0 ? [...codes].sort() : null;
+}
+
+/**
+ * The codes as the error row writes them: hyphens become spaces. The Health panel's key (errorGrouping.ts,
+ * `fingerprint`) reads any run of 20 or more letters, digits, `_` and `-` as an id, and FCM's longest codes
+ * are that long (`mismatched-credential`, `message-rate-exceeded`, `third-party-auth-error`): written raw,
+ * different failures would share one group and one daily cap (the review, 01.11.2026).
+ */
+export function codeWords(codes: readonly string[]): string {
+  return codes.map((c) => c.replace(/-/g, " ")).join(", ");
+}
+
 /** What a dry run of the message said, by the error it threw (none: `"valid"`). */
 export function dryRunVerdict(error: unknown): "valid" | "refused" | "unknown" {
   if (error === undefined || error === null) return "valid";

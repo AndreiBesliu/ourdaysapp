@@ -269,12 +269,17 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   Acum: lângă un token livrat, mesajul e bun și tokenul e mort; când nimic n-a fost livrat, decide o verificare a
   ACELUIAȘI mesaj fără livrare (`send(..., dryRun)`, către un topic): trece = tokenurile sunt moarte; refuzată =
   mesajul e de vină, nimeni nu-și pierde tokenul și se scrie un rând de eroare (`pushTokens.ts`).
-  - **Rămas, mai vechi decât reparația:** un push care nu ajunge la nimeni din alt motiv (credențiale FCM, un câmp
-    refuzat de SDK înainte să plece, cotă) nu lasă nicio urmă în afară de jurnalul funcției. Remediul: un rând de
-    eroare când nimic n-a fost livrat, cu codurile.
-  - **Rămas, mai vechi:** un grup de limbă cu peste 500 de tokenuri face `sendEachForMulticast` să arunce, deci
-    nimeni din el nu primește push-ul (regula lasă 500 de tokenuri pe cont). Remediul: cel mult ~10 tokenuri pe
-    destinatar, sau trimiteri în felii de 500.
+  - **REPARAT pe 01.11 (a doua felie):** un push care nu ajunge la nimeni din alt motiv decât adrese moarte (credențiale,
+    cotă, o pană, o felie care aruncă) scrie un rând de eroare cu codurile (`unreachedCodes`, scrise cu spații ca să
+    rămână deosebite în amprenta din Health). Când grupul de limbă e al unui singur om, cel mult un rând pe zi pentru el
+    (`push_unreached/{uid}`, șters cu contul); tipul push-ului stă în stivă, deci o defecțiune e un singur grup.
+  - **REPARAT pe 01.11:** trimiterea merge în felii de 500 (un apel peste 500 arunca și nu primea nimeni); toate feliile
+    au același mesaj. O sesiune HTTP/2 căzută: rezultatele reale (`pendingBatchResponse`) sunt cele judecate. Un token
+    din două conturi (dispozitiv comun) e tăiat din amândouă.
+  - **Rămas, deliberat:** un token care eșuează la fiecare push fără să fie dovedit mort (de exemplu un abonament
+    web-push vechi refuzat pentru credențiale) rămâne în cont pentru totdeauna: un rând pe zi pentru omul acela. Ce se
+    strică dacă rămâne: un grup recurent în Health, pe care nu-l poate repara nimeni din Admin. Remediul ar fi tăierea
+    după K zile consecutive de eșec, cu stare ținută pe server.
 - **REPARAT pe 01.11: rândurile de eroare scrise de server n-aveau plafon zilnic.** Acum o eroare (după amprenta pe
   care o grupează și Health) scrie cel mult 20 de rânduri pe zi UTC, apoi UN rând care spune că plafonul s-a atins,
   apoi doar în jurnalul funcției (`errorCap.ts`, `errorCaps/{hash}`). O pretenție nouă de la ultimul rând (o eroare
