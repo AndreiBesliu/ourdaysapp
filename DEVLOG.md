@@ -14503,3 +14503,21 @@ apel Claude și adăuga un al doilea set de puncte (id-uri noi, pe care `arrayUn
 - **CLAUDE.md:**
   - pașii de sincronizare cer acum și build-ul funcțiilor, plus `test:rules`, când s-a atins `functions/src`;
   - regula regiunii nu mai spune că un trigger dublat ar dubla checklist-ul, fiindcă acum se deduplică singur.
+
+## 2026-11-01 · Checklist-ul AI o singură dată: publicat pe live și verificat (Task Completed)
+
+**Prompt (Andrei):** „Continua” (publicarea fără întrebare, după regula din 17.10).
+**Model:** Claude Opus 5.5.
+
+- **Publicat** (`deploy --only "functions,hosting" --project live`, de la `0af9447`): 97 de funcții actualizate, nicio
+  creare sau ștergere, apoi hosting-ul, release complet. Prima încercare a fost refuzată de `tree-clean` înaintea oricărei
+  operații, fiindcă `OWNER_VERIFY.md` nu era încă în commit; a fost pus în commit și publicarea a fost reluată.
+- **Verificat pe live după:**
+  - proba CORS (OPTIONS): 42/42 callable-uri publice în europe-central2 și 42/42 în us-central1;
+  - intrarea servită e cea construită local (`index-ZkHvymSO.js`) și conține noul motiv al cardului;
+  - `errorLogs`: 0 rânduri de la publicare;
+  - memento-urile au rulat „ok” după publicare;
+  - prima rulare a rezumatului de erori din Europa (06:00 UTC) a fost „ok”, fără eșecuri;
+  - CI verde pe `b7244dd`.
+- **Neverificat de mine:** un eveniment real cu „Asistent AI” pe live. Cere un cont și un apel plătit, așa că e în
+  OWNER_VERIFY.
