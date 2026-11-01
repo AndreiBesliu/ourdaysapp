@@ -29,8 +29,19 @@ import {
   CHECKLIST_BAD_OUTPUT,
   CHECKLIST_BUSY,
   CHECKLIST_ERROR,
+  CHECKLIST_RUNNING,
+  claimedByAnotherDelivery,
+  claimStep,
+  mayEndChecklist,
+  maySucceedChecklist,
+  isOwnClaim,
+  checklistHoldMs,
 } from '../../functions/src/aiChecklistOutcome';
 import { checklistReasonKey, checklistWorthRetrying } from './aiErrorKey';
+import {
+  checklistNoteView, pendingSince, watchedFor, CHECKLIST_DEAD_RUN_MS, CHECKLIST_WATCH_MS, CHECKLIST_SKEW_CEILING_MS,
+  DEAD_RUN_REASON, type ChecklistNoteInput,
+} from './aiChecklistNote';
 import { translations } from './i18nAll';
 
 describe('which reason gets recorded', () => {
@@ -123,6 +134,174 @@ describe('what a reason implies', () => {
     for (const reason of CHECKLIST_REASONS) {
       expect(checklistWorthRetrying(reason), reason).toBe(worthRetrying(reason));
     }
+  });
+});
+
+describe('one delivery does the work (31.10.2026)', () => {
+  // Eventarc delivers "at least once". Every delivery carries the event as it was created, so the
+  // claim is judged on the event as it is NOW: `live` is that, `created` the creation snapshot's note.
+  const HOLD = 150_000;
+  const NOW = Date.parse('2026-11-01T08:00:00.000Z');
+  const at = (msAgo: number) => new Date(NOW - msAgo).toISOString();
+  const running = (msAgo: number) => ({ status: CHECKLIST_RUNNING, at: at(msAgo) });
+
+  it('a fresh running note written after creation is a claim by another delivery', () => {
+    expect(claimedByAnotherDelivery(running(0), undefined, NOW, HOLD)).toBe(true);
+    expect(claimedByAnotherDelivery(running(HOLD - 1), undefined, NOW, HOLD)).toBe(true);
+  });
+
+  it('a claim as old as the hold belongs to a delivery past its timeout: the work is free', () => {
+    expect(claimedByAnotherDelivery(running(HOLD), undefined, NOW, HOLD)).toBe(false);
+    expect(claimedByAnotherDelivery(running(HOLD * 10), undefined, NOW, HOLD)).toBe(false);
+  });
+
+  it('no note, a failed note, or a note with no readable time is no claim', () => {
+    expect(claimedByAnotherDelivery(undefined, undefined, NOW, HOLD)).toBe(false);
+    expect(claimedByAnotherDelivery(null, undefined, NOW, HOLD)).toBe(false);
+    expect(claimedByAnotherDelivery({ status: 'failed', reason: CHECKLIST_ERROR, at: at(0) }, undefined, NOW, HOLD)).toBe(false);
+    expect(claimedByAnotherDelivery({ status: CHECKLIST_RUNNING }, undefined, NOW, HOLD)).toBe(false);
+    expect(claimedByAnotherDelivery({ status: CHECKLIST_RUNNING, at: 'soon' }, undefined, NOW, HOLD)).toBe(false);
+    expect(claimedByAnotherDelivery({ status: CHECKLIST_RUNNING, at: NOW }, undefined, NOW, HOLD)).toBe(false);
+  });
+
+  it('the note the event was CREATED with is not a claim, however fresh', () => {
+    // A personal event's create is open: a copy made on leaving a group, or a planted note, would
+    // otherwise hold the work off forever, with the skeleton spinning.
+    const planted = running(0);
+    expect(claimedByAnotherDelivery({ ...planted }, planted, NOW, HOLD)).toBe(false);
+    const future = { status: CHECKLIST_RUNNING, at: new Date(NOW + 3_600_000).toISOString() };
+    expect(claimedByAnotherDelivery({ ...future }, future, NOW, HOLD)).toBe(false);
+  });
+
+  it('a delivery that claimed over a created note is still a claim', () => {
+    expect(claimedByAnotherDelivery(running(1_000), running(60_000), NOW, HOLD)).toBe(true);
+    expect(claimedByAnotherDelivery(running(1_000), { status: 'failed', at: at(1_000) }, NOW, HOLD)).toBe(true);
+  });
+
+  it('the hold is the trigger timeout plus the margin, and outlives the timeout', () => {
+    expect(checklistHoldMs(120)).toBe(HOLD);
+    expect(checklistHoldMs(120)).toBeGreaterThan(120_000);
+  });
+});
+
+describe('each delivery knows its own claim (01.11.2026)', () => {
+  const HOLD = checklistHoldMs(120);
+  const NOW = Date.parse('2026-11-01T08:00:00.000Z');
+  const ME = 'token-me';
+  const claimBy = (by: string, msAgo = 1_000) => ({ status: CHECKLIST_RUNNING, at: new Date(NOW - msAgo).toISOString(), by });
+  const open = (note?: unknown) => ({ assigneeIds: ['u1', 'ai_assistant'], ...(note ? { aiChecklist: note } : {}) });
+  const done = (note?: unknown) => ({ assigneeIds: ['u1'], ...(note ? { aiChecklist: note } : {}) });
+
+  it('own claim only with the same token and a running status', () => {
+    expect(isOwnClaim(claimBy(ME), ME)).toBe(true);
+    expect(isOwnClaim(claimBy('other'), ME)).toBe(false);
+    expect(isOwnClaim({ ...claimBy(ME), status: 'failed' }, ME)).toBe(false);
+    expect(isOwnClaim(undefined, ME)).toBe(false);
+  });
+
+  it('at the door: take open work, keep our own claim, skip the rest', () => {
+    expect(claimStep(open(), undefined, ME, NOW, HOLD)).toBe('take');
+    // A retried attempt reads the claim its earlier attempt committed: still ours, however fresh.
+    expect(claimStep(open(claimBy(ME)), undefined, ME, NOW, HOLD)).toBe('ours');
+    expect(claimStep(open(claimBy('other')), undefined, ME, NOW, HOLD)).toBe('skip');
+    expect(claimStep(open(claimBy('other', HOLD)), undefined, ME, NOW, HOLD)).toBe('take');
+    expect(claimStep(done(), undefined, ME, NOW, HOLD)).toBe('skip');
+    expect(claimStep(done(claimBy(ME)), undefined, ME, NOW, HOLD)).toBe('skip');
+    expect(claimStep(undefined, undefined, ME, NOW, HOLD)).toBe('skip');
+  });
+
+  it('an ending is ours to write: our claim, or open work nobody else holds', () => {
+    expect(mayEndChecklist(open(claimBy(ME)), undefined, ME, NOW, HOLD)).toBe(true);
+    // Our claim taken off by a move into a group, or never written because the claim threw.
+    expect(mayEndChecklist(open(), undefined, ME, NOW, HOLD)).toBe(true);
+    // Another delivery took over after our hold ran out: its work, not ours.
+    expect(mayEndChecklist(open(claimBy('other')), undefined, ME, NOW, HOLD)).toBe(false);
+    // Done by another delivery (no assistant, no note): nothing to end.
+    expect(mayEndChecklist(done(), undefined, ME, NOW, HOLD)).toBe(false);
+    // Its stale claim, and the work still open: the delivery that wrote it is gone.
+    expect(mayEndChecklist(open(claimBy('other', HOLD)), undefined, ME, NOW, HOLD)).toBe(true);
+    expect(mayEndChecklist(undefined, undefined, ME, NOW, HOLD)).toBe(false);
+  });
+
+  it('a paid list also lands over a failure another delivery recorded, and nowhere else new', () => {
+    const failed = { status: 'failed', reason: CHECKLIST_QUOTA, at: new Date(NOW).toISOString() };
+    expect(maySucceedChecklist(done(failed), undefined, ME, NOW, HOLD)).toBe(true);
+    expect(mayEndChecklist(done(failed), undefined, ME, NOW, HOLD)).toBe(false);
+    // Everything else as an ending.
+    expect(maySucceedChecklist(open(claimBy(ME)), undefined, ME, NOW, HOLD)).toBe(true);
+    expect(maySucceedChecklist(open(claimBy('other')), undefined, ME, NOW, HOLD)).toBe(false);
+    expect(maySucceedChecklist(done(), undefined, ME, NOW, HOLD)).toBe(false);
+    expect(maySucceedChecklist(undefined, undefined, ME, NOW, HOLD)).toBe(false);
+  });
+});
+
+describe('the screen and a request nobody answered (01.11.2026)', () => {
+  const NOW = Date.parse('2026-11-01T08:00:00.000Z');
+  const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString();
+  const running = (msAgo: number) => ({ status: 'running', at: iso(msAgo), by: 't' });
+  const input = (over: Partial<ChecklistNoteInput>): ChecklistNoteInput => ({
+    note: undefined, aiAssigned: true, checklistEmpty: true, createdAt: iso(1_000), ...over,
+  });
+  const WATCHED = CHECKLIST_WATCH_MS;
+
+  it('waits longer than the server hold, and watches for at least the hold', () => {
+    // 120 s is the AI functions' timeout, pinned by functions/test/claudeAuth.test.ts.
+    expect(CHECKLIST_DEAD_RUN_MS - checklistHoldMs(120)).toBeGreaterThanOrEqual(60_000);
+    expect(CHECKLIST_WATCH_MS).toBeGreaterThanOrEqual(checklistHoldMs(120));
+  });
+
+  it('a fresh claim keeps the skeleton; one past the wait, watched long enough, is a failure with Retry', () => {
+    expect(checklistNoteView(input({ note: running(1_000) }), NOW, WATCHED)).toEqual({ kind: 'running' });
+    expect(checklistNoteView(input({ note: running(CHECKLIST_DEAD_RUN_MS - 1) }), NOW, WATCHED)?.kind).toBe('running');
+    const dead = checklistNoteView(input({ note: running(CHECKLIST_DEAD_RUN_MS) }), NOW, WATCHED);
+    expect(dead).toEqual({ kind: 'failed', reason: DEAD_RUN_REASON, at: iso(CHECKLIST_DEAD_RUN_MS) });
+    expect(checklistWorthRetrying(DEAD_RUN_REASON)).toBe(true);
+    expect(CHECKLIST_REASONS).toContain(DEAD_RUN_REASON);
+  });
+
+  it('a device clock running ahead cannot show the card early: the watch must pass too', () => {
+    // Stored 5 s ago, read by a clock 4 minutes fast: old by this clock, still working in fact.
+    const fast = NOW + 240_000;
+    expect(checklistNoteView(input({ note: running(5_000) }), fast, 0)?.kind).toBe('running');
+    expect(checklistNoteView(input({ note: running(5_000) }), fast, WATCHED - 1)?.kind).toBe('running');
+    expect(checklistNoteView(input({ note: running(5_000) }), fast, WATCHED)?.kind).toBe('failed');
+    // Older than any skew: no watch needed.
+    expect(checklistNoteView(input({ note: running(CHECKLIST_SKEW_CEILING_MS) }), NOW, 0)?.kind).toBe('failed');
+  });
+
+  it('no note, the assistant on and an empty checklist: the same wait, from the creation', () => {
+    // A move into a group deletes the claim; the AI switched on in an edit is never served at all.
+    expect(checklistNoteView(input({ createdAt: iso(1_000) }), NOW, WATCHED)).toEqual({ kind: 'running' });
+    expect(checklistNoteView(input({ createdAt: iso(CHECKLIST_DEAD_RUN_MS) }), NOW, WATCHED))
+      .toEqual({ kind: 'failed', reason: DEAD_RUN_REASON, at: iso(CHECKLIST_DEAD_RUN_MS) });
+    // A stored Timestamp reads the same.
+    const ts = { toMillis: () => NOW - CHECKLIST_SKEW_CEILING_MS };
+    expect(checklistNoteView(input({ createdAt: ts }), NOW, 0)?.kind).toBe('failed');
+    // Items already there (the skeleton is not drawn): nothing to say.
+    expect(checklistNoteView(input({ createdAt: iso(CHECKLIST_SKEW_CEILING_MS), checklistEmpty: false }), NOW, 0)).toBeNull();
+    // No readable creation time: nothing to count from.
+    expect(checklistNoteView(input({ createdAt: undefined }), NOW, WATCHED)).toBeNull();
+    expect(pendingSince(input({ createdAt: 'soon' }))).toBeNull();
+  });
+
+  it('nothing pending when the AI is not assigned: a copy keeps the note, not the promise', () => {
+    // A personal copy made on leaving a group spreads the note, with the assignees reset.
+    expect(checklistNoteView(input({ note: running(CHECKLIST_SKEW_CEILING_MS), aiAssigned: false }), NOW, WATCHED)).toBeNull();
+    expect(checklistNoteView(input({ createdAt: iso(CHECKLIST_SKEW_CEILING_MS), aiAssigned: false }), NOW, WATCHED)).toBeNull();
+  });
+
+  it('a failed note is shown as it is, assigned or not; an unreadable claim is not', () => {
+    expect(checklistNoteView(input({ note: { status: 'failed', reason: CHECKLIST_QUOTA, at: 'x' }, aiAssigned: false }), NOW, 0))
+      .toEqual({ kind: 'failed', reason: CHECKLIST_QUOTA, at: 'x' });
+    expect(checklistNoteView(input({ note: { status: 'running' } }), NOW, WATCHED)).toBeNull();
+    expect(checklistNoteView(input({ note: { status: 'running', at: 'soon' } }), NOW, WATCHED)).toBeNull();
+  });
+
+  it('the watch starts on the first look and keeps counting for the same request', () => {
+    const key = `test-${NOW}`;
+    expect(watchedFor(key, 1_000)).toBe(0);
+    expect(watchedFor(key, 61_000)).toBe(60_000);
+    expect(watchedFor(`${key}-other`, 61_000)).toBe(0);
   });
 });
 
@@ -226,7 +405,7 @@ describe('the trigger has no ending that tells nobody', () => {
     ).toEqual([]);
   });
 
-  it('the trigger keeps exactly the two returns that mean "not my job" — by NAME', () => {
+  it('the trigger keeps exactly the three returns that mean "not my job" — by NAME', () => {
     // COMPARED, not counted. The first version asserted `returnsIn(body).length === 2` and named
     // the two legitimate guards only in this comment — so substituting a silent failure return for
     // one of them keeps the count at two and the suite stays green, which is the precise defect
@@ -260,7 +439,26 @@ describe('the trigger has no ending that tells nobody', () => {
     expect(guards).toEqual([
       '!data.assigneeIds || !data.assigneeIds.includes("ai_assistant")',
       '!snapshot',
+      // Another delivery of the same creation has the work, or has finished it (31.10.2026).
+      '!(await claimChecklistRun(snapshot.ref, data, token))',
     ].sort());
+  });
+
+  it('the claim sits inside the trigger’s try, so a claim that throws ends with a reason', () => {
+    // Above the try, a failed claim rejects past the catch: no reason written, the assistant left
+    // on, the skeleton spinning. The guard text above is the same either way (review of 01.11.2026).
+    const calls: ts.CallExpression[] = [];
+    const visit = (n: ts.Node): void => {
+      if (ts.isCallExpression(n) && n.expression.getText(sf) === 'claimChecklistRun') calls.push(n);
+      ts.forEachChild(n, visit);
+    };
+    visit(sf);
+    expect(calls, 'claimChecklistRun is called once, by the trigger').toHaveLength(1);
+    let inTry = false;
+    for (let p: ts.Node | undefined = calls[0]; p?.parent; p = p.parent) {
+      if (ts.isTryStatement(p.parent) && p.parent.tryBlock === p) { inTry = true; break; }
+    }
+    expect(inTry, 'a claim outside the try rejects past the catch: no reason, skeleton forever').toBe(true);
   });
 
   it('records an outcome on the failure path, as a CALL', () => {
@@ -284,7 +482,7 @@ describe('the trigger has no ending that tells nobody', () => {
       if (ts.isCatchClause(n)) {
         const calls = (m: ts.Node): void => {
           if (ts.isCallExpression(m) && m.expression.getText(sf) === 'recordChecklistOutcome'
-              && m.arguments.length === 3) inCatch++;
+              && m.arguments.length === 4) inCatch++;
           ts.forEachChild(m, calls);
         };
         calls(n.block);
@@ -292,7 +490,7 @@ describe('the trigger has no ending that tells nobody', () => {
       ts.forEachChild(n, walkCatch);
     };
     walkCatch(trigger!.initializer!);
-    expect(inCatch, 'the trigger’s catch must call recordChecklistOutcome(snapshot, data, reason)')
+    expect(inCatch, 'the trigger’s catch must call recordChecklistOutcome(snapshot, data, reason, token)')
       .toBe(1);
 
     // And the recorder must actually write the field the screen reads.

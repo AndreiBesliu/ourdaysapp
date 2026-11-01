@@ -388,10 +388,17 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     server (AI, invitații, chat direct, ștergerea contului, Warlord PvP).
   - `functions/test/regions.test.ts` (pe `__endpoint`) refuză un callable fără ambele regiuni și un job sau trigger cu
     regiune proprie; `src/utils/functionsRegion.test.ts` refuză orice `getFunctions(` din `src/` fără `FUNCTIONS_REGION`.
-  - **De întărit (din recenzia din 31.10), independent de regiune:** `autoSuggestChecklist` nu e idempotent. Eventarc
-    livrează „cel puțin o dată”, deci o livrare repetată plătește încă un apel Claude, consumă încă o unitate din cota
-    zilnică și adaugă un al doilea set de puncte (id-uri noi, `arrayUnion` nu le unește). Reparația: scrierea într-o
-    tranzacție care recitește evenimentul și scoate `ai_assistant` din `assigneeIds` în aceeași scriere.
+  - **REPARAT pe 01.11 (din recenzia din 31.10):** `autoSuggestChecklist` nu era idempotent. Eventarc livrează „cel puțin
+    o dată”, iar o livrare repetată plătea încă un apel Claude, consuma încă o unitate din cota zilnică și adăuga un al
+    doilea set de puncte. Acum fiecare livrare își revendică munca la ușă, înaintea cotei, într-o tranzacție pe evenimentul
+    de ACUM (`claimChecklistRun`, nota `aiChecklist: running`, cu tokenul livrării), iar finalurile scriu doar cât munca
+    e tot a lor. Ecranul arată o cerere fără răspuns ca eșec cu Reîncearcă (`src/utils/aiChecklistNote.ts`). Testele:
+    `functions/test/checklistOnce.test.ts` (emulator), `src/utils/aiChecklistOutcome.test.ts`,
+    `src/utils/modalWriteGuards.test.ts`.
+    - **Rămas, acceptat ca rar:** o mutare într-un grup șterge revendicarea, iar o livrare dublă în secundele următoare
+      preia munca; dacă aceea eșuează, rămâne cardul cu Reîncearcă în loc de listă. Închiderea cere o revendicare ținută
+      într-un document doar-server (`ai_checklist_claims/{eventId}`). Ce se strică dacă nu se face: rar, un Reîncearcă
+      în plus.
 - **Node 24 în Cloud Functions din 31.10.2026** (`engines.node`, CI pe 24). Node 24 iese din uz pe 30.04.2028.
   `@types/node` a rămas pe 22 (npm stricat pe mașină); de urcat la prima instalare.
 - **Fereastra de deploy și taburile vechi.** Regulile noi întâlnesc, până la hosting, clientul web

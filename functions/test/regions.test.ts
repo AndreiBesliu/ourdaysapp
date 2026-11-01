@@ -3,9 +3,9 @@
 // The callables run in europe-central2, next to the database, AND in us-central1, where the installed APK
 // (a frozen bundle, built before 31.10) calls the ones it knows. Everything else — the scheduled jobs and the
 // Firestore triggers — runs in europe-central2 only. A trigger with a second copy fires twice per document:
-// two pushes and two bell rows per chat message (onMessageCreated keys no row), two paid Claude calls and two
-// checklists per AI event (autoSuggestChecklist), two announcements per game. The reminders dedupe themselves
-// (reminder_log claims), so they are not the reason; the triggers are.
+// two pushes and two bell rows per chat message (onMessageCreated keys no row), two announcements per game. The
+// reminders (reminder_log claims) and, since 01.11.2026, the AI checklist (claimChecklistRun) dedupe themselves,
+// so they are not the reason; the other triggers are.
 //
 // Read off `__endpoint` in the compiled lib, as globalOptions.test.ts does and for the same reason. The first
 // guard was a regex on the source, and the review of 31.10.2026 found it blind: it never matched a scheduled

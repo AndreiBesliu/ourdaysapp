@@ -24,9 +24,9 @@ exports.MAX_INSTANCES = 10;
 // 842–892 ms). Everything runs next to the database now. The callables ALSO stay in us-central1 (CALLABLE_REGIONS):
 // the installed APK runs a frozen bundle that calls them there, and the web app calls europe-central2
 // (src/firebase.ts, FUNCTIONS_REGION). Scheduled jobs and triggers run in one region only: a trigger with a
-// second copy fires twice per document (two pushes per chat message, two paid Claude calls and two checklists
-// per AI event, two announcements per game; the reminders dedupe themselves). functions/test/regions.test.ts
-// holds all of it on the compiled endpoints.
+// second copy fires twice per document (two pushes per chat message, two announcements per game; the reminders
+// and, since 01.11.2026, the AI checklist dedupe themselves). functions/test/regions.test.ts holds all of it on
+// the compiled endpoints.
 exports.REGION = "europe-central2";
 exports.CALLABLE_REGIONS = [exports.REGION, "us-central1"];
 (0, v2_1.setGlobalOptions)({ maxInstances: exports.MAX_INSTANCES, region: exports.REGION });

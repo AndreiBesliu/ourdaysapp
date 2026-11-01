@@ -54,9 +54,9 @@ React + TypeScript + Vite + Tailwind, Firebase (Auth, Firestore, Functions, Host
     callable-urile care existau când a fost construit (31.10), deci copia din SUA a unuia nou nu servește pe nimeni. Toate
     copiile din SUA pleacă odată, când `"us-central1"` iese din `CALLABLE_REGIONS`.
   - **Un job sau un trigger NU primește regiune proprie.** Cu o a doua copie, un trigger rulează de două ori pentru
-    fiecare document: două notificări la fiecare mesaj de chat (`onMessageCreated`), două apeluri Claude plătite și două
-    checklist-uri la fiecare eveniment AI (`autoSuggestChecklist`), două anunțuri la fiecare joc. Memento-urile NU sunt
-    motivul: se deduplică singure (`reminder_log`).
+    fiecare document: două notificări la fiecare mesaj de chat (`onMessageCreated`), două anunțuri la fiecare joc.
+    Memento-urile (`reminder_log`) și, din 01.11, checklist-ul AI (`claimChecklistRun`) NU sunt motivul: se deduplică
+    singure.
   - `functions/test/regions.test.ts` le ține pe primele două pe `__endpoint` (ce citește publicarea);
     `src/utils/functionsRegion.test.ts` ține clientul (orice `getFunctions(` din `src/`).
 - **Joburile programate (din 27.09) lasă marcaje de rulare**, citite în Admin → Health → „Scheduled
@@ -114,6 +114,9 @@ normalizează sfârșiturile de linie tocmai ca să nu ajungi să-l ignori. `arm
 ## Reguli de lucru (hard)
 - **Sync workflow:** după FIECARE task: `npx tsc -b` verde → **`node scripts/lint-gate.mjs` verde** →
   `npm test` verde → `npm run build` verde → intrare în DEVLOG.md → commit → push
+  - **Dacă s-a atins `functions/src`:** și `npm --prefix functions run build`, cu `functions/lib` în același commit, plus
+    `npm run test:rules` (suita funcțiilor pe emulator). Niciunul nu e în pașii de mai sus: `tsc -b` nu construiește
+    funcțiile, iar CI-ul refuză un `lib` nepotrivit înaintea tuturor celorlalți pași.
   - **Poarta de lint NU e opțională și NU e `npm run lint`** (ăla e roșu permanent, 520 de constatări
     vechi). `scripts/lint-gate.mjs` rulează lista de reguli ținute la ZERO, între care
     `react-hooks/rules-of-hooks`. Pe 18.09 am pus trei hook-uri sub `if (!isOpen) return null` în

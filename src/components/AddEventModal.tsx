@@ -811,8 +811,10 @@ export default function AddEventModal({ isOpen, onClose, selectedDate, editEvent
       fields: {
         ...(answers ? { rsvps: answers } : {}),
         // The AI checklist's note is the server's, about this calendar; the rules let it into a group
-        // only from the server, so a move into one takes it off (08.10.2026).
-        ...((move === 'in' || move === 'across') && 'aiChecklist' in cur ? { aiChecklist: deleteField() } : {}),
+        // only from the server, so a move into one takes it off (08.10.2026). Always, not only when the
+        // read above saw one: the trigger's claim (01.11.2026) can land between that read and this
+        // write, and the rules refuse a move that carries it. Deleting an absent field is accepted.
+        ...((move === 'in' || move === 'across') ? { aiChecklist: deleteField() } : {}),
       },
       // Only people the tick NAMED: somebody who answered or was assigned after the form opened was
       // not shown, so is not invited on its say-so (review). And only those still on the event now.

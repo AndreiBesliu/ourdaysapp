@@ -14434,3 +14434,72 @@ Andrei (APK-ul cheamă callable-urile din us-central1). Nimic schimbat în cod.
   Înainte: 165–188 ms și 842–892 ms. Măsurată pe trei rulări.
 - **OWNER_VERIFY:** o acțiune pe web care trece prin server (Admin, o invitație sau AI-ul), fiindcă un callable cu login
   nu-l pot chema eu.
+
+## 2026-11-01 · Checklist-ul AI: o singură rulare la o livrare dublă (Task Started)
+
+**Prompt (Andrei):** „Continua” (la „Fac acum checklist-ul AI rezistent la o livrare dublă?”).
+**Model:** Claude Opus 5.5.
+**Ce e:** constatarea din recenzia din 31.10, pusă în BACKLOG. Eventarc livrează un trigger Firestore „cel puțin o dată”,
+iar fiecare livrare a aceleiași creări poartă același instantaneu: evenimentul așa cum a fost creat, cu `ai_assistant`
+încă printre cei asignați. Judecată doar pe el, o a doua livrare consuma încă o unitate din cele 50 pe zi, plătea încă un
+apel Claude și adăuga un al doilea set de puncte (id-uri noi, pe care `arrayUnion` nu le unește). **Plan:**
+- **revendicarea la ușă**, înaintea cotei, într-o tranzacție care citește evenimentul așa cum e ACUM: dacă `ai_assistant`
+  nu mai e acolo (munca e gata, eșecul e scris, omul l-a scos, evenimentul a fost șters) sau o altă livrare a scris deja
+  `aiChecklist: { status: "running", at }`, livrarea nu face nimic; altfel scrie ea nota, în același pas;
+- **o notă mai veche decât timpul-limită al funcției (120 s) + 30 s** e a unei livrări oprite de Cloud Run fără să termine:
+  munca e din nou liberă;
+- **o notă cu care evenimentul a fost CREAT nu e revendicare.** Serverul nu scrie niciodată una la creare, iar crearea unui
+  eveniment personal e deschisă proprietarului. Altfel o copie sau o notă plantată ar ține munca pe loc pentru totdeauna, adică
+  scheletul care se învârte la nesfârșit;
+- succesul șterge nota împreună cu `ai_assistant`, iar eșecul o înlocuiește cu motivul (`failed`). Ecranul arată doar nota
+  `failed`, deci cea `running` nu se vede;
+- ideea din BACKLOG (o tranzacție în jurul scrierii finale) ar fi oprit al doilea checklist, dar apelul tot s-ar fi plătit.
+
+## 2026-11-01 · Checklist-ul AI: o singură rulare la o livrare dublă (Task Completed)
+
+**Prompt (Andrei):** „Continua” (la „Fac acum checklist-ul AI rezistent la o livrare dublă?”).
+**Model:** Claude Opus 5.5.
+
+- **Revendicarea** (`claimChecklistRun`, la ușă, înaintea cotei): o tranzacție citește evenimentul așa cum e acum și scrie
+  `aiChecklist: { status: "running", at, by }`. `by` e un token al livrării, făcut o singură dată, în afara tranzacției.
+  Decizia e pură, `claimStep` în `aiChecklistOutcome.ts`:
+  - **ia munca** când e deschisă;
+  - **e a ei** când citește propria revendicare: biblioteca reia tranzacția după un commit ajuns cu răspunsul pierdut;
+  - **sare** când AI-ul nu mai e asignat sau altă livrare are o revendicare proaspătă.
+- **Ambele finaluri** sunt tranzacții care întreabă întâi dacă munca e tot a lor:
+  - eșecul, prin `mayEndChecklist`: revendicarea proprie, sau munca deschisă pe care n-o ține nimeni;
+  - succesul, prin `maySucceedChecklist`: la fel, plus peste un eșec scris de altă livrare, fiindcă o listă plătită
+    bate un card de eșec. Își recunoaște și propriile puncte ajunse cu răspunsul pierdut; un eveniment șters între timp
+    e spus ca atare.
+- **Ținerea** e `checklistHoldMs(timeout)` = timpul-limită + 30 s. Limitează suprapunerea, dar nu dovedește că livrarea
+  s-a oprit: Cloud Run poate relua lucrul oprit la timeout. De aceea finalurile verifică proprietatea.
+- **Ecranul** (`src/utils/aiChecklistNote.ts`, `EventDetailsModal`): o cerere fără răspuns devine cardul de eșec cu
+  Reîncearcă. Cererea e fie o revendicare `running`, fie AI-ul asignat cu checklist-ul gol și nicio notă (o mutare într-un
+  grup șterge nota; AI-ul pornit dintr-o editare nu e servit deloc de trigger). Cardul apare când:
+  - **vârsta** e de cel puțin 210 s, după ceasul dispozitivului;
+  - **și** fereastra a urmărit cererea cel puțin 150 s, pe un ceas care doar crește; un ceas al telefonului care merge
+    înainte ar arăta altfel un Reîncearcă plătit cât livrarea încă lucrează;
+  - **sau** cererea e mai veche de o oră.
+  Reîncearcă scoate și asistentul, cât timp e asignat. O mutare într-un grup șterge nota mereu, nu doar când a văzut-o
+  (altfel revendicarea venită între citire și scriere refuza toată salvarea).
+- **Recenzia** (13 agenți, 1,88 M tokeni, 18 min):
+  - **10 constatări, toate confirmate:** una medie (commit-ul ajuns cu răspunsul pierdut, citit ca revendicarea altcuiva:
+    schelet pentru totdeauna, fără nicio urmă), nouă mici;
+  - una dintre cele mici e anterioară schimbării: „eșuat” scris peste o listă terminată.
+- **Reverificarea remedierilor** (2 agenți, 0,48 M): toate cele 10 sunt închise, dar a găsit 5 probleme mici noi; 4 sunt
+  reparate:
+  - ceasul dispozitivului;
+  - nota ștearsă de mutare;
+  - rezultatul plătit pierdut când livrarea care a preluat eșuează;
+  - jurnalul înșelător.
+  A cincea e rară și acceptată, scrisă în cod deasupra lui `mayEndChecklist`: o mutare urmată în câteva secunde de o
+  livrare dublă.
+- **Mutanți:** 31 din 31 prinși, în trei serii (8 + 15 + 8). Patru au ieșit VOID la prima rulare (compilatorul refuza
+  forma) și au fost refăcuți până s-au aplicat.
+- **Porți:**
+  - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
+  - `npm test` (2756), `test:tz` (46), `test:rules` (1151);
+  - funcțiile construite, cu `functions/lib` în același commit.
+- **CLAUDE.md:**
+  - pașii de sincronizare cer acum și build-ul funcțiilor, plus `test:rules`, când s-a atins `functions/src`;
+  - regula regiunii nu mai spune că un trigger dublat ar dubla checklist-ul, fiindcă acum se deduplică singur.

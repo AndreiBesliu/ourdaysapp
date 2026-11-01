@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calendar as CalendarIcon, CheckCircle, FileText, Image as ImageIcon, Trash2, Edit2, GripVertical, Sparkles, Users, ThumbsUp, HelpCircle, ThumbsDown, MapPin, Bell } from 'lucide-react';
-import { doc, updateDoc, deleteDoc, getDoc, arrayUnion, collection, query as fsQuery, where, getDocs, deleteField } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, getDoc, arrayUnion, arrayRemove, collection, query as fsQuery, where, getDocs, deleteField } from 'firebase/firestore';
 import { reportError } from '../reportError';
 import { planEventWrite } from '../utils/eventWriteTarget';
 import { unsharedAttachedCards } from '../utils/assetAttach';
@@ -29,6 +29,7 @@ import { eventDayAsLocalDate, dayAsLocalDate } from '../utils/dayLabel';
 import { spanRangeLabel } from '../utils/spanLabel';
 import { generateChecklistForTask } from '../ai';
 import { checklistReasonKey, checklistWorthRetrying } from '../utils/aiErrorKey';
+import { checklistNoteView, pendingSince, watchedFor, type ChecklistNoteInput } from '../utils/aiChecklistNote';
 
 
 /** Firestore's answer for a read it cannot make: no connection, and the document not in the cache. */
@@ -171,6 +172,23 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   const [aiRetryError, setAiRetryError] = useState<string | null>(null);
   // Hides the card the moment a retry lands, without waiting for the snapshot to come back.
   const [aiOutcomeDone, setAiOutcomeDone] = useState(false);
+  // A request nobody answered turns into a failure on its own clocks (utils/aiChecklistNote.ts,
+  // 01.11.2026). While one is pending this re-renders the window every 15 s, so that moment is seen
+  // while it is open; nothing else would re-render it.
+  const [aiClock, setAiClock] = useState(() => Date.now());
+  const aiNoteInput: ChecklistNoteInput | null = event ? {
+    note: event.aiChecklist,
+    aiAssigned: !!event.assigneeIds?.includes('ai_assistant'),
+    checklistEmpty: checklist.length === 0,
+    createdAt: event.createdAt,
+  } : null;
+  const aiSince = aiNoteInput ? pendingSince(aiNoteInput) : null;
+  const aiPendingKey = event && aiSince !== null ? `${event.id}|${aiSince}` : null;
+  useEffect(() => {
+    if (!aiPendingKey) return;
+    const id = setInterval(() => setAiClock(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, [aiPendingKey]);
 
   // Keyed on the event ID, NOT on `event`: that object gets a new identity on every Firestore
   // snapshot, and resetting there would wipe the error sentence before it could be read.
@@ -238,6 +256,9 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
   const materialising = useRef<{ key: string; promise: Promise<string> } | null>(null);
 
   if (!isOpen || !event) return null;
+  const aiNote = aiNoteInput && checklistNoteView(
+    aiNoteInput, Math.max(aiClock, Date.now()), aiPendingKey ? watchedFor(aiPendingKey, performance.now()) : 0,
+  );
 
   // Cards attached to THIS event that I own and that this event's group cannot read. Built from
   // the documents that actually loaded, so by construction it only ever names cards I can read,
@@ -530,7 +551,13 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
       // offline fallback — see utils/checklistOps.ts.
       await writeChecklistOp(db, await resolveWriteTarget(), { kind: 'append', items: newItems }, merged);
       const noteHome = plan.kind === 'override' ? plan.parentId : plan.id;
-      await updateDoc(doc(db, 'events', noteHome), { aiChecklist: deleteField() })
+      // The assistant too, when a claim nobody finished is what is being answered: it is still
+      // assigned then, and a late duplicate delivery would find the work open and pay for it again.
+      // Only when it is there: `arrayRemove` on a missing list writes an empty one.
+      await updateDoc(doc(db, 'events', noteHome), {
+        aiChecklist: deleteField(),
+        ...(event.assigneeIds?.includes('ai_assistant') ? { assigneeIds: arrayRemove('ai_assistant') } : {}),
+      })
         .catch((e) => {
           // The items are already saved; a failure here costs a stale card, not the work.
           reportError(e instanceof Error ? e.message : String(e), { context: 'EventDetailsModal.clearAiChecklistNote' });
@@ -1148,16 +1175,17 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
 
           {/* Why there is no checklist, and what to do about it.
 
-              Shown only when the trigger recorded a failure. `ai_assistant` has been removed by
-              then — it fires once, so leaving it would promise work that can never run — which is
-              why the skeleton below no longer draws and this takes its place. */}
-          {!aiOutcomeDone && event.aiChecklist?.status === 'failed' && (
+              Shown when the trigger recorded a failure. `ai_assistant` has been removed by then —
+              it fires once, so leaving it would promise work that can never run — which is why the
+              skeleton below no longer draws and this takes its place. Also shown for a claim
+              nobody finished (utils/aiChecklistNote.ts), which takes the skeleton's place too. */}
+          {!aiOutcomeDone && aiNote?.kind === 'failed' && (
             <div className="p-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/20">
               <p className="text-sm font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4" /> {t('aiChecklistNotGenerated', language)}
               </p>
               <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-                {t(checklistReasonKey(event.aiChecklist.reason), language)}
+                {t(checklistReasonKey(aiNote.reason), language)}
               </p>
               {/* When the note is not from today, say when it IS from.
 
@@ -1170,7 +1198,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
                   `at` is an INSTANT, unlike an event's `date`, so formatting it in the reader's
                   own zone is the correct thing to do rather than the trap. */}
               {(() => {
-                const at = event.aiChecklist.at;
+                const at = aiNote.at;
                 const when = typeof at === 'string' ? new Date(at) : null;
                 if (!when || Number.isNaN(when.getTime())) return null;
                 if (localDayKey(when) === localDayKey(new Date())) return null;
@@ -1184,7 +1212,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
               {aiRetryError && (
                 <p className="text-xs text-red-700 dark:text-red-400 mt-1.5">{aiRetryError}</p>
               )}
-              {canEdit && checklistWorthRetrying(event.aiChecklist.reason) && (
+              {canEdit && checklistWorthRetrying(aiNote.reason) && (
                 <button
                   type="button"
                   onClick={handleRetryAiChecklist}
@@ -1199,7 +1227,7 @@ export default function EventDetailsModal({ isOpen, onClose, event, userMap = {}
           )}
 
           {/* AI Generating Skeletons */}
-          {checklist.length === 0 && event.assigneeIds?.includes('ai_assistant') && (
+          {checklist.length === 0 && event.assigneeIds?.includes('ai_assistant') && aiNote?.kind !== 'failed' && (
             <div>
               <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2 flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-primary" /> {t('generatingChecklist', language)}

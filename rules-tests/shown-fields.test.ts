@@ -10,7 +10,7 @@
 
 import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { addDoc, arrayUnion, collection, deleteField, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { addDoc, arrayRemove, arrayUnion, collection, deleteField, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { ALICE, BOB, G1, as, resetWorld, seed, startEnv, stopEnv } from './_harness';
 import { SCANNER_FORMATS } from '../src/utils/barcodeFormat';
 
@@ -157,6 +157,22 @@ describe('a group event is edited only into shown fields of the app’s kind', (
     // The edit form's move deletes it, and then the move passes.
     await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'noted'), { groupId: G1, updatedAt: DAY, aiChecklist: deleteField() }));
     await fails(updateDoc(doc(as(ALICE), 'events', 'noted'), { aiChecklist: { status: 'failed', reason: 'x' } }));
+  });
+
+  it('the trigger’s claim (01.11.2026): a move deletes it whether or not the form saw one, and Retry takes the assistant off', async () => {
+    const claim = { status: 'running', at: DAY, by: 'delivery-token' };
+    await seed(async (db) => {
+      await setDoc(doc(db, 'events', 'claimedMine'), { ...webEvent(BOB), groupId: null, assigneeIds: [BOB, 'ai_assistant'], aiChecklist: claim });
+      await setDoc(doc(db, 'events', 'claimedGroup'), { ...webEvent(ALICE), assigneeIds: [ALICE, 'ai_assistant'], aiChecklist: claim });
+    });
+    // The form deletes the note on every move into a group: with no note there, the delete passes...
+    await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'mine'), { groupId: G1, title: 'Mine', aiChecklist: deleteField() }));
+    // ...and with a claim that landed after the form read the event, the move passes too.
+    await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'claimedMine'), { groupId: G1, updatedAt: DAY, aiChecklist: deleteField() }));
+    // A client cannot write a claim, nor refresh one.
+    await fails(updateDoc(doc(as(BOB), 'events', 'claimedGroup'), { aiChecklist: { ...claim, at: '2026-11-01T09:00:00.000Z' } }));
+    // Retry on a claim nobody finished clears the note and the assistant, as any member may.
+    await assertSucceeds(updateDoc(doc(as(BOB), 'events', 'claimedGroup'), { aiChecklist: deleteField(), assigneeIds: arrayRemove('ai_assistant') }));
   });
 
   it('a note the server left on a group event stays through any edit that does not touch it', async () => {

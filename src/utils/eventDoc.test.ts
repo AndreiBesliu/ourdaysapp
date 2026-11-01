@@ -186,7 +186,7 @@ describe('every place that reads events uses it', () => {
 
   it('a move into a group takes the AI note off, as the rules require', () => {
     const form = readFileSync('src/components/AddEventModal.tsx', 'utf8');
-    expect(form).toContain("...((move === 'in' || move === 'across') && 'aiChecklist' in cur ? { aiChecklist: deleteField() } : {}),");
+    expect(form).toContain("...((move === 'in' || move === 'across') ? { aiChecklist: deleteField() } : {}),");
   });
 
   it('the form stops where the rules stop', () => {

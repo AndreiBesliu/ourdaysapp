@@ -156,6 +156,122 @@ export function refundsQuota(reason: string): boolean {
 }
 
 /**
+ * The note a delivery of the trigger leaves while it works:
+ * `aiChecklist: { status: "running", at, by }`, where `by` is that delivery's own token. Both endings
+ * replace it. The screen shows it only once it is older than any delivery could still be working
+ * (`src/utils/aiChecklistNote.ts`), and then as a failure with Retry.
+ */
+export const CHECKLIST_RUNNING = "running";
+
+/** Seconds a claim outlives the function's own timeout. */
+export const CHECKLIST_HOLD_MARGIN_S = 30;
+
+/**
+ * How long a delivery's claim keeps the others off: the function's timeout, plus the margin.
+ *
+ * It limits the overlap; it does not prove the delivery stopped. Cloud Run may keep work it timed
+ * out and resume it on a later request, which is why both endings check that the claim is still
+ * theirs (`mayEndChecklist`).
+ */
+export function checklistHoldMs(timeoutSeconds: number): number {
+  return (timeoutSeconds + CHECKLIST_HOLD_MARGIN_S) * 1000;
+}
+
+type NoteLike = { status?: unknown; at?: unknown; by?: unknown } | null | undefined;
+type EventLike = { assigneeIds?: unknown; aiChecklist?: unknown } | null | undefined;
+
+/** Is this the claim written by the delivery holding `token`? */
+export function isOwnClaim(note: unknown, token: string): boolean {
+  const n = note as NoteLike;
+  return !!n && typeof n === "object" && n.status === CHECKLIST_RUNNING && n.by === token;
+}
+
+function aiAssigned(live: EventLike): boolean {
+  const ids = live?.assigneeIds;
+  return Array.isArray(ids) && ids.includes("ai_assistant");
+}
+
+/**
+ * Has another delivery of this creation already taken the work?
+ *
+ * Eventarc delivers "at least once", and every delivery carries the event as it was CREATED, so
+ * only the event as it is now can tell them apart (review of 31.10.2026). The claim is a running
+ * note younger than `holdMs`. An older one belongs to a delivery that ran past its timeout: the
+ * work is free again, and that delivery's endings will find the claim is no longer theirs.
+ *
+ * A note the event was created WITH is not a claim. The server never writes one at creation, and a
+ * personal event's create is open to its owner: a copied or planted note would otherwise keep the
+ * work off forever, which is the STICK ending again. Clients may only delete the note afterwards
+ * (`aiNoteUntouched` in the rules), so any other running note was written by a delivery.
+ */
+export function claimedByAnotherDelivery(
+  liveNote: unknown, createdNote: unknown, nowMs: number, holdMs: number,
+): boolean {
+  const note = liveNote as { status?: unknown; at?: unknown } | null | undefined;
+  if (!note || typeof note !== "object" || note.status !== CHECKLIST_RUNNING || typeof note.at !== "string") {
+    return false;
+  }
+  const created = createdNote as { status?: unknown; at?: unknown } | null | undefined;
+  if (created && typeof created === "object" && created.status === note.status && created.at === note.at) {
+    return false;
+  }
+  const age = nowMs - Date.parse(note.at);
+  return Number.isFinite(age) && age < holdMs;
+}
+
+/**
+ * What a delivery holding `token` does at the door, judged on the event as it is now.
+ *
+ * `ours` is its own claim, read back by a retried attempt of the same transaction: the library runs
+ * the callback again after a commit whose answer was lost, and that commit may have landed (review
+ * of 01.11.2026). Read as another delivery's claim, the work would stop with nobody doing it.
+ */
+export function claimStep(
+  live: EventLike, createdNote: unknown, token: string, nowMs: number, holdMs: number,
+): "take" | "ours" | "skip" {
+  if (!aiAssigned(live)) return "skip";
+  if (isOwnClaim(live?.aiChecklist, token)) return "ours";
+  if (claimedByAnotherDelivery(live?.aiChecklist, createdNote, nowMs, holdMs)) return "skip";
+  return "take";
+}
+
+/**
+ * May the delivery holding `token` write an ending, success or failure?
+ *
+ * Its own claim, or work still open that no other delivery holds: its claim taken off by a move into
+ * a group, or a claim that could not be written at all. Not work another delivery has taken over,
+ * and not work that is done. Without this, a delivery resumed after its timeout appended a second
+ * checklist, or wrote "failed" over a finished one, with Retry offering to pay again.
+ *
+ * Known and accepted, as rarer than anything it would cost to close: a move into a group deletes a
+ * live claim (the rules refuse a note carried into one), and a duplicate delivery inside the next few
+ * seconds then takes the work. The first delivery's result is dropped; if the duplicate then fails,
+ * the event shows the failure card with Retry and no list. Closing it means a claim kept where no
+ * client can reach it (a server-only document), which the review of 01.11.2026 left optional.
+ */
+export function mayEndChecklist(
+  live: EventLike, createdNote: unknown, token: string, nowMs: number, holdMs: number,
+): boolean {
+  if (isOwnClaim(live?.aiChecklist, token)) return true;
+  return aiAssigned(live) && !claimedByAnotherDelivery(live?.aiChecklist, createdNote, nowMs, holdMs);
+}
+
+/**
+ * May the SUCCESS write land? Wherever an ending may, and also over a failure another delivery
+ * recorded. A list that was generated and paid for beats a card saying it was not: a delivery that
+ * outlived its hold lost its result when the one that took over then failed (its quota spent by the
+ * first, say), and the card's Retry met the same spent quota (review of 01.11.2026). A person's own
+ * Retry clears the note when it lands, so a late result does not land beside it.
+ */
+export function maySucceedChecklist(
+  live: EventLike, createdNote: unknown, token: string, nowMs: number, holdMs: number,
+): boolean {
+  const note = live?.aiChecklist as NoteLike;
+  return mayEndChecklist(live, createdNote, token, nowMs, holdMs)
+    || (!!note && typeof note === "object" && note.status === "failed");
+}
+
+/**
  * Is retrying worth offering?
  *
  * `unconfigured` means there is no key on the service. Offering a button that cannot work — and

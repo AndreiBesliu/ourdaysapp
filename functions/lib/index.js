@@ -255,17 +255,25 @@ async function usersShareGroup(a, b) {
 // reader's language, and it offers Retry — through `generateAIChecklist`, which already exists, so
 // a retry faces the same auth, quota and budget the trigger faced. That is the retry story: not
 // the trigger firing again, which it cannot, but the person choosing to.
-async function recordChecklistOutcome(snapshot, data, reason) {
+async function recordChecklistOutcome(snapshot, data, reason, token) {
     try {
-        await snapshot.ref.update({
-            // Removed in every case: an assignee advertising work that can never run is the STICK
-            // ending, and it is the thing this whole path exists to stop.
-            //
-            // `arrayRemove` rather than a filtered copy of the create-time array, for the same reason
-            // the success path uses it: `data` is seconds old by now, and writing it back would
-            // un-assign anybody added while the model was being asked.
-            assigneeIds: firestore_2.FieldValue.arrayRemove("ai_assistant"),
-            aiChecklist: { status: "failed", reason, at: new Date().toISOString() },
+        // Only an ending that is this delivery's to write (`mayEndChecklist`, 01.11.2026): a delivery
+        // whose claim threw, or that resumed after its timeout, used to write "failed" over a checklist
+        // another delivery had finished, with Retry offering to pay for it again.
+        await admin.firestore().runTransaction(async (tx) => {
+            const live = (await tx.get(snapshot.ref)).data();
+            if (!(0, aiChecklistOutcome_1.mayEndChecklist)(live, data.aiChecklist, token, Date.now(), CHECKLIST_HOLD_MS))
+                return;
+            tx.update(snapshot.ref, {
+                // Removed in every case: an assignee advertising work that can never run is the STICK
+                // ending, and it is the thing this whole path exists to stop.
+                //
+                // `arrayRemove` rather than a filtered copy of the create-time array, for the same reason
+                // the success path uses it: `data` is seconds old by now, and writing it back would
+                // un-assign anybody added while the model was being asked.
+                assigneeIds: firestore_2.FieldValue.arrayRemove("ai_assistant"),
+                aiChecklist: { status: "failed", reason, at: new Date().toISOString() },
+            });
         });
     }
     catch (err) {
@@ -342,7 +350,7 @@ function checklistItemsOf(result) {
  * apart from success, the event was left claiming work that was never going to run. Every stop in
  * here is a throw carrying a reason, so the one catch in the caller is the only ending there is.
  */
-async function runAutoChecklist(snapshot, data, ownerId) {
+async function runAutoChecklist(snapshot, data, ownerId, token) {
     // Text only: a personal event's fields are not typed by the rules, and anything else went into the
     // prompt as "[object Object]", paid for (08.10.2026).
     const title = typeof data.title === "string" ? data.title : "";
@@ -374,31 +382,93 @@ async function runAutoChecklist(snapshot, data, ownerId) {
     //
     // `arrayUnion` appends without reading, and each item carries a fresh id so none collide.
     // `arrayRemove` takes out exactly the one value that needs to go.
-    await snapshot.ref.update({
-        checklistItems: firestore_2.FieldValue.arrayUnion(...newItems),
-        // Removed because the work is DONE, which is the one ending that needs no explanation.
-        assigneeIds: firestore_2.FieldValue.arrayRemove("ai_assistant"),
+    //
+    // In a transaction that first asks whether the ending is still this delivery's (`maySucceedChecklist`,
+    // 01.11.2026). A delivery resumed after its timeout, once another had taken the work over, used to
+    // append a second checklist here. Its result is dropped instead: paid for, and not needed.
+    const mine = new Set(newItems.map((item) => item.id));
+    const outcome = await admin.firestore().runTransaction(async (tx) => {
+        const live = (await tx.get(snapshot.ref)).data();
+        if (!live)
+            return "gone";
+        // A retried attempt whose earlier commit landed with its answer lost: the items are ours, and done.
+        if (Array.isArray(live.checklistItems) && live.checklistItems.some((item) => mine.has(item === null || item === void 0 ? void 0 : item.id))) {
+            return "landed";
+        }
+        if (!(0, aiChecklistOutcome_1.maySucceedChecklist)(live, data.aiChecklist, token, Date.now(), CHECKLIST_HOLD_MS))
+            return "dropped";
+        tx.update(snapshot.ref, {
+            checklistItems: firestore_2.FieldValue.arrayUnion(...newItems),
+            // Removed because the work is DONE, which is the one ending that needs no explanation.
+            assigneeIds: firestore_2.FieldValue.arrayRemove("ai_assistant"),
+            // The claim goes with the work it announced (`claimChecklistRun`).
+            aiChecklist: firestore_2.FieldValue.delete(),
+        });
+        return "landed";
     });
-    console.log(`Successfully generated checklist for: ${title}`);
+    if (outcome === "landed")
+        console.log(`Successfully generated checklist for: ${title}`);
+    else if (outcome === "gone")
+        console.log(`auto-checklist: the event was deleted meanwhile, result dropped for: ${title}`);
+    else
+        console.warn(`auto-checklist: another delivery has this work, result dropped for: ${title}`);
+}
+/** How long a delivery's claim keeps the others off (`checklistHoldMs`: the timeout plus a margin). */
+const CHECKLIST_HOLD_MS = (0, aiChecklistOutcome_1.checklistHoldMs)(AI_FUNCTION_OPTS.timeoutSeconds);
+/**
+ * Take the work, or learn that it is not ours (review of 31.10.2026).
+ *
+ * Eventarc delivers "at least once", and every delivery of one creation carries the same snapshot:
+ * the event as it was created, `ai_assistant` and all. Judged on that, a second delivery took
+ * another of the owner's fifty, paid for another Claude call, and appended a second checklist under
+ * fresh ids, which `arrayUnion` cannot merge.
+ *
+ * So the event is read as it is NOW, in a transaction, and the delivery that finds the work open
+ * writes its claim in the same step. Any other delivery finds either that claim or the finished
+ * work: both endings take `ai_assistant` off. It runs before the quota, so a delivery that was never
+ * going to run costs nothing. The BACKLOG's first idea, a transaction around the final write, would
+ * have stopped the second checklist but still paid for the call.
+ *
+ * The claim carries `token`, so a retried attempt of this transaction knows its own committed claim
+ * (`claimStep` → "ours"), and both endings write only while the work is still theirs.
+ */
+async function claimChecklistRun(ref, created, token) {
+    return admin.firestore().runTransaction(async (tx) => {
+        const step = (0, aiChecklistOutcome_1.claimStep)((await tx.get(ref)).data(), created.aiChecklist, token, Date.now(), CHECKLIST_HOLD_MS);
+        if (step === "take") {
+            tx.update(ref, { aiChecklist: { status: aiChecklistOutcome_1.CHECKLIST_RUNNING, at: new Date().toISOString(), by: token } });
+        }
+        return step !== "skip";
+    });
 }
 exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)(Object.assign({ document: "events/{eventId}" }, AI_FUNCTION_OPTS), async (event) => {
     const snapshot = event.data;
     if (!snapshot)
         return;
     const data = snapshot.data();
-    // Not ours: the only two returns left, and both are "this trigger has no job here" rather than
-    // "the job failed". Nothing has been promised to anybody at this point.
+    // Not ours: these two returns and the claim's below are the only ones, and all three mean "this
+    // trigger has no job here" rather than "the job failed". Nothing has been promised at this point.
     if (!data.assigneeIds || !data.assigneeIds.includes("ai_assistant")) {
         return;
     }
     const ownerId = data.ownerId;
+    // This delivery's own, made once, OUTSIDE the claim's transaction: a retried attempt must recognise
+    // the claim its earlier attempt committed. Not the CloudEvent id, which every duplicate shares.
+    const token = crypto.randomUUID();
     try {
+        // The third "not my job": another delivery of this creation has the work, or has finished it.
+        // Inside the try, so a claim that cannot be written ends like any other failure: a reason on
+        // the event, not a skeleton left spinning.
+        if (!(await claimChecklistRun(snapshot.ref, data, token))) {
+            console.log(`auto-checklist: already taken or done for ${event.params.eventId}`);
+            return;
+        }
         // Rate-limited by the event owner, sharing the same daily allowance as the callables —
         // otherwise this is a free path to spam the model by creating events with the assignee.
         if (ownerId && !(await tryConsumeQuota(ownerId, "ai_usage", AI_DAILY_LIMIT))) {
             throw (0, aiChecklistOutcome_1.checklistFailure)(aiChecklistOutcome_1.CHECKLIST_QUOTA);
         }
-        await runAutoChecklist(snapshot, data, ownerId);
+        await runAutoChecklist(snapshot, data, ownerId, token);
     }
     catch (error) {
         const reason = (0, aiChecklistOutcome_1.checklistReason)(error);
@@ -424,7 +494,7 @@ exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)(Object.assign(
         else {
             console.log(`auto-checklist stopped for ${ownerId || "unknown"}: ${reason}`);
         }
-        await recordChecklistOutcome(snapshot, data, reason);
+        await recordChecklistOutcome(snapshot, data, reason, token);
     }
 });
 exports.onMessageCreated = (0, firestore_1.onDocumentCreated)("groups/{groupId}/messages/{messageId}", async (event) => {

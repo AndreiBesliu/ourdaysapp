@@ -170,3 +170,40 @@ describe('a retry that outlives its event does not write to the next one', () =>
     expect(done[0].getStart(sf)).toBeGreaterThan(lastWrite);
   });
 });
+
+describe('a claim nobody finished is answered, not left spinning (01.11.2026)', () => {
+  // The trigger now leaves `aiChecklist: { status: "running" }` while a delivery works. One that dies
+  // leaves it for good (the trigger is not retried), with the assistant still assigned. The window
+  // reads the note through `checklistNoteView`, which turns such a claim into a failure with Retry.
+  const text = (n: ts.Node) => n.getText(sf).replace(/\s+/g, ' ');
+  const binaries = (op: string) => nodesIn(sf, (n) => ts.isBinaryExpression(n) && text(n) === op);
+
+  it('the card and the skeleton both read the view, not the raw status', () => {
+    expect(binaries("aiNote?.kind === 'failed'").length, 'the card must render for the view’s failures').toBeGreaterThan(0);
+    expect(binaries("aiNote?.kind !== 'failed'"), 'the skeleton must give way to that card').toHaveLength(1);
+    // The raw status check showed only recorded failures: a dead claim kept the skeleton forever.
+    expect(binaries("event.aiChecklist?.status === 'failed'")).toEqual([]);
+    const view = nodesIn(sf, isCallTo('checklistNoteView'));
+    expect(view, 'checklistNoteView is called once').toHaveLength(1);
+    // Fed the event as it is, and watched on the monotonic clock (a device clock may run ahead).
+    const input = declOf('aiNoteInput');
+    expect(input, 'aiNoteInput not found').not.toBeNull();
+    for (const prop of [
+      'note: event.aiChecklist',
+      "aiAssigned: !!event.assigneeIds?.includes('ai_assistant')",
+      'checklistEmpty: checklist.length === 0',
+      'createdAt: event.createdAt',
+    ]) expect(input!.replace(/\s+/g, ' ')).toContain(prop);
+    expect(text((view[0] as ts.CallExpression).arguments[2])).toBe('aiPendingKey ? watchedFor(aiPendingKey, performance.now()) : 0');
+  });
+
+  it('Retry takes the assistant off with the note, when it is still assigned', () => {
+    // Otherwise a late duplicate delivery finds the work open (assistant on, no note) and pays again.
+    const fn = nodeOf('handleRetryAiChecklist')!;
+    const clears = nodesIn(fn, isCallTo('updateDoc'))
+      .map((n) => (n as ts.CallExpression).arguments[1])
+      .filter((a) => a && ts.isObjectLiteralExpression(a) && text(a).includes('aiChecklist: deleteField()'));
+    expect(clears, 'one write clears the note').toHaveLength(1);
+    expect(text(clears[0])).toContain("...(event.assigneeIds?.includes('ai_assistant') ? { assigneeIds: arrayRemove('ai_assistant') } : {})");
+  });
+});
