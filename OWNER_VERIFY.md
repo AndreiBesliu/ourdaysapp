@@ -15,6 +15,21 @@
 
 ---
 
+## 🆕 Checklist-ul AI: o singură listă și o singură plată, chiar dacă Google trimite evenimentul de două ori (01.11) — PUBLICAT pe 01.11
+
+**Fapt:** Google poate livra de două ori crearea unui eveniment cu „Asistent AI”. A doua livrare plătea încă un apel,
+consuma încă unul din cele 50 pe zi și adăuga a doua listă. Acum prima livrare își revendică munca, iar a doua nu face
+nimic. Tot de acum, un checklist care nu mai vine (o rulare oprită la jumătate, AI-ul pornit dintr-o editare, un eveniment
+mutat într-un grup cât se genera) arată după 3–4 minute cardul „Checklist-ul nu s-a generat” cu **Reîncearcă**. Înainte,
+scheletul se învârtea pentru totdeauna. Pe live n-o pot încerca eu: cere un cont și un apel plătit.
+
+- [ ] **Pe web, un eveniment nou cu „Asistent AI” bifat** (1 minut; costă unul din cele 50 de apeluri pe zi).
+      - **Cum arată bine:** câteva secunde scheletul „Se generează checklist-ul…”, apoi punctele, **o singură listă**.
+      - **Ce e greșit:** două liste la fel (a doua livrare n-a fost oprită); sau cardul cu Reîncearcă după câteva minute,
+        fără nicio listă (prima livrare n-a terminat). Oricare înseamnă că revendicarea nu merge pe live.
+
+---
+
 ## 🆕 Funcțiile rulează în Europa, lângă baza de date (31.10) — PUBLICAT pe 31.10
 
 **Fapt:** funcțiile au trecut din SUA (us-central1) în europe-central2, unde e și baza de date. Memento-urile citesc
