@@ -14663,3 +14663,12 @@ Cele două puncte lăsate de felia de dinainte, din `functions/src/notify.ts`:
   - funcțiile construite, cu `functions/lib` în același commit.
 - **BACKLOG:** cele două puncte marcate REPARAT. Rămas, deliberat: un token care eșuează mereu fără să fie dovedit mort
   rămâne în cont (un rând pe zi pentru omul acela); remediul ar fi tăierea după K zile de eșec.
+
+## 2026-11-01 · Push-ul: ce nu ajunge la nimeni, felii de 500 — publicat și verificat pe live
+
+- **Publicat:** `4845c0e`, doar funcțiile, `--project live`: 97 de funcții actualizate, nicio creare, nicio ștergere.
+  CI verde pe `4845c0e`.
+- **Verificat pe live:** 42/42 callable-uri publice în europe-central2 și în us-central1; memento-urile au rulat ok
+  după publicarea terminată la 15:38 UTC (0 eșecuri la rând); niciun rând de eroare nou.
+- **Nevăzut de mine:** un push care nu ajunge la nimeni pe live (rândul nou) și o felie peste 500 de tokenuri: nu se
+  pot provoca fără o pană FCM sau un cont cu sute de tokenuri; sunt probate pe emulator.
