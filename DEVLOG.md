@@ -14597,3 +14597,16 @@ Felia următoare din BACKLOG §2, fără decizii ale lui Andrei: cinci locuri î
 - **CLAUDE.md:** capcana `groups/${null}` acoperă acum și id-urile cu `/` (`isPlainDocId`).
 - **BACKLOG:** cele cinci puncte marcate REPARAT, cu ce a rămas: un push care nu ajunge la nimeni din alt motiv nu lasă
   urme; un grup de limbă cu peste 500 de tokenuri face trimiterea să arunce; mesajele șterse ocupă tot din cele 50 citite.
+
+## 2026-11-01 · Serverul: id-urile din afară, numele, push-ul, plafonul de erori — publicat și verificat pe live
+
+- **Publicat:** `1b30f01`, doar funcțiile (aplicația web n-are schimbări), `--project live`. 97 de funcții actualizate,
+  nicio creare, nicio ștergere. CI verde pe `1b30f01`.
+- **Verificat pe live:**
+  - toate cele 42 de callable-uri publice în europe-central2 și în us-central1 (proba CORS);
+  - codul nou rulează: `peekGroupInviteLink` cu codul `a/b` răspunde `INVALID_ARGUMENT` (înainte arunca `INTERNAL`),
+    iar un cod lipsă, valid ca formă, tot `not-found`;
+  - niciun rând de eroare nou (cel mai nou: acum 25 de zile);
+  - memento-urile după publicare: rulare ok la ~14:10 UTC, după publicarea terminată la 14:05:38, 0 eșecuri la rând.
+- **Nevăzut de mine:** un push refuzat de FCM pe live (verificarea fără livrare) și un plafon atins pe live: nu se pot
+  provoca fără un token stricat sau o eroare reală; sunt probate pe emulator.
