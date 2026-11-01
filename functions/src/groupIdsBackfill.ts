@@ -11,6 +11,7 @@
 
 import * as admin from "firebase-admin";
 import { registerGroupId } from "./groupIds";
+import { isPlainDocId } from "./docId";
 
 /** Collections whose field names a group, and that field. */
 const POINTERS: readonly [string, string][] = [
@@ -22,11 +23,9 @@ const POINTERS: readonly [string, string][] = [
   ["assets", "sharedGroupId"],
 ];
 
-/** Only an id that names exactly one document may become a path: anything else is reported, not written. */
-export function isPlainDocId(id: unknown): id is string {
-  return typeof id === "string" && id.length > 0 && id.length <= 1500
-    && !id.includes("/") && id !== "." && id !== ".." && !/^__.*__$/.test(id);
-}
+// Only an id that names exactly one document may become a path: anything else is reported, not written.
+// One definition for the whole server (docId.ts); exported here too, where its test has always found it.
+export { isPlainDocId };
 
 export interface GroupIdBackfill {
   /** Groups that exist now. */

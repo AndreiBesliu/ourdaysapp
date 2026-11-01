@@ -27,6 +27,7 @@ exports.digestWindow = digestWindow;
 exports.digestEventLines = digestEventLines;
 const eventTime_1 = require("./eventTime");
 const recurrenceServer_1 = require("./recurrenceServer");
+const digestMessages_1 = require("./digestMessages");
 /**
  * How far back to fetch, so that an event which STARTED earlier and is still running is seen.
  *
@@ -123,9 +124,10 @@ function digestEventLines(docs, groupId, window, max = exports.DIGEST_EVENT_LINE
     const shown = occurrences.slice(0, Math.max(0, max));
     return {
         lines: shown.map((occ) => {
-            const title = typeof occ.source.title === "string" && occ.source.title
-                ? occ.source.title
-                : "(untitled)";
+            var _a;
+            // One line, like everything a client wrote into the prompt (digestMessages.ts): a title's own line
+            // breaks would start lines of their own.
+            const title = (_a = (0, digestMessages_1.digestText)(occ.source.title, 200)) !== null && _a !== void 0 ? _a : "(untitled)";
             // `occ.day`, not the document's own date. For an occurrence of a series those are different
             // days, and the parent's is the one nobody asked about.
             return `- ${title} on ${occ.day}`;

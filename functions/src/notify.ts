@@ -31,6 +31,8 @@ import {
   DEFAULT_LANG, normaliseLang, renderNotify, type NotifyLang,
 } from "./notifyStrings";
 import { clampText } from "./pushText";
+import { deadTokens, dryRunVerdict } from "./pushTokens";
+import { logServerError } from "./errorLog";
 
 export interface NotifySpec {
   /** Who to tell. Deduped; `createdBy` is dropped — nobody is notified of their own action. */
@@ -99,6 +101,9 @@ const BODY_CAP = 500;
 
 /** Where a tapped push opens. The project is fixed in .firebaserc; there is no runtime lookup for it. */
 const APP_ORIGIN = "https://our-days-2a939.web.app";
+
+/** Where a push is validated without being delivered (a dry run): no app subscribes to it. */
+const PAYLOAD_CHECK_TOPIC = "payload-check";
 
 /**
  * The bell row of `rowKey` for one recipient. A hash, so that no length or character of either part
@@ -195,34 +200,55 @@ export async function notify(spec: NotifySpec): Promise<NotifyResult> {
   for (const [lang, bucket] of byLang) {
     const tokens = [...new Set(bucket.tokens)];
     if (tokens.length === 0) continue;
+    // One message for the whole bucket, built once: the dry run below must judge the very same one.
+    const message = {
+      notification: { title: titleFor(spec, lang), body: bodyFor(spec, lang) },
+      // `tag` also rides in data so the page's foreground handler can use the same one.
+      data: { ...(spec.data || {}), tag },
+      webpush: {
+        notification: { icon: "/icons.svg", tag },
+        fcmOptions: { link },
+      },
+    };
     try {
-      const res = await admin.messaging().sendEachForMulticast({
-        tokens,
-        notification: { title: titleFor(spec, lang), body: bodyFor(spec, lang) },
-        // `tag` also rides in data so the page's foreground handler can use the same one.
-        data: { ...(spec.data || {}), tag },
-        webpush: {
-          notification: { icon: "/icons.svg", tag },
-          fcmOptions: { link },
-        },
-      });
+      const res = await admin.messaging().sendEachForMulticast({ tokens, ...message });
       pushed += res.successCount;
 
-      // The report every previous sender threw away.
-      res.responses.forEach((r, i) => {
-        if (r.success) return;
-        const code = (r.error as { code?: string } | undefined)?.code || "";
-        // ONLY these three mean the address itself is gone. Every other failure — a quota, a
-        // timeout, a transient server error — must not cost somebody their token, or one bad
-        // minute on Google's side would silently unsubscribe the whole family.
-        if (code.includes("registration-token-not-registered") ||
-            code.includes("invalid-registration-token") ||
-            code.includes("invalid-argument")) {
-          const owner = bucket.owners.get(tokens[i]);
-          if (!owner) return;
-          deadByUser.set(owner, [...(deadByUser.get(owner) ?? []), tokens[i]]);
+      // The report every previous sender threw away. Only an answer about the ADDRESS costs somebody
+      // their token. A quota, a timeout or a transient server error must not, or one bad minute on
+      // Google's side would silently unsubscribe the whole family; nor may a refused MESSAGE, which
+      // FCM reports with the same code as a malformed token (pushTokens.ts).
+      const results = res.responses.map((r) => ({
+        success: r.success,
+        code: (r.error as { code?: string } | undefined)?.code,
+      }));
+      let verdict = deadTokens(results);
+      if (verdict.unproven) {
+        // Nothing was delivered to say the message is fine. FCM validates it without delivering it
+        // (`dryRun`), to a topic, which needs no subscriber and reaches nobody.
+        // Through a resolved promise: the SDK throws its own validation synchronously, not as a rejection.
+        const dryRun = await Promise.resolve()
+          .then(() => admin.messaging().send({ topic: PAYLOAD_CHECK_TOPIC, ...message }, true))
+          .then(() => undefined, (e: unknown) => e ?? new Error("dry run failed"));
+        const said = dryRunVerdict(dryRun);
+        if (said === "valid") {
+          verdict = deadTokens(results, true);
+        } else if (said === "refused") {
+          // Nobody else hears about a push that reached no one: the caller never fails (see below).
+          await logServerError(
+            `push "${spec.type}" refused for all ${tokens.length} tokens as invalid-argument, and a dry run ` +
+              `of the same message too: ${String((dryRun as Error)?.message || dryRun).slice(0, 300)}; no token was removed`,
+            "notify:push",
+          );
+        } else {
+          console.error("notify: the message check said nothing; no token was removed", spec.type, dryRun);
         }
-      });
+      }
+      for (const i of verdict.dead) {
+        const owner = bucket.owners.get(tokens[i]);
+        if (!owner) continue;
+        deadByUser.set(owner, [...(deadByUser.get(owner) ?? []), tokens[i]]);
+      }
     } catch (err) {
       // Never fail the caller: the thing being announced has already happened.
       console.error("notify: push failed for", lang, err);

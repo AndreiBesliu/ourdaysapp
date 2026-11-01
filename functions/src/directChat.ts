@@ -31,6 +31,7 @@ import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { notify } from "./notify";
+import { isPlainDocId } from "./docId";
 
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 
@@ -77,7 +78,8 @@ export const openDirectChat = onCall({ region: CALLABLE_REGIONS, enforceAppCheck
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
 
   const { otherUid } = request.data || {};
-  if (typeof otherUid !== "string" || !otherUid) {
+  // A uid, so ONE segment: it becomes part of `chats/<a>__<b>` and of `users/<it>` (docId.ts).
+  if (!isPlainDocId(otherUid)) {
     throw new HttpsError("invalid-argument", "otherUid is required.");
   }
   if (otherUid === uid) {

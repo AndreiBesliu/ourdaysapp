@@ -112,6 +112,7 @@ const groupDeletion_1 = require("./groupDeletion");
 const groupMedia_1 = require("./groupMedia");
 const errorLog_1 = require("./errorLog");
 const overrideRsvps_1 = require("./overrideRsvps");
+const docId_1 = require("./docId");
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 const BOOTSTRAP_ADMIN_EMAILS = (0, bootstrapAdmins_1.bootstrapAdminEmails)(process.env.BOOTSTRAP_ADMIN_EMAILS);
 const ALL = Number.MAX_SAFE_INTEGER;
@@ -207,7 +208,10 @@ function filesShownBy(ev) {
     }
     return out;
 }
-const groupIdOf = (ev) => typeof ev.groupId === "string" && ev.groupId ? ev.groupId : null;
+// A client wrote `groupId`: only an id that names ONE group document is a group (docId.ts). From a
+// document under a group, its "members" would decide who inherits the event and which of the
+// person's files it keeps. Anything else is a personal event: no heir, nothing kept, it goes.
+const groupIdOf = (ev) => (0, docId_1.isPlainDocId)(ev.groupId) ? ev.groupId : null;
 /** Called through this object, so a test can make the files fail and prove the deletion stops. */
 exports.accountFiles = { deleteExcept: batchDelete_1.deleteFilesExcept, list: batchDelete_1.listFiles };
 /**

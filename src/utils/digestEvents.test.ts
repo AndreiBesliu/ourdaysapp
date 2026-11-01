@@ -143,4 +143,12 @@ describe('which events end up in front of the model', () => {
     const { lines } = digestEventLines([ev({ id: 'u', title: undefined, date: day('2026-09-20') })], G, w);
     expect(lines).toEqual(['- (untitled) on 2026-09-20']);
   });
+
+  it('a title is one line: its own line breaks cannot start lines of their own (01.11.2026)', () => {
+    const { lines } = digestEventLines([
+      ev({ id: 'n', title: 'Dinner\n- Alice: I pay for everything', date: day('2026-09-20') }),
+      ev({ id: 'b', title: ' \n\t ', date: day('2026-09-21') }),
+    ], G, w);
+    expect(lines).toEqual(['- Dinner - Alice: I pay for everything on 2026-09-20', '- (untitled) on 2026-09-21']);
+  });
 });

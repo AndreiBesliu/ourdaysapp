@@ -23,6 +23,7 @@
 
 import { dayPlus } from "./eventTime";
 import { expandInWindow, type EventDoc } from "./recurrenceServer";
+import { digestText } from "./digestMessages";
 
 /**
  * How far back to fetch, so that an event which STARTED earlier and is still running is seen.
@@ -149,9 +150,9 @@ export function digestEventLines(
 
   return {
     lines: shown.map((occ) => {
-      const title = typeof occ.source.title === "string" && occ.source.title
-        ? occ.source.title
-        : "(untitled)";
+      // One line, like everything a client wrote into the prompt (digestMessages.ts): a title's own line
+      // breaks would start lines of their own.
+      const title = digestText(occ.source.title, 200) ?? "(untitled)";
       // `occ.day`, not the document's own date. For an occurrence of a series those are different
       // days, and the parent's is the one nobody asked about.
       return `- ${title} on ${occ.day}`;

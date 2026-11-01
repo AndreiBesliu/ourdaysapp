@@ -42,6 +42,8 @@ const crypto = require("crypto");
 const friendship_1 = require("./friendship");
 const inviteLinkState_1 = require("./inviteLinkState");
 const notify_1 = require("./notify");
+const docId_1 = require("./docId");
+const senderIdentity_1 = require("./senderIdentity");
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 /** Ceilings live HERE, not in the caller's payload. A client-chosen limit is not a limit. */
 exports.LINK_MAX_DAYS_CAP = 30;
@@ -84,8 +86,9 @@ exports.createGroupInviteLink = (0, https_1.onCall)({ region: globalOptions_1.CA
     let groupName = null;
     if (groupId != null) {
         // `groups/${null}` is a VALID Firestore path that resolves to a missing document, so the
-        // shape is checked before it is ever used to build one.
-        if (typeof groupId !== "string" || !groupId) {
+        // shape is checked before it is ever used to build one. So is `G/typing/B`, to a document under
+        // the group whose `members` the check below would then trust (docId.ts).
+        if (!(0, docId_1.isPlainDocId)(groupId)) {
             throw new https_1.HttpsError("invalid-argument", "groupId must be a group id or null.");
         }
         const snap = await db.doc(`groups/${groupId}`).get();
@@ -95,7 +98,7 @@ exports.createGroupInviteLink = (0, https_1.onCall)({ region: globalOptions_1.CA
         if (!Array.isArray(members) || !members.includes(uid)) {
             throw new https_1.HttpsError("permission-denied", "You are not in that group.");
         }
-        groupName = cap(((_c = snap.data()) === null || _c === void 0 ? void 0 : _c.name) || "", 60) || null;
+        groupName = (0, senderIdentity_1.stampedGroupName)((_c = snap.data()) === null || _c === void 0 ? void 0 : _c.name);
     }
     // Daily cap, counted on the documents themselves so it cannot drift from reality.
     const since = firestore_1.Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
@@ -134,7 +137,7 @@ exports.createGroupInviteLink = (0, https_1.onCall)({ region: globalOptions_1.CA
 exports.peekGroupInviteLink = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a, _b, _c, _d, _e, _f;
     const { code } = request.data || {};
-    if (typeof code !== "string" || !code || code.length > 64) {
+    if (typeof code !== "string" || !code || code.length > 64 || !(0, docId_1.isPlainDocId)(code)) {
         throw new https_1.HttpsError("invalid-argument", "A code is required.");
     }
     const snap = await admin.firestore().doc(`invite_links/${code}`).get();
@@ -150,8 +153,9 @@ exports.peekGroupInviteLink = (0, https_1.onCall)({ region: globalOptions_1.CALL
     // link and was removed since is told the link is spent — which it is, by them — instead of the
     // join screen welcoming them into a group redeem no longer puts them back in (25.09.2026).
     if (verdict === "already" && typeof d.groupId === "string" && d.groupId && ((_c = request.auth) === null || _c === void 0 ? void 0 : _c.uid)) {
-        const g = await admin.firestore().doc(`groups/${d.groupId}`).get();
-        const members = (_d = g.data()) === null || _d === void 0 ? void 0 : _d.members;
+        // Written by createGroupInviteLink, which checks the id; read as if it were not (docId.ts).
+        const g = (0, docId_1.isPlainDocId)(d.groupId) ? await admin.firestore().doc(`groups/${d.groupId}`).get() : null;
+        const members = (_d = g === null || g === void 0 ? void 0 : g.data()) === null || _d === void 0 ? void 0 : _d.members;
         if (!Array.isArray(members) || !members.includes(request.auth.uid))
             verdict = "spent";
     }
@@ -181,7 +185,7 @@ exports.redeemGroupInviteLink = (0, https_1.onCall)({ region: globalOptions_1.CA
     if (!uid)
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
     const { code } = request.data || {};
-    if (typeof code !== "string" || !code || code.length > 64) {
+    if (typeof code !== "string" || !code || code.length > 64 || !(0, docId_1.isPlainDocId)(code)) {
         throw new https_1.HttpsError("invalid-argument", "A code is required.");
     }
     const db = admin.firestore();
@@ -226,6 +230,8 @@ exports.redeemGroupInviteLink = (0, https_1.onCall)({ region: globalOptions_1.CA
         let groupRef = null;
         let joinsGroup = false;
         if (typeof d.groupId === "string" && d.groupId) {
+            if (!(0, docId_1.isPlainDocId)(d.groupId))
+                throw new https_1.HttpsError("not-found", "That group no longer exists.");
             groupRef = db.doc(`groups/${d.groupId}`);
             const groupSnap = await tx.get(groupRef);
             if (!groupSnap.exists)
@@ -300,7 +306,7 @@ exports.revokeGroupInviteLink = (0, https_1.onCall)({ region: globalOptions_1.CA
     if (!uid)
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
     const { code } = request.data || {};
-    if (typeof code !== "string" || !code || code.length > 64) {
+    if (typeof code !== "string" || !code || code.length > 64 || !(0, docId_1.isPlainDocId)(code)) {
         throw new https_1.HttpsError("invalid-argument", "A code is required.");
     }
     const db = admin.firestore();

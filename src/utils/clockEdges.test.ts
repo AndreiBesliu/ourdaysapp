@@ -12,7 +12,7 @@
 // Runs in the ordinary suite (no emulator): `npx vitest run <this file>`, from src/utils.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { awayFromEdge } from '../../functions/test/clockEdges';
+import { MAX_EDGE_MARGIN_MS, awayFromEdge } from '../../functions/test/clockEdges';
 
 const DAY = 86_400_000;
 const MIDNIGHT = Date.parse('2026-10-18T00:00:00.000Z');
@@ -85,5 +85,15 @@ describe('awayFromEdge waits out the edge, and only near it', () => {
         vi.useRealTimers();
       }
     }
+  });
+
+  it('the widest margin a caller may ask still leaves the hook room; a wider one is refused', async () => {
+    for (let before = 0; before <= MAX_EDGE_MARGIN_MS; before += 250) {
+      const w = await waitOf(MIDNIGHT - before, 0, MAX_EDGE_MARGIN_MS);
+      expect(w, String(before)).toBeLessThanOrEqual(28_000);
+    }
+    vi.useRealTimers();
+    await expect(awayFromEdge(0, 30_000)).rejects.toThrow('does not fit');
+    await expect(awayFromEdge(0, MAX_EDGE_MARGIN_MS + 1)).rejects.toThrow('does not fit');
   });
 });

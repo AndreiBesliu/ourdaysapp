@@ -26,6 +26,10 @@ type Sent = { tokens: string[]; notification: { title: string; body: string } };
 let sent: Sent[];
 /** What FCM answers per token; success unless named here. */
 let fcmErrors: Record<string, string>;
+/** Every single-message send, with its dry-run flag (notify asks FCM to validate a message it doubts). */
+let dryRuns: Array<{ msg: Record<string, unknown>; dryRun: unknown }>;
+/** What the dry run throws; it passes unless set. */
+let dryRunError: unknown;
 
 beforeAll(async () => {
   expect(FS, 'run through `npm run test:rules`').not.toBe('');
@@ -39,6 +43,16 @@ beforeEach(async () => {
   expect((await fetch(`http://${FS}/emulator/v1/projects/${PROJECT}/databases/(default)/documents`, { method: 'DELETE' })).ok).toBe(true);
   sent = [];
   fcmErrors = {};
+  dryRuns = [];
+  dryRunError = undefined;
+  // Under the same stub as the multicast: nothing here may reach FCM, a dry run included.
+  vi.spyOn(Object.getPrototypeOf(admin.messaging()), 'send').mockImplementation(((msg: Record<string, unknown>, dryRun: unknown) => {
+    dryRuns.push({ msg: JSON.parse(JSON.stringify(msg)), dryRun });
+    // As firebase-admin does it: its own validation THROWS (synchronously), FCM's answer REJECTS.
+    if (String((dryRunError as { code?: unknown } | undefined)?.code).includes('invalid-payload')) throw dryRunError;
+    if (dryRunError) return Promise.reject(dryRunError);
+    return Promise.resolve('projects/demo/messages/dry-run');
+  }) as never);
   vi.spyOn(Object.getPrototypeOf(admin.messaging()), 'sendEachForMulticast').mockImplementation((async (msg: Sent) => {
     sent.push(JSON.parse(JSON.stringify(msg)));
     const responses = msg.tokens.map((tok) => (fcmErrors[tok]
@@ -271,5 +285,125 @@ describe('every push is cut like its bell row, and never through a character', (
     expect(res).toMatchObject({ rows: 2, pushed: 1, pruned: 1 });
     expect((await db.doc(`users/${BOB}`).get()).get('fcmTokens')).toEqual([]);
     expect((await db.doc(`users/${CAROL}`).get()).get('fcmTokens')).toEqual(['tok-carol']);
+  });
+
+  // FCM's v1 API says INVALID_ARGUMENT both for a token that is no token and for a message it refuses,
+  // and the Admin SDK reports both as `messaging/invalid-argument` (01.11.2026, pushTokens.ts).
+  describe('invalid-argument: the token, or the message?', () => {
+    /** Bob reads English too, so Bob and Carol share ONE send: one message, two tokens. */
+    const oneSend = () => db.doc(`users/${BOB}`).update({ language: 'en-US' });
+    const tokensOf = async (uid: string) => (await db.doc(`users/${uid}`).get()).get('fcmTokens');
+
+    it('beside a token the same message reached, it is the token’s: pruned, with no dry run', async () => {
+      await oneSend();
+      fcmErrors['tok-bob'] = 'messaging/invalid-argument';
+      const res = await send({ bodyText: 'hi' });
+      expect(sent).toHaveLength(1);
+      expect(res).toMatchObject({ pushed: 1, pruned: 1 });
+      expect(await tokensOf(BOB)).toEqual([]);
+      expect(await tokensOf(CAROL)).toEqual(['tok-carol']);
+      expect(dryRuns).toEqual([]);
+      expect(await errors()).toEqual([]);
+    });
+
+    it('refused for every token: a dry run of the SAME message, to a topic, decides', async () => {
+      await oneSend();
+      fcmErrors['tok-bob'] = 'messaging/invalid-argument';
+      fcmErrors['tok-carol'] = 'messaging/invalid-argument';
+      await send({ bodyText: 'hi' });
+      expect(dryRuns).toHaveLength(1);
+      expect(dryRuns[0].dryRun).toBe(true);
+      const { tokens, ...message } = sent[0] as unknown as Record<string, unknown>;
+      expect(tokens).toEqual(['tok-bob', 'tok-carol']);
+      expect(dryRuns[0].msg).toEqual({ topic: 'payload-check', ...message });
+    });
+
+    it('the dry run passes: the message was fine, so the refused tokens were dead', async () => {
+      await oneSend();
+      fcmErrors['tok-bob'] = 'messaging/invalid-argument';
+      fcmErrors['tok-carol'] = 'messaging/invalid-argument';
+      const res = await send({ bodyText: 'hi' });
+      expect(res).toMatchObject({ pushed: 0, pruned: 2 });
+      expect(await tokensOf(BOB)).toEqual([]);
+      expect(await tokensOf(CAROL)).toEqual([]);
+      expect(await errors()).toEqual([]);
+    });
+
+    it('the dry run refuses it too: the message is at fault, nobody loses a token, and it is reported', async () => {
+      await oneSend();
+      fcmErrors['tok-bob'] = 'messaging/invalid-argument';
+      fcmErrors['tok-carol'] = 'messaging/invalid-argument';
+      dryRunError = Object.assign(new Error('Invalid value at message.data'), { code: 'messaging/invalid-argument' });
+      const res = await send({ bodyText: 'hi' });
+      expect(res).toMatchObject({ pushed: 0, pruned: 0 });
+      expect(await tokensOf(BOB)).toEqual(['tok-bob']);
+      expect(await tokensOf(CAROL)).toEqual(['tok-carol']);
+      const rows = await errors();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ context: 'notify:push', source: 'server' });
+      expect(rows[0].message).toContain('refused for all 2 tokens');
+      expect(rows[0].message).toContain('Invalid value at message.data');
+    });
+
+    it('the SDK refuses the dry run before it leaves (it throws, synchronously): reported, tokens stay', async () => {
+      await oneSend();
+      fcmErrors['tok-bob'] = 'messaging/invalid-argument';
+      fcmErrors['tok-carol'] = 'messaging/registration-token-not-registered';
+      dryRunError = Object.assign(new Error('data must only contain string values'), { code: 'messaging/invalid-payload' });
+      const res = await send({ bodyText: 'hi' });
+      // The gone token still goes: the throw must not skip the rest of the bucket's verdict.
+      expect(res).toMatchObject({ pushed: 0, pruned: 1 });
+      expect(await tokensOf(BOB)).toEqual(['tok-bob']);
+      expect(await tokensOf(CAROL)).toEqual([]);
+      const rows = await errors();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].message).toContain('data must only contain string values');
+    });
+
+    it('the dry run fails for another reason: it decides nothing, tokens stay, nothing is reported', async () => {
+      await oneSend();
+      fcmErrors['tok-bob'] = 'messaging/invalid-argument';
+      fcmErrors['tok-carol'] = 'messaging/invalid-argument';
+      dryRunError = Object.assign(new Error('unavailable'), { code: 'messaging/server-unavailable' });
+      const quiet = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const res = await send({ bodyText: 'hi' });
+      expect(res).toMatchObject({ pushed: 0, pruned: 0 });
+      expect(await tokensOf(BOB)).toEqual(['tok-bob']);
+      expect(await errors()).toEqual([]);
+      expect(quiet.mock.calls.some((c) => String(c[0]).includes('the message check said nothing'))).toBe(true);
+    });
+
+    it('one person’s two dead tokens are not evidence against the message: the dry run passes, both go', async () => {
+      // Bob, alone in his language, with two devices he no longer uses: before the review this read as
+      // "two refused, none delivered", blamed the message on every push and never pruned (01.11.2026).
+      await db.doc(`users/${BOB}`).update({ fcmTokens: ['tok-bob', 'tok-bob-old'] });
+      fcmErrors['tok-bob'] = 'messaging/invalid-argument';
+      fcmErrors['tok-bob-old'] = 'messaging/invalid-argument';
+      const res = await send({ bodyText: 'hi' });
+      expect(res).toMatchObject({ pushed: 1, pruned: 2 });
+      expect(await tokensOf(BOB)).toEqual([]);
+      expect(await errors()).toEqual([]);
+    });
+
+    it('a lone token refused is judged by the dry run too: pruned when the message is fine', async () => {
+      fcmErrors['tok-bob'] = 'messaging/invalid-argument';
+      const res = await send({ bodyText: 'hi' });
+      expect(sent).toHaveLength(2);
+      expect(dryRuns).toHaveLength(1);
+      expect(res).toMatchObject({ pushed: 1, pruned: 1 });
+      expect(await tokensOf(BOB)).toEqual([]);
+      expect(await errors()).toEqual([]);
+    });
+
+    it('a token FCM says is gone is pruned even when nothing was delivered, with no dry run', async () => {
+      await oneSend();
+      fcmErrors['tok-bob'] = 'messaging/registration-token-not-registered';
+      fcmErrors['tok-carol'] = 'messaging/internal-error';
+      const res = await send({ bodyText: 'hi' });
+      expect(res).toMatchObject({ pushed: 0, pruned: 1 });
+      expect(await tokensOf(BOB)).toEqual([]);
+      expect(await tokensOf(CAROL)).toEqual(['tok-carol']);
+      expect(dryRuns).toEqual([]);
+    });
   });
 });

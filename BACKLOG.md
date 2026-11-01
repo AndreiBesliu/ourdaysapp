@@ -236,14 +236,20 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   previzualizarea dacă era a lui. De decis cât merită (rândurile din clopoțel sunt ale fiecăruia).
 - **Reacția, fixarea și ștergerea unui mesaj nu spun nimic când sunt refuzate** (`GroupChatWidget.tsx`):
   refuzul ajunge doar în jurnalul de erori. Remediul: un mesaj scurt pe ecran.
-- **Rezumatul AI al grupului include mesajele șterse** (ca „[Image]”/„[Audio]”) și citește textul fără
-  verificarea tipului (`generateGroupDigest`). Din 08.10 regula nu mai lasă text care nu e text.
-- **`userInGroup` (server) nu verifică id-ul grupului** (un `/` în el ar citi alt document). Regulile
-  din 08.10 închid efectul pentru mesaje și „scrie...”; rădăcina e pe server.
-- **Serverul citește numele grupului fără gardă** în rezumatul AI (`generateGroupDigest`), în Admin
-  (`adminListGroups`, `adminGetUser`) și în linkurile de invitație. Din 08.10 regula nu mai lasă un nume
-  care nu e text, iar pe live nu există; remediul (prin `stampedGroupName`) merge la următorul deploy
-  de funcții.
+- **REPARAT pe 01.11: rezumatul AI al grupului includea mesajele șterse** (ca „[Audio]”) și citea textul fără
+  verificarea tipului. Acum le lasă afară (`digestMessageLine`). Tot ce a scris un client în prompt (textul,
+  numele expeditorului, al grupului, titlurile) intră pe UN rând (`digestText`), ca să nu poată scrie rânduri care
+  se citesc drept ale altcuiva.
+  - **Rămas, mărunt:** mesajele șterse ocupă tot din cele 50 citite, deci câteva șterse ascund tot atâtea mai
+    vechi (la fel ca înainte). Când toate 50 sunt șterse, promptul spune că cele mai vechi n-au fost citite.
+- **REPARAT pe 01.11: `userInGroup` (server) nu verifica id-ul grupului** (un `/` în el citea un document SUB
+  grup și îl întreba de `members`). Acum orice id ales de altcineva trece prin `isPlainDocId`
+  (`functions/src/docId.ts`) înainte să devină o cale: în jur de 20 de locuri, inclusiv ștergerea contului
+  (moștenitorul evenimentului) și chatul direct. `functions/test/pathIds.test.ts` plantează forma atacului.
+  Pe live: 0 id-uri cu mai multe segmente în cele 6 colecții care numesc un grup.
+- **REPARAT pe 01.11: serverul citea numele grupului fără gardă** în rezumatul AI, în Admin și în linkurile de
+  invitație. Acum prin `stampedGroupName` (`functions/test/groupNames.test.ts`). `aiScope.ts` îl citește încă
+  singur, cu verificarea tipului (doar spațiile de la capete nu sunt tăiate, iar pe ecran nu se văd).
 - **Ce rămâne expus pe APK în Arcade după 06.10:** un joc deschis cu date stricate (tabla, mâinile,
   combinațiile) pică aplicația pentru cine îl deschide, până la repornire. Regula acoperă doar ce se
   citește în afara jocului (bannerul, lista, clasamentul). Se rezolvă cu reconstruirea APK-ului.
@@ -258,14 +264,22 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   caractere, text până la 500 și orice cheie de titlu (tipul, până la 60, din 29.10), cu cota zilnică de notificări. APK-ul afișează
   titlul scris. Clientul îl folosește pentru sarcinile atribuite. Închiderea cere o listă de chei și
   textul compus pe server. De decis dacă merită.
-- **Serverul citește orice `invalid-argument` de la FCM ca token mort** și îl șterge
-  (`functions/src/notify.ts`). Pentru un token chiar invalid e corect. Pentru un mesaj refuzat întreg
-  (prea mare, câmp greșit) ar șterge tokenurile tuturor destinatarilor. Din 06.10, textul membrilor
-  nu mai poate face un mesaj prea mare (tăiat la 200/500). Rămâne ca risc pentru un apel nou care ar
-  trimite un câmp greșit.
-- **Rândurile de eroare scrise de server n-au plafon zilnic** (cele de client au 200 pe cont). TTL-ul
-  limitează cât trăiesc, nu câte sunt. (Că se pierdeau pe căile de eșec e reparat din 25.09: toate
-  sunt așteptate cu `await`.)
+- **REPARAT pe 01.11: serverul citea orice `invalid-argument` de la FCM ca token mort.** FCM v1 îl dă și pentru
+  un token stricat, și pentru un mesaj refuzat întreg, deci un mesaj greșit ar fi dezabonat toți destinatarii.
+  Acum: lângă un token livrat, mesajul e bun și tokenul e mort; când nimic n-a fost livrat, decide o verificare a
+  ACELUIAȘI mesaj fără livrare (`send(..., dryRun)`, către un topic): trece = tokenurile sunt moarte; refuzată =
+  mesajul e de vină, nimeni nu-și pierde tokenul și se scrie un rând de eroare (`pushTokens.ts`).
+  - **Rămas, mai vechi decât reparația:** un push care nu ajunge la nimeni din alt motiv (credențiale FCM, un câmp
+    refuzat de SDK înainte să plece, cotă) nu lasă nicio urmă în afară de jurnalul funcției. Remediul: un rând de
+    eroare când nimic n-a fost livrat, cu codurile.
+  - **Rămas, mai vechi:** un grup de limbă cu peste 500 de tokenuri face `sendEachForMulticast` să arunce, deci
+    nimeni din el nu primește push-ul (regula lasă 500 de tokenuri pe cont). Remediul: cel mult ~10 tokenuri pe
+    destinatar, sau trimiteri în felii de 500.
+- **REPARAT pe 01.11: rândurile de eroare scrise de server n-aveau plafon zilnic.** Acum o eroare (după amprenta pe
+  care o grupează și Health) scrie cel mult 20 de rânduri pe zi UTC, apoi UN rând care spune că plafonul s-a atins,
+  apoi doar în jurnalul funcției (`errorCap.ts`, `errorCaps/{hash}`). O pretenție nouă de la ultimul rând (o eroare
+  marcată rezolvată sau văzută, sau o reparație declarată în `errorFixes.ts`) lasă să treacă UN rând peste plafon,
+  ca regresia să se vadă în aceeași zi, nu după miezul nopții.
 - **Un membru scos poate accepta o a DOUA invitație încă în așteptare** în același grup. Scoaterea
   nu anulează invitațiile și linkurile lui. Asta cere un trigger pe `groups` sau o listă a celor scoși,
   ținută de server. Decizia lui Andrei.

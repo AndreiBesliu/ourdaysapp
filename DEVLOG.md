@@ -14521,3 +14521,79 @@ apel Claude și adăuga un al doilea set de puncte (id-uri noi, pe care `arrayUn
   - CI verde pe `b7244dd`.
 - **Neverificat de mine:** un eveniment real cu „Asistent AI” pe live. Cere un cont și un apel plătit, așa că e în
   OWNER_VERIFY.
+
+## 2026-11-01 · Serverul: id-urile din afară, numele grupului, push-ul, plafonul de erori (Task Started)
+
+**Prompt (Andrei):** „Ok, continua”.
+**Model:** Claude Opus 5.5.
+
+Felia următoare din BACKLOG §2, fără decizii ale lui Andrei: cinci locuri în care funcțiile citesc sau scriu fără gardă.
+- `userInGroup` și celelalte citiri `groups/${id}` construite din id-uri alese de client: un `/` în id citește un
+  document SUB grup și îl întreabă de `members`.
+- Numele grupului citit fără gardă (rezumatul AI, Admin, linkurile de invitație).
+- Rezumatul AI include mesajele șterse (ca „[Audio]”) și citește textul fără tip.
+- `notify()` șterge tokenul la orice `invalid-argument`, pe care FCM îl dă și pentru un mesaj refuzat întreg.
+- Rândurile de eroare scrise de server n-au plafon zilnic.
+
+## 2026-11-01 · Serverul: id-urile din afară, numele grupului, push-ul, plafonul de erori (Task Completed)
+
+**Prompt (Andrei):** „Ok, continua”.
+**Model:** Claude Opus 5.5.
+
+- **Id-urile din afară numesc UN document** (`functions/src/docId.ts`, `isPlainDocId`). Un `/` într-un id ales de
+  altcineva citea un document SUB grup (`groups/G/typing/B`) și îl întreba de `members`. Păzite acum, în jur de 20 de
+  locuri:
+  - `userInGroup`, override-urile de serie (dreptul de editare și asignații), ștampila invitației, anunțul unui joc,
+    acceptarea unei invitații, provocările Warlord, difuzarea din Admin, linkurile de invitație;
+  - ștergerea contului (cine moștenește un eveniment și ce fișiere păstrează), chatul direct;
+  - argumentele id ale callable-urilor (eveniment, card, cerere, prieten, invitație, cod de link).
+  Pe live: 0 id-uri cu mai multe segmente în cele 6 colecții care numesc un grup, deci nicio migrare.
+  `functions/test/pathIds.test.ts` plantează forma atacului și trece fiecare funcție pe lângă ea.
+- **Numele grupului** trece prin `stampedGroupName` în rezumatul AI, în Admin și în linkuri; ștampilele taie numele pe
+  caractere întregi (o tăietură pe unități UTF-16 lăsa o jumătate de emoji).
+- **Rezumatul AI al grupului:**
+  - lasă afară mesajele șterse (ajungeau la model ca „[Audio]”) și citește textul doar ca text;
+  - tot ce a scris un client în prompt (mesajul, numele expeditorului, al grupului, titlurile) intră pe UN rând
+    (`digestText`): line breaks, controale C0/C1 și NEL devin un spațiu, tăiat pe caractere întregi;
+  - când cele mai noi 50 sunt toate șterse, promptul spune că cele mai vechi n-au fost citite.
+- **Tokenurile de push** (`pushTokens.ts`, `notify.ts`). FCM v1 dă `invalid-argument` și pentru un token stricat, și
+  pentru un mesaj refuzat întreg; înainte, orice `invalid-argument` ștergea tokenul. Acum:
+  - lângă un token livrat (același mesaj), tokenul e mort;
+  - când nimic n-a fost livrat, decide o verificare a aceluiași mesaj fără livrare (`send(..., dryRun)`, către un
+    topic): trece = tokenurile sunt moarte; refuzată = mesajul e de vină, nimeni nu-și pierde tokenul, un rând de
+    eroare.
+- **Plafonul rândurilor de eroare de pe server** (`errorCap.ts`, `errorLog.ts`, `errorCaps/{hash}`):
+  - cel mult 20 pe zi UTC pentru fiecare eroare (după amprenta din Health), apoi UN rând „Cap of 20/day reached”, apoi
+    doar în jurnalul funcției; pe live, `ai:suggestAsset` scrisese 47 într-o zi;
+  - o pretenție nouă de la ultimul rând (eroare marcată rezolvată sau văzută, ori o reparație din `errorFixes.ts`) lasă
+    UN rând peste plafon, ca regresia să se vadă în aceeași zi; o pretenție datată în viitor nu contează până îi vine
+    ora;
+  - rândul se scrie în aceeași tranzacție cu numărătoarea; peste plafon, fără tranzacție (doar pentru erorile pe care
+    instanța le-a văzut deja peste plafon azi); o numărătoare care nu se poate citi scrie rândul.
+- **Recenzia** (16 agenți, 2,01 M tokeni, 30 min): 13 constatări, 8 confirmate, 5 respinse (4 ca mai vechi decât
+  schimbarea, 1 pe mecanism). Între ele:
+  - ștergerea contului și chatul direct citeau încă id-uri din afară ca o cale (locuri ratate);
+  - două tokenuri moarte ale aceluiași om arătau ca un mesaj refuzat: alarmă falsă la fiecare push, tokenuri nemaișterse;
+  - plafonul îngheța ultima apariție, deci o reparație contrazisă în aceeași zi arăta „ține” până la miezul nopții;
+  - un nume cu rânduri noi falsifica rânduri în rezumat.
+- **Reverificarea remedierilor** (2 agenți, 0,47 M): toate 14 închise; 11 probleme noi, mici, cele mai multe din
+  remedieri, reparate:
+  - jumătatea de emoji (rezumatul ar fi căzut pentru tot grupul);
+  - nicio probă pentru reparația declarată prin scriitorul real;
+  - rândul pretenției scris după numărătoare;
+  - `send()` care aruncă sincron;
+  - `since` din viitor;
+  - drumul în plus la fiecare eroare;
+  - NEL; lista de fișiere la ștergerea contului.
+  Respinse: documentele de plafon vechi (colecția e nouă) și CRLF-ul (git normalizează).
+- **Mutanți:** 56 din 56 prinși, pe codul final, într-o clonă din afara Drive, cu control verde înainte și după.
+  - Prima rundă (47) a ieșit cu controlul de final ROȘU: un emulator orfan ținea portul, iar fiecare rulare de după
+    murea la pornire, ceea ce arăta ca „mutant prins”.
+  - Runner-ul nou oprește emulatoarele rămase din clona lui, cere porturile libere și scrie INVALID la „port taken”.
+- **Porți:**
+  - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
+  - `npm test` (2792), `test:tz` (46), `test:rules` (1208);
+  - funcțiile construite, cu `functions/lib` în același commit.
+- **CLAUDE.md:** capcana `groups/${null}` acoperă acum și id-urile cu `/` (`isPlainDocId`).
+- **BACKLOG:** cele cinci puncte marcate REPARAT, cu ce a rămas: un push care nu ajunge la nimeni din alt motiv nu lasă
+  urme; un grup de limbă cu peste 500 de tokenuri face trimiterea să arunce; mesajele șterse ocupă tot din cele 50 citite.

@@ -272,5 +272,8 @@ document", nu „e owner-ul aplicației" — e adevărat pentru orice user despr
   arată ca o listă goală. S-a livrat de trei ori pe `events`; `src/utils/eventQueryRules.test.ts`
   citește câmpurile permise DIN `firestore.rules` și refuză orice interogare care nu le atinge.
 - **`groups/${null}` e o cale Firestore VALIDĂ** — o citire de membru neghidată se rezolvă la un document inexistent și refuză tot. Orice `groupId` se verifică `typeof x === 'string' && x`.
+  **La fel `groups/${'G/typing/B'}`** (din 01.11): un id cu `/` citește un document SUB grup și îl întreabă de `members`.
+  Pe server, orice id ales de altcineva (argumentul unui callable, un câmp scris de client) trece prin `isPlainDocId`
+  (`functions/src/docId.ts`) înainte să devină o cale; `functions/test/pathIds.test.ts` plantează forma atacului.
 - **Ceasul zilei din Warlord** e ancorat de `lastTickAt` DIN SAVE, nu de o cheie locală; vezi `src/warlord/logic/tick.ts`.
 - **Matematica economiei** are o singură sursă: `simulateEconomyDay` din `src/warlord/logic/economy.ts`. UI-ul NU reimplementează formule — s-a livrat de trei ori bug-ul ăsta (numere afișate pe care jocul nu le plătea).

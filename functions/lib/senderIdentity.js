@@ -48,7 +48,8 @@ function trustedEmail(authEmail) {
 function senderStamp(input) {
     const email = trustedEmail(input.authEmail);
     const raw = typeof input.profileName === "string" ? input.profileName.trim() : "";
-    const name = (raw || (email ? email.split("@")[0] : "") || "Someone").slice(0, exports.SENDER_NAME_MAX);
+    // Cut on whole characters: a cut by UTF-16 units can leave half an emoji.
+    const name = Array.from(raw || (email ? email.split("@")[0] : "") || "Someone").slice(0, exports.SENDER_NAME_MAX).join("");
     // Verified means something only about an email that exists.
     return { name, email, emailVerified: input.authVerified === true && email !== null };
 }
@@ -56,7 +57,8 @@ function senderStamp(input) {
 function stampedGroupName(raw) {
     if (typeof raw !== "string")
         return null;
-    const s = raw.trim().slice(0, exports.GROUP_NAME_MAX);
+    // On whole characters, as the rule counts them: a cut by UTF-16 units can leave half an emoji.
+    const s = Array.from(raw.trim()).slice(0, exports.GROUP_NAME_MAX).join("").trim();
     return s || null;
 }
 //# sourceMappingURL=senderIdentity.js.map

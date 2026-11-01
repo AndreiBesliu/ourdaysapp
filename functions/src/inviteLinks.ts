@@ -40,6 +40,8 @@ import * as crypto from "crypto";
 import { readFriendship, authIdentityOf } from "./friendship";
 import { linkVerdict } from "./inviteLinkState";
 import { notify } from "./notify";
+import { isPlainDocId } from "./docId";
+import { stampedGroupName } from "./senderIdentity";
 
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 
@@ -86,8 +88,9 @@ export const createGroupInviteLink = onCall({ region: CALLABLE_REGIONS, enforceA
   let groupName: string | null = null;
   if (groupId != null) {
     // `groups/${null}` is a VALID Firestore path that resolves to a missing document, so the
-    // shape is checked before it is ever used to build one.
-    if (typeof groupId !== "string" || !groupId) {
+    // shape is checked before it is ever used to build one. So is `G/typing/B`, to a document under
+    // the group whose `members` the check below would then trust (docId.ts).
+    if (!isPlainDocId(groupId)) {
       throw new HttpsError("invalid-argument", "groupId must be a group id or null.");
     }
     const snap = await db.doc(`groups/${groupId}`).get();
@@ -96,7 +99,7 @@ export const createGroupInviteLink = onCall({ region: CALLABLE_REGIONS, enforceA
     if (!Array.isArray(members) || !members.includes(uid)) {
       throw new HttpsError("permission-denied", "You are not in that group.");
     }
-    groupName = cap(snap.data()?.name || "", 60) || null;
+    groupName = stampedGroupName(snap.data()?.name);
   }
 
   // Daily cap, counted on the documents themselves so it cannot drift from reality.
@@ -139,7 +142,7 @@ export const createGroupInviteLink = onCall({ region: CALLABLE_REGIONS, enforceA
  */
 export const peekGroupInviteLink = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   const { code } = request.data || {};
-  if (typeof code !== "string" || !code || code.length > 64) {
+  if (typeof code !== "string" || !code || code.length > 64 || !isPlainDocId(code)) {
     throw new HttpsError("invalid-argument", "A code is required.");
   }
   const snap = await admin.firestore().doc(`invite_links/${code}`).get();
@@ -156,8 +159,9 @@ export const peekGroupInviteLink = onCall({ region: CALLABLE_REGIONS, enforceApp
   // link and was removed since is told the link is spent — which it is, by them — instead of the
   // join screen welcoming them into a group redeem no longer puts them back in (25.09.2026).
   if (verdict === "already" && typeof d.groupId === "string" && d.groupId && request.auth?.uid) {
-    const g = await admin.firestore().doc(`groups/${d.groupId}`).get();
-    const members = g.data()?.members;
+    // Written by createGroupInviteLink, which checks the id; read as if it were not (docId.ts).
+    const g = isPlainDocId(d.groupId) ? await admin.firestore().doc(`groups/${d.groupId}`).get() : null;
+    const members = g?.data()?.members;
     if (!Array.isArray(members) || !members.includes(request.auth.uid)) verdict = "spent";
   } else if (verdict === "already" && request.auth?.uid && typeof d.createdBy === "string" && d.createdBy) {
     // A PERSONAL link's one effect is the friendship. Somebody who used it and was unfriended since
@@ -185,7 +189,7 @@ export const redeemGroupInviteLink = onCall({ region: CALLABLE_REGIONS, enforceA
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
 
   const { code } = request.data || {};
-  if (typeof code !== "string" || !code || code.length > 64) {
+  if (typeof code !== "string" || !code || code.length > 64 || !isPlainDocId(code)) {
     throw new HttpsError("invalid-argument", "A code is required.");
   }
 
@@ -228,6 +232,7 @@ export const redeemGroupInviteLink = onCall({ region: CALLABLE_REGIONS, enforceA
     let groupRef: admin.firestore.DocumentReference | null = null;
     let joinsGroup = false;
     if (typeof d.groupId === "string" && d.groupId) {
+      if (!isPlainDocId(d.groupId)) throw new HttpsError("not-found", "That group no longer exists.");
       groupRef = db.doc(`groups/${d.groupId}`);
       const groupSnap = await tx.get(groupRef);
       if (!groupSnap.exists) throw new HttpsError("not-found", "That group no longer exists.");
@@ -304,7 +309,7 @@ export const revokeGroupInviteLink = onCall({ region: CALLABLE_REGIONS, enforceA
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError("unauthenticated", "You must be signed in.");
   const { code } = request.data || {};
-  if (typeof code !== "string" || !code || code.length > 64) {
+  if (typeof code !== "string" || !code || code.length > 64 || !isPlainDocId(code)) {
     throw new HttpsError("invalid-argument", "A code is required.");
   }
 

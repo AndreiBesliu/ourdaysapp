@@ -28,6 +28,8 @@ const aiConfigProvenance_1 = require("./aiConfigProvenance");
 const aiSpendMerge_1 = require("./aiSpendMerge");
 const friendship_1 = require("./friendship");
 const senderIdentity_1 = require("./senderIdentity");
+const docId_1 = require("./docId");
+const digestMessages_1 = require("./digestMessages");
 const overrideRsvps_1 = require("./overrideRsvps");
 const notify_1 = require("./notify");
 const pushText_1 = require("./pushText");
@@ -222,10 +224,11 @@ async function assertAdmin(request) {
     }
     throw new https_1.HttpsError("permission-denied", "Admin access required.");
 }
-// Whether `uid` is a member of the given group.
+// Whether `uid` is a member of the given group. Only an id that names one document is looked up:
+// `G/typing/B` would read a document under the group and ask IT for `members` (docId.ts).
 async function userInGroup(uid, groupId) {
     var _a;
-    if (!groupId)
+    if (!(0, docId_1.isPlainDocId)(groupId))
         return false;
     const snap = await admin.firestore().doc(`groups/${groupId}`).get();
     const members = snap.exists ? (_a = snap.data()) === null || _a === void 0 ? void 0 : _a.members : undefined;
@@ -656,7 +659,8 @@ exports.onGroupInviteCreated = (0, firestore_1.onDocumentCreated)("group_invites
         return;
     try {
         const db = admin.firestore();
-        const groupId = typeof inv.groupId === "string" && inv.groupId ? inv.groupId : "";
+        // A group id that names more than one segment is no group: the stamp says so, by naming none.
+        const groupId = (0, docId_1.isPlainDocId)(inv.groupId) ? inv.groupId : "";
         const [identity, prof, group] = await Promise.all([
             (0, friendship_1.authIdentityOf)(fromId),
             db.doc(`profiles/${fromId}`).get(),
@@ -688,6 +692,12 @@ exports.onGameCreated = (0, firestore_1.onDocumentCreated)("games/{gameId}", asy
     const groupId = gameData.groupId;
     if (!groupId || !creatorId)
         return;
+    // The group is read for its members, who all get a push: from a document under the group, they
+    // would be whoever that document lists (docId.ts).
+    if (!(0, docId_1.isPlainDocId)(groupId)) {
+        await (0, errorLog_1.logServerError)(`game ${snapshot.id} not announced: its group id is not a document id (${typeof groupId})`, "games:onGameCreated", { uid: typeof creatorId === "string" ? creatorId : null });
+        return;
+    }
     // The game's name comes from a fixed list, never from the document. Until 06.10.2026 it was
     // `gameType` title-cased, and `gameType` was free text at creation: any member could put any
     // words on the lock screens of the whole group, at any length. The rule now takes only the
@@ -859,7 +869,7 @@ exports.suggestEventCategory = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (requ
     }
 });
 exports.generateGroupDigest = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (request) => {
-    var _a;
+    var _a, _b;
     const { groupId, language = 'en-US' } = request.data;
     if (!groupId || typeof groupId !== 'string') {
         throw new https_1.HttpsError('invalid-argument', 'groupId is required.');
@@ -885,7 +895,10 @@ exports.generateGroupDigest = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (reque
         }
         const db = admin.firestore();
         const groupDoc = await db.collection('groups').doc(groupId).get();
-        const groupName = groupDoc.exists ? (((_a = groupDoc.data()) === null || _a === void 0 ? void 0 : _a.name) || "The Group") : "The Group";
+        // Through stampedGroupName (senderIdentity.ts): text only, trimmed and cut. A map there went into
+        // the prompt as "[object Object]"; the rule has refused one since 08.10. And on one line, like
+        // everything a client wrote into this prompt (digestMessages.ts): any member may rename the group.
+        const groupName = (_b = (groupDoc.exists ? (0, digestMessages_1.digestText)((0, senderIdentity_1.stampedGroupName)((_a = groupDoc.data()) === null || _a === void 0 ? void 0 : _a.name), 60) : null)) !== null && _b !== void 0 ? _b : "The Group";
         // Get messages from last 48 hours
         const pastDate = new Date();
         pastDate.setDate(pastDate.getDate() - 2);
@@ -905,27 +918,37 @@ exports.generateGroupDigest = (0, https_1.onCall)(AI_CALLABLE_OPTS, async (reque
         //
         // Resolved in ONE pass rather than a `get()` per message inside the loop: fifty sequential
         // round trips is fifty times the latency for a value that repeats.
-        const senderIds = Array.from(new Set(messageDocs.map((d) => d.data().senderId).filter((x) => typeof x === "string")));
+        const senderIds = Array.from(new Set(messageDocs.map((d) => d.data().senderId).filter((x) => (0, docId_1.isPlainDocId)(x))));
         const senderNames = new Map();
         await Promise.all(chunk(senderIds, 30).map(async (ids) => {
             const snaps = await Promise.all(ids.map((id) => db.doc(`profiles/${id}`).get().catch(() => null)));
             snaps.forEach((snap, i) => {
                 var _a;
-                const name = snap && snap.exists ? (_a = snap.data()) === null || _a === void 0 ? void 0 : _a.name : null;
-                senderNames.set(ids[i], typeof name === "string" && name ? name : "Someone");
+                // On one line: the name opens the line, so its own line breaks would open lines under other
+                // people's names (digestMessages.ts). 60 is the most the rule lets a profile name be.
+                const name = snap && snap.exists ? (0, digestMessages_1.digestText)((_a = snap.data()) === null || _a === void 0 ? void 0 : _a.name, 60) : null;
+                senderNames.set(ids[i], name !== null && name !== void 0 ? name : "Someone");
             });
         }));
-        let chatHistory = "Recent Chat Messages:\n";
-        if (messageDocs.length === 0) {
-            chatHistory += "(No recent messages)\n";
+        // A deleted message is nobody's words any more: it used to reach the model as "[Audio]" (its text
+        // and links are cleared, so the old fallback named it a voice note). Text is read only as text, and
+        // a message with nothing left to show is left out (digestMessages.ts). Deleted ones still use up the
+        // 50-message read: when it was full and nothing is left, older words may exist unread, and the
+        // prompt says so rather than "no recent messages".
+        const chatLines = [];
+        for (const docSnap of messageDocs) {
+            const d = docSnap.data();
+            const line = (0, digestMessages_1.digestMessageLine)(d);
+            if (line === null)
+                continue;
+            const senderName = (typeof d.senderId === "string" && senderNames.get(d.senderId)) || "Someone";
+            chatLines.push(`- ${senderName}: ${line}\n`);
         }
-        else {
-            for (const docSnap of messageDocs) {
-                const d = docSnap.data();
-                const senderName = (d.senderId && senderNames.get(d.senderId)) || "Someone";
-                chatHistory += `- ${senderName}: ${d.text || (d.imageUrl ? '[Image]' : '[Audio]')}\n`;
-            }
-        }
+        const chatHistory = "Recent Chat Messages:\n" + (chatLines.length
+            ? chatLines.join("")
+            : digestTruncated
+                ? "(The most recent messages were deleted; earlier ones were not read)\n"
+                : "(No recent messages)\n");
         // ── Upcoming events ──────────────────────────────────────────────────────────────────
         //
         // The window and the selection live in `digestEvents.ts`, tested from
@@ -1205,7 +1228,7 @@ exports.createEventOverride = (0, https_1.onCall)({ region: globalOptions_1.CALL
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
     }
     const { parentId, overrideDate, data } = request.data || {};
-    if (!parentId || !overrideDate || !data || typeof data !== "object") {
+    if (!(0, docId_1.isPlainDocId)(parentId) || !overrideDate || !data || typeof data !== "object") {
         throw new https_1.HttpsError("invalid-argument", "parentId, overrideDate and data are required.");
     }
     // `overrideDate` goes into arrayUnion on the parent's exception list unchecked otherwise, so
@@ -1274,8 +1297,12 @@ exports.createEventOverride = (0, https_1.onCall)({ region: globalOptions_1.CALL
     // the series' owner, and a parent read just before the leaver sweep cleaned it (groupLeave.ts)
     // still names them; an occurrence naming a non-member is born frozen (`namedAreInGroup`) and
     // sends them its reminders (05.10.2026).
-    const groupMembers = typeof p.groupId === "string" && p.groupId
-        ? new Set(((_c = (_b = (await db.doc(`groups/${p.groupId}`).get()).data()) === null || _b === void 0 ? void 0 : _b.members) !== null && _c !== void 0 ? _c : []))
+    // A group id that is not one document's names nobody: no one is assigned (docId.ts). Truthiness, as
+    // in `canEdit` above, so an event the edit check treats as a group's is never filtered as personal.
+    const groupMembers = p.groupId
+        ? new Set((0, docId_1.isPlainDocId)(p.groupId)
+            ? ((_c = (_b = (await db.doc(`groups/${p.groupId}`).get()).data()) === null || _b === void 0 ? void 0 : _b.members) !== null && _c !== void 0 ? _c : [])
+            : [])
         : null;
     const assigneeIds = requested.filter((id) => allowed.has(id) && id !== "ai_assistant" && (!groupMembers || groupMembers.has(id)));
     safe.assigneeIds = assigneeIds;
@@ -1440,7 +1467,7 @@ exports.transferAssetCopy = (0, https_1.onCall)({ region: globalOptions_1.CALLAB
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
     }
     const { assetId, recipientId, mode } = request.data || {};
-    if (!assetId || !recipientId) {
+    if (!(0, docId_1.isPlainDocId)(assetId) || !(0, docId_1.isPlainDocId)(recipientId)) {
         throw new https_1.HttpsError("invalid-argument", "assetId and recipientId are required.");
     }
     // "copy" leaves the original with the sender; "move" hands it over entirely. Both go through
@@ -1494,7 +1521,7 @@ exports.respondToFriendRequest = (0, https_1.onCall)({ region: globalOptions_1.C
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
     }
     const { requestId, accept } = request.data || {};
-    if (!requestId || typeof accept !== "boolean") {
+    if (!(0, docId_1.isPlainDocId)(requestId) || typeof accept !== "boolean") {
         throw new https_1.HttpsError("invalid-argument", "requestId and accept are required.");
     }
     const cap = (s) => String(s || "").slice(0, 80);
@@ -1582,7 +1609,7 @@ exports.removeFriend = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_RE
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
     }
     const { friendUid } = request.data || {};
-    if (!friendUid || friendUid === uid) {
+    if (!(0, docId_1.isPlainDocId)(friendUid) || friendUid === uid) {
         throw new https_1.HttpsError("invalid-argument", "A valid friendUid is required.");
     }
     const db = admin.firestore();
@@ -1632,7 +1659,7 @@ exports.acceptGroupInvite = (0, https_1.onCall)({ region: globalOptions_1.CALLAB
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
     }
     const { inviteId } = request.data || {};
-    if (!inviteId) {
+    if (!(0, docId_1.isPlainDocId)(inviteId)) {
         throw new https_1.HttpsError("invalid-argument", "inviteId is required.");
     }
     const db = admin.firestore();
@@ -1663,6 +1690,11 @@ exports.acceptGroupInvite = (0, https_1.onCall)({ region: globalOptions_1.CALLAB
             return { status: typeof inv.status === "string" && inv.status ? inv.status : "invalid", groupId: inv.groupId || null };
         }
         if (inv.groupId) {
+            // The client chose this field. An id of more than one segment would vouch with, and then add
+            // the invitee to, a document under some group instead of the group (docId.ts).
+            if (!(0, docId_1.isPlainDocId)(inv.groupId)) {
+                throw new https_1.HttpsError("not-found", "That group no longer exists.");
+            }
             const groupSnap = await tx.get(db.doc(`groups/${inv.groupId}`));
             if (!groupSnap.exists) {
                 throw new https_1.HttpsError("not-found", "That group no longer exists.");
@@ -2321,7 +2353,7 @@ exports.adminGetUser = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_RE
         birthday: (0, adminTally_1.memberText)(ud.birthday, 32) || null,
         pushEnabled: Array.isArray(ud.fcmTokens) && ud.fcmTokens.length > 0,
         friends: Array.isArray(ud.friends) ? ud.friends.map((f) => ({ uid: (0, adminTally_1.memberText)(f === null || f === void 0 ? void 0 : f.uid, 128), name: (0, adminTally_1.memberText)(f === null || f === void 0 ? void 0 : f.name, 80), email: (0, adminTally_1.memberText)(f === null || f === void 0 ? void 0 : f.email, 254) })) : [],
-        groups: groupsSnap.docs.map((d) => ({ id: d.id, name: d.data().name || "Group", members: (d.data().members || []).length })),
+        groups: groupsSnap.docs.map((d) => { var _a; return ({ id: d.id, name: (_a = (0, senderIdentity_1.stampedGroupName)(d.data().name)) !== null && _a !== void 0 ? _a : "Group", members: (d.data().members || []).length }); }),
         counts: { groups: groupsSnap.size, events: eventsTotal, games: gamesSnap.size, assets: assetsSnap.size },
         recentEvents: recentSnap.docs.map((d) => {
             var _a;
@@ -2404,6 +2436,8 @@ exports.adminBroadcast = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_
     // bell would have shown the literal text "notifBroadcast". Unreachable from the form; cheap to close.
     if (typeof title !== "string" || !title.trim() || !target)
         throw new https_1.HttpsError("invalid-argument", "target and title are required.");
+    if (target !== "all" && !(0, docId_1.isPlainDocId)(target))
+        throw new https_1.HttpsError("invalid-argument", "target must be \"all\" or a group id.");
     const db = admin.firestore();
     let recipients = [];
     if (target === "all") {
@@ -2458,9 +2492,10 @@ exports.adminListGroups = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE
     gamesSnap.forEach((d) => { const g = d.data().groupId; if (g)
         (0, adminTally_1.inc)(gaByGroup, g); });
     const groups = groupsSnap.docs.map((d) => {
+        var _a;
         const g = d.data();
         return {
-            id: d.id, name: g.name || "Group", ownerId: g.ownerId || null,
+            id: d.id, name: (_a = (0, senderIdentity_1.stampedGroupName)(g.name)) !== null && _a !== void 0 ? _a : "Group", ownerId: g.ownerId || null,
             members: (g.members || []).length, memberUids: g.members || [],
             events: (0, adminTally_1.countOf)(evByGroup, d.id), games: (0, adminTally_1.countOf)(gaByGroup, d.id),
         };
@@ -2619,6 +2654,9 @@ exports.acceptWarlordChallenge = (0, https_1.onCall)({ region: globalOptions_1.C
         // note `groups/${null}` is a VALID path string, so this must be guarded or every
         // global challenge would fail the membership check.
         const battleGroupId = typeof g.groupId === "string" && g.groupId ? g.groupId : null;
+        if (battleGroupId && !(0, docId_1.isPlainDocId)(battleGroupId)) {
+            throw new https_1.HttpsError("permission-denied", "Both players must be members of the group.");
+        }
         if (battleGroupId) {
             const groupSnap = await tx.get(db.doc(`groups/${battleGroupId}`));
             const members = groupSnap.exists ? (_a = groupSnap.data()) === null || _a === void 0 ? void 0 : _a.members : undefined;
@@ -2667,6 +2705,9 @@ exports.createWarlordChallenge = (0, https_1.onCall)({ region: globalOptions_1.C
     // any other. A groupId (when supplied) only tags the battle to that group so it
     // also shows up in the group's arcade list — it is never a permission requirement.
     const groupIdOrNull = typeof groupId === "string" && groupId ? groupId : null;
+    // A tag that is not one document's id would be checked against a document under some group.
+    if (groupIdOrNull && !(0, docId_1.isPlainDocId)(groupIdOrNull))
+        throw new https_1.HttpsError("invalid-argument", "Invalid group id.");
     if (typeof opponentUid !== "string" || !opponentUid || opponentUid === uid) {
         throw new https_1.HttpsError("invalid-argument", "A valid, distinct opponent is required.");
     }

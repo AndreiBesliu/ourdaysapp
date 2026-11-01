@@ -102,6 +102,7 @@ import { deleteGroupData } from "./groupDeletion";
 import { groupMedia } from "./groupMedia";
 import { logServerError } from "./errorLog";
 import { RSVP_ANSWERS } from "./overrideRsvps";
+import { isPlainDocId } from "./docId";
 
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 const BOOTSTRAP_ADMIN_EMAILS = bootstrapAdminEmails(process.env.BOOTSTRAP_ADMIN_EMAILS);
@@ -192,8 +193,11 @@ export function filesShownBy(ev: Record<string, unknown>): string[] {
   return out;
 }
 
+// A client wrote `groupId`: only an id that names ONE group document is a group (docId.ts). From a
+// document under a group, its "members" would decide who inherits the event and which of the
+// person's files it keeps. Anything else is a personal event: no heir, nothing kept, it goes.
 const groupIdOf = (ev: Record<string, unknown>): string | null =>
-  typeof ev.groupId === "string" && ev.groupId ? ev.groupId : null;
+  isPlainDocId(ev.groupId) ? ev.groupId : null;
 
 type Doc = admin.firestore.QueryDocumentSnapshot;
 

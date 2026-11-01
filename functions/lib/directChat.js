@@ -34,6 +34,7 @@ const firestore_1 = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 const firestore_2 = require("firebase-admin/firestore");
 const notify_1 = require("./notify");
+const docId_1 = require("./docId");
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 /**
  * The document id for a pair, derived rather than random.
@@ -78,7 +79,8 @@ exports.openDirectChat = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_
     if (!uid)
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
     const { otherUid } = request.data || {};
-    if (typeof otherUid !== "string" || !otherUid) {
+    // A uid, so ONE segment: it becomes part of `chats/<a>__<b>` and of `users/<it>` (docId.ts).
+    if (!(0, docId_1.isPlainDocId)(otherUid)) {
         throw new https_1.HttpsError("invalid-argument", "otherUid is required.");
     }
     if (otherUid === uid) {

@@ -33,12 +33,16 @@ const firestore_1 = require("firebase-admin/firestore");
 const notifyStrings_1 = require("./notifyStrings");
 Object.defineProperty(exports, "DEFAULT_LANG", { enumerable: true, get: function () { return notifyStrings_1.DEFAULT_LANG; } });
 const pushText_1 = require("./pushText");
+const pushTokens_1 = require("./pushTokens");
+const errorLog_1 = require("./errorLog");
 /** The longest title, in the bell AND in the push (pushText.ts says why the push needs one). */
 const CAP = 200;
 /** The longest body, likewise. */
 const BODY_CAP = 500;
 /** Where a tapped push opens. The project is fixed in .firebaserc; there is no runtime lookup for it. */
 const APP_ORIGIN = "https://our-days-2a939.web.app";
+/** Where a push is validated without being delivered (a dry run): no app subscribes to it. */
+const PAYLOAD_CHECK_TOPIC = "payload-check";
 /**
  * The bell row of `rowKey` for one recipient. A hash, so that no length or character of either part
  * can make it an invalid id: a reminder's recipients come from an event's assignees, which members write.
@@ -52,7 +56,7 @@ const rowIdFor = (rowKey, uid) => (0, crypto_1.createHash)("sha256").update(rowK
  * roll that back. Call it after the transaction commits.
  */
 async function notify(spec) {
-    var _a, _b;
+    var _a, _b, _c;
     const db = admin.firestore();
     const targets = [...new Set(spec.userIds)]
         .filter((u) => typeof u === "string" && u && (spec.includeActor || u !== spec.createdBy))
@@ -115,36 +119,57 @@ async function notify(spec) {
         const tokens = [...new Set(bucket.tokens)];
         if (tokens.length === 0)
             continue;
+        // One message for the whole bucket, built once: the dry run below must judge the very same one.
+        const message = {
+            notification: { title: titleFor(spec, lang), body: bodyFor(spec, lang) },
+            // `tag` also rides in data so the page's foreground handler can use the same one.
+            data: Object.assign(Object.assign({}, (spec.data || {})), { tag }),
+            webpush: {
+                notification: { icon: "/icons.svg", tag },
+                fcmOptions: { link },
+            },
+        };
         try {
-            const res = await admin.messaging().sendEachForMulticast({
-                tokens,
-                notification: { title: titleFor(spec, lang), body: bodyFor(spec, lang) },
-                // `tag` also rides in data so the page's foreground handler can use the same one.
-                data: Object.assign(Object.assign({}, (spec.data || {})), { tag }),
-                webpush: {
-                    notification: { icon: "/icons.svg", tag },
-                    fcmOptions: { link },
-                },
-            });
+            const res = await admin.messaging().sendEachForMulticast(Object.assign({ tokens }, message));
             pushed += res.successCount;
-            // The report every previous sender threw away.
-            res.responses.forEach((r, i) => {
-                var _a, _b;
-                if (r.success)
-                    return;
-                const code = ((_a = r.error) === null || _a === void 0 ? void 0 : _a.code) || "";
-                // ONLY these three mean the address itself is gone. Every other failure — a quota, a
-                // timeout, a transient server error — must not cost somebody their token, or one bad
-                // minute on Google's side would silently unsubscribe the whole family.
-                if (code.includes("registration-token-not-registered") ||
-                    code.includes("invalid-registration-token") ||
-                    code.includes("invalid-argument")) {
-                    const owner = bucket.owners.get(tokens[i]);
-                    if (!owner)
-                        return;
-                    deadByUser.set(owner, [...((_b = deadByUser.get(owner)) !== null && _b !== void 0 ? _b : []), tokens[i]]);
-                }
+            // The report every previous sender threw away. Only an answer about the ADDRESS costs somebody
+            // their token. A quota, a timeout or a transient server error must not, or one bad minute on
+            // Google's side would silently unsubscribe the whole family; nor may a refused MESSAGE, which
+            // FCM reports with the same code as a malformed token (pushTokens.ts).
+            const results = res.responses.map((r) => {
+                var _a;
+                return ({
+                    success: r.success,
+                    code: (_a = r.error) === null || _a === void 0 ? void 0 : _a.code,
+                });
             });
+            let verdict = (0, pushTokens_1.deadTokens)(results);
+            if (verdict.unproven) {
+                // Nothing was delivered to say the message is fine. FCM validates it without delivering it
+                // (`dryRun`), to a topic, which needs no subscriber and reaches nobody.
+                // Through a resolved promise: the SDK throws its own validation synchronously, not as a rejection.
+                const dryRun = await Promise.resolve()
+                    .then(() => admin.messaging().send(Object.assign({ topic: PAYLOAD_CHECK_TOPIC }, message), true))
+                    .then(() => undefined, (e) => e !== null && e !== void 0 ? e : new Error("dry run failed"));
+                const said = (0, pushTokens_1.dryRunVerdict)(dryRun);
+                if (said === "valid") {
+                    verdict = (0, pushTokens_1.deadTokens)(results, true);
+                }
+                else if (said === "refused") {
+                    // Nobody else hears about a push that reached no one: the caller never fails (see below).
+                    await (0, errorLog_1.logServerError)(`push "${spec.type}" refused for all ${tokens.length} tokens as invalid-argument, and a dry run ` +
+                        `of the same message too: ${String((dryRun === null || dryRun === void 0 ? void 0 : dryRun.message) || dryRun).slice(0, 300)}; no token was removed`, "notify:push");
+                }
+                else {
+                    console.error("notify: the message check said nothing; no token was removed", spec.type, dryRun);
+                }
+            }
+            for (const i of verdict.dead) {
+                const owner = bucket.owners.get(tokens[i]);
+                if (!owner)
+                    continue;
+                deadByUser.set(owner, [...((_c = deadByUser.get(owner)) !== null && _c !== void 0 ? _c : []), tokens[i]]);
+            }
         }
         catch (err) {
             // Never fail the caller: the thing being announced has already happened.

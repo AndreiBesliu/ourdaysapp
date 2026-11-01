@@ -10,11 +10,13 @@
 // Run once, after the functions are deployed and before the rules: `scripts/backfill-used-group-ids.mjs`
 // (a dry run unless told `--apply`). It lists, it does not delete or change anything else.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isPlainDocId = isPlainDocId;
+exports.isPlainDocId = void 0;
 exports.planGroupIdBackfill = planGroupIdBackfill;
 exports.applyGroupIdBackfill = applyGroupIdBackfill;
 const admin = require("firebase-admin");
 const groupIds_1 = require("./groupIds");
+const docId_1 = require("./docId");
+Object.defineProperty(exports, "isPlainDocId", { enumerable: true, get: function () { return docId_1.isPlainDocId; } });
 /** Collections whose field names a group, and that field. */
 const POINTERS = [
     ["events", "groupId"],
@@ -24,11 +26,6 @@ const POINTERS = [
     ["invite_links", "groupId"],
     ["assets", "sharedGroupId"],
 ];
-/** Only an id that names exactly one document may become a path: anything else is reported, not written. */
-function isPlainDocId(id) {
-    return typeof id === "string" && id.length > 0 && id.length <= 1500
-        && !id.includes("/") && id !== "." && id !== ".." && !/^__.*__$/.test(id);
-}
 async function planGroupIdBackfill(db = admin.firestore()) {
     const groups = await db.collection("groups").get();
     const live = new Set(groups.docs.map((g) => g.id));
@@ -47,7 +44,7 @@ async function planGroupIdBackfill(db = admin.firestore()) {
             const g = d.get(field);
             if (g === null || g === undefined || g === "")
                 continue;
-            if (!isPlainDocId(g)) {
+            if (!(0, docId_1.isPlainDocId)(g)) {
                 refused.add(String(g));
                 continue;
             }
@@ -80,7 +77,7 @@ async function planGroupIdBackfill(db = admin.firestore()) {
 async function applyGroupIdBackfill(ids, db = admin.firestore()) {
     let added = 0;
     for (const id of ids) {
-        if (!isPlainDocId(id))
+        if (!(0, docId_1.isPlainDocId)(id))
             continue;
         const before = (await db.doc(`usedGroupIds/${id}`).get()).exists;
         await (0, groupIds_1.registerGroupId)(id);
