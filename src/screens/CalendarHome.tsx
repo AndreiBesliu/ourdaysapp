@@ -17,7 +17,9 @@ import GroupSettingsModal from '../components/GroupSettingsModal';
 import NotificationsDropdown from '../components/NotificationsDropdown';
 import VerifyEmailBanner from '../components/VerifyEmailBanner';
 import { useVerifiedEmail } from '../hooks/useVerifiedEmail';
-import GroupChatWidget from '../components/GroupChatWidget';
+// The floating chat, loaded on demand (06.11.2026): the on-demand wrapper, under the widget's name. The widget's own
+// code is fetched the first time a group tab is shown, and while the app is idle (GroupChatWidgetOnDemand.tsx).
+import GroupChatWidget from '../components/GroupChatWidgetOnDemand';
 import { bannerPlayerIds, gameTypeName } from '../components/games/gameTypeName';
 import { withGroupName } from '../utils/groupName';
 import ErrorBoundary from '../components/ErrorBoundary';
@@ -1128,9 +1130,19 @@ export default function CalendarHome() {
         // The floating chat in its own boundary (08.10.2026): a conversation that cannot be shown
         // says so in a small note instead of taking the calendar down. The boundary carries the
         // namespaced key now — it is the sibling — so a group switch still starts the pane clean.
-        <ErrorBoundary key={`chat-${activeGroupId}`} context="GroupChatWidget" fallback={
-          <p role="alert" className="fixed bottom-20 right-4 z-40 max-w-xs rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-lg p-3 text-xs text-zinc-600 dark:text-zinc-300">{t('chatCouldNotShow', language)}</p>
-        }>
+        // Its code loads on demand (06.11.2026): a chunk that cannot load says to reload, and offers it (on Chromium
+        // nothing short of a reload fetches a failed chunk again; GroupChatWidgetOnDemand.tsx). An offer, never by
+        // itself: somebody may be typing in another window.
+        <ErrorBoundary key={`chat-${activeGroupId}`} context="GroupChatWidget" fallback={({ chunk }) => (
+          <div role="alert" className="fixed bottom-20 right-4 z-40 max-w-xs rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 shadow-lg p-3 text-xs text-zinc-600 dark:text-zinc-300">
+            <p>{chunk ? t('chatCouldNotLoad', language) : t('chatCouldNotShow', language)}</p>
+            {chunk && (
+              <button type="button" onClick={() => window.location.reload()} className="mt-2 min-h-[44px] px-3 rounded-lg bg-primary text-white font-medium">
+                {t('errorReload', language)}
+              </button>
+            )}
+          </div>
+        )}>
         <GroupChatWidget
           // Remounted per group, for the same reason Chat.tsx does it: the pane holds a message
           // list, an AI digest, a draft and a reply target, and without a key a tab switch points

@@ -48,6 +48,12 @@ interface GroupChatWidgetProps {
    * with an account that was deleted (utils/formerMembers.ts).
    */
   closedNote?: string;
+  /**
+   * Messages newer than this count as unread on the closed button (ms since the epoch). Default: when this mounts.
+   * The calendar's on-demand wrapper passes the time the chat was SHOWN (06.11.2026): its code may arrive a moment
+   * later, and a message sent in that moment must still count (GroupChatWidgetOnDemand.tsx).
+   */
+  unreadSince?: number;
 }
 
 /** How many messages one mark-as-seen batch covers (see markSeen). */
@@ -111,7 +117,7 @@ function AudioPlayer({ src, isMe }: { src: string; isMe: boolean }) {
 }
 
 export default function GroupChatWidget({
-  convId, convKind, title, userMap, members = [], embedded = false, onClose, closedNote,
+  convId, convKind, title, userMap, members = [], embedded = false, onClose, closedNote, unreadSince,
 }: GroupChatWidgetProps) {
   // One place the collection is chosen. Every path below is built from this, so a direct chat and
   // a group differ in exactly one line.
@@ -146,7 +152,7 @@ export default function GroupChatWidget({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [lastRead, setLastRead] = useState<number>(Date.now());
+  const [lastRead, setLastRead] = useState<number>(() => unreadSince ?? Date.now());
   // The listener below is created once per conversation (and per window size), not on every open
   // and close of the pane, so it reads these two through refs — a closure would keep the values it
   // was created with.

@@ -464,6 +464,7 @@ const dictionary: Dictionary = {
   gamesLoadFailed: "Les parties n’ont pas pu être chargées.",
   gameCouldNotShow: "Cette partie n’a pas pu être affichée. L’erreur a été enregistrée.",
   chatCouldNotShow: "Cette conversation n’a pas pu être affichée. L’erreur a été enregistrée.",
+  chatCouldNotLoad: "Le chat n’a pas pu être chargé. Vérifiez votre connexion, puis rechargez la page.",
   cardCouldNotShow: "Cette carte n’a pas pu être affichée. L’erreur a été enregistrée.",
   expensesCouldNotShow: "Les dépenses n’ont pas pu être affichées. L’erreur a été enregistrée.",
   calendarCouldNotShow: "Ce calendrier n’a pas pu être affiché. L’erreur a été enregistrée.",

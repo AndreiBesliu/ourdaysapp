@@ -13,13 +13,14 @@
 /**
  * Screens, and parts of screens, that must be dynamic entries, outside the boot set. The calendar's
  * windows and the card code since 29.10.2026: they carried the code libraries, drag-and-drop, the date
- * parser and the arcade into boot (about 300 kB).
+ * parser and the arcade into boot (about 300 kB). The calendar's floating chat since 06.11.2026.
  */
 export const LAZY_SCREENS = [
   'src/screens/Wallet.tsx', 'src/screens/Chat.tsx', 'src/screens/Settings.tsx',
   'src/screens/Admin.tsx', 'src/screens/PeriodLog.tsx', 'src/screens/Warlord.tsx',
   'src/components/AssetBarcode.tsx', 'src/components/InviteFamilyModal.tsx',
   'src/components/AddEventModal.tsx', 'src/components/EventDetailsModal.tsx', 'src/components/games/GamesHubModal.tsx',
+  'src/components/GroupChatWidget.tsx',
 ];
 
 /** Code that must never load at boot, found by a string that survives minification. */

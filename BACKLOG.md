@@ -389,7 +389,14 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     Pornirea 1.201.795 → 1.078.030 octeți, gzip 366.025 → 326.364. Pachetul a rămas în `package.json` (npm e stricat pe
     mașină); de scos la prima instalare. **Fără recenzie cu agenți și fără banc vizual** (contextul sesiunii plin): Andrei
     verifică animația și glisarea (OWNER_VERIFY).
-  - **Candidații următori, de ales de Andrei:** `GroupChatWidget` (33 kB); Firebase Storage și Messaging (44 kB).
+  - **Chatul plutitor al calendarului, la cerere din 06.11** (`GroupChatWidgetOnDemand.tsx`, la alegerea lui Andrei): se
+    încarcă la primul tab de grup și în pauza de după login; desenat direct când a sosit, fără `React.lazy` (altfel
+    butonul lipsea ~300 ms). Pornirea 1.079.830 → 1.039.085 octeți, gzip 326.746 → 315.647; bucata lui are 35 kB.
+    **De știut:** Chromium ține un `import()` eșuat cât trăiește pagina, deci o bucată picată o dată nu revine fără
+    reîncărcare. Preîncărcarea și montarea chatului așteaptă acum conexiunea, iar nota chatului oferă reîncărcarea.
+    Ferestrele calendarului (29.10) au aceeași expunere la un eșec în timpul pauzei; preîncărcarea online le acoperă și pe
+    ele, dar nota lor nu are buton.
+  - **Candidații următori, de ales de Andrei:** Firebase Storage și Messaging (44 kB).
 - **Hosting răspunde cu `index.html` la un `/assets/*.js` lipsă**, cu cache imutabil pe un an (măsurat
   pe live).
   - **Ce nu se strică:** un tab vechi după un deploy vede tot „versiune nouă”; Chrome, Firefox și

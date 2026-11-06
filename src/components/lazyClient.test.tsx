@@ -10,9 +10,18 @@
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createElement, lazy, Suspense } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 const reportError = vi.fn();
 vi.mock('../reportError', () => ({ reportError: (...a: unknown[]) => reportError(...a) }));
+// What `import('../components/GroupChatWidget')` brings in this file: a stand-in (the real one needs Firebase), so the
+// shipped wiring — lazyParts' loader, its `loaded`, and the wrapper's default export — runs as it is.
+const widgetImports = vi.fn();
+vi.mock('./GroupChatWidget', async () => {
+  widgetImports();
+  const { createElement: h } = await import('react');
+  return { default: (p: { title: string }) => h('p', null, `wired ${p.title}`) };
+});
 
 // ── The DOM React's client needs to mount, render text and unmount: no layout, no events. ──
 class MiniNode {
@@ -54,6 +63,7 @@ class MiniElement extends MiniNode {
 
 let createRoot: typeof import('react-dom/client').createRoot;
 let LazyAssetBarcode: typeof import('./LazyAssetBarcode');
+let OnDemand: typeof import('./GroupChatWidgetOnDemand');
 let ErrorBoundary: typeof import('./ErrorBoundary').default;
 const roots: Array<{ unmount(): void }> = [];
 
@@ -75,6 +85,7 @@ beforeAll(async () => {
   g.HTMLIFrameElement = function HTMLIFrameElement() {};
   ({ createRoot } = await import('react-dom/client'));
   LazyAssetBarcode = await import('./LazyAssetBarcode');
+  OnDemand = await import('./GroupChatWidgetOnDemand');
   ErrorBoundary = (await import('./ErrorBoundary')).default;
 });
 afterEach(() => { while (roots.length) roots.pop()!.unmount(); reportError.mockReset(); });
@@ -143,5 +154,151 @@ describe('a window, when its chunk cannot load', () => {
     const text = await mount(createElement(ErrorBoundary, { fallback: 'x', children: createElement(Suspense, { fallback: null }, createElement(Window)) }));
     expect(text).toBe('the window');
     expect(load).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the calendar’s floating chat, drawn when its code arrives (06.11.2026)', () => {
+  const PROPS = { convId: 'g1', convKind: 'group', title: 'Family', userMap: {} };
+  const Widget = (p: { title: string }) => createElement('p', null, `chat ${p.title}`);
+
+  it('nothing until it arrives, then the widget, with its props, and ONE load', async () => {
+    let arrive!: (w: typeof Widget) => void;
+    const load = vi.fn(() => new Promise<typeof Widget>((r) => { arrive = r; }));
+    const Chat = OnDemand.onArrival(load as never, () => null);
+    const container = new MiniElement('div');
+    const root = createRoot(container as unknown as Element);
+    roots.push(root);
+    root.render(createElement(Chat, PROPS as never));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(container.textContent).toBe('');
+    arrive(Widget);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(container.textContent).toBe('chat Family');
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it('already here (the idle warm-up): drawn in the very render that mounts it, without a load', () => {
+    const load = vi.fn(() => Promise.resolve(Widget));
+    const Chat = OnDemand.onArrival(load as never, () => Widget as never);
+    // The server renderer runs one render and no effects: what it shows is the first render.
+    expect(renderToStaticMarkup(createElement(Chat, PROPS as never))).toBe('<p>chat Family</p>');
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('not here yet: the first render is empty, and it is the effect that asks for it', () => {
+    const load = vi.fn(() => new Promise(() => {}));
+    const Chat = OnDemand.onArrival(load as never, () => null);
+    expect(renderToStaticMarkup(createElement(Chat, PROPS as never))).toBe('');
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  for (const afterMs of [-1, 20]) {
+    it(`a chunk that cannot load reaches the boundary as a chunk, with ONE load, reported once (${afterMs < 0 ? 'at once' : 'after a round trip'})`, async () => {
+      const load = failing(afterMs);
+      const Chat = OnDemand.onArrival(load as never, () => null);
+      const seen: boolean[] = [];
+      const text = await mount(createElement(ErrorBoundary, {
+        context: 'GroupChatWidget',
+        fallback: ({ chunk }: { chunk: boolean }) => { seen.push(chunk); return chunk ? 'reload the page' : 'could not be shown'; },
+        children: createElement(Chat, PROPS as never),
+      }), 300);
+      expect(text).toBe('reload the page');
+      expect(seen.every((c) => c === true)).toBe(true);
+      expect(load).toHaveBeenCalledTimes(1);
+      expect(reportError).toHaveBeenCalledTimes(1);
+      expect(reportError.mock.calls[0][1]).toMatchObject({ context: 'StaleChunk' });
+    });
+  }
+
+  it('unread counts from when the chat was SHOWN, not from when its code came (review of 06.11.2026)', async () => {
+    let arrive!: (w: unknown) => void;
+    const seen: Array<number | undefined> = [];
+    const Probe = (p: { unreadSince?: number }) => { seen.push(p.unreadSince); return createElement('p', null, 'probe'); };
+    const load = vi.fn(() => new Promise((r) => { arrive = r; }));
+    const Chat = OnDemand.onArrival(load as never, () => null);
+    const shownFrom = Date.now();
+    const container = new MiniElement('div');
+    const root = createRoot(container as unknown as Element);
+    roots.push(root);
+    root.render(createElement(Chat, PROPS as never));
+    await new Promise((r) => setTimeout(r, 30));
+    const shownBy = Date.now();
+    await new Promise((r) => setTimeout(r, 80));
+    const arrivedAt = Date.now();
+    arrive(Probe);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(container.textContent).toBe('probe');
+    expect(seen.length).toBeGreaterThan(0);
+    for (const s of seen) {
+      expect(s).toBeGreaterThanOrEqual(shownFrom);
+      expect(s).toBeLessThanOrEqual(shownBy);
+      expect(s!).toBeLessThan(arrivedAt);
+    }
+  });
+
+  it('offline before the code came: no fetch spent, nothing drawn; back online: ONE load, and the chat', async () => {
+    const listeners = new Set<() => void>();
+    const env = {
+      onLine: false as boolean | undefined,
+      addEventListener: ((t: string, fn: () => void) => { if (t === 'online') listeners.add(fn); }) as never,
+      removeEventListener: ((t: string, fn: () => void) => { if (t === 'online') listeners.delete(fn); }) as never,
+    };
+    const load = vi.fn(() => Promise.resolve(Widget));
+    const Chat = OnDemand.onArrival(load as never, () => null, () => env);
+    const container = new MiniElement('div');
+    const root = createRoot(container as unknown as Element);
+    roots.push(root);
+    root.render(createElement(Chat, PROPS as never));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(load).not.toHaveBeenCalled();
+    expect(container.textContent).toBe('');
+    env.onLine = true;
+    for (const fn of [...listeners]) fn();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toBe('chat Family');
+    expect(listeners.size).toBe(0);
+  });
+
+  it('offline, then the tab switched away: the wait ends with it, and nothing loads later', async () => {
+    const listeners = new Set<() => void>();
+    const env = {
+      onLine: false as boolean | undefined,
+      addEventListener: ((t: string, fn: () => void) => { if (t === 'online') listeners.add(fn); }) as never,
+      removeEventListener: ((t: string, fn: () => void) => { if (t === 'online') listeners.delete(fn); }) as never,
+    };
+    const load = vi.fn(() => Promise.resolve(Widget));
+    const Chat = OnDemand.onArrival(load as never, () => null, () => env);
+    const container = new MiniElement('div');
+    const root = createRoot(container as unknown as Element);
+    root.render(createElement(Chat, PROPS as never));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(listeners.size).toBe(1);
+    root.unmount();
+    expect(listeners.size).toBe(0);
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('a time the caller gives wins over the time it was shown', () => {
+    const seen: Array<number | undefined> = [];
+    const Probe = (p: { unreadSince?: number }) => { seen.push(p.unreadSince); return null; };
+    const Chat = OnDemand.onArrival((() => Promise.resolve(Probe)) as never, () => Probe as never);
+    renderToStaticMarkup(createElement(Chat, { ...PROPS, unreadSince: 1234 } as never));
+    expect(seen).toEqual([1234]);
+  });
+
+  it('the shipped wiring: the warm-up’s own loader fills what the first render reads, with one import', async () => {
+    const parts = await import('../utils/lazyParts');
+    expect(parts.loadedGroupChatWidget()).toBeNull();
+    expect(renderToStaticMarkup(createElement(OnDemand.default, PROPS as never))).toBe('');
+    // What App.tsx warms while idle: the very function in LAZY_PARTS.
+    const warmed = parts.LAZY_PARTS.find((l) => l === parts.loadGroupChatWidget);
+    expect(warmed).toBeDefined();
+    await warmed!();
+    expect(parts.loadedGroupChatWidget()).not.toBeNull();
+    // The calendar's wrapper, as shipped, draws it in its first render now.
+    expect(renderToStaticMarkup(createElement(OnDemand.default, PROPS as never))).toBe('<p>wired Family</p>');
+    await parts.loadGroupChatWidget();
+    expect(widgetImports).toHaveBeenCalledTimes(1);
   });
 });

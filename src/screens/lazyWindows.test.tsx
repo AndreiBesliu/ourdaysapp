@@ -8,11 +8,12 @@
 // itself is run in src/components/lazyClient.test.tsx.
 
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { latchOpened, useOpenedOnce } from '../hooks/useOpenedOnce';
-import { LAZY_PARTS } from '../utils/lazyParts';
+import { LAZY_PARTS, keptOnArrival, loadGroupChatWidget } from '../utils/lazyParts';
+import { LAZY_SCREENS } from '../../scripts/bundleSplit.mjs';
 import { t } from '../utils/i18nAll';
 
 const read = (p: string) => readFileSync(p, 'utf8');
@@ -131,8 +132,9 @@ describe('what boot imports never carries the windows or their libraries', () =>
   // The modules loaded at boot on the way to the windows. A static import of a window or of a library
   // only they use pulls it all back into boot (check-split refuses that build too).
   const BOOT = ['src/screens/CalendarHome.tsx', 'src/App.tsx', 'src/utils/lazyParts.ts',
-    'src/hooks/useOpenedOnce.ts', 'src/components/LazyAssetBarcode.tsx', 'src/components/CodeNumber.tsx'];
-  const WINDOWS = /^import (?!type\b)[^;]*from ['"][./]*(?:components\/)?(?:games\/)?(?:AssetBarcode|InviteFamilyModal|AddEventModal|EventDetailsModal|GamesHubModal)['"]/m;
+    'src/hooks/useOpenedOnce.ts', 'src/components/LazyAssetBarcode.tsx', 'src/components/CodeNumber.tsx',
+    'src/components/GroupChatWidgetOnDemand.tsx'];
+  const WINDOWS = /^import (?!type\b)[^;]*from ['"][./]*(?:components\/)?(?:games\/)?(?:AssetBarcode|InviteFamilyModal|AddEventModal|EventDetailsModal|GamesHubModal|GroupChatWidget(?!OnDemand))['"]/m;
   const LIBRARIES = /^import (?!type\b)[^;]*from ['"](?:react-barcode|react-qr-code|@hello-pangea\/dnd|chrono-node)['"]/m;
 
   it('no static import of a window or of a library only the windows use', () => {
@@ -149,8 +151,85 @@ describe('what boot imports never carries the windows or their libraries', () =>
       ['AddEventModal', 'components/AddEventModal'], ['EventDetailsModal', 'components/EventDetailsModal'], ['GamesHubModal', 'components/games/GamesHubModal']]) {
       expect(parts, name).toContain(`export const load${name} = () => import('../${path}');`);
     }
-    expect(LAZY_PARTS).toHaveLength(5);
-    expect(new Set(LAZY_PARTS).size).toBe(5);
+    expect(parts).toContain("const chatWidget = keptOnArrival(() => import('../components/GroupChatWidget'));");
+    expect(LAZY_PARTS).toContain(loadGroupChatWidget);
+    expect(LAZY_PARTS).toHaveLength(6);
+    expect(new Set(LAZY_PARTS).size).toBe(6);
     expect(read('src/App.tsx')).toMatch(/warmRoutes\(\[loadWallet, loadChat, loadSettings, \.\.\.LAZY_PARTS\]\)/);
+  });
+});
+
+describe('the calendar’s floating chat, loaded on demand (06.11.2026)', () => {
+  it('the build guard holds it outside the boot set (scripts/check-split.mjs)', () => {
+    expect(LAZY_SCREENS).toContain('src/components/GroupChatWidget.tsx');
+  });
+
+  it('unread counts from when the chat was shown: the widget starts its last-read time from `unreadSince`', () => {
+    const widget = read('src/components/GroupChatWidget.tsx');
+    expect(widget).toContain('const [lastRead, setLastRead] = useState<number>(() => unreadSince ?? Date.now());');
+    // The chat screen gives none: there the widget mounts with the screen, as before.
+    expect(read('src/screens/Chat.tsx')).not.toContain('unreadSince');
+  });
+
+  it('the warm-up waits for a connection (a fetch spent offline stays failed on Chromium)', () => {
+    const app = read('src/App.tsx');
+    expect(app).toContain('stopWaiting = whenOnline(() => { void warmRoutes([loadWallet, loadChat, loadSettings, ...LAZY_PARTS]); }, browserOnline());');
+    // Both ways the effect ends (idle callback, timer) stop the wait too: signed out offline, nothing warms later.
+    expect(app).toContain('return () => { cic(id); stopWaiting(); };');
+    expect(app).toContain('return () => { window.clearTimeout(id); stopWaiting(); };');
+  });
+
+  it('the calendar has the on-demand wrapper, under the widget’s name; the chat screen keeps the widget itself', () => {
+    expect(HOME).toContain("import GroupChatWidget from '../components/GroupChatWidgetOnDemand';");
+    expect(HOME).not.toMatch(/from '\.\.\/components\/GroupChatWidget';/);
+    expect(read('src/screens/Chat.tsx')).toContain("import GroupChatWidget from '../components/GroupChatWidget';");
+  });
+
+  it('its boundary says to reload when it was the chunk, and offers it; "could not be shown" when it was the conversation', () => {
+    const at = HOME.indexOf('<GroupChatWidget');
+    const boundary = HOME.lastIndexOf('<ErrorBoundary', at);
+    const fallback = HOME.slice(boundary, at);
+    expect(fallback).toMatch(/fallback=\{\(\{ chunk \}\) => \([\s\S]*\{chunk \? t\('chatCouldNotLoad', language\) : t\('chatCouldNotShow', language\)\}/);
+    // The reload, only for a chunk (on Chromium nothing else fetches it again), and only as an offer. The tag is written
+    // `<(?:button)` so this file's text holds no literal opening tag for the button-coverage count (buttonNames.test.ts).
+    expect(fallback).toMatch(/\{chunk && \(\s*<(?:button) type="button" onClick=\{\(\) => window\.location\.reload\(\)\}[^>]*>\s*\{t\('errorReload', language\)\}/);
+    for (const lang of ['en-US', 'ro-RO', 'fr-FR', 'es-ES', 'it-IT', 'de-DE']) {
+      expect(t('chatCouldNotLoad', lang), lang).not.toBe('chatCouldNotLoad');
+      expect(t('chatCouldNotLoad', lang), lang).not.toBe(t('chatCouldNotShow', lang));
+    }
+  });
+});
+
+describe('keptOnArrival: a loader that keeps what it brought', () => {
+  it('nothing before, the value after; later calls do not import again', async () => {
+    const importer = vi.fn(() => Promise.resolve({ default: 'W' }));
+    const part = keptOnArrival(importer);
+    expect(part.loaded()).toBeNull();
+    expect(await part.load()).toBe('W');
+    expect(part.loaded()).toBe('W');
+    expect(await part.load()).toBe('W');
+    expect(importer).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls while it loads share the one load', async () => {
+    let resolve!: (m: { default: string }) => void;
+    const importer = vi.fn(() => new Promise<{ default: string }>((r) => { resolve = r; }));
+    const part = keptOnArrival(importer);
+    const a = part.load();
+    const b = part.load();
+    resolve({ default: 'W' });
+    expect(await Promise.all([a, b])).toEqual(['W', 'W']);
+    expect(importer).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed load is forgotten: the next call asks again, and nothing is kept', async () => {
+    const importer = vi.fn()
+      .mockImplementationOnce(() => Promise.reject(new TypeError('Failed to fetch dynamically imported module: /assets/x.js')))
+      .mockImplementationOnce(() => Promise.resolve({ default: 'W' }));
+    const part = keptOnArrival(importer as () => Promise<{ default: string }>);
+    await expect(part.load()).rejects.toThrow('Failed to fetch dynamically imported module');
+    expect(part.loaded()).toBeNull();
+    expect(await part.load()).toBe('W');
+    expect(importer).toHaveBeenCalledTimes(2);
   });
 });

@@ -15,6 +15,19 @@
 
 ---
 
+## 🆕 Chatul de pe calendar se încarcă la cerere (06.11)
+
+**Fapt:** codul chatului plutitor (bulina din colțul calendarului, pe un tab de grup) nu mai e în pachetul de pornire: se
+aduce la primul tab de grup și în pauza de după login. Pornirea e cu ~41 kB mai mică. Probat pe un banc cu aplicația
+reală: bulina apare la ~11 ms după clic, necititele și deschiderea merg. Ce n-am putut vedea: o rețea lentă reală.
+
+- [ ] **Pe telefon, cu aplicația abia deschisă, apasă repede un tab de grup** (1 minut).
+      - **Cum arată bine:** bulina chatului apare imediat sau după o clipă, cu numărul de necitite dacă cineva scrie.
+      - **Ce e greșit:** nota „The chat could not be loaded… reload” cu buton **Reload**, cu semnal bun. Dacă apare,
+        spune-mi: înseamnă că bucata nu se încarcă pe live.
+
+---
+
 ## 🆕 Un mesaj șters nu-și mai lasă vorbele în lista de conversații (06.11) — PUBLICAT pe 06.11
 
 **Fapt:** lista de conversații arăta textul ultimului mesaj chiar și după ce autorul îl ștergea, până scria cineva

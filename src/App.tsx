@@ -35,7 +35,7 @@ const loadSettings = () => import('./screens/Settings');
 const Wallet = lazy(loadWallet);
 const Chat = lazy(loadChat);
 const Settings = lazy(loadSettings);
-import { warmRoutes } from './utils/routeWarmup';
+import { browserOnline, warmRoutes, whenOnline } from './utils/routeWarmup';
 import { LAZY_PARTS } from './utils/lazyParts';
 import { forgetOfflineWallet, readOfflineWallet } from './utils/offlineWallet';
 import { startOfflineWalletSync, stopOfflineWalletSync } from './utils/offlineWalletSync';
@@ -368,17 +368,22 @@ function App() {
   // the module is already in memory. Above the `if (loading)` return, like every hook here. The
   // calendar's windows and the card codes too (29.10.2026, `LAZY_PARTS`): a code is opened at the
   // till, where the signal is what it is, and a window should open at once.
+  // Online only (06.11.2026, routeWarmup.ts `whenOnline`): a fetch spent offline is kept failed by Chromium until a
+  // reload, and the calendar's chat mounts by itself on every group tab.
   useEffect(() => {
     if (!user) return;
-    const warm = () => { void warmRoutes([loadWallet, loadChat, loadSettings, ...LAZY_PARTS]); };
+    let stopWaiting = () => {};
+    const warm = () => {
+      stopWaiting = whenOnline(() => { void warmRoutes([loadWallet, loadChat, loadSettings, ...LAZY_PARTS]); }, browserOnline());
+    };
     const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
     const cic = (window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
     if (ric && cic) {
       const id = ric(warm, { timeout: 5000 });
-      return () => cic(id);
+      return () => { cic(id); stopWaiting(); };
     }
     const id = window.setTimeout(warm, 2000);
-    return () => window.clearTimeout(id);
+    return () => { window.clearTimeout(id); stopWaiting(); };
   }, [user]);
 
   // Keep the offline card copy in step with the server while the app is open, on any screen

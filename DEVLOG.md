@@ -14810,3 +14810,59 @@ previzualizarea lui nu ține text, deci nicio reparare retroactivă.
 - **Nevăzut de mine:** o ștergere reală pe live. Cere două conturi într-o conversație; e în `OWNER_VERIFY.md`, sus.
 - **Unelte:** din Git Bash, `npx.cmd firebase …`. Un `npx` simplu ajunge la npm-ul stricat (bash nu caută `.cmd` după
   PATHEXT), chiar cu înlocuitorul primul în PATH.
+
+## 2026-11-06 · Bundle: chatul plutitor al calendarului se încarcă la cerere (Task Started)
+
+**Prompt (Andrei):** „Chat widget on demand” (la „Care e felia următoare?”).
+**Model:** Claude Opus 5.5.
+
+Din BACKLOG §3 („Bundle-ul, pasul următor”, candidatul `GroupChatWidget`): calendarul îl importă direct, deci tot codul
+chatului (1531 de rânduri, cu încărcarea pozelor și a mesajelor vocale, rezumatul AI) stă în bucata pe care o încarcă
+oricine la pornire, chiar și pe tab-ul personal, unde chatul nu apare. Pornirea azi: 1.079.830 octeți, gzip 326.746.
+Pe tab-urile de grup, widgetul ascultă mesajele și închis (bulina cu necitite), deci nu poate aștepta primul clic: se
+încarcă la prima afișare a unui tab de grup și e adus și în fundal, când aplicația stă (ca ferestrele, din 29.10).
+
+## 2026-11-06 · Bundle: chatul plutitor al calendarului se încarcă la cerere (Task Completed)
+
+**Prompt (Andrei):** „Chat widget on demand”.
+**Model:** Claude Opus 5.5.
+
+- **Pornirea:** 1.079.830 → 1.039.085 octeți (−40.745), gzip 326.746 → 315.647 (−11.099). `GroupChatWidget` are bucata lui
+  (35 kB), cu `ai`, `uploadFile` și `sounds` în bucăți comune la cerere. `check-split` îl ține afară (`LAZY_SCREENS`).
+- **Cum se încarcă:** `CalendarHome` montează `GroupChatWidgetOnDemand` (sub numele widgetului). Codul vine prin
+  `keptOnArrival` (`lazyParts.ts`), care ține componenta sosită; e și în `LAZY_PARTS`, deci se aduce în pauza de după
+  login. Desenat DIRECT în randarea care îl montează, nu `React.lazy`: un lazy suspendă la prima randare și atunci când
+  bucata e de mult în browser, iar React ține rezerva ~300 ms (memoria `reference_react_capcane`). Ecranul Chat importă
+  widgetul direct, ca înainte.
+- **Recenzia** (7 agenți, 0,93 M tokeni, față de ~0,8 M anunțați): 4 constatări reale, toate mici după verificare.
+  - **Necititele** se numărau de la sosirea codului, nu de la afișarea tab-ului. Acum `unreadSince`, un prop nou și
+    opțional: ora afișării, din wrapper.
+  - **Chromium ține un `import()` eșuat cât trăiește pagina.** Verificatorul a măsurat în browser: aceeași adresă
+    respinge fără rețea, cât timp pagina rămâne deschisă. Deci o preîncărcare căzută (offline) oprea chatul până la
+    reîncărcare, iar comentariile promiteau o reîncercare inexistentă. Acum:
+    - preîncărcarea așteaptă conexiunea (`whenOnline`, `browserOnline` în `routeWarmup.ts`);
+    - nota chatului are buton **Reload**;
+    - comentariile spun adevărul.
+  - **Legătura reală** (exportul implicit și `loaded` din aceeași instanță cu încărcătorul preîncărcării) nu era testată.
+    Acum e, cu modulul widgetului înlocuit în test.
+  - **Un test nu putea pica** (demontarea înainte de sosire): scos. Garda `live` e numită defensivă.
+- **Reverificarea** (1 agent, 0,14 M): cele 4 închise. A mai găsit o gaură: montarea chatului își cheltuia singură
+  încărcarea offline. Acum așteaptă și ea conexiunea. Offline, înainte să fi venit codul, tab-ul de grup nu are buton de
+  chat până revine rețeaua.
+- **Banc** (aplicația reală, emulatorii Auth + Firestore + Storage, fișierele șterse înainte de commit):
+  - deconectat, modulul widgetului nu e cerut; controlul pe HEAD îl cerea la 58 ms;
+  - după login, îl aduce preîncărcarea; un tab de grup arată butonul la 11–15 ms, și la cel mai rapid clic (341 ms
+    după încărcare);
+  - un mesaj nou de la Bob dă „Family (1)”; deschiderea arată mesajele și stinge bulina; Friends și Personal se comportă
+    cum trebuie;
+  - refăcut după reparații: necititele merg cu noua inițializare.
+- **Mutanți** (clonă în afara Drive, control verde înainte și după, fișierele restaurate la octet): **27 din 28 prinși**.
+  Supraviețuitorul e echivalent: garda `live` (React ignoră un `setState` pe o componentă demontată).
+- **Porți:**
+  - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
+  - `npm test` (2835), `test:tz` (46 + 46);
+  - funcțiile n-au schimbări.
+- **Pe drum:** scanerul i18n citește `=> Promise<…>` ca text JSX (încărcătoarele au acum semnătură de interfață, ca
+  `LazyAssetBarcode`), iar testul butoanelor numără un `<button` literal și dintr-o expresie regulată dintr-un `.tsx`.
+- **Rămase:** ferestrele calendarului (29.10) au aceeași expunere la un eșec în timpul pauzei, cu notă fără buton
+  (BACKLOG). Rapoartele `StaleChunk` se repetă la fiecare tab de grup după un eșec (zgomot în jurnal, plafonat pe server).
