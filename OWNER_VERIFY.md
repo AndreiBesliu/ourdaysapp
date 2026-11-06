@@ -15,7 +15,7 @@
 
 ---
 
-## 🆕 Chatul de pe calendar se încarcă la cerere (06.11)
+## 🆕 Chatul de pe calendar se încarcă la cerere (06.11) — PUBLICAT pe 06.11
 
 **Fapt:** codul chatului plutitor (bulina din colțul calendarului, pe un tab de grup) nu mai e în pachetul de pornire: se
 aduce la primul tab de grup și în pauza de după login. Pornirea e cu ~41 kB mai mică. Probat pe un banc cu aplicația

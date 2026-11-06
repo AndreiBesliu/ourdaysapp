@@ -14866,3 +14866,15 @@ Pe tab-urile de grup, widgetul ascultă mesajele și închis (bulina cu necitite
   `LazyAssetBarcode`), iar testul butoanelor numără un `<button` literal și dintr-o expresie regulată dintr-un `.tsx`.
 - **Rămase:** ferestrele calendarului (29.10) au aceeași expunere la un eșec în timpul pauzei, cu notă fără buton
   (BACKLOG). Rapoartele `StaleChunk` se repetă la fiecare tab de grup după un eșec (zgomot în jurnal, plafonat pe server).
+
+## 2026-11-06 · Bundle: chatul plutitor la cerere — publicat și verificat pe live
+
+- **Publicat:** `237debb`, `--only functions,hosting`, `--project live`: cele 99 de funcții sărite („No changes
+  detected”), hosting cu 97 de fișiere, release complete. Predeploy-ul a trecut `check-bundle` și `check-split`. CI verde
+  pe `237debb`.
+- **Verificat pe live:**
+  - intrarea servită (`index-BYeCW31r.js`) e cea construită local;
+  - `index.html` nu preîncarcă widgetul, iar intrarea nu-i mai conține codul (doar numele bucății, pentru `import()`);
+  - `GroupChatWidget-CPnXcNhy.js` se servește (200);
+  - 0 rânduri de eroare în cele 30 de minute de după publicare; joburile au `ok` și 0 eșecuri la rând.
+- **Nevăzut de mine:** o rețea lentă reală pe telefon (OWNER_VERIFY, sus).
