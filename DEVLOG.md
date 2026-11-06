@@ -14710,3 +14710,12 @@ nu prindeau refuzul deloc (o promisiune respinsă, la raportorul global). Ecranu
   închisă după scriere, ștergerea neprinsă).
 - **Porți:** `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`; `npm test` (2801), `test:tz` (46).
   Funcțiile și regulile n-au schimbări.
+
+## 2026-11-06 · Chatul: refuzurile pe ecran — publicat și verificat pe live
+
+- **Publicat:** `fcaef7e`, `--only functions,hosting`, `--project live`. Hosting: 88 de fișiere, release complete.
+  Funcțiile: toate cele 97 sărite („No changes detected”). CI verde pe `fcaef7e`.
+- **Verificat pe live:** intrarea servită (`index-BsJq1fPa.js`) e cea construită local și conține propozițiile noi
+  (engleza și româna); bucățile fr/es/de cu cheile noi se servesc (200). Niciun rând de eroare nou.
+- **Unelte:** înlocuitorii pentru npm-ul stricat stau acum în `C:\Users\besli\.claude\tools\npxshim` (copia din Temp
+  dispăruse); emulatorii cer JDK 21, cel din Android Studio.
