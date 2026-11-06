@@ -26,7 +26,7 @@
 //
 // So clients cannot create a chat at all. They ask for one.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onDirectMessageCreated = exports.openDirectChat = void 0;
+exports.onDirectMessageCreated = exports.onDirectMessageUpdated = exports.openDirectChat = void 0;
 exports.directChatId = directChatId;
 const https_1 = require("firebase-functions/v2/https");
 const globalOptions_1 = require("./globalOptions");
@@ -35,6 +35,9 @@ const admin = require("firebase-admin");
 const firestore_2 = require("firebase-admin/firestore");
 const notify_1 = require("./notify");
 const docId_1 = require("./docId");
+const chatPreview_1 = require("./chatPreview");
+const chatPreviewWrite_1 = require("./chatPreviewWrite");
+const errorLog_1 = require("./errorLog");
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 /**
  * The document id for a pair, derived rather than random.
@@ -129,6 +132,22 @@ exports.openDirectChat = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_
     });
     return { chatId: id, created: true };
 });
+// The same as a group's (index.ts, onGroupMessageUpdated): a deleted or edited newest message, in the list too;
+// retried the same way.
+exports.onDirectMessageUpdated = (0, firestore_1.onDocumentUpdated)({ document: "chats/{chatId}/messages/{messageId}", retry: true }, async (event) => {
+    var _a, _b;
+    if (!(0, chatPreview_1.previewUpdate)((_a = event.data) === null || _a === void 0 ? void 0 : _a.before.data(), (_b = event.data) === null || _b === void 0 ? void 0 : _b.after.data()))
+        return;
+    try {
+        await (0, chatPreviewWrite_1.syncPreview)(`chats/${event.params.chatId}`);
+    }
+    catch (err) {
+        await (0, errorLog_1.logServerError)(`direct-chat preview not refreshed: ${String((err === null || err === void 0 ? void 0 : err.message) || err)}`, "chat:preview", {
+            stack: err === null || err === void 0 ? void 0 : err.stack,
+        });
+        throw err;
+    }
+});
 /**
  * A direct message arrived: tell the other person, and keep the list preview current.
  *
@@ -141,13 +160,20 @@ exports.onDirectMessageCreated = (0, firestore_1.onDocumentCreated)("chats/{chat
     var _a, _b, _c, _d;
     const msg = (_a = event.data) === null || _a === void 0 ? void 0 : _a.data();
     const chatId = event.params.chatId;
-    if (!msg || !chatId)
+    if (!msg || !chatId || !event.data)
         return;
     const senderId = typeof msg.senderId === "string" ? msg.senderId : "";
     if (!senderId)
         return;
     try {
         const db = admin.firestore();
+        // The preview, from the chat's newest message as it is now (chatPreviewWrite.ts). Written by the server, never by
+        // a client: a writable preview is a way to put words into somebody else's conversation list. One that cannot be
+        // written is logged there, and the announcement still goes.
+        const now = await (0, chatPreviewWrite_1.previewNewMessage)(`chats/${chatId}`, event.data.ref);
+        // Taken back before it was announced: not announced (index.ts, onMessageCreated). As it is now, edits included.
+        if (!now || now.isDeleted === true)
+            return;
         const chatSnap = await db.doc(`chats/${chatId}`).get();
         const members = Array.isArray((_b = chatSnap.data()) === null || _b === void 0 ? void 0 : _b.members) ? chatSnap.data().members : [];
         if (members.length === 0)
@@ -156,20 +182,10 @@ exports.onDirectMessageCreated = (0, firestore_1.onDocumentCreated)("chats/{chat
         // Telling it anything would only leave a bell row nobody can read.
         const former = (_c = chatSnap.data()) === null || _c === void 0 ? void 0 : _c.formerMembers;
         const gone = (m) => !!(former && typeof former === "object" && former[m]);
-        const preview = typeof msg.text === "string" && msg.text
-            ? msg.text.slice(0, 140)
-            : msg.imageUrl ? "\u{1F4F7}" : msg.audioUrl ? "\u{1F3A4}" : "";
-        // Written by the server, never by a client: a writable preview is a way to put words into
-        // somebody else's conversation list.
-        await db.doc(`chats/${chatId}`).set({
-            lastMessageAt: firestore_2.FieldValue.serverTimestamp(),
-            lastMessageText: preview,
-            lastMessageBy: senderId,
-        }, { merge: true });
         const senderName = ((_d = (await db.doc(`profiles/${senderId}`).get()).data()) === null || _d === void 0 ? void 0 : _d.name) || "Someone";
-        await (0, notify_1.notify)(Object.assign(Object.assign({ userIds: members.filter((m) => m !== senderId && !gone(m)), createdBy: senderId, type: "chat", titleKey: "notifNewMessage", titleParam: senderName }, (typeof msg.text === "string" && msg.text
-            ? { bodyText: msg.text }
-            : { bodyKey: msg.imageUrl ? "notifSentImage" : "notifSentMessage" })), { data: { route: "/chat", chatId } }));
+        await (0, notify_1.notify)(Object.assign(Object.assign({ userIds: members.filter((m) => m !== senderId && !gone(m)), createdBy: senderId, type: "chat", titleKey: "notifNewMessage", titleParam: senderName }, (typeof now.text === "string" && now.text
+            ? { bodyText: now.text }
+            : { bodyKey: now.imageUrl ? "notifSentImage" : "notifSentMessage" })), { data: { route: "/chat", chatId } }));
     }
     catch (err) {
         console.error("onDirectMessageCreated: could not deliver", err);

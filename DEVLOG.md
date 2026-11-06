@@ -14719,3 +14719,72 @@ nu prindeau refuzul deloc (o promisiune respinsă, la raportorul global). Ecranu
   (engleza și româna); bucățile fr/es/de cu cheile noi se servesc (200). Niciun rând de eroare nou.
 - **Unelte:** înlocuitorii pentru npm-ul stricat stau acum în `C:\Users\besli\.claude\tools\npxshim` (copia din Temp
   dispăruse); emulatorii cer JDK 21, cel din Android Studio.
+
+## 2026-11-06 · Lista de conversații: un mesaj șters sau editat nu-și mai lasă vorbele în previzualizare (Task Started)
+
+**Prompt (Andrei):** „Yes, the preview” (la „Șterg acum pe server textul unui mesaj șters din previzualizarea
+conversației?”).
+**Model:** Claude Opus 5.5.
+
+Din BACKLOG §2 („Textul unui mesaj șters rămâne în copiile serverului”): `lastMessageText` pe grup și pe chatul direct
+păstra vorbele unui mesaj șters până la mesajul următor; niciun trigger nu rula la modificarea unui mesaj. Doar
+previzualizarea; rândurile din clopoțel rămân decizia lui Andrei. Pe live: 1 grup cu ultimul mesaj șters, iar
+previzualizarea lui nu ține text, deci nicio reparare retroactivă.
+
+## 2026-11-06 · Lista de conversații: un mesaj șters sau editat nu-și mai lasă vorbele în previzualizare (Task Completed)
+
+**Prompt (Andrei):** „Yes, the preview”.
+**Model:** Claude Opus 5.5.
+
+- **Un singur scriitor, `functions/src/chatPreviewWrite.ts`.** `syncPreview` citește într-o tranzacție conversația și
+  cel MAI NOU mesaj al ei, așa cum e acum, și scrie din el `lastMessageText`, `lastMessageBy` și câmpul nou
+  `lastMessageDeleted`; `lastMessageAt` doar la un mesaj nou (o editare sau o ștergere nu mută conversația în listă).
+  - `update`, nu `set`: o conversație ștearsă între timp nu revine.
+  - Nu scrie nimic când previzualizarea e deja cea corectă (o editare a unui mesaj mai vechi).
+  - „Cel mai nou” = doar `createdAt` care e o dată și nu e în viitor: înainte de 08.10, regulile primeau orice valoare,
+    iar un text, o hartă sau anul 2099 se ordonează deasupra oricărei date reale (pe live: 0 asemenea mesaje).
+- **Patru triggere, aceeași regulă:**
+  - Cele două de creare (grup, chat direct) trec prin `previewNewMessage`. Un mesaj șters înainte să plece anunțul nu
+    mai e anunțat, iar anunțul poartă textul de acum (editat). Dacă previzualizarea nu se poate scrie: rând
+    `chat:preview` în jurnal, iar anunțul pleacă oricum.
+  - Două noi, la modificare (`onGroupMessageUpdated`, `onDirectMessageUpdated`), pornesc doar când se schimbă ce arată
+    lista (`previewUpdate`, pur, `chatPreview.ts`). Chitanțele, reacțiile și fixările nu citesc nimic. Au
+    `retry: true` și aruncă după jurnal: se recitesc, deci a doua rulare nu poate strica. Cele de creare nu au
+    (anunță).
+  - Eventarc nu garantează ordinea: o ștergere poate ajunge înaintea creării, o editare după ștergere. Orice eveniment
+    scrie ce spune ACUM mesajul cel mai nou, deci rezultatul e același în orice ordine.
+  - Un grup de un singur membru primește acum previzualizare (ieșea înainte de scriere, fiindcă n-avea pe cine anunța).
+- **Clientul:** `previewLine` (`src/utils/conversations.ts`): un ultim mesaj șters arată „Deleted message” („Mesaj
+  șters”), după numele expeditorului într-un grup sau după „You: ”, nu „Nothing said yet”. `Chat.tsx` îl folosește.
+- **Live, măsurat cu cheia de citire (doar numere):**
+  - interogarea nouă merge pe toate cele 6 conversații, cu indexul pe un singur câmp;
+  - 2 grupuri n-au deloc previzualizare, fiind dinaintea previzualizărilor de grup, iar unul are ultimul mesaj șters.
+    Se repară la următorul eveniment de mesaj din ele, nu la publicare (cheia nu scrie). Notat în `OWNER_VERIFY.md`.
+- **Recenzia** (14 agenți, 1,56 M tokeni, față de ~0,7 M anunțați: depășire). 11 constatări reale, toate mici. Prima
+  variantă scria din instantaneul evenimentului, deci ordinea evenimentelor conta. Reproiectarea, care citește mesajul
+  cel mai nou, le-a închis.
+- **Reverificarea 1** (1 agent, 0,15 M): 8 din 11 închise. 4 noi, reparate:
+  - eșecul previzualizării la creare era invizibil și oprea anunțul;
+  - un JSDoc mutat pe triggerul greșit;
+  - scrieri care nu schimbau nimic;
+  - calea „editat înainte de anunț” netestată în chatul direct.
+- **Reverificarea 2** (3 agenți, 0,47 M, față de ~0,45 M anunțați). Reparate:
+  - testul pe `updateTime` nu deosebea nimic, fiindcă Firestore nu mută `updateTime` la o scriere identică; proba e
+    acum spionul `Transaction.update`;
+  - marcajul „deleted” peste o previzualizare deja goală, netestat;
+  - `createdAt` vechi ciudat;
+  - lipsa reîncercării la modificare;
+  - `lastMessageDeleted` lipsea din `GROUP_KEYS` (`predeploy-measure.mjs`) și din cheile refuzate clientului în
+    `rules-tests/groups.test.ts`;
+  - comentarii rătăcite, iar documentele promiteau un nume în chatul direct.
+- **Mutanți** (clonă în afara Drive; porturile verificate înainte de fiecare rulare; control verde înainte și după;
+  fișierele restaurate la octet): **44 din 45 prinși** (10 unitari, 35 pe emulator). Supraviețuitorul e echivalent:
+  `gone` neverificat în `previewNewMessage`; mai jos, triggerul citește oricum grupul sau chatul și se oprește.
+- **Porți:**
+  - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
+  - `npm test` (2812), `test:tz` (46 + 46);
+  - funcțiile construite (`lib` în commit), `test:rules` întreg (84 de fișiere, 1266 de teste).
+- **Lăsate deliberat:**
+  - comentariul din `firestore.rules` („scris de `onMessageCreated`”) nu e atins: o publicare de reguli pentru un
+    comentariu nu merită riscul;
+  - rândurile din clopoțel păstrează textul unui mesaj șters: decizia lui Andrei (`OWNER_VERIFY.md`, `BACKLOG.md`).

@@ -96,27 +96,22 @@ describe('the list of used group ids', () => {
 });
 
 describe('a chat message does not bring a deleted group back', () => {
-  it('the preview is an update: a group deleted between the read and the write stays deleted', async () => {
+  it('the preview is an update: a group deleted while the trigger runs stays deleted', async () => {
     await db.doc(`groups/${G}`).set({ ownerId: ALICE, members: [ALICE, BOB], name: 'Family' });
     await db.doc(`users/${ALICE}`).set({ name: 'Alice' });
     const msgRef = db.doc(`groups/${G}/messages/m1`);
-    await msgRef.set({ senderId: ALICE, text: 'hello' });
+    await msgRef.set({ senderId: ALICE, text: 'hello', createdAt: admin.firestore.Timestamp.now() });
     const snap = await msgRef.get();
-    // The trigger reads the group first; the group is deleted before its preview write.
-    const realDoc = db.doc.bind(db);
+    // The preview is written in a transaction (chatPreviewWrite.ts): the group is deleted just before it runs.
+    const realTx = db.runTransaction.bind(db);
     let n = 0;
-    vi.spyOn(db, 'doc').mockImplementation(((path: string) => {
-      const ref = realDoc(path);
-      if (path === `groups/${G}` && ++n === 2) {
-        return Object.assign(Object.create(Object.getPrototypeOf(ref)), ref, {
-          update: async (...args: unknown[]) => { await realDoc(path).delete(); return (ref.update as (...a: unknown[]) => unknown)(...args); },
-        });
-      }
-      return ref;
+    vi.spyOn(db, 'runTransaction').mockImplementation((async (...args: unknown[]) => {
+      if (++n === 1) await db.doc(`groups/${G}`).delete();
+      return (realTx as (...a: unknown[]) => unknown)(...args);
     }) as never);
     await fn.onMessageCreated.run({ data: snap, params: { groupId: G, messageId: 'm1' } });
     vi.restoreAllMocks();
-    expect(n).toBe(2);
+    expect(n).toBe(1);
     expect(await exists(`groups/${G}`)).toBe(false);
     expect((await db.collection('notifications').get()).size).toBe(0);
   });
@@ -125,7 +120,7 @@ describe('a chat message does not bring a deleted group back', () => {
     await db.doc(`groups/${G}`).set({ ownerId: ALICE, members: [ALICE, BOB], name: 'Family' });
     await db.doc(`users/${ALICE}`).set({ name: 'Alice' });
     const msgRef = db.doc(`groups/${G}/messages/m1`);
-    await msgRef.set({ senderId: ALICE, text: 'hello' });
+    await msgRef.set({ senderId: ALICE, text: 'hello', createdAt: admin.firestore.Timestamp.now() });
     await fn.onMessageCreated.run({ data: await msgRef.get(), params: { groupId: G, messageId: 'm1' } });
     expect((await db.doc(`groups/${G}`).get()).data()).toMatchObject({ lastMessageText: 'hello', lastMessageBy: ALICE, members: [ALICE, BOB] });
   });

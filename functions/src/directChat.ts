@@ -27,11 +27,14 @@
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { CALLABLE_REGIONS } from "./globalOptions";
-import { onDocumentCreated } from "firebase-functions/v2/firestore";
+import { onDocumentCreated, onDocumentUpdated } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { notify } from "./notify";
 import { isPlainDocId } from "./docId";
+import { previewUpdate } from "./chatPreview";
+import { previewNewMessage, syncPreview } from "./chatPreviewWrite";
+import { logServerError } from "./errorLog";
 
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 
@@ -135,6 +138,20 @@ export const openDirectChat = onCall({ region: CALLABLE_REGIONS, enforceAppCheck
   return { chatId: id, created: true };
 });
 
+// The same as a group's (index.ts, onGroupMessageUpdated): a deleted or edited newest message, in the list too;
+// retried the same way.
+export const onDirectMessageUpdated = onDocumentUpdated({ document: "chats/{chatId}/messages/{messageId}", retry: true }, async (event) => {
+  if (!previewUpdate(event.data?.before.data(), event.data?.after.data())) return;
+  try {
+    await syncPreview(`chats/${event.params.chatId}`);
+  } catch (err) {
+    await logServerError(`direct-chat preview not refreshed: ${String((err as Error)?.message || err)}`, "chat:preview", {
+      stack: (err as Error)?.stack,
+    });
+    throw err;
+  }
+});
+
 /**
  * A direct message arrived: tell the other person, and keep the list preview current.
  *
@@ -146,13 +163,20 @@ export const openDirectChat = onCall({ region: CALLABLE_REGIONS, enforceAppCheck
 export const onDirectMessageCreated = onDocumentCreated("chats/{chatId}/messages/{messageId}", async (event) => {
   const msg = event.data?.data();
   const chatId = event.params.chatId;
-  if (!msg || !chatId) return;
+  if (!msg || !chatId || !event.data) return;
 
   const senderId = typeof msg.senderId === "string" ? msg.senderId : "";
   if (!senderId) return;
 
   try {
     const db = admin.firestore();
+    // The preview, from the chat's newest message as it is now (chatPreviewWrite.ts). Written by the server, never by
+    // a client: a writable preview is a way to put words into somebody else's conversation list. One that cannot be
+    // written is logged there, and the announcement still goes.
+    const now = await previewNewMessage(`chats/${chatId}`, event.data.ref);
+    // Taken back before it was announced: not announced (index.ts, onMessageCreated). As it is now, edits included.
+    if (!now || now.isDeleted === true) return;
+
     const chatSnap = await db.doc(`chats/${chatId}`).get();
     const members: string[] = Array.isArray(chatSnap.data()?.members) ? chatSnap.data()!.members : [];
     if (members.length === 0) return;
@@ -160,18 +184,6 @@ export const onDirectMessageCreated = onDocumentCreated("chats/{chatId}/messages
     // Telling it anything would only leave a bell row nobody can read.
     const former = chatSnap.data()?.formerMembers;
     const gone = (m: string) => !!(former && typeof former === "object" && (former as Record<string, unknown>)[m]);
-
-    const preview = typeof msg.text === "string" && msg.text
-      ? msg.text.slice(0, 140)
-      : msg.imageUrl ? "\u{1F4F7}" : msg.audioUrl ? "\u{1F3A4}" : "";
-
-    // Written by the server, never by a client: a writable preview is a way to put words into
-    // somebody else's conversation list.
-    await db.doc(`chats/${chatId}`).set({
-      lastMessageAt: FieldValue.serverTimestamp(),
-      lastMessageText: preview,
-      lastMessageBy: senderId,
-    }, { merge: true });
 
     const senderName =
       (await db.doc(`profiles/${senderId}`).get()).data()?.name || "Someone";
@@ -182,9 +194,9 @@ export const onDirectMessageCreated = onDocumentCreated("chats/{chatId}/messages
       type: "chat",
       titleKey: "notifNewMessage",
       titleParam: senderName,
-      ...(typeof msg.text === "string" && msg.text
-        ? { bodyText: msg.text }
-        : { bodyKey: msg.imageUrl ? "notifSentImage" : "notifSentMessage" }),
+      ...(typeof now.text === "string" && now.text
+        ? { bodyText: now.text }
+        : { bodyKey: now.imageUrl ? "notifSentImage" : "notifSentMessage" }),
       data: { route: "/chat", chatId },
     });
   } catch (err) {

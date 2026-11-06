@@ -30,6 +30,8 @@ import { mergeRollups, mergeModelDays } from "./aiSpendMerge";
 import { readFriendship, authIdentityOf } from "./friendship";
 import { senderStamp, stampedGroupName, trustedEmail } from "./senderIdentity";
 import { isPlainDocId } from "./docId";
+import { previewUpdate } from "./chatPreview";
+import { previewNewMessage, syncPreview } from "./chatPreviewWrite";
 import { digestMessageLine, digestText } from "./digestMessages";
 import { overrideRsvps } from "./overrideRsvps";
 import { notify } from "./notify";
@@ -64,7 +66,7 @@ export {
   createGroupInviteLink, peekGroupInviteLink, redeemGroupInviteLink,
   revokeGroupInviteLink, listMyInviteLinks,
 } from "./inviteLinks";
-export { openDirectChat, onDirectMessageCreated } from "./directChat";
+export { openDirectChat, onDirectMessageCreated, onDirectMessageUpdated } from "./directChat";
 // A person deleting their own account, from Settings (04.10.2026). The admin's delete runs the same
 // cascade, through `deleteAccountData`.
 export { deleteMyAccount } from "./accountDeletion";
@@ -543,6 +545,23 @@ export const autoSuggestChecklist = onDocumentCreated({
   }
 });
 
+// A message deleted or edited after it reached the conversation list: the list's preview follows (chatPreview.ts,
+// chatPreviewWrite.ts). Most updates are receipts, reactions and pins, which change nothing the list shows and end
+// at the first comparison, without a read. A failure is logged and thrown, so the platform runs it again: words
+// somebody deleted must not stay in every member's list until the next message, and a second run re-reads the
+// conversation, so it cannot do harm. (The create triggers are not retried: they announce.)
+export const onGroupMessageUpdated = onDocumentUpdated({ document: "groups/{groupId}/messages/{messageId}", retry: true }, async (event) => {
+  if (!previewUpdate(event.data?.before.data(), event.data?.after.data())) return;
+  try {
+    await syncPreview(`groups/${event.params.groupId}`);
+  } catch (err) {
+    await logServerError(`group preview not refreshed: ${String((err as Error)?.message || err)}`, "chat:preview", {
+      stack: (err as Error)?.stack,
+    });
+    throw err;
+  }
+});
+
 export const onMessageCreated = onDocumentCreated("groups/{groupId}/messages/{messageId}", async (event) => {
   const snapshot = event.data;
   if (!snapshot) return;
@@ -552,6 +571,18 @@ export const onMessageCreated = onDocumentCreated("groups/{groupId}/messages/{me
   const groupId = event.params.groupId;
 
   try {
+    // The conversation list sorts groups and direct chats together, so a group needs the same preview a chat keeps.
+    // Server-written for the same reason: a client-writable preview is a way to put words into somebody else's list.
+    // First, before anything below can stop early (a group of one has nobody to notify, and still a list), and from
+    // the group's newest message as it is now (chatPreviewWrite.ts). In a transaction, with `update`: a group deleted
+    // meanwhile is not brought back holding the start of a message, under an id that must stay gone (groupIds.ts,
+    // 06.10.2026), and a group that is gone has nobody to notify either. A preview that cannot be written is logged
+    // there, and the announcement still goes.
+    const now = await previewNewMessage(`groups/${groupId}`, snapshot.ref);
+    // A message taken back before it was announced is not announced: its words would reach every phone after the
+    // sender withdrew them. As it is now, so an edit made meanwhile is what goes out.
+    if (!now || now.isDeleted === true) return;
+
     const groupDoc = await admin.firestore().doc(`groups/${groupId}`).get();
     if (!groupDoc.exists) return;
     const groupData = groupDoc.data();
@@ -559,31 +590,11 @@ export const onMessageCreated = onDocumentCreated("groups/{groupId}/messages/{me
 
     const members = groupData.members || [];
     const targetUserIds = members.filter((id: string) => id !== senderId);
-    
+
     if (targetUserIds.length === 0) return;
 
     const senderDoc = await admin.firestore().doc(`users/${senderId}`).get();
     const senderName = pushName(senderDoc.data());
-
-    // The conversation list sorts groups and direct chats together, so a group needs the same
-    // preview a chat keeps. Server-written for the same reason: a client-writable preview is a
-    // way to put words into somebody else's list.
-    //
-    // `update`, not `set(merge)`: if the group was deleted since the read above, a merge would
-    // create it again — a document with no members holding the start of a message, under an id that
-    // must stay gone (groupIds.ts, 06.10.2026). A group that is gone has nobody to notify either.
-    try {
-      await admin.firestore().doc(`groups/${groupId}`).update({
-        lastMessageAt: FieldValue.serverTimestamp(),
-        lastMessageText: typeof msgData.text === "string" && msgData.text
-          ? msgData.text.slice(0, 140)
-          : msgData.imageUrl ? "\u{1F4F7}" : msgData.audioUrl ? "\u{1F3A4}" : "",
-        lastMessageBy: senderId,
-      });
-    } catch (err) {
-      if ((err as { code?: number })?.code === 5) return; // NOT_FOUND
-      throw err;
-    }
 
     // The message TEXT is passed as `bodyText`, never as a key: it is the sender's own words,
     // and translating them would be worse than leaving them alone. Only the wrapper around it —
@@ -595,9 +606,9 @@ export const onMessageCreated = onDocumentCreated("groups/{groupId}/messages/{me
       titleKey: "notifNewMessage",
       titleParam: senderName,
       // Text only as text (08.10.2026): `String()` of a map a member planted read "[object Object]".
-      ...(typeof msgData.text === "string" && msgData.text
-        ? { bodyText: msgData.text }
-        : { bodyKey: msgData.imageUrl ? "notifSentImage" : "notifSentMessage" }),
+      ...(typeof now.text === "string" && now.text
+        ? { bodyText: now.text }
+        : { bodyKey: now.imageUrl ? "notifSentImage" : "notifSentMessage" }),
       data: { route: "/", groupId: String(groupId || "") },
     });
   } catch (error) {

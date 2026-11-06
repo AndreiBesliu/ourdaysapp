@@ -26,6 +26,8 @@ export interface Conversation {
   lastAt: number;
   /** A one-line preview, already trimmed by the server. */
   lastText: string;
+  /** The newest message was deleted: its words left the preview (functions/src/chatPreviewWrite.ts). */
+  lastDeleted: boolean;
   lastBy: string | null;
   /** The other person, for a direct chat. Null for a group. */
   otherUid: string | null;
@@ -44,6 +46,7 @@ export interface RawGroup {
   lastMessageAt?: unknown;
   lastMessageText?: unknown;
   lastMessageBy?: unknown;
+  lastMessageDeleted?: unknown;
 }
 
 export interface RawChat {
@@ -53,6 +56,7 @@ export interface RawChat {
   lastMessageAt?: unknown;
   lastMessageText?: unknown;
   lastMessageBy?: unknown;
+  lastMessageDeleted?: unknown;
 }
 
 /** What the screen knows about people: `profiles` merged with the caller's own user doc. */
@@ -114,6 +118,7 @@ export function buildConversations(args: {
       members: strList(g.members),
       lastAt: millisOf(g.lastMessageAt),
       lastText: str(g.lastMessageText),
+      lastDeleted: g.lastMessageDeleted === true,
       lastBy: typeof g.lastMessageBy === 'string' ? g.lastMessageBy : null,
       otherUid: null,
       otherGone: false,
@@ -134,6 +139,7 @@ export function buildConversations(args: {
         members,
         lastAt: millisOf(c.lastMessageAt),
         lastText: str(c.lastMessageText),
+        lastDeleted: c.lastMessageDeleted === true,
         lastBy: typeof c.lastMessageBy === 'string' ? c.lastMessageBy : null,
         otherUid: other,
         otherGone: !!other && other in formerMembersOf(c),
@@ -148,6 +154,20 @@ export function buildConversations(args: {
     if (a.title !== b.title) return a.title.localeCompare(b.title);
     return a.id.localeCompare(b.id);
   });
+}
+
+/**
+ * The row's second line: the newest message after who sent it (`prefix`: "You: ", a name in a group, nothing for the
+ * other person in a direct chat), "deleted" after it for a deleted newest message, or "nothing said yet" when there is
+ * no message. A deleted message reads as one, as in the conversation itself: "nothing said yet" would be wrong with
+ * older messages above it.
+ */
+export function previewLine(
+  c: Pick<Conversation, 'lastText' | 'lastDeleted'>, prefix: string, labels: { deleted: string; nothing: string },
+): string {
+  if (c.lastText) return `${prefix}${c.lastText}`;
+  if (c.lastDeleted) return `${prefix}${labels.deleted}`;
+  return labels.nothing;
 }
 
 /** The key a list item needs. Ids are unique per collection, not across both. */

@@ -230,10 +230,15 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     cere ca nota să plece la mutare, iar APK-ul nu o știe șterge. Azi drumul e de neatins, calendarul APK fiind
     gol (interogarea lui e refuzată). Dacă reconstruirea APK-ului îl readuce, varianta e o notă în forma
     serverului (`status`, `reason`, `at`, text) acceptată la mutare; lărgirea redeschide falsificarea ei.
-- **Textul unui mesaj șters rămâne în copiile serverului** (harta din 08.10): previzualizarea din lista
-  de conversații (`lastMessageText`) până la mesajul următor, și rândurile din clopoțel pentru totdeauna.
-  Niciun trigger nu rulează la modificarea unui mesaj. Remediul: un trigger la ștergere care curăță
-  previzualizarea dacă era a lui. De decis cât merită (rândurile din clopoțel sunt ale fiecăruia).
+- **REPARAT pe 06.11 (previzualizarea): un mesaj șters își lăsa vorbele în lista de conversații**
+  (`lastMessageText`, până la mesajul următor). Acum orice trigger de mesaj, în grup și în chatul direct, la creare,
+  editare sau ștergere, rescrie previzualizarea din cel MAI NOU mesaj, așa cum e acum (`chatPreviewWrite.ts`), deci
+  ajunge la starea corectă în orice ordine sosesc evenimentele. Un ultim mesaj șters arată „Deleted message” (după
+  numele expeditorului într-un grup, după „You: ” când e al tău), nu „nimic încă”; unul editat arată vorbele noi. Un mesaj șters înainte să plece
+  anunțul nu mai e anunțat, iar anunțul poartă textul editat.
+  - **Rămâne: rândurile din clopoțel** (`notifications`) păstrează textul unui mesaj șters pentru totdeauna. Sunt ale
+    fiecărui destinatar; de decis de Andrei dacă și cum se curăță (ștergerea lor din urmă ar atinge clopoțelul
+    altora).
 - **REPARAT pe 06.11: reacția, fixarea și ștergerea unui mesaj nu spuneau nimic când erau refuzate**
   (`GroupChatWidget.tsx`). Acum un banner deasupra câmpului de scriere spune, pe sensul acțiunii, ce nu s-a întâmplat
   („Your reaction was not saved / removed”, „The message was not pinned / is still pinned”, „The message was not

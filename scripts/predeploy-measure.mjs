@@ -162,7 +162,7 @@ for (const d of (await db.collection('invite_links').get()).docs) {
 // Groups: the cascade's sweep guard assumes auto-ids; caps assume no group near them.
 // Since 08.10.2026 a group's name is text of 1 to 60 characters and a client changes nothing but the
 // name and the members. A group counted in the last three would show as "Group" on the web.
-const GROUP_KEYS = ['name', 'ownerId', 'members', 'createdAt', 'lastMessageAt', 'lastMessageText', 'lastMessageBy', 'formerMembers'];
+const GROUP_KEYS = ['name', 'ownerId', 'members', 'createdAt', 'lastMessageAt', 'lastMessageText', 'lastMessageBy', 'lastMessageDeleted', 'formerMembers'];
 const grp = {
   groups: groupsSnap.size, idNotAutoShape: 0, idLikeDirectChat: 0, idEqualsAChat: 0, noOwnerId: 0, maxMessages: 0, groupsOver3000Messages: 0,
   nameNotText: 0, nameBlankOrOver60: 0, keysNoClientWrites: 0,

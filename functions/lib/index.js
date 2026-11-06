@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.aiPreviewScope = exports.onWarlordBattleUpdated = exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onGroupInviteCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onGroupDeleted = exports.onGroupCreated = exports.onGroupMembersChanged = exports.deleteMyAccount = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
-exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminSetAiConfig = exports.adminGetAiConfig = exports.adminGetAiSpend = void 0;
+exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onGroupInviteCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.onGroupMessageUpdated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onGroupDeleted = exports.onGroupCreated = exports.onGroupMembersChanged = exports.deleteMyAccount = exports.onDirectMessageUpdated = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
+exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminSetAiConfig = exports.adminGetAiConfig = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = void 0;
 // FIRST, before anything that defines a function: the global options apply only to functions
 // defined after them. See globalOptions.ts.
 require("./globalOptions");
@@ -29,6 +29,8 @@ const aiSpendMerge_1 = require("./aiSpendMerge");
 const friendship_1 = require("./friendship");
 const senderIdentity_1 = require("./senderIdentity");
 const docId_1 = require("./docId");
+const chatPreview_1 = require("./chatPreview");
+const chatPreviewWrite_1 = require("./chatPreviewWrite");
 const digestMessages_1 = require("./digestMessages");
 const overrideRsvps_1 = require("./overrideRsvps");
 const notify_1 = require("./notify");
@@ -62,6 +64,7 @@ Object.defineProperty(exports, "listMyInviteLinks", { enumerable: true, get: fun
 var directChat_1 = require("./directChat");
 Object.defineProperty(exports, "openDirectChat", { enumerable: true, get: function () { return directChat_1.openDirectChat; } });
 Object.defineProperty(exports, "onDirectMessageCreated", { enumerable: true, get: function () { return directChat_1.onDirectMessageCreated; } });
+Object.defineProperty(exports, "onDirectMessageUpdated", { enumerable: true, get: function () { return directChat_1.onDirectMessageUpdated; } });
 // A person deleting their own account, from Settings (04.10.2026). The admin's delete runs the same
 // cascade, through `deleteAccountData`.
 var accountDeletion_2 = require("./accountDeletion");
@@ -500,6 +503,25 @@ exports.autoSuggestChecklist = (0, firestore_1.onDocumentCreated)(Object.assign(
         await recordChecklistOutcome(snapshot, data, reason, token);
     }
 });
+// A message deleted or edited after it reached the conversation list: the list's preview follows (chatPreview.ts,
+// chatPreviewWrite.ts). Most updates are receipts, reactions and pins, which change nothing the list shows and end
+// at the first comparison, without a read. A failure is logged and thrown, so the platform runs it again: words
+// somebody deleted must not stay in every member's list until the next message, and a second run re-reads the
+// conversation, so it cannot do harm. (The create triggers are not retried: they announce.)
+exports.onGroupMessageUpdated = (0, firestore_1.onDocumentUpdated)({ document: "groups/{groupId}/messages/{messageId}", retry: true }, async (event) => {
+    var _a, _b;
+    if (!(0, chatPreview_1.previewUpdate)((_a = event.data) === null || _a === void 0 ? void 0 : _a.before.data(), (_b = event.data) === null || _b === void 0 ? void 0 : _b.after.data()))
+        return;
+    try {
+        await (0, chatPreviewWrite_1.syncPreview)(`groups/${event.params.groupId}`);
+    }
+    catch (err) {
+        await (0, errorLog_1.logServerError)(`group preview not refreshed: ${String((err === null || err === void 0 ? void 0 : err.message) || err)}`, "chat:preview", {
+            stack: err === null || err === void 0 ? void 0 : err.stack,
+        });
+        throw err;
+    }
+});
 exports.onMessageCreated = (0, firestore_1.onDocumentCreated)("groups/{groupId}/messages/{messageId}", async (event) => {
     const snapshot = event.data;
     if (!snapshot)
@@ -508,6 +530,18 @@ exports.onMessageCreated = (0, firestore_1.onDocumentCreated)("groups/{groupId}/
     const senderId = msgData.senderId;
     const groupId = event.params.groupId;
     try {
+        // The conversation list sorts groups and direct chats together, so a group needs the same preview a chat keeps.
+        // Server-written for the same reason: a client-writable preview is a way to put words into somebody else's list.
+        // First, before anything below can stop early (a group of one has nobody to notify, and still a list), and from
+        // the group's newest message as it is now (chatPreviewWrite.ts). In a transaction, with `update`: a group deleted
+        // meanwhile is not brought back holding the start of a message, under an id that must stay gone (groupIds.ts,
+        // 06.10.2026), and a group that is gone has nobody to notify either. A preview that cannot be written is logged
+        // there, and the announcement still goes.
+        const now = await (0, chatPreviewWrite_1.previewNewMessage)(`groups/${groupId}`, snapshot.ref);
+        // A message taken back before it was announced is not announced: its words would reach every phone after the
+        // sender withdrew them. As it is now, so an edit made meanwhile is what goes out.
+        if (!now || now.isDeleted === true)
+            return;
         const groupDoc = await admin.firestore().doc(`groups/${groupId}`).get();
         if (!groupDoc.exists)
             return;
@@ -520,33 +554,12 @@ exports.onMessageCreated = (0, firestore_1.onDocumentCreated)("groups/{groupId}/
             return;
         const senderDoc = await admin.firestore().doc(`users/${senderId}`).get();
         const senderName = (0, pushText_1.pushName)(senderDoc.data());
-        // The conversation list sorts groups and direct chats together, so a group needs the same
-        // preview a chat keeps. Server-written for the same reason: a client-writable preview is a
-        // way to put words into somebody else's list.
-        //
-        // `update`, not `set(merge)`: if the group was deleted since the read above, a merge would
-        // create it again — a document with no members holding the start of a message, under an id that
-        // must stay gone (groupIds.ts, 06.10.2026). A group that is gone has nobody to notify either.
-        try {
-            await admin.firestore().doc(`groups/${groupId}`).update({
-                lastMessageAt: firestore_2.FieldValue.serverTimestamp(),
-                lastMessageText: typeof msgData.text === "string" && msgData.text
-                    ? msgData.text.slice(0, 140)
-                    : msgData.imageUrl ? "\u{1F4F7}" : msgData.audioUrl ? "\u{1F3A4}" : "",
-                lastMessageBy: senderId,
-            });
-        }
-        catch (err) {
-            if ((err === null || err === void 0 ? void 0 : err.code) === 5)
-                return; // NOT_FOUND
-            throw err;
-        }
         // The message TEXT is passed as `bodyText`, never as a key: it is the sender's own words,
         // and translating them would be worse than leaving them alone. Only the wrapper around it —
         // "New message from …" — is rendered in the reader's language.
-        await (0, notify_1.notify)(Object.assign(Object.assign({ userIds: targetUserIds, createdBy: senderId, type: "chat", titleKey: "notifNewMessage", titleParam: senderName }, (typeof msgData.text === "string" && msgData.text
-            ? { bodyText: msgData.text }
-            : { bodyKey: msgData.imageUrl ? "notifSentImage" : "notifSentMessage" })), { data: { route: "/", groupId: String(groupId || "") } }));
+        await (0, notify_1.notify)(Object.assign(Object.assign({ userIds: targetUserIds, createdBy: senderId, type: "chat", titleKey: "notifNewMessage", titleParam: senderName }, (typeof now.text === "string" && now.text
+            ? { bodyText: now.text }
+            : { bodyKey: now.imageUrl ? "notifSentImage" : "notifSentMessage" })), { data: { route: "/", groupId: String(groupId || "") } }));
     }
     catch (error) {
         console.error("Error sending FCM payload:", error);

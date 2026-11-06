@@ -15,6 +15,30 @@
 
 ---
 
+## 🆕 Un mesaj șters nu-și mai lasă vorbele în lista de conversații (06.11)
+
+**Fapt:** lista de conversații arăta textul ultimului mesaj chiar și după ce autorul îl ștergea, până scria cineva
+altceva. Acum arată „Deleted message” („Mesaj șters”), după numele
+celui care l-a trimis într-un grup („Bob: Deleted message”), după „You: ” când e al tău, singur în chatul direct când e al
+celuilalt; un mesaj editat arată vorbele noi. Un mesaj șters înainte să plece
+notificarea nu mai e anunțat deloc. Pe live n-o pot încerca eu: cere două conturi într-o conversație. (Pe live, două
+grupuri n-au deloc previzualizare, fiind dinaintea previzualizărilor de grup, iar unul dintre ele are ultimul mesaj
+șters: arată „Nothing said yet” până la următorul mesaj din ele, sau următoarea ștergere ori editare. Nu la publicare.)
+
+- [ ] **Pe web (<https://our-days-2a939.web.app/chat>), într-un grup sau un chat direct, scrie un mesaj, apoi
+      șterge-l** (1 minut).
+      - **Cum arată bine:** în lista de conversații (ecranul Chat), rândul arată „You: Deleted message” în câteva
+        secunde; după un mesaj nou, textul lui.
+      - **Ce e greșit:** rândul păstrează textul șters (triggerul nu rulează pe live), sau arată „Nothing said yet”
+        (eticheta nu se citește).
+- [ ] **Decizia ta: rândurile din clopoțel.** Notificarea unui mesaj șters își păstrează textul în clopoțelul fiecărui
+      destinatar, pentru totdeauna. Variante: (a) **rămân așa** (implicit; clopoțelul e al fiecăruia, iar mesajul a
+      ajuns deja pe telefoane); (b) la ștergere, serverul golește textul din rândurile acelui mesaj.
+      - **Ce se strică dacă alegi greșit:** la (a), un mesaj trimis din greșeală rămâne citibil în clopoțel; la (b),
+        ștergerea atinge datele altora și cere o legătură mesaj → rânduri care azi nu există.
+
+---
+
 ## 🆕 Checklist-ul AI: o singură listă și o singură plată, chiar dacă Google trimite evenimentul de două ori (01.11) — PUBLICAT pe 01.11
 
 **Fapt:** Google poate livra de două ori crearea unui eveniment cu „Asistent AI”. A doua livrare plătea încă un apel,

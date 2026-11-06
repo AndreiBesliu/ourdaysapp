@@ -538,7 +538,7 @@ describe('a group\u2019s name, and what else a client may put on a group', () =>
     for (const extra of [
       { id: 'g2' }, { id: POISON }, { color: { a: 1 } },
       { lastMessageText: 'x' }, { lastMessageBy: DAVE }, { lastMessageAt: 1 }, { formerMembers: {} },
-      { createdAt: { a: 1 } }, { createdAt: 5 },
+      { lastMessageDeleted: true }, { createdAt: { a: 1 } }, { createdAt: 5 },
     ]) {
       await assertFails(create(extra));
     }
@@ -587,6 +587,7 @@ describe('a group\u2019s name, and what else a client may put on a group', () =>
     for (const who of [ALICE, BOB]) {
       for (const change of [
         { createdAt: 'x' }, { lastMessageAt: new Date() }, { lastMessageText: 'x' },
+        { lastMessageDeleted: true }, { lastMessageDeleted: false },
         { color: 'red' }, { id: 'group-two' }, { id: POISON },
       ]) {
         await assertFails(updateDoc(doc(as(who), 'groups', 'g-live'), change));

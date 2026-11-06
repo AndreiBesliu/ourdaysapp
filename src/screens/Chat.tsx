@@ -24,7 +24,7 @@ import { t } from '../utils/i18n';
 import GroupChatWidget from '../components/GroupChatWidget';
 import { useDialog } from '../hooks/useDialog';
 import {
-  buildConversations, conversationKey, findConversation, personName, startableWith,
+  buildConversations, conversationKey, findConversation, personName, previewLine, startableWith,
   type Conversation, type People,
 } from '../utils/conversations';
 import { deletedName, formerMembersOf, withFormerMembers } from '../utils/formerMembers';
@@ -295,7 +295,7 @@ function ConversationRow({ conversation: c, people, myUid, language, active, onS
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{c.title}</p>
         <p className="text-xs text-zinc-500 truncate">
-          {c.lastText ? `${prefix}${c.lastText}` : t('chatNothingYet', language)}
+          {previewLine(c, prefix, { deleted: t('chatDeletedPreview', language), nothing: t('chatNothingYet', language) })}
         </p>
       </div>
     </button>
