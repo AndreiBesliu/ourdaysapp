@@ -14672,3 +14672,41 @@ Cele două puncte lăsate de felia de dinainte, din `functions/src/notify.ts`:
   după publicarea terminată la 15:38 UTC (0 eșecuri la rând); niciun rând de eroare nou.
 - **Nevăzut de mine:** un push care nu ajunge la nimeni pe live (rândul nou) și o felie peste 500 de tokenuri: nu se
   pot provoca fără o pană FCM sau un cont cu sute de tokenuri; sunt probate pe emulator.
+
+## 2026-11-06 · Chatul: reacția, fixarea și ștergerea refuzate spun asta pe ecran (Task Started)
+
+**Prompt (Andrei):** „Yes, chat refusals” (la „Fac acum ca reacțiile, fixările și ștergerile din chat să spună pe ecran
+când sunt refuzate?”).
+**Model:** Claude Opus 5.5.
+
+Din BACKLOG §2: în `GroupChatWidget.tsx`, o reacție refuzată ajungea doar în jurnalul de erori, iar fixarea și ștergerea
+nu prindeau refuzul deloc (o promisiune respinsă, la raportorul global). Ecranul punea schimbarea înapoi fără niciun cuvânt.
+
+## 2026-11-06 · Chatul: reacția, fixarea și ștergerea refuzate spun asta pe ecran (Task Completed)
+
+**Prompt (Andrei):** „Yes, chat refusals”.
+**Model:** Claude Opus 5.5.
+
+- **`GroupChatWidget.tsx`:** reacția, fixarea și ștergerea își așteaptă scrierea într-un `try`. Un refuz e raportat
+  (`reportError`) și aprinde un banner chihlimbariu (`role="alert"`) deasupra câmpului de scriere, sau deasupra notei
+  unei conversații închise, cu „Dismiss”. Fiecare acțiune nouă îl stinge întâi, deci bannerul e despre ultima.
+- **Pe sensul acțiunii:** „Your reaction was not saved” / „…was not removed” (o retragere refuzată nu e „nesalvată”:
+  ecranul arată reacția încă acolo), „The message was not pinned” / „…is still pinned”, „The message was not deleted”.
+  5 chei noi în cele 6 limbi, cu verbele pe care aplicația le folosește deja pentru fixare.
+- **Paleta de reacții se închide la atingere**, înaintea scrierii: închisă după răspunsul serverului, stătea deschisă un
+  drum dus-întors (o a doua atingere retrăgea reacția) și, offline, până revenea legătura (mai vechi decât felia).
+- **Probat pe un banc** (widgetul real, emulatorii Auth și Firestore, `firestore.rules` din repo; fișierele bancului
+  șterse înainte de commit):
+  - ca membru, reacția ajunge pe server și nu apare niciun banner;
+  - scos din grup cu chatul deschis: reacția, fixarea, ștergerea, retragerea reacției și desprinderea arată fiecare
+    propoziția ei; „Dismiss” închide bannerul; înapoi în grup, o acțiune reușită îl stinge;
+  - controlul negativ: același refuz pe widgetul de pe HEAD nu arată nimic (refuzul ajunge doar în jurnal), iar pe
+    server reacția nu există;
+  - telefon (375 px) și tema întunecată: fără derulare orizontală, contrastul măsurat ~11:1.
+- **Recenzia** (5 agenți, 0,53 M tokeni): 4 constatări, 3 reale (propoziția fixării era o construcție abstractă și nu
+  spunea sensul; retragerea refuzată citea „nesalvată”; testul nu lega acțiunea de propoziția ei), reparate. A patra
+  (paleta ținută deschisă) era mai veche decât felia: reparată și ea, un rând.
+- **Mutanți pe testul de sursă:** 5 din 5 prinși (propoziții inversate, sensul pierdut la reacție și la fixare, paleta
+  închisă după scriere, ștergerea neprinsă).
+- **Porți:** `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`; `npm test` (2801), `test:tz` (46).
+  Funcțiile și regulile n-au schimbări.

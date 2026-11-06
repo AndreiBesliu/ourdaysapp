@@ -134,6 +134,11 @@ export default function GroupChatWidget({
   // Set when the RECORDING itself cannot be sent — the retry button has to disappear, because
   // every retry rebuilds the same request and earns the same refusal.
   const [voiceRefused, setVoiceRefused] = useState(false);
+  // A reaction, a pin or a delete the server refused (since 08.10.2026 the rules judge each one, and
+  // refuse all of them once the person is out of the group). The screen used to put the change back
+  // without a word, and the refusal reached only the error log.
+  // Each way named apart: a refused removal is not "not saved", the screen shows it is still there.
+  const [actionNotSaved, setActionNotSaved] = useState<'reaction' | 'unreaction' | 'pin' | 'unpin' | 'delete' | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -533,7 +538,9 @@ export default function GroupChatWidget({
   };
 
   const handleDelete = async (msgId: string) => {
-    if (confirm(t('deleteMessageConfirm', language))) {
+    if (!confirm(t('deleteMessageConfirm', language))) return;
+    setActionNotSaved(null);
+    try {
       await updateDoc(doc(db, `${basePath}/messages`, msgId), {
         isDeleted: true,
         text: null,
@@ -541,6 +548,9 @@ export default function GroupChatWidget({
         // A deleted voice note kept its link until 08.10.2026, so it could still be fetched.
         audioUrl: null
       });
+    } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'GroupChatWidget.delete' });
+      setActionNotSaved('delete');
     }
   };
 
@@ -593,25 +603,37 @@ export default function GroupChatWidget({
     // be written back from what this screen held — normalised, and possibly a moment old — so two
     // people reacting at once dropped one of them; the rules now refuse a write that removes anyone
     // but the writer, and arrayUnion/arrayRemove cannot collide. An emptied emoji is removed, never [].
-    const change = !current.includes(uid) ? arrayUnion(uid)
+    const adding = !current.includes(uid);
+    const change = adding ? arrayUnion(uid)
       : current.length === 1 ? deleteField()
       : arrayRemove(uid);
+    setActionNotSaved(null);
+    // Closed at the tap: the chip shows the change at once (the local copy), while the write waits for
+    // the server. Closed after it, the picker stayed open for a round trip, where a second tap undid the
+    // reaction, and offline until the connection came back.
+    setActiveReactionMsg(null);
     try {
       await updateDoc(doc(db, `${basePath}/messages`, msgId), new FieldPath('reactions', emoji), change);
     } catch (err) {
       reportError(err instanceof Error ? err.message : String(err), { context: 'GroupChatWidget.reaction' });
+      setActionNotSaved(adding ? 'reaction' : 'unreaction');
     }
-    setActiveReactionMsg(null);
   };
 
   // --- Pinned Messages ---
   const handlePin = async (msgId: string) => {
     const msg = messages.find(m => m.id === msgId);
     if (!msg) return;
-    await updateDoc(doc(db, `${basePath}/messages`, msgId), {
-      isPinned: !msg.isPinned
-    });
-    triggerHaptic('light');
+    setActionNotSaved(null);
+    try {
+      await updateDoc(doc(db, `${basePath}/messages`, msgId), {
+        isPinned: !msg.isPinned
+      });
+      triggerHaptic('light');
+    } catch (err) {
+      reportError(err instanceof Error ? err.message : String(err), { context: 'GroupChatWidget.pin' });
+      setActionNotSaved(msg.isPinned ? 'unpin' : 'pin');
+    }
   };
 
   // From the pinned query, not the window: a pin older than the newest page stays in the bar.
@@ -1341,6 +1363,23 @@ export default function GroupChatWidget({
               </div>
               <button onClick={() => { setEditingMsg(null); setNewMessage(''); }} aria-label={t('cancelEditing', language)} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-full text-zinc-500 transition-colors">
                 <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* A reaction, pin or delete that did not land: here as well as under a closed conversation,
+              where the message box is not. */}
+          {actionNotSaved && (
+            <div role="alert" className="px-3 py-2 border-t border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 flex items-center gap-2 shrink-0">
+              <span className="text-xs text-amber-800 dark:text-amber-200 flex-1">
+                {actionNotSaved === 'reaction' ? t('chatReactionNotSaved', language)
+                  : actionNotSaved === 'unreaction' ? t('chatReactionNotRemoved', language)
+                  : actionNotSaved === 'pin' ? t('chatPinNotSaved', language)
+                  : actionNotSaved === 'unpin' ? t('chatUnpinNotSaved', language)
+                  : t('chatDeleteNotSaved', language)}
+              </span>
+              <button type="button" onClick={() => setActionNotSaved(null)} aria-label={t('dismissAction', language)} className="text-xs font-medium text-amber-800 dark:text-amber-200 underline">
+                {t('dismissAction', language)}
               </button>
             </div>
           )}

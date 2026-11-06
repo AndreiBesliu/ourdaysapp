@@ -234,8 +234,11 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   de conversații (`lastMessageText`) până la mesajul următor, și rândurile din clopoțel pentru totdeauna.
   Niciun trigger nu rulează la modificarea unui mesaj. Remediul: un trigger la ștergere care curăță
   previzualizarea dacă era a lui. De decis cât merită (rândurile din clopoțel sunt ale fiecăruia).
-- **Reacția, fixarea și ștergerea unui mesaj nu spun nimic când sunt refuzate** (`GroupChatWidget.tsx`):
-  refuzul ajunge doar în jurnalul de erori. Remediul: un mesaj scurt pe ecran.
+- **REPARAT pe 06.11: reacția, fixarea și ștergerea unui mesaj nu spuneau nimic când erau refuzate**
+  (`GroupChatWidget.tsx`). Acum un banner deasupra câmpului de scriere spune, pe sensul acțiunii, ce nu s-a întâmplat
+  („Your reaction was not saved / removed”, „The message was not pinned / is still pinned”, „The message was not
+  deleted”); se închide cu „Dismiss” și dispare la următoarea acțiune. Paleta de reacții se închide la atingere, nu
+  după răspunsul serverului.
 - **REPARAT pe 01.11: rezumatul AI al grupului includea mesajele șterse** (ca „[Audio]”) și citea textul fără
   verificarea tipului. Acum le lasă afară (`digestMessageLine`). Tot ce a scris un client în prompt (textul,
   numele expeditorului, al grupului, titlurile) intră pe UN rând (`digestText`), ca să nu poată scrie rânduri care
