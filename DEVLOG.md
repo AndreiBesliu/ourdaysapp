@@ -14788,3 +14788,25 @@ previzualizarea lui nu ține text, deci nicio reparare retroactivă.
   - comentariul din `firestore.rules` („scris de `onMessageCreated`”) nu e atins: o publicare de reguli pentru un
     comentariu nu merită riscul;
   - rândurile din clopoțel păstrează textul unui mesaj șters: decizia lui Andrei (`OWNER_VERIFY.md`, `BACKLOG.md`).
+
+## 2026-11-06 · Lista de conversații: mesajul șters sau editat — publicat și verificat pe live
+
+- **Publicat:** `0df7cad`, `--project live`, în doi pași.
+  - **Pasul 1:** `deploy --only "functions:onGroupMessageUpdated,functions:onDirectMessageUpdated" --force`. Funcțiile
+    noi cu `retry: true` cer `--force` în mod non-interactiv. Limitat la ele, `--force` nu poate șterge nimic din afara
+    listei. Ambele au fost create.
+  - **Pasul 2:** `--only functions,hosting`, fără `--force`: 97 de funcții actualizate, cele 2 noi sărite („No changes
+    detected”); hosting cu 88 de fișiere, release complete.
+  - O primă încercare `--only functions,hosting` s-a oprit la pregătire, tocmai pe `--force`, fără să publice nimic.
+  - CI verde pe `0df7cad`.
+- **Verificat pe live:**
+  - 99 de funcții: 42 de callable-uri în fiecare regiune, 12 triggere, 3 joburi.
+  - Proba CORS (OPTIONS): 42/42 callable-uri publice în europe-central2 și 42/42 în us-central1.
+  - `onGroupMessageUpdated` și `onDirectMessageUpdated` sunt pe `document.v1.updated`, pe căile mesajelor, cu
+    `retry: true`; cele două de creare, fără.
+  - Intrarea servită (`index-yQ2gX7Aj.js`) e cea construită local; bucata `Chat` se servește (200).
+  - 0 rânduri de eroare în cele 90 de minute de după publicare.
+  - Joburile au `ok` și 0 eșecuri la rând (memento-urile au rulat acum 2 minute).
+- **Nevăzut de mine:** o ștergere reală pe live. Cere două conturi într-o conversație; e în `OWNER_VERIFY.md`, sus.
+- **Unelte:** din Git Bash, `npx.cmd firebase …`. Un `npx` simplu ajunge la npm-ul stricat (bash nu caută `.cmd` după
+  PATHEXT), chiar cu înlocuitorul primul în PATH.

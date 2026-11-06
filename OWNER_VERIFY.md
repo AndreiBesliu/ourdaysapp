@@ -15,7 +15,7 @@
 
 ---
 
-## 🆕 Un mesaj șters nu-și mai lasă vorbele în lista de conversații (06.11)
+## 🆕 Un mesaj șters nu-și mai lasă vorbele în lista de conversații (06.11) — PUBLICAT pe 06.11
 
 **Fapt:** lista de conversații arăta textul ultimului mesaj chiar și după ce autorul îl ștergea, până scria cineva
 altceva. Acum arată „Deleted message” („Mesaj șters”), după numele
