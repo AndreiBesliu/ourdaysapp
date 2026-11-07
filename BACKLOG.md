@@ -395,7 +395,10 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     **De știut:** Chromium ține un `import()` eșuat cât trăiește pagina, deci o bucată picată o dată nu revine fără
     reîncărcare. Preîncărcarea și montarea chatului așteaptă acum conexiunea, iar nota chatului oferă reîncărcarea.
     Ferestrele calendarului (29.10) au aceeași expunere la un eșec în timpul pauzei; preîncărcarea online le acoperă și pe
-    ele, dar nota lor nu are buton.
+    ele, iar din 07.11 nota lor oferă și ea **Reload** (`CouldNotShow`: butonul e exact pe notele al căror text cere
+    reîncărcarea). Rămas: codul unui card (`CodeNumber`, „reload the page once you have signal”) are numărul, nu buton;
+    arcade-ul și invitația spun „reîncarcă” și la o cădere care nu e a bucății (alegerea cheii după `chunk`, ca la
+    adăugare și detalii, ar fi mai cinstită).
   - **Candidații următori, de ales de Andrei:** Firebase Storage și Messaging (44 kB).
 - **Hosting răspunde cu `index.html` la un `/assets/*.js` lipsă**, cu cache imutabil pe un an (măsurat
   pe live).

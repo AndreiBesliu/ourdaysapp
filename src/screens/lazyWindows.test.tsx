@@ -14,6 +14,9 @@ import { createElement } from 'react';
 import { latchOpened, useOpenedOnce } from '../hooks/useOpenedOnce';
 import { LAZY_PARTS, keptOnArrival, loadGroupChatWidget } from '../utils/lazyParts';
 import { LAZY_SCREENS } from '../../scripts/bundleSplit.mjs';
+import { readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import CouldNotShow, { NOTES_ASKING_FOR_RELOAD } from '../components/CouldNotShow';
 import { t } from '../utils/i18nAll';
 
 const read = (p: string) => readFileSync(p, 'utf8');
@@ -231,5 +234,57 @@ describe('keptOnArrival: a loader that keeps what it brought', () => {
     expect(part.loaded()).toBeNull();
     expect(await part.load()).toBe('W');
     expect(importer).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('a window note that says to reload offers the reload (07.11.2026)', () => {
+  /** Every .tsx under src/, tests aside. */
+  function tsxFiles(dir: string): string[] {
+    return readdirSync(dir).flatMap((name) => {
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) return tsxFiles(p);
+      return p.endsWith('.tsx') && !p.includes('.test.') ? [p] : [];
+    });
+  }
+  /** Every message key given to CouldNotShow anywhere in the app: literal, or each branch of a choice. */
+  function noteKeys(): Set<string> {
+    const keys = new Set<string>();
+    let calls = 0;
+    let read_ = 0;
+    for (const f of tsxFiles('src')) {
+      const src = read(f);
+      calls += (src.match(/<CouldNotShow\b/g) ?? []).length;
+      for (const m of src.matchAll(/<CouldNotShow\s+messageKey=(?:"(\w+)"|\{([^}]*)\})/g)) {
+        read_++;
+        if (m[1]) keys.add(m[1]);
+        for (const q of (m[2] ?? '').matchAll(/'(\w+)'/g)) keys.add(q[1]);
+      }
+    }
+    // Honest about its reach: every call is read, or the rule below would pass on the ones it skipped.
+    expect(read_, 'a <CouldNotShow> written another way (props first, a variable): read it here').toBe(calls);
+    return keys;
+  }
+
+  it('the button is on exactly the notes whose text asks for a reload, and each of those is in use', () => {
+    const used = noteKeys();
+    expect(used.size).toBeGreaterThanOrEqual(3);
+    for (const key of used) {
+      const asks = /reload/i.test(t(key, 'en-US'));
+      expect(NOTES_ASKING_FOR_RELOAD.includes(key), `${key}: "${t(key, 'en-US')}"`).toBe(asks);
+    }
+    for (const key of NOTES_ASKING_FOR_RELOAD) expect(used.has(key), key).toBe(true);
+  });
+
+  it('drawn: "Reload" under the note that asks for it; none under one that does not', () => {
+    const html = renderToStaticMarkup(createElement(CouldNotShow, { messageKey: 'windowCouldNotOpen', onClose: () => {} }));
+    expect(html).toContain(`>${t('errorReload', 'en-US')}</button>`);
+    // `<(?:button)`: no literal opening tag in this file's text for the button-coverage count (buttonNames.test.ts).
+    expect(html).toMatch(/<(?:button) type="button"[^>]*min-h-\[44px\]/);
+    const quiet = renderToStaticMarkup(createElement(CouldNotShow, { messageKey: 'eventCouldNotShow', onClose: () => {} }));
+    expect(quiet).not.toContain(t('errorReload', 'en-US'));
+    // In the reader's language: on a real client root (lazyClient.test.tsx), where the store's language applies.
+    for (const lang of ['en-US', 'ro-RO', 'fr-FR', 'es-ES', 'it-IT', 'de-DE']) {
+      expect(t('errorReload', lang), lang).not.toBe('errorReload');
+    }
   });
 });

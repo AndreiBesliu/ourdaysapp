@@ -64,6 +64,7 @@ class MiniElement extends MiniNode {
 let createRoot: typeof import('react-dom/client').createRoot;
 let LazyAssetBarcode: typeof import('./LazyAssetBarcode');
 let OnDemand: typeof import('./GroupChatWidgetOnDemand');
+let CouldNotShow: typeof import('./CouldNotShow').default;
 let ErrorBoundary: typeof import('./ErrorBoundary').default;
 const roots: Array<{ unmount(): void }> = [];
 
@@ -86,6 +87,7 @@ beforeAll(async () => {
   ({ createRoot } = await import('react-dom/client'));
   LazyAssetBarcode = await import('./LazyAssetBarcode');
   OnDemand = await import('./GroupChatWidgetOnDemand');
+  CouldNotShow = (await import('./CouldNotShow')).default;
   ErrorBoundary = (await import('./ErrorBoundary')).default;
 });
 afterEach(() => { while (roots.length) roots.pop()!.unmount(); reportError.mockReset(); });
@@ -300,5 +302,68 @@ describe('the calendar’s floating chat, drawn when its code arrives (06.11.202
     expect(renderToStaticMarkup(createElement(OnDemand.default, PROPS as never))).toBe('<p>wired Family</p>');
     await parts.loadGroupChatWidget();
     expect(widgetImports).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a window note’s Reload, on a real client root (07.11.2026)', () => {
+  /** Every element under `node`, depth first. */
+  function all(node: MiniNode): MiniNode[] {
+    return [node, ...node.childNodes.flatMap(all)];
+  }
+  /** What React gave the element as props (its handlers live there). */
+  function reactProps(el: MiniNode): Record<string, unknown> {
+    const key = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+    return key ? (el as unknown as Record<string, Record<string, unknown>>)[key] : {};
+  }
+
+  it('in the reader’s language: a Romanian note has a Romanian button (review of 07.11.2026)', async () => {
+    // Only English was rendered at first, and a Romanian note over an English button passed. The store's language
+    // applies on a client root (the server renderer reads the store's initial state).
+    const { useThemeStore } = await import('../store');
+    const { t } = await import('../utils/i18nAll');
+    const before = useThemeStore.getState().language;
+    useThemeStore.setState({ language: 'ro-RO' });
+    try {
+      const container = new MiniElement('div');
+      const root = createRoot(container as unknown as Element);
+      roots.push(root);
+      root.render(createElement(CouldNotShow, { messageKey: 'windowCouldNotOpen', onClose: () => {} }));
+      await new Promise((r) => setTimeout(r, 50));
+      const text = container.textContent;
+      expect(text).toContain(t('windowCouldNotOpen', 'ro-RO'));
+      expect(text).toContain(t('errorReload', 'ro-RO'));
+      expect(t('errorReload', 'ro-RO')).not.toBe(t('errorReload', 'en-US'));
+      expect(text).not.toContain(t('errorReload', 'en-US'));
+    } finally {
+      useThemeStore.setState({ language: before });
+    }
+  });
+
+  it('reloads the page, and only that; the close button still closes', async () => {
+    // A reload called ON the location (an unbound `location.reload` throws "Illegal invocation" in a browser).
+    const receivers: unknown[] = [];
+    const reload = vi.fn(function (this: unknown) { receivers.push(this); });
+    const loc = { reload };
+    vi.stubGlobal('location', loc);
+    try {
+    const onClose = vi.fn();
+    const container = new MiniElement('div');
+    const root = createRoot(container as unknown as Element);
+    roots.push(root);
+    root.render(createElement(CouldNotShow, { messageKey: 'windowCouldNotOpen', onClose }));
+    await new Promise((r) => setTimeout(r, 50));
+    const buttons = all(container).filter((n) => (n as MiniElement).tagName === 'BUTTON') as MiniElement[];
+    const reloadButton = buttons.find((b) => b.textContent === 'Reload');
+    expect(reloadButton).toBeDefined();
+    (reactProps(reloadButton!).onClick as () => void)();
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(receivers).toEqual([loc]);
+    expect(onClose).not.toHaveBeenCalled();
+    const close = buttons.find((b) => b !== reloadButton)!;
+    (reactProps(close).onClick as () => void)();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

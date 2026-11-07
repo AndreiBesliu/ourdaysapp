@@ -14878,3 +14878,49 @@ Pe tab-urile de grup, widgetul ascultă mesajele și închis (bulina cu necitite
   - `GroupChatWidget-CPnXcNhy.js` se servește (200);
   - 0 rânduri de eroare în cele 30 de minute de după publicare; joburile au `ok` și 0 eșecuri la rând.
 - **Nevăzut de mine:** o rețea lentă reală pe telefon (OWNER_VERIFY, sus).
+
+## 2026-11-07 · Ferestrele calendarului: nota „reîncarcă pagina” are buton de reîncărcare (Task Started)
+
+**Prompt (Andrei):** „Reload on windows” (la „Care e felia următoare?”).
+**Model:** Claude Opus 5.5.
+
+Din felia de ieri (chatul la cerere): Chromium ține un `import()` eșuat cât trăiește pagina, deci o fereastră a
+calendarului a cărei bucată n-a venit o dată (offline, sau un tab mai vechi decât o publicare) rămâne fără ea până la
+reîncărcare. Nota ei spune „Check your connection, then reload the page”, dar n-are cum: are doar ×. Ferestrele adăugare,
+detalii, invitație și arcade folosesc aceeași notă (`CouldNotShow`).
+
+## 2026-11-07 · Ferestrele calendarului: nota „reîncarcă pagina” are buton de reîncărcare (Task Completed)
+
+**Prompt (Andrei):** „Reload on windows”.
+**Model:** Claude Opus 5.5.
+
+- **`CouldNotShow`:** nota pe care o arată o fereastră care nu se poate deschide are acum un buton **Reload**
+  (`errorReload`, în cele 6 limbi), dar numai când textul ei cere reîncărcarea: `windowCouldNotOpen` (adăugare și detalii,
+  când n-a venit bucata; arcade-ul) și `inviteCouldNotOpen` (invitația), adică `NOTES_ASKING_FOR_RELOAD`. „Evenimentul nu a
+  putut fi afișat” rămâne fără buton.
+  - Butonul doar oferă reîncărcarea, nu o face singur; are 44 px și `type="button"`.
+- **De ce:** Chromium ține un `import()` eșuat cât trăiește pagina (măsurat în recenzia de ieri), deci numai reîncărcarea
+  aduce fereastra înapoi. Nota spunea asta, dar avea doar ×.
+- **Teste:**
+  - o invariantă peste toate apelurile `<CouldNotShow>` din `src`: butonul apare dacă și numai dacă textul englez spune
+    „reload”, fiecare cheie din listă e folosită, iar numărătoarea cade dacă vreun apel e scris altfel și n-ar fi citit;
+  - randarea, cu buton și fără buton;
+  - pe un client React real: clicul cheamă `location.reload()` o dată, pe `location`, nu închide nota, iar × închide în
+    continuare; în română, nota are butonul „Reîncarcă”.
+- **Banc** (componenta reală, CSS-ul aplicației; fișierele șterse înainte de commit):
+  - notele de fereastră și de invitație au butonul, cea de eveniment nu;
+  - la 375 px: fără derulare orizontală, butonul primește clicul (`elementFromPoint`);
+  - contrastul butonului: 4,94:1 pe tema luminoasă, 4,85:1 pe cea întunecată; textul notei 11,99:1 pe cea întunecată;
+  - clicul reîncarcă pagina (navigarea de după e `reload`).
+- **Recenzia** (7 agenți, 0,83 M tokeni, față de ~0,4 M anunțați: depășire de două ori). O constatare reală, mică:
+  testul de randare spunea „în limba cititorului”, dar randa doar în engleză, deci un buton rămas în engleză sub o notă
+  în română trecea. Acum verificarea în română rulează pe client: pe server, `zustand` citește starea inițială.
+  - Respinse de verificatori, cu motive: reîncărcarea offline duce la pagina offline a aplicației (e ce cere chiar nota),
+    și arcade-ul sau invitația spun „reîncarcă” și la o cădere de cod (dinainte de felie; notat în BACKLOG).
+  - Întăriri luate totuși: numărătoarea apelurilor în invariantă, verificarea lui `this` la `reload` și înlocuitorul lui
+    `location` scos în `finally`.
+- **Mutanți** (clonă în afara Drive, control verde înainte și după, fișierele restaurate la octet): **13 din 13 prinși**.
+- **Porți:**
+  - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
+  - `npm test` (2839), `test:tz` (46 + 46);
+  - pornirea +311 octeți (nota e la pornire); funcțiile n-au schimbări.
