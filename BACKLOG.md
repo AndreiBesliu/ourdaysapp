@@ -563,7 +563,27 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
 - **Warlord, în submodul** (se repară în repo-ul Warlord, nu de aici): `loadSave` pornește
   portofelul de la 5 aur, `resetAll` de la 10, iar `resetAll` nu resetează `inspection`.
 
-## 5. Nivelul de owner — NU se începe fără Andrei
+## 5. Nivelul de owner — făcut pe 07.11 (pornit de Andrei din roadmap)
 
-Orice admin poate face alt admin și poate trimite broadcast, fără MFA și fără autentificare recentă.
-CLAUDE.md o numește o felie separată de autorizare.
+- **Făcut:** rolul de owner pe rândul din `admins/{uid}`, citit din Firestore la fiecare apel
+  (`functions/src/adminRoles.ts`). Doar un owner:
+  - schimbă lista de admini și rolurile;
+  - trimite broadcast;
+  - face bugetul AI mai riscant.
+  Lista are mereu un admin și un owner, inclusiv cu doi owneri care acționează simultan (o singură tranzacție citește
+  toată lista). Un owner din `BOOTSTRAP_ADMIN_EMAILS` nu poate fi retrogradat sau scos din admin: ar redeveni owner la
+  următorul apel. Pe live, singurul admin (bootstrap, fără rol) devine owner la primul lui apel de admin după publicare.
+- **Rămâne, fiecare o felie separată:**
+  - **Autentificarea recentă** pentru acțiunile de owner (`auth_time` în token; ecranul ar cere reconectarea).
+    Obligatorie pentru publicarea din admin (decizia din 15.08), opțională pentru listă.
+  - **MFA** pe conturile de admin: cere Identity Platform, deci e o decizie de cont a lui Andrei.
+  - **Jurnalul listei:** azi rămân pe rând `addedBy`, `roleSetBy` și `roleSetAt`, dar un admin scos nu lasă nicio urmă.
+    Modelul ar fi `aiConfigLog` (rândul scris în aceeași tranzacție).
+  - **`warlordConfig`** se scrie direct din browser, de orice admin (`firestore.rules`), fără callable și fără jurnal.
+  - **Moderarea** (`adminModerateUser`): niciun admin nu poate dezactiva sau șterge alt admin, nici un owner. Așa a
+    rămas, intenționat; un owner care vrea asta scoate întâi adminul din listă.
+  - **Submodulul Warlord** își are copia regulii în `src/warlord/CLAUDE.md` („Nu are un nivel de owner deloc”, ~r. 150).
+    Se corectează în repo-ul Warlord, nu de aici.
+- **Văzut pe banc, dinainte și în afara feliei:** linkurile `text-primary` ale adminului („Make owner”, „Make admin” din
+  Profiles) au 3,43:1 pe cardurile întunecate. `--primary` vine din accentul ales de om (`primaryTokens`, `App.tsx`),
+  iar cel implicit e albastrul temei luminoase.

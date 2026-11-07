@@ -15150,3 +15150,66 @@ tokenul și ascultă notificările din prim-plan; deci nu „doar la abonare”,
   - CI pe `ae2809e`: verde.
 - **Nevăzut de mine:** o încărcare de poză pe live, din spatele login-ului (`OWNER_VERIFY.md`, sus), și notificările pe un
   telefon real.
+
+## 2026-11-07 · Un nivel de owner în admin (Task Started)
+
+**Prompt (Andrei):** „Owner level” (la „Încep „Un nivel de owner în admin”, primul punct din Later?”, după felia
+Storage și Messaging, cu coloana Next goală).
+**Model:** Claude Opus 5.5.
+
+Punctul din roadmap: azi orice admin poate face alt admin (`adminSetAdmin` e păzit doar de `assertAdmin`). Felia de
+autorizare: owner-ul citit din Firestore, nu dintr-un claim, ca retragerea să fie imediată; deblochează mai târziu
+publicarea din admin. Pe live e un singur admin, creat prin bootstrap, fără rol (numărat cu cheia de citire, doar
+numere).
+
+## 2026-11-07 · Un nivel de owner în admin (Task Completed)
+
+**Prompt (Andrei):** „Owner level”.
+**Model:** Claude Opus 5.5.
+
+- **Serverul** (`functions/src/adminRoles.ts`, nou; `functions/src/index.ts`):
+  - rolul stă pe `admins/{uid}.role` („owner”; orice altceva, sau lipsa lui, înseamnă admin) și se citește din Firestore
+    la fiecare apel, nu dintr-un claim (`adminRoleOf`, din care `assertAdmin` și `assertOwner`);
+  - un email verificat din `BOOTSTRAP_ADMIN_EMAILS` e owner: rândul lui se creează sau primește `role: "owner"` la
+    fiecare apel, fără să-și piardă `addedBy` și `addedAt`;
+  - `adminSetAdmin` e doar al owner-ului, cu un `role` opțional. Decizia o ia `planRosterChange`, pură, în tranzacția
+    care citește toată lista: mereu cel puțin un admin și un owner. Owner-ul din bootstrap nu poate fi retrogradat sau
+    scos din admin, iar un „Make admin” pe un owner nu-l retrogradează;
+  - `adminBroadcast` e al owner-ului („Only an owner can send a broadcast.”);
+  - `adminSetAiConfig` își ia actorul din rândul apelantului, citit în tranzacția care scrie: o retrogradare are efect
+    imediat, iar un admin scos între timp nu mai schimbă nimic;
+  - `adminListAdmins` dă rolul fiecăruia, iar `bootstrap` vine din emailul verificat al contului, ca în `adminSetAdmin`.
+- **Ecranul** (`src/screens/Admin.tsx`, `src/utils/adminRosterView.ts`, nou):
+  - etichete Owner/Admin. Butoanele fiecărui rând sunt exact cele pe care `planRosterChange` le-ar accepta, întrebate
+    chiar de funcția serverului;
+  - un admin simplu vede lista și o notă, fără formulare, inclusiv la Broadcast și fără „Make admin” în Profiles;
+  - cât lista nu a venit, scrie „Checking your role…”; dacă n-a venit deloc, scrie că nu s-a putut încărca;
+  - pe propriul rând, retrogradarea și scoaterea cer confirmare; după scoaterea proprie, aplicația pleacă din admin.
+- **Pe live:** un singur admin, cel din bootstrap, fără rol. Devine owner la primul lui apel de admin după publicare.
+- **Banc** (aplicația reală, funcțiile reale pe emulatoarele Auth, Firestore și Functions; fișierele șterse înainte de
+  commit), de două ori:
+  - **a prins un bug:** clientul trimite `email: undefined` ca `null`, iar validarea nouă îl refuza („uid and email must
+    be strings.”). Ar fi stricat „Make owner” și orice acordare după uid. Acum `null` înseamnă „lipsă”, cu test;
+  - owner, admin simplu, owner din bootstrap (rândul vechi devine Owner);
+  - „Make owner”, „Make admin”, retrogradarea și scoaterea proprie;
+  - 375 px fără derulare orizontală; notele pe tema întunecată de la 3,67 la 6,91:1; țintele trec testul de clic.
+- **Recenzia** (Workflow, 5 lentile și 16 verificatori, 21 de agenți, 2,54 M tokeni, față de ~1,5 M anunțați: o
+  depășire de 1,7 ori). 16 constatări, 12 confirmate (10 distincte, toate mici, plus fișierul de teste care nu se
+  compila), reparate:
+  - refuzul broadcast-ului spunea textul despre listă;
+  - cât lista se încărca sau dacă eșua, ecranul îi spunea owner-ului că nu e owner;
+  - comentarii despre un APK cu ecran de admin (APK-ul instalat n-are) și afirmații la prezent despre poarta veche;
+  - retrogradarea și scoaterea proprie, fără confirmare;
+  - patru goluri de test.
+  Respinse de verificatori, cu motive: o adresă neverificată acordată prin email (mai veche și micșorată de felie), un
+  bootstrap acordat ca admin (redevine owner, intenționat), „Admin granted.” la nimic schimbat și numele accesibile
+  ale butoanelor (dinainte).
+- **Reverificarea** (1 agent, 0,22 M): toate 11 complete. O problemă nouă, mică, reparată: „No admins.” sub „Checking
+  your role…”. Total recenzie: 2,76 M.
+- **Mutanți** (clonă în afara Drive, control verde înainte și după, fișierele restaurate la octet): în prima rundă au
+  supraviețuit 3 din 34, iar testele lor s-au adăugat. Finalul: **37 din 37 prinși**, 16 unitari și 21 pe emulator.
+- **Porți:**
+  - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
+  - `npm test` (2926), `test:tz` (46 + 46);
+  - funcțiile construite (`lib` în commit), `test:rules` întreg (86 de fișiere, 1323 de teste);
+  - pornirea neschimbată (986.254 octeți); adminul, în bucata lui (85 kB).

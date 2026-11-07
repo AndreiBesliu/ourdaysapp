@@ -183,11 +183,10 @@ export type AiConfigActor = 'owner' | 'admin';
  * whoever is holding the phone when the bill starts moving. Turning it off, or raising a limit,
  * needs the one identity in this app that another admin cannot mint.
  *
- * That asymmetry matters here specifically: `adminSetAdmin` is gated by `assertAdmin` alone, so
- * any admin can create another admin. `CLAUDE.md` records that as the reason OurDaysApp was
- * excluded from the publish-to-live feature. A money control behind that same door would
- * re-create exactly what was excluded, on the thing that costs money — unless the dangerous
- * direction is held somewhere else.
+ * That asymmetry mattered here specifically: until 07.11.2026 `adminSetAdmin` was gated by
+ * `assertAdmin` alone, so any admin could create another admin, and "owner" had to mean the
+ * bootstrap email. Since then it is the role on the caller's roster row, which only an owner can
+ * give (adminRoles.ts) — still an identity a plain admin cannot mint.
  */
 export function configChangeAllowed(
   actor: AiConfigActor,

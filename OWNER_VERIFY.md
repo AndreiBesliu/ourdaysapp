@@ -15,6 +15,25 @@
 
 ---
 
+## 🆕 Un nivel de owner în admin (07.11)
+
+**Fapt:** în Admin → Admins, fiecare admin are acum eticheta **Owner** sau **Admin**. Doar un owner poate:
+- adăuga sau scoate admini și face pe cineva owner („Make owner”, „Make admin”);
+- trimite broadcast;
+- ridica bugetul AI sau opri kill switch-ul.
+
+Un admin simplu vede lista și o notă, fără butoane. Tu ești owner prin `BOOTSTRAP_ADMIN_EMAILS`. Rândul tău devine
+„Owner” la prima intrare în admin după publicare și nu poate fi retrogradat sau scos din admin; lângă el scrie „server
+settings”. Ultimul owner nu poate fi retrogradat sau scos. Probat pe banc, cu aplicația reală și funcțiile reale pe
+emulatoare: owner, admin simplu, owner din bootstrap, 375 px.
+
+- [ ] **Pe live, deschide Admin → Admins** (1 minut).
+      - **Cum arată bine:** rândul tău cu „Owner”, „you” și „server settings”; formularul „Grant admin by email” deasupra.
+      - **Ce e greșit:** „Admin” pe rândul tău după o reîncărcare, sau „Only an owner can…” în locul formularului.
+- [ ] **În Admin → Roadmap, marchează cu ✓ „Un nivel de owner în admin”.**
+
+---
+
 ## 🆕 Storage și Messaging se încarcă la cerere (07.11) — PUBLICAT pe 07.11
 
 **Fapt:** pachetul de pornire e cu ~54 kB mai mic (gzip ~16 kB). Codul pentru poze și fișiere (Storage) vine odată cu

@@ -229,10 +229,14 @@ Admin SDK, delete niciodată).
 `adminAudit` cu valorile dinainte și un `restoreFromAudit` funcțional: ăla e modelul.
 
 ### Domeniul de aplicare
-**OurDaysApp NU primește butonul** (decis 2026-08-15). Nu are un nivel de owner deloc:
-`adminSetAdmin` e păzit de `assertAdmin`, deci orice admin poate face alt admin; iar
-`warlordConfig` se scrie direct din browser, fără callable pe care să atârni listă albă sau
-jurnal. Se reia după o felie separată de autorizare.
+**OurDaysApp NU primește butonul** (decis 2026-08-15). Felia de autorizare cerută atunci s-a făcut
+pe 07.11: **nivelul de owner**. Rolul stă pe rândul din `admins/{uid}` (`role: "owner"`) și se citește din
+Firestore la fiecare apel, nu dintr-un claim (`functions/src/adminRoles.ts`, `adminRoleOf` / `assertOwner` în
+`index.ts`). Doar un owner schimbă lista de admini și rolurile (`adminSetAdmin`), trimite broadcast și face bugetul
+AI mai riscant. Lista are mereu un admin și un owner. Un email verificat din `BOOTSTRAP_ADMIN_EMAILS` e owner, refăcut
+la fiecare apel, deci nici retrogradat, nici scos din admin. Rămâne deschis: `warlordConfig` se scrie direct din
+browser, fără callable pe care să atârni listă albă sau jurnal, iar adminul n-are MFA și nici autentificare recentă.
+Butonul se reia doar cu Andrei.
 *Capcană de denumire acolo:* `isOwner(uid)` din `firestore.rules` înseamnă „deține ACEST
 document", nu „e owner-ul aplicației" — e adevărat pentru orice user despre datele lui.
 

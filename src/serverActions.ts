@@ -122,7 +122,7 @@ export async function acceptGroupInvite(inviteId: string): Promise<void> {
   await fn({ inviteId });
 }
 
-// ── Admin backend (all server-gated by assertAdmin) ──
+// ── Admin backend (all server-gated by assertAdmin; adminSetAdmin and adminBroadcast by assertOwner) ──
 export async function adminCheck(): Promise<boolean> {
   const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminCheck");
   const res = await fn({});
@@ -140,7 +140,8 @@ export async function adminListAdmins(): Promise<{ admins: any[] }> {
   const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminListAdmins");
   return (await fn({})).data as { admins: any[] };
 }
-export async function adminSetAdmin(params: { uid?: string; email?: string; makeAdmin: boolean }): Promise<void> {
+/** Grant or revoke admin, or set an admin's role (owner only; functions/src/adminRoles.ts has the rules). */
+export async function adminSetAdmin(params: { uid?: string; email?: string; makeAdmin: boolean; role?: 'owner' | 'admin' }): Promise<void> {
   const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminSetAdmin");
   await fn(params);
 }

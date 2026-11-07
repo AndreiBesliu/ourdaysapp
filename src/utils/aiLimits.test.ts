@@ -184,9 +184,9 @@ describe('who may move the limits, and in which direction', () => {
   });
 
   it('refuses a plain admin RAISING either limit', () => {
-    // `adminSetAdmin` is gated by `assertAdmin` alone, so any admin can mint another admin.
-    // CLAUDE.md records that as the reason this app was excluded from publish-to-live. A money
-    // control behind that same door would re-create exactly what was excluded.
+    // Until 07.11.2026 `adminSetAdmin` was gated by `assertAdmin` alone, so any admin could mint
+    // another admin. Now only an owner can (functions/src/adminRoles.ts), and a plain admin still
+    // may not move the money control in the risky direction.
     expect(configChangeAllowed('admin', at(5, 0.25), at(50, 0.25)).allowed).toBe(false);
     expect(configChangeAllowed('admin', at(5, 0.25), at(5, 1)).allowed).toBe(false);
   });

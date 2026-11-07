@@ -25,6 +25,7 @@ import {
   effectiveLimits, AI_CONFIG_PATH, AI_LIMITS, LIMITS_SOURCE, AI_MODEL, MODEL_PRICING,
 } from "./aiLedger";
 import { clampAiLimits, configChangeAllowed, type AiConfigFields } from "./aiLimits";
+import { planRosterChange, requestedRole, roleOf, ONLY_THE_OWNER, type AdminRole } from "./adminRoles";
 import { changedOutsideAdmin } from "./aiConfigProvenance";
 import { mergeRollups, mergeModelDays } from "./aiSpendMerge";
 import { readFriendship, authIdentityOf } from "./friendship";
@@ -200,10 +201,11 @@ async function assertAiCallerAllowed(request: { auth?: { uid?: string } }): Prom
   return uid;
 }
 
-// Admin gate for the admin-backend callables. Admin if `admins/{uid}` exists, or
-// the caller's VERIFIED email is in BOOTSTRAP_ADMIN_EMAILS (auto-provisioned into
-// `admins/{uid}` on first use so they appear in the admins list). Returns the uid.
-async function assertAdmin(request: { auth?: { uid?: string; token?: any } }): Promise<string> {
+// Admin gate for the admin-backend callables, with the caller's role (adminRoles.ts). Admin if `admins/{uid}` exists,
+// with the role stored on that row, read here on every call and never from a claim. A VERIFIED email in
+// BOOTSTRAP_ADMIN_EMAILS is an owner: provisioned into `admins/{uid}` on first use so they appear in the admins list, and
+// made an owner again if their row says otherwise (07.11.2026: the rows written before the owner level have no role).
+async function adminRoleOf(request: { auth?: { uid?: string; token?: any } }): Promise<{ uid: string; role: AdminRole }> {
   const uid = request.auth?.uid;
   if (!uid) {
     throw new HttpsError("unauthenticated", "You must be signed in.");
@@ -211,21 +213,41 @@ async function assertAdmin(request: { auth?: { uid?: string; token?: any } }): P
   const db = admin.firestore();
   const adminRef = db.doc(`admins/${uid}`);
   const snap = await adminRef.get();
-  if (snap.exists) return uid;
 
   const email = (request.auth?.token?.email || "").toLowerCase();
   const emailVerified = request.auth?.token?.email_verified === true;
   if (emailVerified && BOOTSTRAP_ADMIN_EMAILS.includes(email)) {
-    // Auto-provision the bootstrap owner so they show up in the admins list.
-    await adminRef.set({
-      email,
-      name: request.auth?.token?.name || email.split("@")[0],
-      addedBy: "bootstrap",
-      addedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-    return uid;
+    if (!snap.exists) {
+      await adminRef.set({
+        email,
+        name: request.auth?.token?.name || email.split("@")[0],
+        addedBy: "bootstrap",
+        addedAt: FieldValue.serverTimestamp(),
+        role: "owner",
+      }, { merge: true });
+    } else if (roleOf(snap.data()) !== "owner") {
+      // Only the role: who added the row, and when, stay as they were.
+      await adminRef.set({ role: "owner" }, { merge: true });
+    }
+    return { uid, role: "owner" };
   }
+  if (snap.exists) return { uid, role: roleOf(snap.data()) };
   throw new HttpsError("permission-denied", "Admin access required.");
+}
+
+/** Admin gate for the admin-backend callables. Returns the uid. */
+async function assertAdmin(request: { auth?: { uid?: string; token?: any } }): Promise<string> {
+  return (await adminRoleOf(request)).uid;
+}
+
+/**
+ * The owner's gate: an admin whose row says `role: "owner"` (or a bootstrap owner). Returns the uid. `refusal` is what a
+ * plain admin reads, so it names the thing refused (a broadcast is not "adding or removing admins").
+ */
+async function assertOwner(request: { auth?: { uid?: string; token?: any } }, refusal: string = ONLY_THE_OWNER): Promise<string> {
+  const { uid, role } = await adminRoleOf(request);
+  if (role !== "owner") throw new HttpsError("permission-denied", refusal);
+  return uid;
 }
 
 // Whether `uid` is a member of the given group. Only an id that names one document is looked up:
@@ -1892,7 +1914,8 @@ export const acceptGroupInvite = onCall({ region: CALLABLE_REGIONS, enforceAppCh
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// ADMIN BACKEND — all gated by assertAdmin(); data served via Admin SDK so we
+// ADMIN BACKEND — all gated by assertAdmin() (adminSetAdmin and adminBroadcast by assertOwner, from 07.11.2026); data
+// served via Admin SDK so we
 // never open read rules on user PII. Stats are computed on-read (refreshable).
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -1922,7 +1945,8 @@ const chunk = <T>(arr: T[], size: number): T[][] => {
 
 // `logServerError` lives in errorLog.ts since 25.09.2026, with the one writer every row goes through.
 
-// Is the current caller an admin? (Non-throwing for non-admins.)
+// Is the current caller an admin? (Non-throwing for non-admins.) Whether they are an owner is on their row of
+// `adminListAdmins`, which the admin screen reads anyway.
 export const adminCheck = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   if (!request.auth?.uid) {
     throw new HttpsError("unauthenticated", "You must be signed in.");
@@ -2138,70 +2162,93 @@ export const adminListAdmins = onCall({ region: CALLABLE_REGIONS, enforceAppChec
     let email = data.email || null;
     let name = data.name || null;
     let emailVerified: boolean | null = null;
+    let authEmail = "";
     try {
       const u = await admin.auth().getUser(d.id);
       email = email || u.email || null;
       name = name || u.displayName || null;
       emailVerified = u.emailVerified;
+      authEmail = (u.email || "").toLowerCase();
     } catch { /* auth user may be gone */ }
     return {
       uid: d.id, email, name, emailVerified,
       addedBy: data.addedBy || null,
       addedAt: data.addedAt?.toDate?.()?.toISOString?.() || null,
-      bootstrap: BOOTSTRAP_ADMIN_EMAILS.includes((email || "").toLowerCase()),
+      role: roleOf(data),
+      // Named in the server's settings, so neither demoted nor removed from the admin (adminRoles.ts). The same test as
+      // `adminSetAdmin`'s: the email on the account, verified.
+      bootstrap: emailVerified === true && BOOTSTRAP_ADMIN_EMAILS.includes(authEmail),
     };
   }));
   return { admins };
 });
 
-// Grant or revoke admin (admin-only). Accepts a uid or an email. Last-admin
-// protected; the bootstrap owner re-provisions on next call so can't be locked out.
+// Grant or revoke admin, or change an admin's role (owner only, from 07.11.2026; before, any admin). Accepts a uid or an
+// email, `makeAdmin`, and with `makeAdmin: true` an optional `role` ("owner" | "admin"; without it a new admin is an
+// admin and an existing one keeps their role). The rules are in adminRoles.ts: there is always an admin and an owner,
+// and an owner named in the server's settings is neither demoted nor removed here.
 export const adminSetAdmin = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
-  const callerUid = await assertAdmin(request);
+  const callerUid = await assertOwner(request);
   const { uid, email, makeAdmin } = request.data || {};
+  const role = requestedRole(request.data?.role);
   if (typeof makeAdmin !== "boolean" || (!uid && !email)) {
     throw new HttpsError("invalid-argument", "makeAdmin and a uid or email are required.");
+  }
+  // `null` is "not given": the client SDK sends a field left `undefined` as `null`, and the web admin screen calls with
+  // `{ email: undefined, uid }` (found on the bench, 07.11.2026). The installed APK has no admin screen.
+  if ((uid != null && typeof uid !== "string") || (email != null && typeof email !== "string")) {
+    throw new HttpsError("invalid-argument", "uid and email must be strings.");
+  }
+  if (role === "invalid" || (role !== null && !makeAdmin)) {
+    throw new HttpsError("invalid-argument", "role is \"owner\" or \"admin\", and only with makeAdmin.");
   }
 
   let targetUid = uid as string | undefined;
   let targetEmail = (email || "").toLowerCase();
   let targetName: string | undefined;
+  let targetVerified = false;
   try {
     const rec = targetUid
       ? await admin.auth().getUser(targetUid)
       : await admin.auth().getUserByEmail(targetEmail);
     targetUid = rec.uid;
-    targetEmail = (rec.email || targetEmail).toLowerCase();
+    targetEmail = (rec.email || "").toLowerCase();
     targetName = rec.displayName || undefined;
+    targetVerified = rec.emailVerified === true;
   } catch {
     throw new HttpsError("not-found", "No user found for that uid/email.");
   }
+  // The same test `adminRoleOf` makes them an owner by: a verified email on the list.
+  const targetBootstrap = targetVerified && BOOTSTRAP_ADMIN_EMAILS.includes(targetEmail);
 
   const db = admin.firestore();
   const ref = db.doc(`admins/${targetUid}`);
 
-  if (makeAdmin) {
-    await ref.set({
-      email: targetEmail || null,
-      name: targetName || (targetEmail ? targetEmail.split("@")[0] : null),
-      addedBy: callerUid,
-      addedAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-    return { ok: true, uid: targetUid, makeAdmin: true };
-  }
-
-  // Revoke inside a transaction so the last-admin check and the delete are
-  // atomic (two concurrent revokes can't both pass the floor and empty the set).
-  await db.runTransaction(async (tx) => {
+  // One transaction: the whole roster is read with the write, so the floors (an admin, an owner) and the caller's own
+  // role hold however many owners act at once.
+  const plan = await db.runTransaction(async (tx) => {
     const all = await tx.get(db.collection("admins"));
-    const targetSnap = await tx.get(ref);
-    if (!targetSnap.exists) return; // already not an admin → no-op
-    if (all.size <= 1) {
-      throw new HttpsError("failed-precondition", "Can't remove the last admin.");
+    const roster = all.docs.map((d) => ({ uid: d.id, role: roleOf(d.data()) }));
+    const verdict = planRosterChange(callerUid, roster, { uid: targetUid as string, bootstrap: targetBootstrap },
+      makeAdmin ? { kind: "grant", role } : { kind: "revoke" });
+    if (!verdict.ok) throw new HttpsError(verdict.code, verdict.reason);
+    const write = verdict.write;
+    if (write?.op === "create") {
+      tx.create(ref, {
+        email: targetEmail || null,
+        name: targetName || (targetEmail ? targetEmail.split("@")[0] : null),
+        addedBy: callerUid,
+        addedAt: FieldValue.serverTimestamp(),
+        role: write.role,
+      });
+    } else if (write?.op === "setRole") {
+      tx.set(ref, { role: write.role, roleSetBy: callerUid, roleSetAt: FieldValue.serverTimestamp() }, { merge: true });
+    } else if (write?.op === "delete") {
+      tx.delete(ref);
     }
-    tx.delete(ref);
+    return verdict;
   });
-  return { ok: true, uid: targetUid, makeAdmin: false };
+  return { ok: true, uid: targetUid, makeAdmin, role: plan.role, changed: plan.write !== null };
 });
 
 // ── Error monitoring ──
@@ -2578,9 +2625,11 @@ export const adminModerateUser = onCall({ region: CALLABLE_REGIONS, enforceAppCh
   throw new HttpsError("invalid-argument", "Unknown action.");
 });
 
-// ── Broadcast a notification to all users or one group (admin-only) ──
+// ── Broadcast a notification to all users or one group (owner only, from 07.11.2026) ──
+// A bell row and a push on every recipient's phone: an outward action, like raising the AI budget, so it is held by the
+// role a plain admin cannot give themselves (adminRoles.ts).
 export const adminBroadcast = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
-  const callerUid = await assertAdmin(request);
+  const callerUid = await assertOwner(request, "Only an owner can send a broadcast.");
   const { target, title, body } = request.data || {};
   // A string, and not a blank one. A truthy non-string (an array, say) passed the old check, and
   // String([]) is "" — which made notify() fall back to a titleKey that exists nowhere, so the
@@ -3476,8 +3525,9 @@ export const adminGetAiConfig = onCall({ region: CALLABLE_REGIONS, enforceAppChe
  * Two guards, and they do different jobs. `clampAiLimits` decides what the NUMBERS may be — the
  * server owns those bounds, never the form, because an extra zero is a hundredfold bill.
  * `configChangeAllowed` decides who may move them in which DIRECTION: anyone with the admin may
- * make things safer, only the owner may make them riskier. That asymmetry exists because
- * `adminSetAdmin` is gated by `assertAdmin` alone, so any admin can mint another admin.
+ * make things safer, only an owner may make them riskier. Until 07.11.2026 "owner" meant the
+ * bootstrap email, because any admin could mint another admin; now it is the role on the caller's
+ * roster row (adminRoles.ts), read in the transaction that writes, so a demotion bites at once.
  *
  * The document and its log row go in ONE batch, and it is not best-effort: a configuration change
  * that cannot be recorded should not happen.
@@ -3487,8 +3537,8 @@ export const adminSetAiConfig = onCall({ region: CALLABLE_REGIONS, enforceAppChe
   const db = admin.firestore();
 
   const email = String(request.auth?.token?.email || "").toLowerCase();
-  const emailVerified = request.auth?.token?.email_verified === true;
-  const actor = emailVerified && BOOTSTRAP_ADMIN_EMAILS.includes(email) ? "owner" : "admin";
+  // Set in the transaction below, from the caller's roster row as it is when the change is written.
+  let actor = "admin" as AdminRole;
 
   const requested = (request.data || {}) as Record<string, unknown>;
   const clamped = clampAiLimits({
@@ -3503,6 +3553,7 @@ export const adminSetAiConfig = onCall({ region: CALLABLE_REGIONS, enforceAppChe
   };
 
   const configRef = db.doc(AI_CONFIG_PATH);
+  const callerRef = db.doc(`admins/${uid}`);
   const logRef = db.collection("aiConfigLog").doc();
 
   // ── Read the STORED value, in the transaction that writes ────────────────────────────────
@@ -3529,6 +3580,10 @@ export const adminSetAiConfig = onCall({ region: CALLABLE_REGIONS, enforceAppChe
   try {
     const outcome = await db.runTransaction(async (tx) => {
       const snap = await tx.get(configRef);
+      const callerSnap = await tx.get(callerRef);
+      // Removed from the roster since the gate above: nothing is changed.
+      if (!callerSnap.exists) throw new HttpsError("permission-denied", "Admin access required.");
+      actor = roleOf(callerSnap.data());
       const stored = snap.exists ? (snap.data() || {}) : null;
       // The RAW stored values, clamped only for comparison. A console-written 500 must not be
       // logged as a previous value of 50.

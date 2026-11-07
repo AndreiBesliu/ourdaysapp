@@ -185,8 +185,9 @@ describe('a callable’s id argument names ONE document', () => {
       .rejects.toMatchObject({ code: 'invalid-argument', message: 'Invalid group id.' });
   });
 
-  it('an admin’s broadcast goes to "all" or to a group, never to a document under one', async () => {
-    await db.doc(`admins/${ALICE}`).set({ email: emailOf(ALICE) });
+  it('an owner’s broadcast goes to "all" or to a group, never to a document under one', async () => {
+    // An owner: since 07.11.2026 a plain admin is refused before the target is read (adminRoster.test.ts).
+    await db.doc(`admins/${ALICE}`).set({ email: emailOf(ALICE), role: 'owner' });
     await expect(call('adminBroadcast', ALICE, { target: PLANTED, title: 'Hello' })).rejects.toMatchObject({ code: 'invalid-argument' });
     expect(pushed).toEqual([]);
     expect((await db.collection('notifications').get()).size).toBe(0);

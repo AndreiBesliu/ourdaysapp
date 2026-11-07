@@ -14,6 +14,7 @@ import { jobsNeedingAttention } from '../utils/jobHealthView';
 import JobHealthList from '../components/JobHealthList';
 import ModelSpendList from '../components/ModelSpendList';
 import AdminRoadmap from '../components/AdminRoadmap';
+import { listedRole, rosterControls, rosterNote, viewerIsOwner, type RosterNote } from '../utils/adminRosterView';
 import {
   adminCheck, adminGetStats, adminListProfiles, adminListAdmins, adminSetAdmin,
   adminGetHealth, adminSetErrorStatus, adminGetAiLedger, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
@@ -135,6 +136,9 @@ export default function Admin() {
   const [stats, setStats] = useState<any>(null);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [admins, setAdmins] = useState<any[]>([]);
+  // Whether `admins` has come back at least once ('loaded'), is on its way, or failed the first time. Until it has, the
+  // viewer's role is not known, and the screen must not say "only an owner can…" to the owner (review of 07.11.2026).
+  const [adminsState, setAdminsState] = useState<'loading' | 'loaded' | 'failed'>('loading');
   const [health, setHealth] = useState<any>(null);
   // Default to the two that want attention. Somebody opening this screen is asking "what
   // needs me", not "what have I already dealt with" — and a list that opens with fifty
@@ -264,6 +268,7 @@ export default function Admin() {
 
   const refresh = async () => {
     setLoading(true); setLoadError(false);
+    setAdminsState((st) => (st === 'failed' ? 'loading' : st));
     const results = await Promise.allSettled([
       adminGetStats(), adminListProfiles(), adminListAdmins(), adminGetHealth(), adminListGroups(), adminGetGrowth(),
       // Every AI call writes a ledger row, failures included. Since provider quota refusals stopped
@@ -284,7 +289,9 @@ export default function Admin() {
     if (spend.status === 'fulfilled') setAiSpend(spend.value);
     if (s.status === 'fulfilled') setStats(s.value);
     if (p.status === 'fulfilled') setProfiles(p.value.profiles || []);
-    if (a.status === 'fulfilled') setAdmins(a.value.admins || []);
+    // A later failure keeps the list already shown; only a first one leaves the role unknown.
+    if (a.status === 'fulfilled') { setAdmins(a.value.admins || []); setAdminsState('loaded'); }
+    else setAdminsState((st) => (st === 'loaded' ? st : 'failed'));
     if (h.status === 'fulfilled') setHealth(h.value);
     // Names as text only (08.10.2026, src/utils/groupName.ts): the server hands them back raw.
     if (g.status === 'fulfilled') setGroups((g.value.groups || []).map(withGroupName));
@@ -421,17 +428,44 @@ export default function Admin() {
     return profiles.filter(p => (p.name || '').toLowerCase().includes(q) || (p.email || '').toLowerCase().includes(q));
   }, [profiles, search]);
 
-  const grant = async (email?: string, uid?: string, makeAdmin = true) => {
+  // Owner only, on the server (functions/src/adminRoles.ts). `role` changes an admin's role; without it a new admin is an
+  // admin and an existing one keeps theirs.
+  const grant = async (email?: string, uid?: string, makeAdmin = true, role?: 'owner' | 'admin') => {
     setBusy(true); setGrantMsg(null);
     try {
-      await adminSetAdmin({ email, uid, makeAdmin });
+      await adminSetAdmin({ email, uid, makeAdmin, ...(role ? { role } : {}) });
+      // Removed themselves: every admin call refuses them from now on, so a refresh would leave the old screen standing.
+      if (!makeAdmin && uid && uid === auth.currentUser?.uid) { navigate('/'); return; }
       setGrantEmail('');
-      setGrantMsg({ ok: true, text: makeAdmin ? 'Admin granted.' : 'Admin revoked.' });
+      setGrantMsg({
+        ok: true,
+        text: !makeAdmin ? 'Admin revoked.' : role === 'owner' ? 'Made an owner.' : role === 'admin' ? 'Made an admin (no longer an owner).' : 'Admin granted.',
+      });
       await refresh();
     } catch (e: any) {
       setGrantMsg({ ok: false, text: e?.message || 'Failed.' });
     } finally { setBusy(false); }
   };
+
+  const makeOwner = (a: { uid: string; name?: string; email?: string }) => {
+    if (!confirm(`Make ${a.name || a.email || 'this admin'} an owner? An owner can add and remove admins and owners, and raise the AI budget.`)) return;
+    void grant(undefined, a.uid, true, 'owner');
+  };
+  // On their own row an owner is asked first: neither can be undone by them (review of 07.11.2026).
+  const makeAdminRow = (a: { uid: string }) => {
+    if (a.uid === auth.currentUser?.uid && !confirm('Give up your owner role? Only another owner can give it back.')) return;
+    void grant(undefined, a.uid, true, 'admin');
+  };
+  const revokeRow = (a: { uid: string }) => {
+    if (a.uid === auth.currentUser?.uid && !confirm('Remove your own admin access? Only an owner can add you back.')) return;
+    void grant(undefined, a.uid, false);
+  };
+
+  // Whether the person looking is an owner, by their own row of the admins list (the server's answer, not a claim).
+  const myUid = auth.currentUser?.uid ?? null;
+  const iAmOwner = viewerIsOwner(admins, myUid);
+  const NOTE_LABEL: Record<RosterNote, string> = { setByServer: 'server settings', lastOwner: 'last owner' };
+  const roleNotKnown = adminsState === 'failed' ? "Couldn't load the admins list. Try Refresh." : 'Checking your role…';
 
   if (access === 'checking') {
     return <div className="min-h-screen flex items-center justify-center text-zinc-500"><Loader2 className="w-6 h-6 animate-spin" /></div>;
@@ -677,11 +711,11 @@ export default function Admin() {
                       <td className="p-3 text-center tabular-nums">{p.events}</td>
                       <td className="p-3 text-center tabular-nums">{p.friends}</td>
                       <td className="p-3 text-right">
-                        {!p.isAdmin ? (
-                          <button onClick={(e) => { e.stopPropagation(); grant(undefined, p.uid, true); }} disabled={busy} className="text-xs text-primary hover:underline whitespace-nowrap">Make admin</button>
-                        ) : (
+                        {p.isAdmin ? (
                           <span className="text-[10px] uppercase font-bold text-amber-500">Admin</span>
-                        )}
+                        ) : iAmOwner ? (
+                          <button onClick={(e) => { e.stopPropagation(); grant(undefined, p.uid, true); }} disabled={busy} className="text-xs text-primary hover:underline whitespace-nowrap">Make admin</button>
+                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -695,37 +729,65 @@ export default function Admin() {
         {/* ── ADMINS ── */}
         {tab === 'admins' && (
           <div className="flex flex-col gap-4">
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
-              <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2"><UserPlus className="w-4 h-4" /> Grant admin by email</p>
-              <div className="flex gap-2">
-                <div className="relative flex-1 max-w-sm">
-                  <Mail className="absolute left-3 top-2.5 w-4 h-4 text-zinc-400" />
-                  <input value={grantEmail} onChange={e => setGrantEmail(e.target.value)} placeholder="user@example.com"
-                    className="w-full pl-9 pr-3 py-2 text-sm border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none" />
+            {/* Owner only (07.11.2026): a plain admin sees the list and nothing to press. The server refuses them anyway;
+                the controls on each row are the ones its rules accept (src/utils/adminRosterView.ts). */}
+            {iAmOwner ? (
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+                <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2"><UserPlus className="w-4 h-4" /> Grant admin by email</p>
+                <div className="flex gap-2">
+                  <div className="relative flex-1 max-w-sm">
+                    <Mail className="absolute left-3 top-2.5 w-4 h-4 text-zinc-400" />
+                    <input value={grantEmail} onChange={e => setGrantEmail(e.target.value)} placeholder="user@example.com"
+                      className="w-full pl-9 pr-3 py-2 text-sm border rounded-lg dark:bg-zinc-800 dark:border-zinc-700 focus:ring-2 focus:ring-primary outline-none" />
+                  </div>
+                  <button onClick={() => grant(grantEmail.trim(), undefined, true)} disabled={busy || !grantEmail.trim()} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">Grant</button>
                 </div>
-                <button onClick={() => grant(grantEmail.trim(), undefined, true)} disabled={busy || !grantEmail.trim()} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium disabled:opacity-50">Grant</button>
               </div>
-              {grantMsg && <p className={`mt-2 text-sm ${grantMsg.ok ? 'text-emerald-500' : 'text-red-500'}`}>{grantMsg.text}</p>}
-            </div>
+            ) : (
+              <p className="text-sm text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+                {adminsState === 'loaded' ? 'Only an owner can add or remove admins, or make someone an owner.' : roleNotKnown}
+              </p>
+            )}
+            {/* Outside the owner's card: an owner who has just made themselves an admin still reads what happened. */}
+            {grantMsg && <p role="status" className={`text-sm ${grantMsg.ok ? 'text-emerald-500' : 'text-red-500'}`}>{grantMsg.text}</p>}
 
             <div className="flex flex-col gap-2">
-              {admins.map(a => (
-                <div key={a.uid} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-full bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0"><Crown className="w-4 h-4" /></div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">{a.name || a.email}</p>
-                      <p className="text-xs text-zinc-500 truncate">{a.email} · since {fmtDate(a.addedAt)}{a.bootstrap ? ' · owner' : ''}</p>
+              {admins.map(a => {
+                const owner = listedRole(a) === 'owner';
+                const controls = rosterControls(admins, myUid, a);
+                const note = rosterNote(admins, myUid, a);
+                return (
+                  <div key={a.uid} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-full bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0"><Crown className="w-4 h-4" /></div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-zinc-900 dark:text-zinc-100 truncate flex items-center gap-2">
+                          <span className="truncate">{a.name || a.email}</span>
+                          <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded shrink-0 ${owner ? 'bg-amber-500/15 text-amber-800 dark:text-amber-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300'}`}>{owner ? 'Owner' : 'Admin'}</span>
+                          {a.uid === myUid && <span className="text-[10px] text-zinc-500 dark:text-zinc-400 shrink-0">you</span>}
+                        </p>
+                        <p className="text-xs text-zinc-500 truncate">{a.email} · since {fmtDate(a.addedAt)}</p>
+                      </div>
                     </div>
+                    {(controls.length > 0 || note) && (
+                      <div className="flex items-center gap-2 shrink-0 ml-auto">
+                        {controls.includes('makeOwner') && (
+                          <button onClick={() => makeOwner(a)} disabled={busy} className="text-xs text-primary hover:underline whitespace-nowrap px-1 py-2">Make owner</button>
+                        )}
+                        {controls.includes('makeAdmin') && (
+                          <button onClick={() => makeAdminRow(a)} disabled={busy} className="text-xs text-primary hover:underline whitespace-nowrap px-1 py-2">Make admin</button>
+                        )}
+                        {controls.includes('revoke') && (
+                          <button onClick={() => revokeRow(a)} disabled={busy} aria-label="Revoke admin" className="p-2 text-zinc-400 hover:text-red-500" title="Revoke admin"><Trash2 className="w-4 h-4" /></button>
+                        )}
+                        {note && <span className="text-[10px] uppercase font-bold text-zinc-500 dark:text-zinc-400">{NOTE_LABEL[note]}</span>}
+                      </div>
+                    )}
                   </div>
-                  {!a.bootstrap && admins.length > 1 ? (
-                    <button onClick={() => grant(undefined, a.uid, false)} disabled={busy} aria-label="Revoke admin" className="p-2 text-zinc-400 hover:text-red-500 shrink-0" title="Revoke admin"><Trash2 className="w-4 h-4" /></button>
-                  ) : (
-                    <span className="text-[10px] uppercase font-bold text-zinc-400 shrink-0">{a.bootstrap ? 'owner' : 'last'}</span>
-                  )}
-                </div>
-              ))}
-              {admins.length === 0 && <p className="text-center text-zinc-400 py-6">No admins.</p>}
+                );
+              })}
+              {/* Only once the list has come back: before that, or when it failed, it was never read (review of 07.11.2026). */}
+              {adminsState === 'loaded' && admins.length === 0 && <p className="text-center text-zinc-400 py-6">No admins.</p>}
             </div>
           </div>
         )}
@@ -1099,9 +1161,10 @@ export default function Admin() {
                 different product from one that bites now.
 
                 The SERVER owns the bounds and the direction. Any admin may make things safer
-                (switch on, limits down); only the owner may raise a limit or switch it back off,
-                because `adminSetAdmin` is gated by `assertAdmin` alone, so any admin can mint
-                another admin. The form cannot widen anything the server will not accept. */}
+                (switch on, limits down); only an owner may raise a limit or switch it back off.
+                Since 07.11.2026 that is the role on the caller's row of Admins, which only an owner
+                can give (functions/src/adminRoles.ts). The form cannot widen anything the server
+                will not accept. */}
             {aiConfig && (
               <Section icon={<Power className="w-4 h-4 text-primary" />} title="Budget and kill switch">
                 <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex flex-col gap-3">
@@ -1380,6 +1443,13 @@ export default function Admin() {
             <div className="bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs rounded-lg p-3 flex items-start gap-2">
               <Megaphone className="w-4 h-4 shrink-0 mt-0.5" /> Sends a bell notification AND a push to every recipient's phone. Use sparingly — this reaches real users.
             </div>
+            {/* Owner only since 07.11.2026 (functions/src/index.ts, adminBroadcast): a plain admin is told so, not
+                handed a form the server refuses. */}
+            {!iAmOwner ? (
+              <p className="text-sm text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+                {adminsState === 'loaded' ? 'Only an owner can send a broadcast.' : roleNotKnown}
+              </p>
+            ) : (
             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex flex-col gap-4">
               <div>
                 <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Recipients</label>
@@ -1406,6 +1476,7 @@ export default function Admin() {
                 {bcMsg && <p className={`text-sm ${bcMsg.ok ? 'text-emerald-500' : 'text-red-500'}`}>{bcMsg.text}</p>}
               </div>
             </div>
+            )}
           </div>
         )}
       </main>

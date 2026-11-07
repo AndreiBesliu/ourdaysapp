@@ -17,8 +17,9 @@
 //
 // So this file asserts that an ADMIN is refused too. That is the assertion that catches a future
 // contributor "helpfully" adding `exists(/admins/$(uid))` here, which would look like an
-// improvement and would quietly move a money control behind a door that any admin can open —
-// `adminSetAdmin` is gated by `assertAdmin` alone, so any admin can mint another.
+// improvement and would quietly move a money control behind a door that any admin can open: a
+// direct write skips `configChangeAllowed`, which is where only an owner may make it riskier
+// (the owner level, 07.11.2026; before it, any admin could also mint another admin).
 
 import { assertFails } from '@firebase/rules-unit-testing';
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
