@@ -15136,3 +15136,17 @@ tokenul și ascultă notificările din prim-plan; deci nu „doar la abonare”,
   - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
   - `npm test` (2902), `test:tz` (46 + 46);
   - funcțiile n-au schimbări.
+
+## 2026-11-07 · Storage și Messaging la cerere: publicat și verificat pe live
+
+- **Publicat:** `ae2809e`, reconstruit din arborele curat, `--only functions,hosting`, `--project live`. Cele 103 funcții
+  au fost sărite („No changes detected”); hosting-ul, release complete. Predeploy-ul a trecut `tree-clean`,
+  `check-bundle`, `check-split` și `check-offline`.
+- **Verificat pe live:**
+  - intrarea servită (`index-Dlp1gdAJ.js`) e identică la octet cu cea construită local și nu conține gazda niciunui SDK
+    dintre cele două; `check-split` pe același `dist`: pornirea curată;
+  - bucățile `firebaseMessaging`, `uploadFile` și `webPushStart` răspund 200, ca JavaScript;
+  - 0 rânduri de eroare în primele 6 minute de la publicare (doar numere, cu cheia de citire);
+  - CI pe `ae2809e`: verde.
+- **Nevăzut de mine:** o încărcare de poză pe live, din spatele login-ului (`OWNER_VERIFY.md`, sus), și notificările pe un
+  telefon real.

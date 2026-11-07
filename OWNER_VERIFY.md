@@ -15,7 +15,7 @@
 
 ---
 
-## 🆕 Storage și Messaging se încarcă la cerere (07.11)
+## 🆕 Storage și Messaging se încarcă la cerere (07.11) — PUBLICAT pe 07.11
 
 **Fapt:** pachetul de pornire e cu ~54 kB mai mic (gzip ~16 kB). Codul pentru poze și fișiere (Storage) vine odată cu
 portofelul, chatul, setările sau fereastra de adăugare, pe care aplicația le aduce oricum în pauza de după login. Codul
