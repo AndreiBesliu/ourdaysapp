@@ -14924,3 +14924,12 @@ detalii, invitație și arcade folosesc aceeași notă (`CouldNotShow`).
   - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
   - `npm test` (2839), `test:tz` (46 + 46);
   - pornirea +311 octeți (nota e la pornire); funcțiile n-au schimbări.
+
+## 2026-11-07 · Ferestrele: Reload în notă — publicat și verificat pe live
+
+- **Publicat:** `bd20b55`, `--only functions,hosting`, `--project live`: cele 99 de funcții sărite („No changes
+  detected”), hosting cu 97 de fișiere, release complete. Predeploy-ul a trecut `check-bundle` și `check-split`.
+- **Verificat pe live:** intrarea servită (`index-DjDfJaFb.js`) e cea construită local și conține lista notelor cu
+  reîncărcare (`windowCouldNotOpen`, `inviteCouldNotOpen`); 0 rânduri de eroare în cele 20 de minute de după publicare.
+- **Nevăzut de mine:** nota pe live, care apare doar când o bucată nu se încarcă; probată pe banc și pe un client React
+  real.
