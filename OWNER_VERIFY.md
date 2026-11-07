@@ -15,7 +15,7 @@
 
 ---
 
-## 🆕 Un nivel de owner în admin (07.11)
+## 🆕 Un nivel de owner în admin (07.11) — PUBLICAT pe 07.11
 
 **Fapt:** în Admin → Admins, fiecare admin are acum eticheta **Owner** sau **Admin**. Doar un owner poate:
 - adăuga sau scoate admini și face pe cineva owner („Make owner”, „Make admin”);

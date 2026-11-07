@@ -15213,3 +15213,19 @@ numere).
   - `npm test` (2926), `test:tz` (46 + 46);
   - funcțiile construite (`lib` în commit), `test:rules` întreg (86 de fișiere, 1323 de teste);
   - pornirea neschimbată (986.254 octeți); adminul, în bucata lui (85 kB).
+
+## 2026-11-07 · Nivelul de owner: publicat și verificat pe live
+
+- **Publicat:** `6284155`, reconstruit din arborele curat, `--only functions,hosting`, `--project live`:
+  - 103 funcții actualizate, niciuna creată sau ștearsă, nicio eroare;
+  - hosting-ul, release complete. Predeploy-ul a trecut `tree-clean`, `check-bundle`, `check-split` și `check-offline`.
+- **Verificat pe live:**
+  - intrarea servită (`index-DzP56jmr.js`) și bucata adminului (`Admin-DYFvLADR.js`, 200) sunt identice la octet cu cele
+    construite local; bucata adminului conține nota nouă;
+  - `adminSetAdmin`, `adminBroadcast` și `adminCheck` răspund în ambele regiuni: OPTIONS 204, iar fără cont refuză cu
+    „You must be signed in.”;
+  - 0 rânduri de eroare de la publicare (doar numere, cu cheia de citire);
+  - lista de admini (doar numere, unealta nouă `ourdays-count-admins.mjs`, în afara repo-ului): 1 rând, creat de
+    bootstrap, fără rol. Devine owner la primul apel de admin al lui Andrei;
+  - CI pe `6284155`: verde.
+- **Nevăzut de mine:** ecranul Admins pe live, din spatele login-ului (`OWNER_VERIFY.md`, sus).
