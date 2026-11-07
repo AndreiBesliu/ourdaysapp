@@ -35,7 +35,8 @@ const PLANTED = `g1/typing/${MALLORY}`;
 function call(name: string, uid: string, data: Record<string, unknown>) {
   return fn[name].run({
     data,
-    auth: { uid, token: { uid, email: emailOf(uid), email_verified: true } },
+    // A fresh sign-in: the owner's actions need one (functions/src/recentSignIn.ts, 07.11.2026).
+    auth: { uid, token: { uid, email: emailOf(uid), email_verified: true, auth_time: Math.floor(Date.now() / 1000) } },
     rawRequest: {},
   } as unknown as CallableRequest<unknown>);
 }

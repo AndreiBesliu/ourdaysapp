@@ -14,6 +14,8 @@ import { jobsNeedingAttention } from '../utils/jobHealthView';
 import JobHealthList from '../components/JobHealthList';
 import ModelSpendList from '../components/ModelSpendList';
 import AdminRoadmap from '../components/AdminRoadmap';
+import ConfirmItsYouDialog from '../components/ConfirmItsYouDialog';
+import { makeConfirmGate, withRecentSignIn } from '../utils/recentSignIn';
 import { listedRole, rosterControls, rosterNote, viewerIsOwner, type RosterNote } from '../utils/adminRosterView';
 import {
   adminCheck, adminGetStats, adminListProfiles, adminListAdmins, adminSetAdmin,
@@ -139,6 +141,10 @@ export default function Admin() {
   // Whether `admins` has come back at least once ('loaded'), is on its way, or failed the first time. Until it has, the
   // viewer's role is not known, and the screen must not say "only an owner can…" to the owner (review of 07.11.2026).
   const [adminsState, setAdminsState] = useState<'loading' | 'loaded' | 'failed'>('loading');
+  // "Confirm it's you" (07.11.2026): open while an owner's action waits for a recent sign-in. The question and its answer
+  // are one gate, made once (utils/recentSignIn.ts, makeConfirmGate; `setConfirmOpen` is stable).
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmGate] = useState(() => makeConfirmGate(setConfirmOpen));
   const [health, setHealth] = useState<any>(null);
   // Default to the two that want attention. Somebody opening this screen is asking "what
   // needs me", not "what have I already dealt with" — and a list that opens with fifty
@@ -355,11 +361,14 @@ export default function Admin() {
     setCfgBusy(true); setCfgMsg(null);
     try {
       // The STRINGS, not Number(). The server's `clampAiLimits` is the one careful parser.
-      const res = await adminSetAiConfig({
+      // Raising it, or switching the kill switch off, needs a recent sign-in: asked here, once, if the server says so.
+      const done = await withRecentSignIn(() => adminSetAiConfig({
         globalDailyUsd: g,
         userDailyUsd: u,
         killSwitch: cfgKill,
-      });
+      }), confirmItsYou);
+      if (!done.ok) { setCfgMsg({ ok: false, text: 'Nothing was changed: it was not confirmed that it is you.' }); return; }
+      const res = done.value;
       // Re-seed from what the SERVER stored, never from what was typed. If the ceiling brought
       // 10000 down to 50, the form must show 50 — otherwise the screen and the bill disagree.
       setCfgGlobal(String(res.saved.globalDailyUsd));
@@ -383,7 +392,9 @@ export default function Admin() {
     if (!bcTitle.trim()) return;
     setBcBusy(true); setBcMsg(null);
     try {
-      const res = await adminBroadcast({ target: bcTarget, title: bcTitle.trim(), body: bcBody.trim() });
+      const done = await withRecentSignIn(() => adminBroadcast({ target: bcTarget, title: bcTitle.trim(), body: bcBody.trim() }), confirmItsYou);
+      if (!done.ok) { setBcMsg({ ok: false, text: 'Not sent: it was not confirmed that it is you.' }); return; }
+      const res = done.value;
       setBcMsg({ ok: true, text: `Bell row for ${res.created} user${res.created === 1 ? '' : 's'} · pushed to ${res.pushed ?? 0} device${(res.pushed ?? 0) === 1 ? '' : 's'}.` });
       setBcTitle(''); setBcBody('');
     } catch (e: any) { setBcMsg({ ok: false, text: e?.message || 'Failed.' }); }
@@ -433,7 +444,8 @@ export default function Admin() {
   const grant = async (email?: string, uid?: string, makeAdmin = true, role?: 'owner' | 'admin') => {
     setBusy(true); setGrantMsg(null);
     try {
-      await adminSetAdmin({ email, uid, makeAdmin, ...(role ? { role } : {}) });
+      const done = await withRecentSignIn(() => adminSetAdmin({ email, uid, makeAdmin, ...(role ? { role } : {}) }), confirmItsYou);
+      if (!done.ok) { setGrantMsg({ ok: false, text: 'Nothing was changed: it was not confirmed that it is you.' }); return; }
       // Removed themselves: every admin call refuses them from now on, so a refresh would leave the old screen standing.
       if (!makeAdmin && uid && uid === auth.currentUser?.uid) { navigate('/'); return; }
       setGrantEmail('');
@@ -460,6 +472,10 @@ export default function Admin() {
     if (a.uid === auth.currentUser?.uid && !confirm('Remove your own admin access? Only an owner can add you back.')) return;
     void grant(undefined, a.uid, false);
   };
+
+  /** Ask the person to confirm it is them; resolves when they do (`true`) or close the dialog (`false`). */
+  const confirmItsYou = confirmGate.ask;
+  const answerConfirm = confirmGate.answer;
 
   // Whether the person looking is an owner, by their own row of the admins list (the server's answer, not a claim).
   const myUid = auth.currentUser?.uid ?? null;
@@ -1480,6 +1496,8 @@ export default function Admin() {
           </div>
         )}
       </main>
+
+      <ConfirmItsYouDialog isOpen={confirmOpen} onDone={answerConfirm} />
 
       {/* User detail + moderation */}
       {detail && (

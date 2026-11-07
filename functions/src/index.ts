@@ -26,6 +26,7 @@ import {
 } from "./aiLedger";
 import { clampAiLimits, configChangeAllowed, type AiConfigFields } from "./aiLimits";
 import { planRosterChange, requestedRole, roleOf, ONLY_THE_OWNER, type AdminRole } from "./adminRoles";
+import { SIGN_IN_AGAIN, signedInRecently } from "./recentSignIn";
 import { changedOutsideAdmin } from "./aiConfigProvenance";
 import { mergeRollups, mergeModelDays } from "./aiSpendMerge";
 import { readFriendship, authIdentityOf } from "./friendship";
@@ -247,6 +248,30 @@ async function assertAdmin(request: { auth?: { uid?: string; token?: any } }): P
 async function assertOwner(request: { auth?: { uid?: string; token?: any } }, refusal: string = ONLY_THE_OWNER): Promise<string> {
   const { uid, role } = await adminRoleOf(request);
   if (role !== "owner") throw new HttpsError("permission-denied", refusal);
+  return uid;
+}
+
+/**
+ * The refusal of an owner's action from a sign-in older than the window (recentSignIn.ts, 07.11.2026): a session left
+ * open must not reach it. `failed-precondition` with `reason`, so the admin screen asks the person to confirm it is them
+ * (src/components/ConfirmItsYouDialog.tsx) and tries again. `toDo` finishes "sign in again to …".
+ */
+function recentSignInRefusal(toDo: string): HttpsError {
+  return new HttpsError("failed-precondition", `Confirm it's you: sign in again to ${toDo}.`, { reason: SIGN_IN_AGAIN });
+}
+
+/** Whether the caller's token says they signed in within the window. */
+function callerSignedInRecently(request: { auth?: { token?: any } }): boolean {
+  return signedInRecently(request.auth?.token?.auth_time, Math.floor(Date.now() / 1000));
+}
+
+/**
+ * The owner's gate for an action that also needs a recent sign-in. The role first: a plain admin is told they are not an
+ * owner, not asked to sign in again for something they could not do anyway.
+ */
+async function assertRecentOwner(request: { auth?: { uid?: string; token?: any } }, refusal: string, toDo: string): Promise<string> {
+  const uid = await assertOwner(request, refusal);
+  if (!callerSignedInRecently(request)) throw recentSignInRefusal(toDo);
   return uid;
 }
 
@@ -2188,7 +2213,7 @@ export const adminListAdmins = onCall({ region: CALLABLE_REGIONS, enforceAppChec
 // admin and an existing one keeps their role). The rules are in adminRoles.ts: there is always an admin and an owner,
 // and an owner named in the server's settings is neither demoted nor removed here.
 export const adminSetAdmin = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
-  const callerUid = await assertOwner(request);
+  const callerUid = await assertRecentOwner(request, ONLY_THE_OWNER, "change the admins");
   const { uid, email, makeAdmin } = request.data || {};
   const role = requestedRole(request.data?.role);
   if (typeof makeAdmin !== "boolean" || (!uid && !email)) {
@@ -2629,7 +2654,7 @@ export const adminModerateUser = onCall({ region: CALLABLE_REGIONS, enforceAppCh
 // A bell row and a push on every recipient's phone: an outward action, like raising the AI budget, so it is held by the
 // role a plain admin cannot give themselves (adminRoles.ts).
 export const adminBroadcast = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
-  const callerUid = await assertOwner(request, "Only an owner can send a broadcast.");
+  const callerUid = await assertRecentOwner(request, "Only an owner can send a broadcast.", "send a broadcast");
   const { target, title, body } = request.data || {};
   // A string, and not a blank one. A truthy non-string (an array, say) passed the old check, and
   // String([]) is "" — which made notify() fall back to a titleKey that exists nowhere, so the
@@ -3603,6 +3628,11 @@ export const adminSetAiConfig = onCall({ region: CALLABLE_REGIONS, enforceAppChe
 
       const verdict = configChangeAllowed(actor, before, to);
       if (!verdict.allowed) throw new HttpsError("permission-denied", verdict.reason);
+      // The riskier direction, which only an owner may take, also needs a recent sign-in (07.11.2026). The safer one never
+      // does: switching the kill switch on must stay one tap away for whoever holds the phone when the bill moves.
+      if (!configChangeAllowed("admin", before, to).allowed && !callerSignedInRecently(request)) {
+        throw recentSignInRefusal("raise the AI budget or switch the kill switch off");
+      }
 
       tx.set(configRef, {
         ...to,

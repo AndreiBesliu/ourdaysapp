@@ -15,6 +15,23 @@
 
 ---
 
+## 🆕 Acțiunile de owner cer o autentificare recentă (07.11)
+
+**Fapt:** schimbarea adminilor sau a rolurilor, broadcast-ul și ridicarea bugetului AI (sau oprirea kill switch-ului)
+cer acum o autentificare din ultimele 5 minute, aceeași fereastră ca la ștergerea contului. Dacă ultima ta autentificare
+e mai veche, adminul deschide „Confirm it's you”: parola sau Google încă o dată, apoi acțiunea se face singură. Coborârea
+bugetului și pornirea kill switch-ului nu cer niciodată asta, ca să rămână la un clic. Probat pe banc, cu aplicația reală:
+fără întrebare imediat după autentificare; cu întrebare după 6 minute; parola greșită spusă; acțiunea reluată după
+confirmare. **Implicitul ales: 5 minute.** Spune dacă vrei altă fereastră.
+
+- [ ] **Pe live, în Admin → Broadcast sau Admins, fă o acțiune de owner** (1 minut). Dacă te-ai autentificat de mult, apare
+      „Confirm it's you”.
+      - **Cum arată bine:** după parolă sau Google, acțiunea se face și vezi mesajul ei verde.
+      - **Ce e greșit:** fereastra revine după ce ai confirmat, sau „Confirm it's you: sign in again…” scris cu roșu.
+- [ ] **În Admin → Roadmap, dacă ai propus-o acolo, marchează punctul ca făcut.** Altfel, nimic.
+
+---
+
 ## 🆕 Un nivel de owner în admin (07.11) — PUBLICAT pe 07.11
 
 **Fapt:** în Admin → Admins, fiecare admin are acum eticheta **Owner** sau **Admin**. Doar un owner poate:

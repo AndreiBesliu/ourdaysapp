@@ -15229,3 +15229,64 @@ numere).
     bootstrap, fără rol. Devine owner la primul apel de admin al lui Andrei;
   - CI pe `6284155`: verde.
 - **Nevăzut de mine:** ecranul Admins pe live, din spatele login-ului (`OWNER_VERIFY.md`, sus).
+
+## 2026-11-07 · Autentificare recentă pentru acțiunile de owner (Task Started)
+
+**Prompt (Andrei):** „Recent sign-in” (la „Ce felie urmează după nivelul de owner?”, după publicarea nivelului de owner).
+**Model:** Claude Opus 5.5.
+
+Primul punct rămas din BACKLOG §5: acțiunile de owner (lista de admini și rolurile, broadcast-ul, bugetul AI făcut mai
+riscant) cer o autentificare din ultimele minute, verificată pe server din `auth_time`, ca o sesiune lăsată deschisă să
+nu ajungă la ele. Există deja modelul, la ștergerea contului: `signedInRecently` (5 minute) pe server și reautentificarea
+cu parola sau cu Google în client. Se refolosește, nu se copiază.
+
+## 2026-11-07 · Autentificare recentă pentru acțiunile de owner (Task Completed)
+
+**Prompt (Andrei):** „Recent sign-in”.
+**Model:** Claude Opus 5.5.
+
+- **Serverul:**
+  - fereastra și testul ei s-au mutat din `accountDeletion.ts` în `functions/src/recentSignIn.ts`: 5 minute, la fel ca
+    la ștergerea contului, aceeași funcție (`signedInRecently`) și același motiv de refuz (`recent-sign-in-required`).
+    `accountDeletion.ts` le importă;
+  - `adminSetAdmin` și `adminBroadcast` trec prin `assertRecentOwner`: întâi rolul (un admin simplu află că nu e owner,
+    nu e trimis să se autentifice), apoi `auth_time` din token. Refuzul e `failed-precondition` cu `reason`;
+  - `adminSetAiConfig` cere fereastra doar pentru o schimbare pe care un admin simplu n-ar avea voie s-o facă (o limită
+    mai mare, kill switch-ul oprit). Coborârea unei limite și pornirea kill switch-ului nu o cer niciodată;
+  - nu o cer nici citirile, nici refacerea owner-ului din bootstrap.
+- **Ecranul:**
+  - `src/utils/recentSignIn.ts`: încearcă, iar la acel refuz întreabă „Confirm it's you” și mai încearcă o dată (o a
+    doua refuzare se arată, nu se intră în buclă). Confirmarea înseamnă `reauthenticateWith…`, apoi `getIdToken(true)`;
+    întrebarea și răspunsul sunt o poartă testată (`makeConfirmGate`);
+  - `src/components/ConfirmItsYouDialog.tsx`: parola sau Google, după furnizorii contului (`reauthMethod`, ca la
+    ștergerea contului). Mesajele sunt cele ale ștergerii, în engleză, ca restul adminului;
+  - `Admin.tsx` trece prin ea adminii, broadcast-ul și bugetul AI;
+  - testele de i18n declară dialogul doar al adminului (excepția existentă, ținută de testul care cere ca doar
+    `Admin.tsx` să-l importe).
+- **Banc** (aplicația reală, funcțiile reale pe emulatoarele Auth, Firestore și Functions; fișierele șterse înainte de
+  commit):
+  - la 11 s după autentificare, acordarea s-a făcut fără întrebare;
+  - după 6 minute a apărut dialogul. Parola greșită spune „That password is not right.”. După parola bună, `auth_time`
+    e proaspăt și acțiunea se reia singură („Made an owner.”);
+  - cu o autentificare veche de 348 s, coborârea bugetului s-a salvat fără întrebare;
+  - la broadcast, Cancel spune „Not sent: …”, iar pe server nu se scrie nicio notificare;
+  - 375 px fără derulare orizontală; contrast între 4,9 și 16:1; o parolă greșită nu lasă rând de eroare.
+- **Recenzia** (Workflow, 3 lentile și 6 verificatori, 9 agenți, 1,17 M tokeni, față de ~1,2 M anunțați). 6 constatări,
+  4 confirmate (mici), reparate:
+  - rândul de eroare nu avea codul cauzei (acum: mesajul și codul erorii, ca la ștergerea contului);
+  - lipsea testul pentru kill switch-ul pornit cu o autentificare veche;
+  - testul de legare al dialogului era prea slab;
+  - poarta întrebării nu era testată (acum `makeConfirmGate`).
+  Respinse, cu motive: două întrebări deodată (cea veche primește „nu”, intenționat) și un test lipsă pentru un `return`
+  care există.
+- **Reverificarea** (1 agent, 0,18 M): toate 4 complete, nicio problemă nouă. Două goluri de test rămase (raportarea din
+  dialog și sursa metodei) au fost închise cu câte o aserțiune. Total recenzie: 1,35 M.
+- **Mutanți** (clonă în afara Drive, control verde înainte și după, fișierele restaurate la octet): **30 din 32 prinși**,
+  22 unitari și 8 pe emulator. Cei doi rămași sunt echivalenți: fără ramura „fereastra Google închisă”, `t(null)` dă tot
+  `null`; fără ștergerea răspunsului din poartă, o promisiune deja rezolvată nu se mai schimbă.
+- **Porți:**
+  - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
+  - `npm test` (2948), `test:tz` (46 + 46);
+  - funcțiile construite (`lib` în commit), `test:rules` întreg (86 de fișiere, 1330 de teste), apoi rosterul din nou cu
+    testul pentru kill switch (43);
+  - pornirea 986.254 → 985.723 octeți. Bucățile s-au reîmpărțit, iar codul nou e doar în bucata adminului.

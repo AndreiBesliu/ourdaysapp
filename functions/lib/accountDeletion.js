@@ -89,8 +89,7 @@
 //     so a run stopped in between would freeze those events for everybody.
 //   * The name kept on conversations is read before the profile goes, and written once.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteMyAccount = exports.DELETION_MEMORY = exports.fileKey = exports.deletionClock = exports.RUN_BUDGET_MS = exports.accountFiles = exports.REFUSAL = exports.RECENT_SIGN_IN_S = void 0;
-exports.signedInRecently = signedInRecently;
+exports.deleteMyAccount = exports.DELETION_MEMORY = exports.fileKey = exports.deletionClock = exports.RUN_BUDGET_MS = exports.accountFiles = exports.REFUSAL = exports.signedInRecently = exports.RECENT_SIGN_IN_S = void 0;
 exports.nextOwner = nextOwner;
 exports.eventHeir = eventHeir;
 exports.keptName = keptName;
@@ -113,24 +112,17 @@ const groupMedia_1 = require("./groupMedia");
 const errorLog_1 = require("./errorLog");
 const overrideRsvps_1 = require("./overrideRsvps");
 const docId_1 = require("./docId");
+const recentSignIn_1 = require("./recentSignIn");
+Object.defineProperty(exports, "RECENT_SIGN_IN_S", { enumerable: true, get: function () { return recentSignIn_1.RECENT_SIGN_IN_S; } });
+Object.defineProperty(exports, "signedInRecently", { enumerable: true, get: function () { return recentSignIn_1.signedInRecently; } });
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 const BOOTSTRAP_ADMIN_EMAILS = (0, bootstrapAdmins_1.bootstrapAdminEmails)(process.env.BOOTSTRAP_ADMIN_EMAILS);
 const ALL = Number.MAX_SAFE_INTEGER;
-/** How recent the last sign-in must be for the person to delete their own account. */
-exports.RECENT_SIGN_IN_S = 5 * 60;
 /** Why a deletion was refused, in `HttpsError.details.reason`, so the app can say it properly. */
 exports.REFUSAL = {
-    signInAgain: "recent-sign-in-required",
+    signInAgain: recentSignIn_1.SIGN_IN_AGAIN,
     admin: "admin-account",
 };
-/**
- * `auth_time` is when the person last proved who they are, in seconds — not when the token was
- * minted, which happens every hour on its own. A minute of clock difference is tolerated.
- */
-function signedInRecently(authTime, nowS) {
-    return typeof authTime === "number" && Number.isFinite(authTime)
-        && authTime <= nowS + 60 && nowS - authTime <= exports.RECENT_SIGN_IN_S;
-}
 const strList = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === "string" && !!x) : []);
 /** The first of `members`, in joining order, who is not the one leaving and not in `skip`. */
 function nextOwner(members, leaving, skip = new Set()) {
@@ -675,7 +667,7 @@ exports.deleteMyAccount = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE
     const uid = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.uid;
     if (!uid)
         throw new https_1.HttpsError("unauthenticated", "You must be signed in.");
-    if (!signedInRecently((_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.auth_time, Math.floor(Date.now() / 1000))) {
+    if (!(0, recentSignIn_1.signedInRecently)((_c = (_b = request.auth) === null || _b === void 0 ? void 0 : _b.token) === null || _c === void 0 ? void 0 : _c.auth_time, Math.floor(Date.now() / 1000))) {
         throw new https_1.HttpsError("failed-precondition", "Sign in again to delete your account.", { reason: exports.REFUSAL.signInAgain });
     }
     const db = admin.firestore();

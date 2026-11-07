@@ -103,28 +103,21 @@ import { groupMedia } from "./groupMedia";
 import { logServerError } from "./errorLog";
 import { RSVP_ANSWERS } from "./overrideRsvps";
 import { isPlainDocId } from "./docId";
+import { RECENT_SIGN_IN_S, SIGN_IN_AGAIN, signedInRecently } from "./recentSignIn";
 
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 const BOOTSTRAP_ADMIN_EMAILS = bootstrapAdminEmails(process.env.BOOTSTRAP_ADMIN_EMAILS);
 const ALL = Number.MAX_SAFE_INTEGER;
 
-/** How recent the last sign-in must be for the person to delete their own account. */
-export const RECENT_SIGN_IN_S = 5 * 60;
+// How recent the last sign-in must be to delete your own account: the server's one window, in recentSignIn.ts since
+// 07.11.2026 (the owner's actions in the admin take it too). Re-exported for what imported it from here.
+export { RECENT_SIGN_IN_S, signedInRecently };
 
 /** Why a deletion was refused, in `HttpsError.details.reason`, so the app can say it properly. */
 export const REFUSAL = {
-  signInAgain: "recent-sign-in-required",
+  signInAgain: SIGN_IN_AGAIN,
   admin: "admin-account",
 } as const;
-
-/**
- * `auth_time` is when the person last proved who they are, in seconds — not when the token was
- * minted, which happens every hour on its own. A minute of clock difference is tolerated.
- */
-export function signedInRecently(authTime: unknown, nowS: number): boolean {
-  return typeof authTime === "number" && Number.isFinite(authTime)
-    && authTime <= nowS + 60 && nowS - authTime <= RECENT_SIGN_IN_S;
-}
 
 const strList = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x) : []);
 

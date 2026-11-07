@@ -235,8 +235,9 @@ Firestore la fiecare apel, nu dintr-un claim (`functions/src/adminRoles.ts`, `ad
 `index.ts`). Doar un owner schimbă lista de admini și rolurile (`adminSetAdmin`), trimite broadcast și face bugetul
 AI mai riscant. Lista are mereu un admin și un owner. Un email verificat din `BOOTSTRAP_ADMIN_EMAILS` e owner, refăcut
 la fiecare apel, deci nici retrogradat, nici scos din admin. Rămâne deschis: `warlordConfig` se scrie direct din
-browser, fără callable pe care să atârni listă albă sau jurnal, iar adminul n-are MFA și nici autentificare recentă.
-Butonul se reia doar cu Andrei.
+browser, fără callable pe care să atârni listă albă sau jurnal, iar adminul n-are MFA. Din 07.11, acțiunile de owner
+cer și o autentificare din ultimele 5 minute (`functions/src/recentSignIn.ts`, aceeași fereastră ca ștergerea contului;
+ecranul întreabă „Confirm it's you” și reia acțiunea). Butonul se reia doar cu Andrei.
 *Capcană de denumire acolo:* `isOwner(uid)` din `firestore.rules` înseamnă „deține ACEST
 document", nu „e owner-ul aplicației" — e adevărat pentru orice user despre datele lui.
 

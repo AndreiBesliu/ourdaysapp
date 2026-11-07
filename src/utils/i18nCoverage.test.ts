@@ -71,7 +71,7 @@ const SKIP_DIRS = new Set(['warlord', 'warlordPvp', 'warlordAdmin', 'node_module
  * them — held by the test at the end of this file, so the exemption cannot quietly spread to a
  * screen users see.
  */
-const ADMIN_ONLY_COMPONENTS = ['JobHealthList.tsx', 'ModelSpendList.tsx', 'AdminRoadmap.tsx'];
+const ADMIN_ONLY_COMPONENTS = ['JobHealthList.tsx', 'ModelSpendList.tsx', 'AdminRoadmap.tsx', 'ConfirmItsYouDialog.tsx'];
 const SKIP_FILES = new Set(['Admin.tsx', 'Warlord.tsx', ...ADMIN_ONLY_COMPONENTS]);
 
 /**

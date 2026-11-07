@@ -574,8 +574,11 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
   toată lista). Un owner din `BOOTSTRAP_ADMIN_EMAILS` nu poate fi retrogradat sau scos din admin: ar redeveni owner la
   următorul apel. Pe live, singurul admin (bootstrap, fără rol) devine owner la primul lui apel de admin după publicare.
 - **Rămâne, fiecare o felie separată:**
-  - **Autentificarea recentă** pentru acțiunile de owner (`auth_time` în token; ecranul ar cere reconectarea).
-    Obligatorie pentru publicarea din admin (decizia din 15.08), opțională pentru listă.
+  - ~~**Autentificarea recentă** pentru acțiunile de owner~~ **făcută pe 07.11:** lista de admini și rolurile,
+    broadcast-ul și bugetul AI făcut mai riscant cer o autentificare din ultimele 5 minute (`functions/src/recentSignIn.ts`,
+    fereastra ștergerii contului). Direcția mai sigură a bugetului nu o cere niciodată. Ecranul întreabă „Confirm it's you”
+    (parola sau Google) și reia acțiunea o dată (`src/utils/recentSignIn.ts`). Publicarea din admin o va lua de aici.
+    Moderarea (dezactivare, ștergere de cont), care e a oricărui admin, nu o cere; e de decis dacă ar trebui.
   - **MFA** pe conturile de admin: cere Identity Platform, deci e o decizie de cont a lui Andrei.
   - **Jurnalul listei:** azi rămân pe rând `addedBy`, `roleSetBy` și `roleSetAt`, dar un admin scos nu lasă nicio urmă.
     Modelul ar fi `aiConfigLog` (rândul scris în aceeași tranzacție).

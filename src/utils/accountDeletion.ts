@@ -15,6 +15,7 @@
 //      sign-in. A deletion that failed must leave the person signed in, able to try again.
 
 import { settleWithin } from './pendingWrite';
+import { SIGN_IN_AGAIN } from '../../functions/src/recentSignIn';
 
 /**
  * The typed word, in any case and with or without diacritics: „sterge” is „ȘTERGE”, „loschen” is
@@ -91,8 +92,8 @@ function codeOf(err: unknown): string {
 export function serverErrorKey(err: unknown): string {
   const e = err as { code?: unknown; details?: { reason?: unknown } } | null;
   const reason = e?.details?.reason;
-  // The reasons functions/src/accountDeletion.ts sends (REFUSAL there).
-  if (reason === 'recent-sign-in-required') return 'deleteAccountSignInAgain';
+  // The reasons functions/src/accountDeletion.ts sends (REFUSAL there; the sign-in one is the server's, recentSignIn.ts).
+  if (reason === SIGN_IN_AGAIN) return 'deleteAccountSignInAgain';
   if (reason === 'admin-account') return 'deleteAccountAdmin';
   // Everything else may have run part way. Saying "nothing happened" could be false; the server
   // continues where it stopped, so trying again is the honest advice.

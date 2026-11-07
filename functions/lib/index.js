@@ -25,6 +25,7 @@ const period_1 = require("./period");
 const aiLedger_1 = require("./aiLedger");
 const aiLimits_1 = require("./aiLimits");
 const adminRoles_1 = require("./adminRoles");
+const recentSignIn_1 = require("./recentSignIn");
 const aiConfigProvenance_1 = require("./aiConfigProvenance");
 const aiSpendMerge_1 = require("./aiSpendMerge");
 const friendship_1 = require("./friendship");
@@ -249,6 +250,29 @@ async function assertOwner(request, refusal = adminRoles_1.ONLY_THE_OWNER) {
     const { uid, role } = await adminRoleOf(request);
     if (role !== "owner")
         throw new https_1.HttpsError("permission-denied", refusal);
+    return uid;
+}
+/**
+ * The refusal of an owner's action from a sign-in older than the window (recentSignIn.ts, 07.11.2026): a session left
+ * open must not reach it. `failed-precondition` with `reason`, so the admin screen asks the person to confirm it is them
+ * (src/components/ConfirmItsYouDialog.tsx) and tries again. `toDo` finishes "sign in again to …".
+ */
+function recentSignInRefusal(toDo) {
+    return new https_1.HttpsError("failed-precondition", `Confirm it's you: sign in again to ${toDo}.`, { reason: recentSignIn_1.SIGN_IN_AGAIN });
+}
+/** Whether the caller's token says they signed in within the window. */
+function callerSignedInRecently(request) {
+    var _a, _b;
+    return (0, recentSignIn_1.signedInRecently)((_b = (_a = request.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.auth_time, Math.floor(Date.now() / 1000));
+}
+/**
+ * The owner's gate for an action that also needs a recent sign-in. The role first: a plain admin is told they are not an
+ * owner, not asked to sign in again for something they could not do anyway.
+ */
+async function assertRecentOwner(request, refusal, toDo) {
+    const uid = await assertOwner(request, refusal);
+    if (!callerSignedInRecently(request))
+        throw recentSignInRefusal(toDo);
     return uid;
 }
 // Whether `uid` is a member of the given group. Only an id that names one document is looked up:
@@ -2059,7 +2083,7 @@ exports.adminListAdmins = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE
 // and an owner named in the server's settings is neither demoted nor removed here.
 exports.adminSetAdmin = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
-    const callerUid = await assertOwner(request);
+    const callerUid = await assertRecentOwner(request, adminRoles_1.ONLY_THE_OWNER, "change the admins");
     const { uid, email, makeAdmin } = request.data || {};
     const role = (0, adminRoles_1.requestedRole)((_a = request.data) === null || _a === void 0 ? void 0 : _a.role);
     if (typeof makeAdmin !== "boolean" || (!uid && !email)) {
@@ -2496,7 +2520,7 @@ exports.adminModerateUser = (0, https_1.onCall)({ region: globalOptions_1.CALLAB
 // role a plain admin cannot give themselves (adminRoles.ts).
 exports.adminBroadcast = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
     var _a;
-    const callerUid = await assertOwner(request, "Only an owner can send a broadcast.");
+    const callerUid = await assertRecentOwner(request, "Only an owner can send a broadcast.", "send a broadcast");
     const { target, title, body } = request.data || {};
     // A string, and not a blank one. A truthy non-string (an array, say) passed the old check, and
     // String([]) is "" — which made notify() fall back to a titleKey that exists nowhere, so the
@@ -3451,6 +3475,11 @@ exports.adminSetAiConfig = (0, https_1.onCall)({ region: globalOptions_1.CALLABL
             const verdict = (0, aiLimits_1.configChangeAllowed)(actor, before, to);
             if (!verdict.allowed)
                 throw new https_1.HttpsError("permission-denied", verdict.reason);
+            // The riskier direction, which only an owner may take, also needs a recent sign-in (07.11.2026). The safer one never
+            // does: switching the kill switch on must stay one tap away for whoever holds the phone when the bill moves.
+            if (!(0, aiLimits_1.configChangeAllowed)("admin", before, to).allowed && !callerSignedInRecently(request)) {
+                throw recentSignInRefusal("raise the AI budget or switch the kill switch off");
+            }
             tx.set(configRef, Object.assign(Object.assign({}, to), { updatedAt: firestore_2.FieldValue.serverTimestamp(), updatedBy: uid, updatedByEmail: email }), { merge: true });
             // `create`, not `set`: append-only becomes a property of the OPERATION rather than a promise
             // about this one call site. A future `set` to an existing id would be a silent rewrite.

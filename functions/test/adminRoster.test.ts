@@ -33,10 +33,13 @@ const EMAIL: Record<string, string> = {
   [BOSS]: BOSS_EMAIL, [OWNER]: 'owner@example.test', [ADMIN]: 'admin@example.test', [MEMBER]: 'member@example.test',
 };
 
+const nowS = () => Math.floor(Date.now() / 1000);
+
+/** A call from `uid`, signed in just now unless `token` says otherwise (the owner's actions need a recent sign-in). */
 function call(name: string, uid: string | null, data: unknown, token: Record<string, unknown> = {}) {
   return fn[name].run({
     data,
-    ...(uid ? { auth: { uid, token: { uid, email: EMAIL[uid], email_verified: true, ...token } } } : {}),
+    ...(uid ? { auth: { uid, token: { uid, email: EMAIL[uid], email_verified: true, auth_time: nowS(), ...token } } } : {}),
     rawRequest: {},
   } as unknown as CallableRequest<unknown>);
 }
@@ -215,6 +218,69 @@ describe('a broadcast is an owner’s (07.11.2026)', () => {
     expect((await db.collection('notifications').get()).size).toBe(0);
     // A target that names no group: refused for what it says, which an admin never reaches.
     await expect(call('adminBroadcast', OWNER, { target: 'a/b', title: 'Hello' })).rejects.toMatchObject({ code: 'invalid-argument' });
+  });
+});
+
+describe('a recent sign-in for the owner\u2019s actions (07.11.2026, functions/src/recentSignIn.ts)', () => {
+  const STALE = { auth_time: nowS() - 6 * 60 }; // six minutes ago: past the five-minute window
+  const SIGN_IN_AGAIN = { code: 'failed-precondition', details: { reason: 'recent-sign-in-required' } };
+
+  it('changing the roster: refused from an old sign-in, with the reason the screen asks again on; nothing written', async () => {
+    await expect(call('adminSetAdmin', OWNER, { email: EMAIL[MEMBER], makeAdmin: true }, STALE)).rejects.toMatchObject(SIGN_IN_AGAIN);
+    await expect(call('adminSetAdmin', OWNER, { uid: ADMIN, makeAdmin: false }, STALE)).rejects.toMatchObject(SIGN_IN_AGAIN);
+    // No auth_time at all, or one in the future, is not recent either.
+    await expect(call('adminSetAdmin', OWNER, { email: EMAIL[MEMBER], makeAdmin: true }, { auth_time: undefined })).rejects.toMatchObject(SIGN_IN_AGAIN);
+    await expect(call('adminSetAdmin', OWNER, { email: EMAIL[MEMBER], makeAdmin: true }, { auth_time: nowS() + 10 * 60 })).rejects.toMatchObject(SIGN_IN_AGAIN);
+    expect(await roster()).toEqual({ [OWNER]: 'owner', [ADMIN]: null });
+    // Four minutes ago is recent.
+    await expect(call('adminSetAdmin', OWNER, { email: EMAIL[MEMBER], makeAdmin: true }, { auth_time: nowS() - 4 * 60 })).resolves.toMatchObject({ ok: true });
+  });
+
+  it('a plain admin is told they are not an owner, not asked to sign in again', async () => {
+    await expect(call('adminSetAdmin', ADMIN, { email: EMAIL[MEMBER], makeAdmin: true }, STALE)).rejects.toMatchObject({ code: 'permission-denied' });
+    await expect(call('adminBroadcast', ADMIN, { target: 'all', title: 'Hello' }, STALE)).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  it('a broadcast: refused from an old sign-in before anything is sent', async () => {
+    await expect(call('adminBroadcast', OWNER, { target: 'all', title: 'Hello' }, STALE)).rejects.toMatchObject(SIGN_IN_AGAIN);
+    expect((await db.collection('notifications').get()).size).toBe(0);
+  });
+
+  describe('the AI budget', () => {
+    beforeEach(async () => {
+      await db.doc('aiConfig/live').set({ globalDailyUsd: 5, userDailyUsd: 0.25, killSwitch: true });
+    });
+
+    it('raising it, or switching the kill switch off, needs a recent sign-in; nothing is written or logged without one', async () => {
+      await expect(call('adminSetAiConfig', OWNER, { globalDailyUsd: '10', userDailyUsd: '0.25', killSwitch: true }, STALE)).rejects.toMatchObject(SIGN_IN_AGAIN);
+      await expect(call('adminSetAiConfig', OWNER, { globalDailyUsd: '5', userDailyUsd: '0.25', killSwitch: false }, STALE)).rejects.toMatchObject(SIGN_IN_AGAIN);
+      expect((await db.doc('aiConfig/live').get()).data()).toMatchObject({ globalDailyUsd: 5, killSwitch: true });
+      expect((await db.collection('aiConfigLog').get()).size).toBe(0);
+      await expect(call('adminSetAiConfig', OWNER, { globalDailyUsd: '10', userDailyUsd: '0.25', killSwitch: false })).resolves.toMatchObject({ actor: 'owner' });
+    });
+
+    it('making it safer never does: lowering a limit, or keeping the kill switch on, from an old sign-in, owner or not', async () => {
+      await expect(call('adminSetAiConfig', OWNER, { globalDailyUsd: '2', userDailyUsd: '0.25', killSwitch: true }, STALE)).resolves.toMatchObject({ saved: { globalDailyUsd: 2 } });
+      await expect(call('adminSetAiConfig', ADMIN, { globalDailyUsd: '1', userDailyUsd: '0.1', killSwitch: true }, STALE)).resolves.toMatchObject({ actor: 'admin' });
+    });
+
+    it('switching the kill switch on never does, owner or not: the emergency stop stays one tap away', async () => {
+      for (const who of [ADMIN, OWNER]) {
+        await db.doc('aiConfig/live').set({ globalDailyUsd: 5, userDailyUsd: 0.25, killSwitch: false });
+        await expect(call('adminSetAiConfig', who, { globalDailyUsd: '5', userDailyUsd: '0.25', killSwitch: true }, STALE))
+          .resolves.toMatchObject({ saved: { killSwitch: true } });
+      }
+    });
+
+    it('a plain admin raising it is refused for the role, not asked to sign in again', async () => {
+      await expect(call('adminSetAiConfig', ADMIN, { globalDailyUsd: '10', userDailyUsd: '0.25', killSwitch: true }, STALE)).rejects.toMatchObject({ code: 'permission-denied' });
+    });
+  });
+
+  it('what does not need it: reading the roster, and the bootstrap owner\u2019s provisioning', async () => {
+    await expect(call('adminListAdmins', ADMIN, {}, STALE)).resolves.toMatchObject({ admins: expect.any(Array) });
+    await expect(call('adminCheck', BOSS, {}, STALE)).resolves.toEqual({ isAdmin: true });
+    expect((await row(BOSS))!.role).toBe('owner');
   });
 });
 
