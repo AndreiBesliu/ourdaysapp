@@ -15,7 +15,7 @@
 
 ---
 
-## 🆕 Acțiunile de owner cer o autentificare recentă (07.11)
+## 🆕 Acțiunile de owner cer o autentificare recentă (07.11) — PUBLICAT pe 07.11
 
 **Fapt:** schimbarea adminilor sau a rolurilor, broadcast-ul și ridicarea bugetului AI (sau oprirea kill switch-ului)
 cer acum o autentificare din ultimele 5 minute, aceeași fereastră ca la ștergerea contului. Dacă ultima ta autentificare

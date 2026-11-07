@@ -15290,3 +15290,18 @@ cu parola sau cu Google în client. Se refolosește, nu se copiază.
   - funcțiile construite (`lib` în commit), `test:rules` întreg (86 de fișiere, 1330 de teste), apoi rosterul din nou cu
     testul pentru kill switch (43);
   - pornirea 986.254 → 985.723 octeți. Bucățile s-au reîmpărțit, iar codul nou e doar în bucata adminului.
+
+## 2026-11-07 · Autentificarea recentă: publicat și verificat pe live
+
+- **Publicat:** `8859920`, reconstruit din arborele curat, `--only functions,hosting`, `--project live`:
+  - 103 funcții actualizate, nicio eroare;
+  - hosting-ul, release complete.
+- **Verificat pe live:**
+  - intrarea servită (`index-uKKEhCAC.js`) și bucata adminului (`Admin-4zWKQGgm.js`, 200) sunt identice la octet cu
+    cele construite local; bucata adminului conține dialogul;
+  - `adminSetAdmin`, `adminBroadcast`, `adminSetAiConfig` și `deleteMyAccount` răspund: OPTIONS 204, iar fără cont
+    refuză cu „You must be signed in.”;
+  - 0 rânduri de eroare de la publicare;
+  - lista de admini neschimbată: 1 rând, creat de bootstrap, încă fără rol (doar numere);
+  - CI pe `8859920`: verde.
+- **Nevăzut de mine:** dialogul pe live, din spatele login-ului (`OWNER_VERIFY.md`, sus).
