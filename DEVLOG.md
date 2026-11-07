@@ -15001,3 +15001,18 @@ Schiță vizuală înainte de cod (regula din memorie). Deciziile lui Andrei, la
   - `npm test` (2867), `test:tz` (46 + 46);
   - funcțiile construite (`lib` în commit), `test:rules` întreg (85 de fișiere, 1288 de teste);
   - pornirea +207 octeți (învelitorile callable-urilor); adminul, în bucata lui (80 kB).
+
+## 2026-11-07 · Admin → Roadmap — publicat și verificat pe live
+
+- **Publicat:** `64a1122`, `--only functions,hosting`, `--project live`:
+  - 4 funcții create (`adminGetRoadmap`, `adminEditRoadmap`, în europe-central2 și us-central1), 99 actualizate;
+  - hosting cu 98 de fișiere, release complete.
+- **Verificat pe live:**
+  - 103 funcții, 44 de callable-uri în fiecare regiune; proba CORS (OPTIONS): 88/88 publice;
+  - intrarea servită (`index-tpKmhayH.js`) e cea construită local, iar bucata adminului (`Admin-BS3S0Y6m.js`, 200)
+    conține tab-ul;
+  - cu cheia de citire, roadmap-ul de pe live: 0 puncte, 0 propuneri tratate (gol, cum trebuie înainte de primul clic);
+  - 0 rânduri de eroare în 30 de minute; joburile au `ok` și 0 eșecuri la rând.
+- **Unealta de citire:** `C:/Users/besli/.claude/tools/ourdays-roadmap-read.mjs` (în afara repo-ului), rulată din
+  `OurDaysApp`. Citește doar `roadmap` și `roadmapProposals`.
+- **Nevăzut de mine:** tab-ul pe live, din spatele login-ului de admin (`OWNER_VERIFY.md`, sus).

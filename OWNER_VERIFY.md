@@ -15,7 +15,7 @@
 
 ---
 
-## 🆕 Admin → Roadmap: unde planificăm ce urmează (07.11)
+## 🆕 Admin → Roadmap: unde planificăm ce urmează (07.11) — PUBLICAT pe 07.11
 
 **Fapt:** în admin e un tab nou, **Roadmap**, cu trei coloane, Now / Next / Later, și „Done” pliat dedesubt, cu data.
 Sus sunt propunerile mele, scoase din BACKLOG; cu un clic intră într-o coloană („Add to …”) sau dispar („Dismiss”, cu
