@@ -15070,3 +15070,17 @@ la o cădere a codului, nota care spune că fereastra n-a putut fi afișată și
   - pornirea +280 de octeți (1.039.603 pe live → 1.039.883); funcțiile n-au schimbări.
 - **Fără banc vizual:** nota e aceeași componentă probată pe banc azi-dimineață (375 px, contrast, clic); se schimbă
   doar textul ales. Notele apar doar când ceva cade, deci pe live nu se văd în mod obișnuit.
+
+## 2026-11-07 · Note cinstite: publicat și verificat pe live
+
+- **Publicat:** `8227a0e`, reconstruit din arborele curat, `--only functions,hosting`, `--project live`. Cele 103 funcții
+  au fost sărite („No changes detected”); hosting-ul are 98 de fișiere, release complete. Predeploy-ul a trecut
+  `tree-clean`, `check-bundle`, `check-split` și `check-offline`.
+- **Verificat pe live:**
+  - intrarea servită (`index-KJJ249ae.js`) e identică la octet cu cea construită local și conține `windowCouldNotShow`
+    și formularea Safari;
+  - 0 rânduri de eroare de la publicare și 0 în ultimele 24 de ore (doar numere, cu cheia de citire; unealta nouă
+    `ourdays-count-errors-since.mjs`, care citește doar câmpul `context`);
+  - CI pe `8227a0e`: verde.
+- **Nevăzut de mine:** notele pe live, care apar doar când o fereastră cade. Probate în teste, cu mutanți și de
+  verificatorii recenziei.

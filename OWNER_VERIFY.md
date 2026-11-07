@@ -15,7 +15,7 @@
 
 ---
 
-## 🆕 Note cinstite la ferestrele calendarului (07.11)
+## 🆕 Note cinstite la ferestrele calendarului (07.11) — PUBLICAT pe 07.11
 
 **Fapt:** când o fereastră a calendarului nu se poate arăta, nota spune acum ce s-a întâmplat.
 - **Codul ferestrei n-a ajuns** (fără semnal, sau un tab mai vechi decât o publicare): „Verifică conexiunea, apoi
