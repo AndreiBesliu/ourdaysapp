@@ -18,7 +18,8 @@ function goodBuild() {
   for (const s of LAZY_SCREENS) {
     const file = `assets/${s.split('/').pop().replace('.tsx', '')}-x.js`;
     manifest[s] = { file, isDynamicEntry: true, imports: ['_jsx-runtime.js'] };
-    code[file] = s.includes('Wallet') ? 'new Html5Qrcode(el)'
+    code[file] = s.includes('Wallet') ? 'new Html5Qrcode(el) "firebasestorage.googleapis.com"'
+      : s.includes('webPushStart') ? '"fcmregistrations.googleapis.com"'
       : s.includes('AssetBarcode') ? 'class InvalidElementException{} throw Error("bad rs block")'
       : s.includes('AddEventModal') ? 'data-rfd-draggable-id tag("parser/ENCasualDateParser")'
       : s.includes('Settings') ? '"Partager avec le groupe" "TAREAS PENDIENTES" "Panoramica di oggi" "AUSSTEHENDE AUFGABEN"' : 'screen';
@@ -57,7 +58,9 @@ describe('the split guard', () => {
     for (const [marker, what] of [['InvalidElementException', /JsBarcode .* is in the boot set/], ['bad rs block', /QR encoder .* is in the boot set/],
       ['data-rfd-draggable-id', /drag-and-drop .* is in the boot set/], ['parser/ENCasualDateParser', /date parser .* is in the boot set/],
       ['Partager avec le groupe', /French .* is in the boot set/], ['TAREAS PENDIENTES', /Spanish .* is in the boot set/],
-      ['Panoramica di oggi', /Italian .* is in the boot set/], ['AUSSTEHENDE AUFGABEN', /German .* is in the boot set/]]) {
+      ['Panoramica di oggi', /Italian .* is in the boot set/], ['AUSSTEHENDE AUFGABEN', /German .* is in the boot set/],
+      // 07.11.2026: both SDKs were in boot through src/firebase.ts.
+      ['firebasestorage.googleapis.com', /Firebase Storage .* is in the boot set/], ['fcmregistrations.googleapis.com', /Firebase Messaging .* is in the boot set/]]) {
       const b = goodBuild();
       b.code['assets/index-a.js'] += ` ${marker}`;
       expect(splitProblems(b).fatal.join(), marker).toMatch(what);
@@ -66,7 +69,7 @@ describe('the split guard', () => {
 
   it('refuses the card code or any of the calendar’s windows pulled back into boot', () => {
     for (const s of ['src/components/AssetBarcode.tsx', 'src/components/InviteFamilyModal.tsx', 'src/components/AddEventModal.tsx',
-      'src/components/EventDetailsModal.tsx', 'src/components/games/GamesHubModal.tsx']) {
+      'src/components/EventDetailsModal.tsx', 'src/components/games/GamesHubModal.tsx', 'src/utils/webPushStart.ts']) {
       const b = goodBuild();
       b.manifest['index.html'].imports.push(s);
       expect(splitProblems(b).fatal.join(), s).toMatch(/is in the boot set/);

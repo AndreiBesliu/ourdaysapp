@@ -15084,3 +15084,55 @@ la o cădere a codului, nota care spune că fereastra n-a putut fi afișată și
   - CI pe `8227a0e`: verde.
 - **Nevăzut de mine:** notele pe live, care apar doar când o fereastră cade. Probate în teste, cu mutanți și de
   verificatorii recenziei.
+
+## 2026-11-07 · Bundle: Firebase Storage și Messaging la cerere (Task Started)
+
+**Prompt (Andrei):** „Storage on demand” (la „Încep felia Storage și Messaging la cerere?”, după citirea roadmap-ului;
+al doilea punct din Next).
+**Model:** Claude Opus 5.5.
+
+Punctul din roadmap: ultimul candidat măsurat din pachetul de pornire, ~44 kB. Ambele SDK-uri intră în pornire prin
+`src/firebase.ts`. Storage e folosit doar de părți la cerere (portofelul și încărcările din adăugare, chat și setări).
+Messaging e folosit de setări (deconectarea) și de calendar, care la fiecare montare cere permisiunea, înregistrează
+tokenul și ascultă notificările din prim-plan; deci nu „doar la abonare”, ci imediat după calendar, nu înaintea lui.
+
+## 2026-11-07 · Bundle: Firebase Storage și Messaging la cerere (Task Completed)
+
+**Prompt (Andrei):** „Storage on demand”.
+**Model:** Claude Opus 5.5.
+
+- **Pornirea:** 1.039.883 → 986.254 octeți (−53.629), gzip 315.223 → 298.947. `src/firebase.ts` nu mai importă niciun SDK
+  dintre cele două.
+  - **Storage** (`src/firebaseStorage.ts`) stă în bucata `uploadFile` (34,5 kB), comună portofelului, setărilor, adăugării
+    și chatului. Toate sunt la cerere și preîncărcate în pauza de după login, cu semnal.
+  - **Messaging** (`src/firebaseMessaging.ts`) e în bucata lui (20 kB), cerută de setări (deconectarea) și de calendar.
+    Efectul calendarului s-a mutat în `src/utils/webPushStart.ts`. Calendarul îl cere după montare, doar cu semnal
+    (`src/utils/pushOnDemand.ts`): Chromium ține un `import()` eșuat cât trăiește pagina. O cădere se raportează o dată
+    pe pagină, ca `StaleChunk` sau `fcm.load`.
+- **Decizia `isSupported()`:** `getMessaging()` își face singur verificarea și o respinge într-o promisiune pe care n-o
+  prinde nimeni. Pe browserele fără push web (WebView-ul APK-ului, Safari pe iPhone în afara aplicației instalate,
+  ferestrele private Firefox), încărcat după login, asta ar fi umplut jurnalul de erori la fiecare vizită. Acum
+  Messaging se face doar după `isSupported()`, iar acolo calendarul nu mai cere permisiunea și nu mai înregistrează
+  „Notification is not defined” (`fcm.token.web`). APK-ul primește asta doar la următoarea reconstruire: are copia web
+  înghețată.
+- **Garda** (`scripts/bundleSplit.mjs`): gazdele celor două SDK-uri sunt mărci care nu au voie la pornire, iar
+  `webPushStart.ts` trebuie să rămână intrare dinamică. Testul sursei (`src/utils/firebaseOnDemand.test.ts`) ține cine
+  are voie să le importe și că doar calendarul cheamă încărcătorul.
+- **Probat în browser**, pe `dist` (`vite preview`): pornirea fără cele două; Messaging făcut pe aceeași aplicație
+  Firebase când push-ul merge; nimic cerut și nicio respingere neprinsă când nu merge.
+- **Recenzia** (Workflow, 8 agenți, 1,08 M tokeni). 4 constatări confirmate, reparate:
+  - respingerea neprinsă de mai sus, plus cererea de permisiune unde `Notification` lipsește;
+  - scanerul testului de sursă nu vedea `.ts` la capăt și nici `@firebase/*`;
+  - lipsea testul că o cădere după demontare tot se raportează;
+  - testele noi ale codului mutat au fost întărite.
+- **Reverificarea** (1 agent, 0,20 M): toate patru complete, probate cu SDK-ul real și cu mutanți proprii (W, M, P, S).
+  O problemă nouă, mică, **acceptată și scrisă în cod și în BACKLOG**: o notificare care sosește cu pagina vizibilă,
+  înainte să vină bucata notificărilor, nu se afișează (worker-ul FCM o dă paginii, care n-are încă handler). Așa era și
+  înainte, de la pornire până la montarea calendarului. Rămase știute: patru forme de import pe care scanerul nu le vede
+  (două dintre ele ar fi refuzate oricum de `check-split`) și câteva verificări din codul mutat neschimbat, netestate
+  nici înainte. Total recenzie: 1,28 M, față de ~1,5 M anunțați.
+- **Mutanți** (clonă în afara Drive, control verde înainte și după, fișierele restaurate la octet): **27 din 27 prinși**.
+- **Porți:**
+  - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
+  - `npm test` (2902), `test:tz` (46 + 46);
+  - funcțiile n-au schimbări.

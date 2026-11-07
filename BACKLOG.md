@@ -406,7 +406,19 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     - **Rămase, văzute la recenzie, în afara feliei:** ecranul general spune „A newer version is available” la orice
       bucată picată, și când e doar lipsă de semnal; prezentarea zilei (Total / Pending / Completed) spune „This event
       could not be shown” la o cădere a listei.
-  - **Candidații următori, de ales de Andrei:** Firebase Storage și Messaging (44 kB).
+  - **Firebase Storage și Messaging la cerere din 07.11** (punctul din Next al roadmap-ului). Pornirea 1.039.883 →
+    986.254 octeți (−53.629), gzip 315.223 → 298.947. Storage stă în bucata `uploadFile` (comună portofelului, setărilor,
+    adăugării și chatului, preîncărcate în pauză); Messaging în bucata lui, cerută de calendar după montare, cu semnal
+    (`src/utils/pushOnDemand.ts`), și de setări. `check-split` refuză întoarcerea lor (gazdele SDK-urilor ca mărci).
+    - **De știut:** Messaging se face doar unde push-ul web poate merge (`isSupported()`, `src/firebaseMessaging.ts`). În
+      APK, în Safari pe iPhone în afara aplicației instalate și în ferestrele private, calendarul nu mai cere permisiunea
+      și nu mai înregistrează eroarea „Notification is not defined” (`fcm.token.web`) la fiecare montare. APK-ul primește
+      asta doar la următoarea reconstruire: are pachetul web înghețat.
+    - **Acceptat:** o notificare care sosește cu aplicația deschisă, după ce apare calendarul, dar înainte să vină bucata
+      notificărilor, nu se afișează. Worker-ul FCM o dă paginii vizibile, iar pagina n-are încă cine s-o arate. Așa era și
+      înainte, de la pornire până la montarea calendarului; încărcarea la cerere adaugă descărcarea a două bucăți mici.
+    - **Ce mai e la pornire** e Firebase de care calendarul are nevoie (Firestore, Auth, App Check), React și codul
+      calendarului. Niciun candidat măsurat rămas.
 - **Hosting răspunde cu `index.html` la un `/assets/*.js` lipsă**, cu cache imutabil pe un an (măsurat
   pe live).
   - **Ce nu se strică:** un tab vechi după un deploy vede tot „versiune nouă”; Chrome, Firefox și

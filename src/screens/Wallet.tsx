@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { auth, db, storage } from '../firebase';
+import { auth, db } from '../firebase';
+import { storage } from '../firebaseStorage';
 import { collection, query, setDoc, updateDoc, deleteDoc, doc, getDoc, where, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { reportError } from '../reportError';
 import { liveQuery, liveDoc } from '../utils/liveQuery';

@@ -26,7 +26,7 @@ const task = {
   },
 };
 
-vi.mock('../firebase', () => ({ storage: {} }));
+vi.mock('../firebaseStorage', () => ({ storage: {} }));
 vi.mock('firebase/storage', () => ({
   ref: (_s: unknown, path: string) => ({ path }),
   uploadBytesResumable: () => { task.started++; return task; },

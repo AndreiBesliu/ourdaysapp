@@ -2,8 +2,8 @@ import { initializeApp } from "firebase/app";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { getAuth } from "firebase/auth";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
-import { getMessaging } from "firebase/messaging";
+// Storage and Messaging are not here since 07.11.2026: everything this file imports loads at boot, and only parts loaded
+// on demand use them. See src/firebaseStorage.ts and src/firebaseMessaging.ts.
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -60,6 +60,3 @@ export const auth = getAuth(app);
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });
-
-export const storage = getStorage(app);
-export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;

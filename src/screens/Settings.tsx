@@ -5,7 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import { t } from '../utils/i18n';
 import { shouldUseLightText, isUnreadableBackground, effectiveTextContrast } from '../utils/themeContrast';
 import { useThemeStore } from '../store';
-import { auth, db, messaging } from '../firebase';
+import { auth, db } from '../firebase';
+import { messagingReady } from '../firebaseMessaging';
 import { signOut, updateProfile } from 'firebase/auth';
 import { doc, updateDoc, setDoc, arrayRemove, terminate, clearIndexedDbPersistence } from 'firebase/firestore';
 import { deleteToken } from 'firebase/messaging';
@@ -237,10 +238,12 @@ export default function Settings() {
     if (Capacitor.isNativePlatform()) {
       await PushNotifications.unregister();
       await PushNotifications.removeAllListeners();
-    } else if (messaging && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       // Only when there can be a token: otherwise deleteToken throws for everybody who never
-      // allowed notifications, and every sign-out would file an error nobody can act on.
-      await deleteToken(messaging);
+      // allowed notifications, and every sign-out would file an error nobody can act on. Messaging
+      // itself is null where web push cannot work (src/firebaseMessaging.ts, 07.11.2026).
+      const messaging = await messagingReady;
+      if (messaging) await deleteToken(messaging);
     }
   };
 

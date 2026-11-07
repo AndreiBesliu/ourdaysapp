@@ -13,14 +13,15 @@
 /**
  * Screens, and parts of screens, that must be dynamic entries, outside the boot set. The calendar's
  * windows and the card code since 29.10.2026: they carried the code libraries, drag-and-drop, the date
- * parser and the arcade into boot (about 300 kB). The calendar's floating chat since 06.11.2026.
+ * parser and the arcade into boot (about 300 kB). The calendar's floating chat since 06.11.2026. The calendar's web push,
+ * with Firebase Messaging, since 07.11.2026.
  */
 export const LAZY_SCREENS = [
   'src/screens/Wallet.tsx', 'src/screens/Chat.tsx', 'src/screens/Settings.tsx',
   'src/screens/Admin.tsx', 'src/screens/PeriodLog.tsx', 'src/screens/Warlord.tsx',
   'src/components/AssetBarcode.tsx', 'src/components/InviteFamilyModal.tsx',
   'src/components/AddEventModal.tsx', 'src/components/EventDetailsModal.tsx', 'src/components/games/GamesHubModal.tsx',
-  'src/components/GroupChatWidget.tsx',
+  'src/components/GroupChatWidget.tsx', 'src/utils/webPushStart.ts',
 ];
 
 /** Code that must never load at boot, found by a string that survives minification. */
@@ -40,6 +41,11 @@ export const HEAVY = [
   { what: 'Spanish (src/utils/lang/es-ES.ts)', marker: 'TAREAS PENDIENTES' },
   { what: 'Italian (src/utils/lang/it-IT.ts)', marker: 'Panoramica di oggi' },
   { what: 'German (src/utils/lang/de-DE.ts)', marker: 'AUSSTEHENDE AUFGABEN' },
+  // The host each SDK talks to (07.11.2026): both were in boot through src/firebase.ts, although only parts loaded on
+  // demand use them (src/firebaseStorage.ts, src/firebaseMessaging.ts). The app's own check of a Storage URL is a
+  // regular expression, with the dots escaped, so it does not carry the Storage marker.
+  { what: 'Firebase Storage (firebase/storage)', marker: 'firebasestorage.googleapis.com' },
+  { what: 'Firebase Messaging (firebase/messaging)', marker: 'fcmregistrations.googleapis.com' },
 ];
 
 /** File names loaded at boot: the single entry chunk and everything it statically imports. */

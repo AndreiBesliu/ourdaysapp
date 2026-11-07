@@ -22,7 +22,7 @@
 //   * reports progress to the caller, so a big photo is a progress bar and not a frozen button.
 
 import { ref, uploadBytesResumable, getDownloadURL, type StorageReference } from 'firebase/storage';
-import { storage } from '../firebase';
+import { storage } from '../firebaseStorage';
 import { startWatch, watchTick, hasStalled, percentOf, STALL_MS } from './uploadWatch';
 import { checkUpload, type UploadRefusal } from './uploadLimits';
 

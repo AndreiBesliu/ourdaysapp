@@ -15,6 +15,21 @@
 
 ---
 
+## 🆕 Storage și Messaging se încarcă la cerere (07.11)
+
+**Fapt:** pachetul de pornire e cu ~54 kB mai mic (gzip ~16 kB). Codul pentru poze și fișiere (Storage) vine odată cu
+portofelul, chatul, setările sau fereastra de adăugare, pe care aplicația le aduce oricum în pauza de după login. Codul
+pentru notificări (Messaging) vine imediat după ce apare calendarul, dacă ai semnal. Pe browserele care nu pot primi
+notificări web (APK-ul, iPhone în Safari, fereastră privată), calendarul nu mai cere permisiunea degeaba. Probat pe
+build-ul real, într-un browser: pornirea fără cele două, iar ele legate de aceeași aplicație Firebase când vin.
+
+- [ ] **Pe live, după login, pune o poză la un eveniment sau un card** (1 minut).
+      - **Cum arată bine:** bara de progres, apoi poza.
+      - **Ce e greșit:** „Image upload failed” cu semnal bun.
+- [ ] **În Admin → Roadmap, marchează cu ✓ „Firebase Storage și Messaging la cerere”.**
+
+---
+
 ## 🆕 Note cinstite la ferestrele calendarului (07.11) — PUBLICAT pe 07.11
 
 **Fapt:** când o fereastră a calendarului nu se poate arăta, nota spune acum ce s-a întâmplat.

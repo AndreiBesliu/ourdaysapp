@@ -15,6 +15,11 @@ export const loadInviteFamilyModal = () => import('../components/InviteFamilyMod
 export const loadAddEventModal = () => import('../components/AddEventModal');
 export const loadEventDetailsModal = () => import('../components/EventDetailsModal');
 export const loadGamesHubModal = () => import('../components/games/GamesHubModal');
+/**
+ * The calendar's web push, with Firebase Messaging (07.11.2026; utils/pushOnDemand.ts). Not among the parts warmed while
+ * idle: the calendar asks for it as soon as it is mounted and online, which is sooner.
+ */
+export const loadWebPushStart = () => import('./webPushStart');
 
 /**
  * A loader that keeps what it brought (06.11.2026), for a part that must be drawn in the render that mounts it once it
