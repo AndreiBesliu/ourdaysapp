@@ -15016,3 +15016,57 @@ Schiță vizuală înainte de cod (regula din memorie). Deciziile lui Andrei, la
 - **Unealta de citire:** `C:/Users/besli/.claude/tools/ourdays-roadmap-read.mjs` (în afara repo-ului), rulată din
   `OurDaysApp`. Citește doar `roadmap` și `roadmapProposals`.
 - **Nevăzut de mine:** tab-ul pe live, din spatele login-ului de admin (`OWNER_VERIFY.md`, sus).
+
+## 2026-11-07 · Note cinstite la arcade și la invitație (Task Started)
+
+**Prompt (Andrei):** „Honest window notes” (butonul de după citirea roadmap-ului; primul punct din coloana Next).
+**Model:** Claude Opus 5.5.
+
+Punctul din roadmap: arcade-ul și fereastra de invitație spun „verifică conexiunea, apoi reîncarcă pagina” și când a
+căzut codul ferestrei, nu bucata ei. Ca la adăugare și detalii: „reîncarcă” doar când n-a venit bucata (`chunk`), iar
+la o cădere a codului, nota care spune că fereastra n-a putut fi afișată și că eroarea a fost înregistrată.
+
+## 2026-11-07 · Note cinstite la arcade și la invitație (Task Completed)
+
+**Prompt (Andrei):** „Honest window notes”.
+**Model:** Claude Opus 5.5.
+
+- **Ferestrele calendarului** (`src/screens/CalendarHome.tsx`) își aleg nota după `chunk`, steagul pe care `ErrorBoundary`
+  îl dă fallback-ului:
+  - arcade-ul: `chunk ? 'windowCouldNotOpen' : 'windowCouldNotShow'`; invitația: `chunk ? 'inviteCouldNotOpen' :
+    'windowCouldNotShow'`. Înainte cereau reîncărcarea (cu butonul Reload de azi-dimineață) și la o cădere a codului, pe
+    care reîncărcarea n-o repară;
+  - o cheie nouă, `windowCouldNotShow` („This window could not be shown. The error has been logged.”), în cele 6 limbi;
+  - adăugarea (deschisă de obicei fără niciun eveniment), ieșirea din grup și evenimentele recurente spuneau „This event
+    could not be shown”; acum spun „This window…”. „Evenimentul…” a rămas doar pe detaliile unui eveniment.
+- **Safari** (`src/utils/appVersion.ts`): Hosting răspunde la un `/assets/*.js` lipsă cu `index.html`, iar WebKit
+  refuză asta cu „'text/html' is not a valid JavaScript MIME type for module script …”, nu ca descărcare eșuată.
+  Formularea nu era recunoscută ca bucată, deci pe iPhone o fereastră dintr-un tab vechi ar fi primit, după felia asta,
+  „nu a putut fi afișată” fără Reload. Acum e recunoscută și de ecranul general și de limbile la cerere, care folosesc
+  același detector. Mesajele asemănătoare ale modulelor JSON și CSS rămân nepotrivite.
+- **Teste** (`src/screens/lazyWindows.test.tsx`, `src/utils/appVersion.test.ts`):
+  - o invariantă peste toate `<CouldNotShow>` din `src`. O notă care cere reîncărcarea apare doar ca ramura `chunk` a unei
+    alegeri `chunk ? '…' : '…'`, într-un fallback care primește `({ chunk })`, iar cealaltă ramură e o notă fără
+    reîncărcare. Cheia trebuie scrisă literal, fiindcă o variabilă sau o constantă ar ascunde-o de reguli;
+  - „Evenimentul nu a putut fi afișat” doar pe `EventDetailsModal`;
+  - cele patru ferestre, fiecare cu perechea ei de note; textul nou e prezent în 6 limbi, diferit de al evenimentului și
+    fără „reload”.
+- **Recenzia** (Workflow, 11 agenți, 1,31 M tokeni, față de ~1 M anunțați). 8 constatări, dintre care 3 confirmate
+  (mici) și reparate:
+  - formularea Safari;
+  - adăugarea, care spunea „evenimentul”;
+  - invarianta, care sărea o cheie dată printr-o variabilă.
+  Respinse de verificatori, cu motive:
+  - prezentarea zilei, codul cardului și ecranul general care spune „versiune nouă” și când e doar lipsă de semnal. Sunt
+    dinainte și în afara feliei; notate în BACKLOG;
+  - două despre întinderea testelor.
+- **Reverificarea** (1 agent, 0,16 M): toate trei complete, nicio problemă nouă. A probat pe o clonă că mesajele MIME
+  ale modulelor JSON și CSS, ale service worker-ului, ale Chromium și ale Firefox nu sunt luate drept bucată. Total
+  recenzie: 1,47 M, o depășire de ~1,5 ori.
+- **Mutanți** (clonă în afara Drive, control verde înainte și după, fișierele restaurate la octet): **22 din 22 prinși**.
+- **Porți:**
+  - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
+  - `npm test` (2870), `test:tz` (46 + 46);
+  - pornirea +280 de octeți (1.039.603 pe live → 1.039.883); funcțiile n-au schimbări.
+- **Fără banc vizual:** nota e aceeași componentă probată pe banc azi-dimineață (375 px, contrast, clic); se schimbă
+  doar textul ales. Notele apar doar când ceva cade, deci pe live nu se văd în mod obișnuit.

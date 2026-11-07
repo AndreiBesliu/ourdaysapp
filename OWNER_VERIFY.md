@@ -15,6 +15,24 @@
 
 ---
 
+## 🆕 Note cinstite la ferestrele calendarului (07.11)
+
+**Fapt:** când o fereastră a calendarului nu se poate arăta, nota spune acum ce s-a întâmplat.
+- **Codul ferestrei n-a ajuns** (fără semnal, sau un tab mai vechi decât o publicare): „Verifică conexiunea, apoi
+  reîncarcă pagina”, cu butonul **Reload**, ca până acum.
+- **Codul a ajuns, dar a căzut:** „Fereastra nu a putut fi afișată. Eroarea a fost înregistrată.”, fără Reload, care
+  n-ar repara nimic. Închizi nota, iar fereastra se încearcă din nou la următoarea deschidere.
+
+Până acum arcade-ul și invitația cereau reîncărcarea la orice cădere, iar adăugarea, ieșirea din grup și evenimentele
+recurente spuneau „Evenimentul nu a putut fi afișat”, deși nu arătau un eveniment. Pe Safari și pe iPhone, o fereastră
+rămasă dintr-o versiune veche ajunge acum la nota cu Reload; înainte primea „nu a putut fi afișată”. Notele apar doar
+când ceva cade, deci pe live nu ai ce vedea în mod obișnuit; sunt probate în teste și cu mutanți.
+
+- [ ] **În Admin → Roadmap, marchează cu ✓ „Note cinstite la arcade și la invitație”.** Dacă nu, rămâne primul în
+      Next, iar data viitoare ți-l propun din nou.
+
+---
+
 ## 🆕 Admin → Roadmap: unde planificăm ce urmează (07.11) — PUBLICAT pe 07.11
 
 **Fapt:** în admin e un tab nou, **Roadmap**, cu trei coloane, Now / Next / Later, și „Done” pliat dedesubt, cu data.
@@ -23,13 +41,14 @@ Sus sunt propunerile mele, scoase din BACKLOG; cu un clic intră într-o coloan�
 sau se șterge. Eu citesc roadmap-ul cu cheia de citire, cum ai hotărât, ca să știu ce ai ales. Pe live nu-l pot deschide
 eu: e în spatele login-ului de admin. Probat pe un banc cu adminul real, pe emulatori.
 
-- [ ] **Deschide <https://our-days-2a939.web.app/admin> → Roadmap** (2 minute).
+- [x] **Deschide <https://our-days-2a939.web.app/admin> → Roadmap** (2 minute). *Bifat de Claude pe 07.11: citit pe
+      live, 9 dintre propuneri sunt adăugate în coloane, deci tab-ul și funcțiile lui merg.*
       - **Cum arată bine:** „Proposed by Claude · 10” (pliat; clic ca să-l deschizi), apoi cele trei coloane goale.
         Adaugă o propunere, mut-o cu ←/→, marcheaz-o cu ✓: apare la „Done · 1”, cu data de azi.
       - **Ce e greșit:** „The roadmap could not be loaded” (funcțiile noi nu răspund pe live), sau o acțiune care spune
         „That change was not saved” fără să mai fi deschis adminul în altă filă.
-- [ ] **Pune în coloane ce vrei să urmeze**, din propuneri sau cu „Add item”. Asta e lista din care îți propun felia
-      următoare.
+- [x] **Pune în coloane ce vrei să urmeze**, din propuneri sau cu „Add item”. Asta e lista din care îți propun felia
+      următoare. *Bifat pe 07.11: 2 în Next, 7 în Later; „android-rebuild” n-a fost nici adăugată, nici ignorată.*
 
 ---
 

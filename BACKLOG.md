@@ -396,9 +396,16 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     reîncărcare. Preîncărcarea și montarea chatului așteaptă acum conexiunea, iar nota chatului oferă reîncărcarea.
     Ferestrele calendarului (29.10) au aceeași expunere la un eșec în timpul pauzei; preîncărcarea online le acoperă și pe
     ele, iar din 07.11 nota lor oferă și ea **Reload** (`CouldNotShow`: butonul e exact pe notele al căror text cere
-    reîncărcarea). Rămas: codul unui card (`CodeNumber`, „reload the page once you have signal”) are numărul, nu buton;
-    arcade-ul și invitația spun „reîncarcă” și la o cădere care nu e a bucății (alegerea cheii după `chunk`, ca la
-    adăugare și detalii, ar fi mai cinstită).
+    reîncărcarea). Rămas: codul unui card (`CodeNumber`, „reload the page once you have signal”) are numărul, nu buton,
+    și îl arată la ORICE cădere, inclusiv a codului (fallback-ul din `LazyAssetBarcode` e fix, nu după `chunk`): de luat
+    odată cu punctul „Codul cardului: buton de reîncărcare” din roadmap.
+    - **Din 07.11 („note cinstite”), fiecare fereastră își alege nota după `chunk`:** „reîncarcă” doar pentru bucata care
+      n-a venit; la o cădere a codului, „Fereastra nu a putut fi afișată” (`windowCouldNotShow`), iar „Evenimentul…” doar
+      în detaliile unui eveniment. Safari primește `index.html` în locul unei bucăți lipsă și o refuză ca tip MIME greșit,
+      nu ca descărcare eșuată; formularea aceea e acum recunoscută ca bucată (`isStaleChunkError`).
+    - **Rămase, văzute la recenzie, în afara feliei:** ecranul general spune „A newer version is available” la orice
+      bucată picată, și când e doar lipsă de semnal; prezentarea zilei (Total / Pending / Completed) spune „This event
+      could not be shown” la o cădere a listei.
   - **Candidații următori, de ales de Andrei:** Firebase Storage și Messaging (44 kB).
 - **Hosting răspunde cu `index.html` la un `/assets/*.js` lipsă**, cu cache imutabil pe un an (măsurat
   pe live).

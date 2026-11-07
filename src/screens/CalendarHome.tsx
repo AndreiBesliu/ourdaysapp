@@ -1173,12 +1173,13 @@ export default function CalendarHome() {
       {/* Add Event Modal — the windows stay mounted while shut, so their boundaries try again on the
           next open instead of remounting (which would drop the form's state). Mounted from the first
           open, when its chunk is asked for; until it arrives, nothing, as before it opened. A chunk
-          that cannot load is caught by the same boundary. */}
+          that cannot load is caught by the same boundary. A crash of its code says "this window", not
+          "this event" (07.11.2026): mostly it was opened to add one, and there is no event yet. */}
       <ErrorBoundary
         context="AddEventModal"
         resetOn={`${isAddModalOpen}-${eventToEdit?.id ?? 'new'}`}
         fallback={({ chunk }) => isAddModalOpen
-          ? <CouldNotShow messageKey={chunk ? 'windowCouldNotOpen' : 'eventCouldNotShow'} onClose={() => { setIsAddModalOpen(false); setEventToEdit(null); setInitialTemplate(null); }} />
+          ? <CouldNotShow messageKey={chunk ? 'windowCouldNotOpen' : 'windowCouldNotShow'} onClose={() => { setIsAddModalOpen(false); setEventToEdit(null); setInitialTemplate(null); }} />
           : null}
       >
       {addEverOpened && (
@@ -1322,10 +1323,11 @@ export default function CalendarHome() {
       {/* Invite Group Modal: mounted only while open (it renders nothing when closed), so its chunk
           is asked for only then; until it arrives, nothing, as before it opened. A chunk that cannot
           load (offline and never fetched, or a tab older than a deploy) says so over the calendar,
-          which keeps working, instead of taking the whole app down. */}
+          which keeps working, instead of taking the whole app down. "Reload" only for that (07.11.2026):
+          a window whose own code failed says it could not be shown, as adding and details do. */}
       {isInviteModalOpen && (
-        <ErrorBoundary context="InviteFamilyModal" fallback={
-          <CouldNotShow messageKey="inviteCouldNotOpen" onClose={() => setIsInviteModalOpen(false)} />
+        <ErrorBoundary context="InviteFamilyModal" fallback={({ chunk }) =>
+          <CouldNotShow messageKey={chunk ? 'inviteCouldNotOpen' : 'windowCouldNotShow'} onClose={() => setIsInviteModalOpen(false)} />
         }>
           <Suspense fallback={null}>
             <InviteFamilyModal
@@ -1348,7 +1350,7 @@ export default function CalendarHome() {
         context="LeaveGroupModal"
         resetOn={isLeaveGroupModalOpen}
         fallback={isLeaveGroupModalOpen
-          ? <CouldNotShow messageKey="eventCouldNotShow" onClose={() => setIsLeaveGroupModalOpen(false)} />
+          ? <CouldNotShow messageKey="windowCouldNotShow" onClose={() => setIsLeaveGroupModalOpen(false)} />
           : null}
       >
       <LeaveGroupModal
@@ -1374,14 +1376,16 @@ export default function CalendarHome() {
       />
 
       {/* The arcade, mounted from its first open like the windows above. Until 29.10.2026 it had no
-          boundary of its own: one now, since its chunk can fail to load as well as its code fail. */}
+          boundary of its own: one now, since its chunk can fail to load as well as its code fail. And
+          since 07.11.2026 it tells the two apart, as adding and details do: "reload" for the chunk, which
+          only a reload fetches again; "could not be shown" for its code, which a reload does not mend. */}
       {gamesEverOpened && (
         <ErrorBoundary
           key={`games-${activeGroupId}`}
           context="GamesHubModal"
           resetOn={isGamesHubOpen}
-          fallback={isGamesHubOpen
-            ? <CouldNotShow messageKey="windowCouldNotOpen" onClose={() => setIsGamesHubOpen(false)} />
+          fallback={({ chunk }) => isGamesHubOpen
+            ? <CouldNotShow messageKey={chunk ? 'windowCouldNotOpen' : 'windowCouldNotShow'} onClose={() => setIsGamesHubOpen(false)} />
             : null}
         >
           <Suspense fallback={null}>
@@ -1406,7 +1410,7 @@ export default function CalendarHome() {
         context="RecurringEventsPanel"
         resetOn={isRecurringPanelOpen}
         fallback={isRecurringPanelOpen
-          ? <CouldNotShow messageKey="eventCouldNotShow" onClose={() => setIsRecurringPanelOpen(false)} />
+          ? <CouldNotShow messageKey="windowCouldNotShow" onClose={() => setIsRecurringPanelOpen(false)} />
           : null}
       >
       <RecurringEventsPanel

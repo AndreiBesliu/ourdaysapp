@@ -161,6 +161,17 @@ describe('a tab that is older than the server', () => {
     expect(isStaleChunkError('Unable to preload CSS for /assets/Admin.css')).toBe(true);
   });
 
+  it('and Safari’s other wording: a missing chunk answered with index.html, as text/html (review of 07.11.2026)', () => {
+    // WebKit (ScriptModuleLoader.cpp), now and before it named the script. Hosting's `**` rewrite serves the page for
+    // a hashed file that is gone, so this, not "Importing a module script failed.", is what a tab older than a deploy gets.
+    expect(isStaleChunkError("'text/html' is not a valid JavaScript MIME type for module script 'https://our-days-2a939.web.app/assets/GamesHubModal-OLD.js'.")).toBe(true);
+    expect(isStaleChunkError("'text/html' is not a valid JavaScript MIME type.")).toBe(true);
+    // Its own words only: a MIME type named in some other error is not a chunk, WebKit's JSON and CSS modules included.
+    expect(isStaleChunkError('Refused to apply style: its MIME type (text/html) is not a supported stylesheet MIME type')).toBe(false);
+    expect(isStaleChunkError("'text/html' is not a valid JSON MIME type for module script 'https://x/data.json'.")).toBe(false);
+    expect(isStaleChunkError("'text/html' is not a valid CSS MIME type for module script 'https://x/a.css'.")).toBe(false);
+  });
+
   it('does NOT claim a plain network failure is a new version', () => {
     // "Failed to fetch" on its own is every offline request there is. Answering those with
     // "there's a new version, reload" is a confident lie to somebody with no signal.

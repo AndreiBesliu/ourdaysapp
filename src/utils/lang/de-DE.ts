@@ -471,6 +471,7 @@ const dictionary: Dictionary = {
   eventCouldNotShow: "Dieser Termin konnte nicht angezeigt werden. Der Fehler wurde protokolliert.",
   inviteCouldNotOpen: "Das Einladungsfenster konnte nicht geladen werden. Prüfe deine Verbindung und lade die Seite neu.",
   windowCouldNotOpen: "Dieses Fenster konnte nicht geöffnet werden. Prüfe deine Verbindung und lade die Seite neu.",
+  windowCouldNotShow: "Dieses Fenster konnte nicht angezeigt werden. Der Fehler wurde protokolliert.",
   walletTapToScan: "Zum Scannen tippen",
   walletNoImage: "Kein Bild",
   walletQuickFilters: "Schnellfilter",

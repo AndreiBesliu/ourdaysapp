@@ -126,7 +126,10 @@ export async function checkForNewVersion(
  * Is this "my tab is older than the server", rather than a defect?
  *
  * A tab left open across a deploy asks for a lazy chunk by its hashed name, and that file is no
- * longer there. Three engines word it three ways. It is the one crash in this app that a reload
+ * longer there. Three engines word it three ways, Safari two (07.11.2026: Hosting answers a missing
+ * `/assets/*.js` with index.html, as text/html, and WebKit rejects THAT as a wrong MIME type, not as a
+ * failed fetch; until then the calendar's windows told a Safari user "could not be shown" with no
+ * Reload for a chunk only a reload brings back). It is the one crash in this app that a reload
  * fixes every time — and the only one where the generic "Something went wrong" is actively
  * misleading, because nothing went wrong: the app moved on without this tab.
  *
@@ -138,6 +141,7 @@ const STALE_CHUNK = [
   'failed to fetch dynamically imported module', // Chrome, Edge
   'error loading dynamically imported module',   // Firefox
   'importing a module script failed',            // Safari
+  'is not a valid javascript mime type',         // Safari, a chunk answered with index.html (module scripts only)
   'unable to preload css for',                   // Vite's preload helper
 ];
 

@@ -8,6 +8,10 @@
 // the windows whose code could not be loaded, and on Chromium nothing short of a reload fetches a failed
 // chunk again (the browser keeps the failure for the life of the page; components/GroupChatWidgetOnDemand.tsx).
 // An offer, never by itself: somebody may be typing in another window.
+//
+// And only for the chunk (07.11.2026): each boundary picks its note by the `chunk` flag it is given, the reload
+// note when the code did not arrive, a "could not be shown" one when the code that did arrive failed, which a
+// reload does not mend. Until then the arcade and the invitation asked for a reload either way.
 
 import { X } from 'lucide-react';
 import { t } from '../utils/i18n';

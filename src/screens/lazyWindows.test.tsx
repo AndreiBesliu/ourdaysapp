@@ -69,12 +69,12 @@ describe('a window is mounted from its first open, and kept', () => {
     const at = HOME.indexOf('<InviteFamilyModal');
     const boundary = HOME.lastIndexOf('<ErrorBoundary context="InviteFamilyModal"', at);
     expect(boundary).toBeGreaterThan(-1);
-    expect(HOME.slice(boundary, at)).toMatch(/fallback=\{\s*<CouldNotShow messageKey="inviteCouldNotOpen"[\s\S]*<Suspense fallback=\{null\}>\s*$/);
+    expect(HOME.slice(boundary, at)).toMatch(/fallback=\{\(\{ chunk \}\) =>\s*<CouldNotShow messageKey=\{chunk \? 'inviteCouldNotOpen' : 'windowCouldNotShow'\}[\s\S]*<Suspense fallback=\{null\}>\s*$/);
     expect(HOME.slice(HOME.lastIndexOf('{isInviteModalOpen && (', boundary), boundary)).toMatch(/^\{isInviteModalOpen && \(\s*$/);
   });
 
   it('the arcade, which had no boundary, says so too', () => {
-    expect(block('{gamesEverOpened && (', '<Suspense')).toMatch(/<CouldNotShow messageKey="windowCouldNotOpen"/);
+    expect(block('{gamesEverOpened && (', '<Suspense')).toMatch(/<CouldNotShow messageKey=\{chunk \? 'windowCouldNotOpen' : 'windowCouldNotShow'\}/);
     for (const lang of ['en-US', 'ro-RO', 'fr-FR', 'es-ES', 'it-IT', 'de-DE']) {
       expect(t('windowCouldNotOpen', lang), lang).not.toBe('windowCouldNotOpen');
     }
@@ -89,11 +89,25 @@ describe('a window whose chunk cannot load', () => {
     expect(HOME).not.toMatch(/lazyRetry|\.catch\([^)]*lazy\(/);
   });
 
-  it('the add and details windows say "reload" when it was the chunk, and "could not be shown" when it was the event', () => {
-    for (const name of ['AddEventModal', 'EventDetailsModal']) {
-      const boundary = HOME.lastIndexOf('<ErrorBoundary', HOME.indexOf(`<${name}`));
-      expect(HOME.slice(boundary, HOME.indexOf(`<${name}`)), name)
-        .toMatch(/fallback=\{\(\{ chunk \}\) => [\s\S]*messageKey=\{chunk \? 'windowCouldNotOpen' : 'eventCouldNotShow'\}/);
+  it('each window says "reload" when it was the chunk, and "could not be shown" when it was its code (add and details since 29.10; the arcade and the invitation since 07.11.2026)', () => {
+    for (const [name, onChunk, onCrash] of [
+      // "This window": adding has no event yet (review of 07.11.2026); only the details show one.
+      ['AddEventModal', 'windowCouldNotOpen', 'windowCouldNotShow'],
+      ['EventDetailsModal', 'windowCouldNotOpen', 'eventCouldNotShow'],
+      ['GamesHubModal', 'windowCouldNotOpen', 'windowCouldNotShow'],
+      ['InviteFamilyModal', 'inviteCouldNotOpen', 'windowCouldNotShow'],
+    ] as const) {
+      const at = HOME.indexOf(`<${name}`);
+      const fallback = HOME.slice(HOME.lastIndexOf('<ErrorBoundary', at), at);
+      expect(fallback, name).toContain(`context="${name}"`);
+      expect(fallback, name)
+        .toMatch(new RegExp(`fallback=\\{\\(\\{ chunk \\}\\) =>[\\s\\S]*messageKey=\\{chunk \\? '${onChunk}' : '${onCrash}'\\}`));
+    }
+    for (const lang of ['en-US', 'ro-RO', 'fr-FR', 'es-ES', 'it-IT', 'de-DE']) {
+      expect(t('windowCouldNotShow', lang), lang).not.toBe('windowCouldNotShow');
+      // Its own text: not the event's, and not one that asks for a reload.
+      expect(t('windowCouldNotShow', lang), lang).not.toBe(t('eventCouldNotShow', lang));
+      expect(t('windowCouldNotShow', lang), lang).not.toBe(t('windowCouldNotOpen', lang));
     }
   });
 });
@@ -246,24 +260,62 @@ describe('a window note that says to reload offers the reload (07.11.2026)', () 
       return p.endsWith('.tsx') && !p.includes('.test.') ? [p] : [];
     });
   }
-  /** Every message key given to CouldNotShow anywhere in the app: literal, or each branch of a choice. */
-  function noteKeys(): Set<string> {
-    const keys = new Set<string>();
+  /** One `<CouldNotShow>` in the app: its key, or the choice between two, and its source back to its boundary. */
+  interface NoteUse { where: string; keys: string[]; choice: string | null; boundary: string }
+  function noteUses(): NoteUse[] {
+    const uses: NoteUse[] = [];
     let calls = 0;
-    let read_ = 0;
     for (const f of tsxFiles('src')) {
       const src = read(f);
       calls += (src.match(/<CouldNotShow\b/g) ?? []).length;
       for (const m of src.matchAll(/<CouldNotShow\s+messageKey=(?:"(\w+)"|\{([^}]*)\})/g)) {
-        read_++;
-        if (m[1]) keys.add(m[1]);
-        for (const q of (m[2] ?? '').matchAll(/'(\w+)'/g)) keys.add(q[1]);
+        // A key the rules can read: literal, or the boundary's choice between two literals. A variable or a constant
+        // would hide its key from every rule below (review of 07.11.2026).
+        expect(m[1] !== undefined || /^chunk \? '\w+' : '\w+'$/.test(m[2] ?? ''),
+          `${f}: messageKey={${m[2]}}: write the key literally, or as chunk ? '…' : '…'`).toBe(true);
+        const from = src.lastIndexOf('<ErrorBoundary', m.index);
+        uses.push({
+          where: `${f}: ${m[1] ?? m[2]}`,
+          keys: m[1] ? [m[1]] : [...(m[2] ?? '').matchAll(/'(\w+)'/g)].map((q) => q[1]),
+          choice: m[2] ?? null,
+          boundary: from < 0 ? '' : src.slice(from, m.index),
+        });
       }
     }
-    // Honest about its reach: every call is read, or the rule below would pass on the ones it skipped.
-    expect(read_, 'a <CouldNotShow> written another way (props first, a variable): read it here').toBe(calls);
-    return keys;
+    // Honest about its reach: every call is read, or the rules below would pass on the ones it skipped.
+    expect(uses.length, 'a <CouldNotShow> written another way (props first, a variable): read it here').toBe(calls);
+    return uses;
   }
+  /** Every message key given to CouldNotShow anywhere in the app: literal, or each branch of a choice. */
+  const noteKeys = () => new Set(noteUses().flatMap((use) => use.keys));
+
+  it('a note that asks for a reload is shown only when it was the chunk, never for a crash of the code (07.11.2026)', () => {
+    let chosen = 0;
+    for (const use of noteUses()) {
+      if (!use.keys.some((key) => NOTES_ASKING_FOR_RELOAD.includes(key))) continue;
+      // Chosen by the flag the boundary passes its fallback: the reload note for the chunk, another for the rest.
+      const branches = use.choice?.match(/^chunk \? '(\w+)' : '(\w+)'$/);
+      expect(branches, use.where).toBeTruthy();
+      expect(NOTES_ASKING_FOR_RELOAD.includes(branches![1]), use.where).toBe(true);
+      expect(NOTES_ASKING_FOR_RELOAD.includes(branches![2]), use.where).toBe(false);
+      // And `chunk` is that flag: the fallback it sits in is the boundary's, taking it.
+      expect(use.boundary.slice(use.boundary.lastIndexOf('fallback={')), use.where).toMatch(/^fallback=\{\(\{ chunk \}\) =>/);
+      chosen++;
+    }
+    // Adding, details, the arcade, the invitation.
+    expect(chosen).toBe(4);
+  });
+
+  it('"this event could not be shown" only on the windows that show an event; the others say "this window" (07.11.2026)', () => {
+    const contexts = new Map<string, string[]>();
+    for (const use of noteUses()) {
+      const context = use.boundary.match(/context="([\w.]+)"/)?.[1] ?? `(no boundary) ${use.where}`;
+      for (const key of use.keys) contexts.set(key, [...(contexts.get(key) ?? []), context]);
+    }
+    expect(contexts.get('eventCouldNotShow')).toEqual(['EventDetailsModal']);
+    expect(contexts.get('windowCouldNotShow')).toEqual(expect.arrayContaining(
+      ['AddEventModal', 'GamesHubModal', 'InviteFamilyModal', 'LeaveGroupModal', 'RecurringEventsPanel']));
+  });
 
   it('the button is on exactly the notes whose text asks for a reload, and each of those is in use', () => {
     const used = noteKeys();
@@ -280,8 +332,11 @@ describe('a window note that says to reload offers the reload (07.11.2026)', () 
     expect(html).toContain(`>${t('errorReload', 'en-US')}</button>`);
     // `<(?:button)`: no literal opening tag in this file's text for the button-coverage count (buttonNames.test.ts).
     expect(html).toMatch(/<(?:button) type="button"[^>]*min-h-\[44px\]/);
-    const quiet = renderToStaticMarkup(createElement(CouldNotShow, { messageKey: 'eventCouldNotShow', onClose: () => {} }));
-    expect(quiet).not.toContain(t('errorReload', 'en-US'));
+    for (const messageKey of ['eventCouldNotShow', 'windowCouldNotShow']) {
+      const quiet = renderToStaticMarkup(createElement(CouldNotShow, { messageKey, onClose: () => {} }));
+      expect(quiet, messageKey).toContain(t(messageKey, 'en-US'));
+      expect(quiet, messageKey).not.toContain(t('errorReload', 'en-US'));
+    }
     // In the reader's language: on a real client root (lazyClient.test.tsx), where the store's language applies.
     for (const lang of ['en-US', 'ro-RO', 'fr-FR', 'es-ES', 'it-IT', 'de-DE']) {
       expect(t('errorReload', lang), lang).not.toBe('errorReload');

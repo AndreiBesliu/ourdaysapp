@@ -471,6 +471,7 @@ const dictionary: Dictionary = {
   eventCouldNotShow: "Cet événement n’a pas pu être affiché. L’erreur a été enregistrée.",
   inviteCouldNotOpen: "La fenêtre d’invitation n’a pas pu être chargée. Vérifiez votre connexion, puis rechargez la page.",
   windowCouldNotOpen: "Cette fenêtre n’a pas pu s’ouvrir. Vérifiez votre connexion, puis rechargez la page.",
+  windowCouldNotShow: "Cette fenêtre n’a pas pu être affichée. L’erreur a été enregistrée.",
   walletTapToScan: "Toucher pour scanner",
   walletNoImage: "Sans image",
   walletQuickFilters: "Filtres rapides",

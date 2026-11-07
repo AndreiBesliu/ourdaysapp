@@ -471,6 +471,7 @@ const dictionary: Dictionary = {
   eventCouldNotShow: "Impossibile mostrare questo evento. L’errore è stato registrato.",
   inviteCouldNotOpen: "Non è stato possibile caricare la finestra di invito. Controlla la connessione, poi ricarica la pagina.",
   windowCouldNotOpen: "Non è stato possibile aprire questa finestra. Controlla la connessione, poi ricarica la pagina.",
+  windowCouldNotShow: "Impossibile mostrare questa finestra. L’errore è stato registrato.",
   walletTapToScan: "Tocca per scansionare",
   walletNoImage: "Nessuna immagine",
   walletQuickFilters: "Filtri rapidi",
