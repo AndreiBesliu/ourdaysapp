@@ -13,6 +13,7 @@ import { errorStatusOf, inErrorState, landingErrorFilter, type ErrorFilter } fro
 import { jobsNeedingAttention } from '../utils/jobHealthView';
 import JobHealthList from '../components/JobHealthList';
 import ModelSpendList from '../components/ModelSpendList';
+import AdminRoadmap from '../components/AdminRoadmap';
 import {
   adminCheck, adminGetStats, adminListProfiles, adminListAdmins, adminSetAdmin,
   adminGetHealth, adminSetErrorStatus, adminGetAiLedger, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
@@ -21,13 +22,13 @@ import {
 } from '../serverActions';
 import { withGroupName } from '../utils/groupName';
 
-type Tab = 'overview' | 'profiles' | 'groups' | 'admins' | 'ai' | 'health' | 'broadcast';
+type Tab = 'overview' | 'profiles' | 'groups' | 'admins' | 'ai' | 'health' | 'broadcast' | 'roadmap';
 
 // The tab button carries `capitalize`, which turns the raw value 'ai' into "Ai". Every other
 // tab happens to read correctly as its own key; this one does not, so the labels are named.
 const TAB_LABEL: Record<Tab, string> = {
   overview: 'Overview', profiles: 'Profiles', groups: 'Groups', admins: 'Admins',
-  ai: 'AI Center', health: 'Health', broadcast: 'Broadcast',
+  ai: 'AI Center', health: 'Health', broadcast: 'Broadcast', roadmap: 'Roadmap',
 };
 
 /**
@@ -470,7 +471,7 @@ export default function Admin() {
         <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800/50 p-1 rounded-xl w-fit overflow-x-auto max-w-full">
           {/* A SECOND list beside the `Tab` union. A value added to the type and not to this
               array is a tab that exists in TypeScript and nowhere on screen. */}
-          {(['overview', 'profiles', 'groups', 'admins', 'ai', 'health', 'broadcast'] as Tab[]).map(t => (
+          {(['overview', 'profiles', 'groups', 'admins', 'ai', 'health', 'broadcast', 'roadmap'] as Tab[]).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`relative px-4 py-2 rounded-lg text-sm font-bold capitalize whitespace-nowrap transition-all ${tab === t ? 'bg-white dark:bg-zinc-700 shadow-sm text-primary' : 'text-zinc-500'}`}>
               {TAB_LABEL[t]}{t === 'profiles' && profiles.length ? ` (${profiles.length})` : ''}{t === 'groups' && groups.length ? ` (${groups.length})` : ''}{t === 'admins' && admins.length ? ` (${admins.length})` : ''}
               {t === 'health' && health?.errors?.length > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{health.errorTotal}</span>}
@@ -1370,6 +1371,10 @@ export default function Admin() {
         )}
 
         {/* ── BROADCAST ── */}
+        {/* What comes next in the app, planned with Claude (07.11.2026). It reads and writes on its own, through the
+            two roadmap callables, so it loads only when opened. */}
+        {tab === 'roadmap' && <AdminRoadmap />}
+
         {tab === 'broadcast' && (
           <div className="flex flex-col gap-4 max-w-xl">
             <div className="bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs rounded-lg p-3 flex items-start gap-2">

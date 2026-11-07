@@ -15,6 +15,24 @@
 
 ---
 
+## 🆕 Admin → Roadmap: unde planificăm ce urmează (07.11)
+
+**Fapt:** în admin e un tab nou, **Roadmap**, cu trei coloane, Now / Next / Later, și „Done” pliat dedesubt, cu data.
+Sus sunt propunerile mele, scoase din BACKLOG; cu un clic intră într-o coloană („Add to …”) sau dispar („Dismiss”, cu
+„Restore” jos). Fiecare punct are un titlu, o notă și o zonă; se mută cu săgețile, se marchează gata cu ✓ și se editează
+sau se șterge. Eu citesc roadmap-ul cu cheia de citire, cum ai hotărât, ca să știu ce ai ales. Pe live nu-l pot deschide
+eu: e în spatele login-ului de admin. Probat pe un banc cu adminul real, pe emulatori.
+
+- [ ] **Deschide <https://our-days-2a939.web.app/admin> → Roadmap** (2 minute).
+      - **Cum arată bine:** „Proposed by Claude · 10” (pliat; clic ca să-l deschizi), apoi cele trei coloane goale.
+        Adaugă o propunere, mut-o cu ←/→, marcheaz-o cu ✓: apare la „Done · 1”, cu data de azi.
+      - **Ce e greșit:** „The roadmap could not be loaded” (funcțiile noi nu răspund pe live), sau o acțiune care spune
+        „That change was not saved” fără să mai fi deschis adminul în altă filă.
+- [ ] **Pune în coloane ce vrei să urmeze**, din propuneri sau cu „Add item”. Asta e lista din care îți propun felia
+      următoare.
+
+---
+
 ## 🆕 Chatul de pe calendar se încarcă la cerere (06.11) — PUBLICAT pe 06.11
 
 **Fapt:** codul chatului plutitor (bulina din colțul calendarului, pe un tab de grup) nu mai e în pachetul de pornire: se

@@ -32,6 +32,8 @@ import { senderStamp, stampedGroupName, trustedEmail } from "./senderIdentity";
 import { isPlainDocId } from "./docId";
 import { previewUpdate } from "./chatPreview";
 import { previewNewMessage, syncPreview } from "./chatPreviewWrite";
+import { parseRoadmapEdit } from "./roadmapCore";
+import { editRoadmap, readRoadmap } from "./roadmapStore";
 import { digestMessageLine, digestText } from "./digestMessages";
 import { overrideRsvps } from "./overrideRsvps";
 import { notify } from "./notify";
@@ -3390,6 +3392,21 @@ export const adminGetAiSpend = onCall({ region: CALLABLE_REGIONS, enforceAppChec
     todayGlobalUsd,
     complete,
   };
+});
+
+// ── Roadmap (07.11.2026, Admin → Roadmap) ─────────────────────────────────────────────────────────────────────────
+// Where Andrei and Claude plan what comes next: items in three lanes, and what was done with Claude's proposals. Admins
+// only, checked here like every admin callable; no client reaches the collections directly (roadmapStore.ts).
+export const adminGetRoadmap = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  await assertAdmin(request);
+  return readRoadmap(admin.firestore());
+});
+
+export const adminEditRoadmap = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+  const uid = await assertAdmin(request);
+  const parsed = parseRoadmapEdit(request.data);
+  if (!parsed.ok) throw new HttpsError("invalid-argument", `Roadmap: ${parsed.reason}.`);
+  return editRoadmap(admin.firestore(), uid, parsed.value);
 });
 
 /**

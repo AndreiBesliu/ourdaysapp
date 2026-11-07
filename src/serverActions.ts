@@ -1,4 +1,5 @@
 import { getFunctions, httpsCallable } from "firebase/functions";
+import type { RoadmapEdit, RoadmapRead } from "../functions/src/roadmapCore";
 import { app, FUNCTIONS_REGION } from "./firebase";
 
 // Server-side actions that create documents owned by ANOTHER user — these can't
@@ -329,6 +330,18 @@ export interface AiConfig {
     from: AiConfigFields | null; to: AiConfigFields | null;
     requested: Record<string, unknown> | null;
   }[];
+}
+
+// ── Roadmap (07.11.2026, Admin → Roadmap; functions/src/roadmapCore.ts decides what is accepted) ──
+export async function adminGetRoadmap(): Promise<RoadmapRead> {
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminGetRoadmap");
+  return (await fn({})).data as RoadmapRead;
+}
+
+/** One edit: create (optionally from a proposal), update, delete, or dismiss / restore a proposal. */
+export async function adminEditRoadmap(edit: RoadmapEdit): Promise<{ id: string | null }> {
+  const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminEditRoadmap");
+  return (await fn(edit)).data as { id: string | null };
 }
 
 export async function adminGetAiConfig(): Promise<AiConfig> {

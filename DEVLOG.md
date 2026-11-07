@@ -14933,3 +14933,71 @@ detalii, invitație și arcade folosesc aceeași notă (`CouldNotShow`).
   reîncărcare (`windowCouldNotOpen`, `inviteCouldNotOpen`); 0 rânduri de eroare în cele 20 de minute de după publicare.
 - **Nevăzut de mine:** nota pe live, care apare doar când o bucată nu se încarcă; probată pe banc și pe un client React
   real.
+
+## 2026-11-07 · Admin → Roadmap: un tab unde planificăm ce urmează în aplicație (Task Started)
+
+**Prompt (Andrei):** „vreau sa imi creezi in admin, un tab 'Roadmap' unde planificam ce urmeaza in aplicatie”.
+**Model:** Claude Opus 5.5.
+
+Schiță vizuală înainte de cod (regula din memorie). Deciziile lui Andrei, la schiță:
+- coloanele Acum / Urmează / Mai târziu (Now / Next / Later), cu „Gata” pliat dedesubt;
+- o secțiune „Propuse de Claude”, cu punctele scoase din BACKLOG, livrate cu codul, cu Adaugă / Ignoră;
+- citesc roadmap-ul cu cheia de citire: excepție de la „doar numere”, numai pentru colecțiile roadmap-ului (notată în
+  memorie).
+
+## 2026-11-07 · Admin → Roadmap: un tab unde planificăm ce urmează în aplicație (Task Completed)
+
+**Prompt (Andrei):** „vreau sa imi creezi in admin, un tab 'Roadmap' unde planificam ce urmeaza in aplicatie”.
+**Model:** Claude Opus 5.5.
+
+- **Tab-ul** (`src/components/AdminRoadmap.tsx`, al optulea din admin):
+  - coloanele Now / Next / Later, cu „Done” pliat dedesubt (cel mai nou primul, cu data);
+  - filtru pe zonă, „Add item”, „Reload”;
+  - pe fiecare punct: ↑/↓ în coloană, ←/→ între coloane, ✓ gata, editare, ștergere cu confirmare;
+  - sus, „Proposed by Claude”: propunerile din BACKLOG (`src/utils/roadmapProposals.ts`, 10 acum), livrate cu codul,
+    fiindcă eu nu scriu pe live. Fiecare se adaugă într-o coloană sau se ignoră; cele ignorate se pot restaura.
+    Secțiunea e pliată când sunt peste 3 propuneri, ca pe telefon coloanele să rămână la vedere;
+  - în engleză, ca restul adminului (excepția lui Andrei); punctele, în ce limbă scrie autorul.
+- **Serverul:** două callable-uri de admin, în ambele regiuni: `adminGetRoadmap` și `adminEditRoadmap`.
+  - `assertAdmin` întâi.
+  - Colecțiile `roadmap` și `roadmapProposals` nu sunt atinse de nicio regulă, deci clienții sunt refuzați, inclusiv un
+    admin, pe ambele colecții și pe toate operațiile (`rules-tests/personal.test.ts`). Fără publicare de reguli.
+  - Validarea e în modulul pur `functions/src/roadmapCore.ts`: titlu ≤ 120 de caractere, notă ≤ 1000, zone și coloane
+    din listă, id-uri care nu pot fi căi. Ecranul importă aceleași limite și același plan de mutare din el: primul
+    import din `functions/src` în codul aplicației, păzit de `functionsPurity`.
+  - Scrierile sunt în `functions/src/roadmapStore.ts`:
+    - o propunere devine UN singur punct, oricât s-ar apăsa „Add”;
+    - o editare spune ce versiune a văzut și e refuzată dacă punctul s-a schimbat între timp;
+    - o mutare atinge doar coloana și rangul;
+    - redistribuirea unei coloane se face într-o singură tranzacție;
+    - ștergerea unui punct venit dintr-o propunere o trimite la „Dismissed”;
+    - plafonul e de 500 de puncte, iar lista citește până la 550;
+    - documentele scrise de mână în consolă sunt afișate în formă și acceptate înapoi.
+- **Decizii la schiță** (vizuală, înaintea codului): coloanele; propunerile cu Adaugă / Ignoră; citesc roadmap-ul cu
+  cheia de citire (excepție de la „doar numere”, numai pentru aceste două colecții; în memorie).
+- **Banc** (adminul real, emulatorii Auth + Firestore + Functions; fișierele șterse înainte de commit), de două ori:
+  - toate acțiunile;
+  - filtrul pe zonă: ↑ trece peste ce e ascuns;
+  - o filă veche refuzată, cu titlul celuilalt admin păstrat;
+  - punctul unei propuneri șters, apoi propunerea restaurată;
+  - focusul la confirmarea ștergerii;
+  - 375 px fără derulare orizontală; contrastul pe tema luminoasă 7,7 / 7,6 / 4,9:1.
+  - Emulatorul de funcții nu pornește procesele cerute simultan (~10 callable-uri la deschiderea adminului, de pe Drive);
+    bancul le pornește întâi pe rând.
+- **Recenzia** (24 de agenți, 2,74 M tokeni, față de ~1 M anunțați: depășire mare). 18 constatări reale, adunate în 13
+  reparații. Cele medii:
+  - o filă rămasă în urmă rescria ce văzuse peste schimbarea altui admin;
+  - ↑/↓ cu filtrul activ nu schimbau nimic vizibil.
+- **Reverificarea** (1 agent, 0,15 M): 9 din 11 reparații complete. A găsit încă 4, reparate:
+  - formularul își lua versiunea la Save, nu la deschidere;
+  - Save rămânea activ în timpul altei cereri;
+  - `reorder` nu găsea un punct cu coloana invalidă;
+  - două citiri se puteau suprapune.
+  - Plus focusul, care nu ajungea pe Keep: `autoFocus` nu se aplica; probat pe banc, mutat explicit.
+- **Mutanți** (clonă în afara Drive, porturile verificate, control verde înainte și după, fișierele restaurate la octet):
+  **44 din 44 prinși**, 22 unitari și 22 pe emulator. Cei atinși de runda a doua au fost rulați din nou pe codul final.
+- **Porți:**
+  - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
+  - `npm test` (2867), `test:tz` (46 + 46);
+  - funcțiile construite (`lib` în commit), `test:rules` întreg (85 de fișiere, 1288 de teste);
+  - pornirea +207 octeți (învelitorile callable-urilor); adminul, în bucata lui (80 kB).

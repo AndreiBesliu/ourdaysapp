@@ -39,6 +39,8 @@ beforeEach(async () => {
 
     await setDoc(doc(db, 'admins', ALICE), { email: EMAIL[ALICE] });
     await setDoc(doc(db, 'errorLogs', 'e1'), { message: 'boom', uid: ALICE });
+    await setDoc(doc(db, 'roadmap', 'r1'), { title: 'Shared lists', lane: 'next' });
+    await setDoc(doc(db, 'roadmapProposals', 'p-1'), { status: 'added' });
 
     await setDoc(doc(db, 'friend_requests', 'fr-uid'), {
       fromId: ALICE, fromName: 'Alice', toId: BOB, toEmail: null, status: 'pending',
@@ -231,6 +233,23 @@ describe('the collections no client may touch at all', () => {
     // It carries whatever a thrown error carried, which is why nothing reads it from a browser.
     await assertFails(getDoc(doc(as(ALICE), 'errorLogs', 'e1')));
     await assertFails(setDoc(doc(as(ALICE), 'errorLogs', 'e2'), { message: 'mine' }));
+  });
+
+  it('the roadmap is the admin callables’ alone (07.11.2026): no client reads or writes it, an admin either', async () => {
+    // Alice is an admin (seeded above): the console reaches the roadmap through adminGetRoadmap / adminEditRoadmap, which
+    // check that on the server. No rule matches these collections, so the rules refuse.
+    for (const who of [ALICE, BOB]) {
+      await assertFails(getDoc(doc(as(who), 'roadmap', 'r1')));
+      await assertFails(getDocs(collection(as(who), 'roadmap')));
+      await assertFails(setDoc(doc(as(who), 'roadmap', 'r2'), { title: 'mine', lane: 'now' }));
+      await assertFails(updateDoc(doc(as(who), 'roadmap', 'r1'), { lane: 'done' }));
+      await assertFails(deleteDoc(doc(as(who), 'roadmap', 'r1')));
+      await assertFails(getDoc(doc(as(who), 'roadmapProposals', 'p-1')));
+      await assertFails(getDocs(collection(as(who), 'roadmapProposals')));
+      await assertFails(setDoc(doc(as(who), 'roadmapProposals', 'p-2'), { status: 'dismissed' }));
+      await assertFails(updateDoc(doc(as(who), 'roadmapProposals', 'p-1'), { status: 'dismissed' }));
+      await assertFails(deleteDoc(doc(as(who), 'roadmapProposals', 'p-1')));
+    }
   });
 
   it('`if false` really refuses — there is no catch-all above it', async () => {

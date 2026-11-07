@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.claimWarlordTimeout = exports.forfeitWarlordBattle = exports.submitWarlordCommand = exports.createWarlordChallenge = exports.acceptWarlordChallenge = exports.adminGetGrowth = exports.adminListGroups = exports.adminBroadcast = exports.adminModerateUser = exports.adminGetUser = exports.adminSetErrorStatus = exports.adminGetHealth = exports.logClientError = exports.adminSetAdmin = exports.adminListAdmins = exports.adminListProfiles = exports.adminGetStats = exports.adminCheck = exports.acceptGroupInvite = exports.removeFriend = exports.respondToFriendRequest = exports.transferAssetCopy = exports.deleteGroupCascade = exports.createEventOverride = exports.notifyUsers = exports.suggestAssetForText = exports.generateGroupDigest = exports.suggestEventCategory = exports.generateAIChecklist = exports.onGameCreated = exports.onGroupInviteCreated = exports.onFriendRequestCreated = exports.onMessageCreated = exports.onGroupMessageUpdated = exports.autoSuggestChecklist = exports.expireIdleGames = exports.logErrorDigest = exports.sendDueReminders = exports.onGroupDeleted = exports.onGroupCreated = exports.onGroupMembersChanged = exports.deleteMyAccount = exports.onDirectMessageUpdated = exports.onDirectMessageCreated = exports.openDirectChat = exports.listMyInviteLinks = exports.revokeGroupInviteLink = exports.redeemGroupInviteLink = exports.peekGroupInviteLink = exports.createGroupInviteLink = void 0;
-exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminSetAiConfig = exports.adminGetAiConfig = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = void 0;
+exports.adminBackfillExpenses = exports.adminGetAiLedger = exports.adminSetAiConfig = exports.adminGetAiConfig = exports.adminEditRoadmap = exports.adminGetRoadmap = exports.adminGetAiSpend = exports.aiPreviewScope = exports.onWarlordBattleUpdated = void 0;
 // FIRST, before anything that defines a function: the global options apply only to functions
 // defined after them. See globalOptions.ts.
 require("./globalOptions");
@@ -31,6 +31,8 @@ const senderIdentity_1 = require("./senderIdentity");
 const docId_1 = require("./docId");
 const chatPreview_1 = require("./chatPreview");
 const chatPreviewWrite_1 = require("./chatPreviewWrite");
+const roadmapCore_1 = require("./roadmapCore");
+const roadmapStore_1 = require("./roadmapStore");
 const digestMessages_1 = require("./digestMessages");
 const overrideRsvps_1 = require("./overrideRsvps");
 const notify_1 = require("./notify");
@@ -3242,6 +3244,20 @@ exports.adminGetAiSpend = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE
         todayGlobalUsd,
         complete,
     };
+});
+// ── Roadmap (07.11.2026, Admin → Roadmap) ─────────────────────────────────────────────────────────────────────────
+// Where Andrei and Claude plan what comes next: items in three lanes, and what was done with Claude's proposals. Admins
+// only, checked here like every admin callable; no client reaches the collections directly (roadmapStore.ts).
+exports.adminGetRoadmap = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    await assertAdmin(request);
+    return (0, roadmapStore_1.readRoadmap)(admin.firestore());
+});
+exports.adminEditRoadmap = (0, https_1.onCall)({ region: globalOptions_1.CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
+    const uid = await assertAdmin(request);
+    const parsed = (0, roadmapCore_1.parseRoadmapEdit)(request.data);
+    if (!parsed.ok)
+        throw new https_1.HttpsError("invalid-argument", `Roadmap: ${parsed.reason}.`);
+    return (0, roadmapStore_1.editRoadmap)(admin.firestore(), uid, parsed.value);
 });
 /**
  * The live AI configuration, plus who changed it and when.
