@@ -15358,3 +15358,20 @@ scrie un rând de jurnal în aceeași tranzacție, ca `aiConfigLog`, iar Admin �
   - `npm test` (2957), `test:tz` (46 + 46);
   - funcțiile construite (`lib` în commit), `test:rules` întreg pe codul final (87 de fișiere, 1346 de teste);
   - pornirea neschimbată (985.723 octeți).
+
+## 2026-11-08 · Jurnalul listei de admini: publicat și verificat pe live
+
+- **Publicat:** `017da02`, reconstruit din arborele curat, `--only functions,hosting`, `--project live`:
+  - 103 funcții actualizate, nicio eroare;
+  - hosting-ul, release complete;
+  - `firestore.rules` neschimbat, deci nepublicat.
+- **Verificat pe live:**
+  - intrarea servită (`index-iau034Wi.js`) și bucata adminului (`Admin-BcMKjTcF.js`, 200) sunt identice la octet cu cele
+    construite local; bucata adminului conține istoricul;
+  - `adminListAdmins`, `adminSetAdmin` și `deleteMyAccount` răspund: OPTIONS 204, iar fără cont refuză cu „You must be
+    signed in.”;
+  - 0 rânduri de eroare de la publicare;
+  - doar numere, cu `ourdays-count-admins.mjs`, care acum numără și jurnalul: 1 admin, creat de bootstrap, încă fără rol;
+    jurnalul are 0 rânduri;
+  - CI pe `017da02`: verde.
+- **Nevăzut de mine:** „Recent changes” pe live, din spatele login-ului (`OWNER_VERIFY.md`, sus).

@@ -15,7 +15,7 @@
 
 ---
 
-## 🆕 Jurnalul listei de admini (07.11)
+## 🆕 Jurnalul listei de admini (07.11) — PUBLICAT pe 08.11
 
 **Fapt:** în Admin → Admins, sub listă, „Recent changes” arată ultimele 50 de schimbări: cine a adăugat, a scos sau a
 schimbat rolul cui și când. De exemplu „Alice made Bob an owner”. Fiecare rând se scrie odată cu schimbarea, iar jurnalul
