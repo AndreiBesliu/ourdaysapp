@@ -580,8 +580,15 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     (parola sau Google) și reia acțiunea o dată (`src/utils/recentSignIn.ts`). Publicarea din admin o va lua de aici.
     Moderarea (dezactivare, ștergere de cont), care e a oricărui admin, nu o cere; e de decis dacă ar trebui.
   - **MFA** pe conturile de admin: cere Identity Platform, deci e o decizie de cont a lui Andrei.
-  - **Jurnalul listei:** azi rămân pe rând `addedBy`, `roleSetBy` și `roleSetAt`, dar un admin scos nu lasă nicio urmă.
-    Modelul ar fi `aiConfigLog` (rândul scris în aceeași tranzacție).
+  - ~~**Jurnalul listei**~~ **făcut pe 07.11:** `adminRosterLog`. Fiecare acordare, schimbare de rol, scoatere și refacere
+    din bootstrap scrie un rând în tranzacția schimbării: cine, pe cine, din ce rol, în ce rol. Rândul ține doar uid-uri,
+    iar numele se caută la citire, deci un cont șters nu lasă acolo nimic personal în afară de uid. Admin → Admins arată
+    ultimele 50 sub „Recent changes”. Fără reținere: rândurile sunt puține și rămân. Schimbările făcute direct din consolă
+    nu apar. Ștergerea unui cont scrie și ea un rând când scoate contul din listă (pasul 11, în tranzacție). Nu se poate
+    acorda drept de admin unui cont a cărui ștergere a început.
+    - **Rămas, știut:** un cont acordat chiar în clipa în care începe ștergerea lui, cu o primă rulare căzută înainte de
+      pasul 11, rămâne admin, iar reluarea ștergerii e refuzată până îl scoate un owner. Garda importurilor din
+      `adminRoles.test.ts` nu vede câteva forme exotice: fără spații, cu comentariu înainte, `/* @vite-ignore */`.
   - **`warlordConfig`** se scrie direct din browser, de orice admin (`firestore.rules`), fără callable și fără jurnal.
   - **Moderarea** (`adminModerateUser`): niciun admin nu poate dezactiva sau șterge alt admin, nici un owner. Așa a
     rămas, intenționat; un owner care vrea asta scoate întâi adminul din listă.

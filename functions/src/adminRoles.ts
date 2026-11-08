@@ -92,3 +92,53 @@ export function planRosterChange(callerUid: string, roster: readonly RosterRow[]
   if (current.role === "owner" && owners <= 1) return refuse("failed-precondition", "Can't remove the last owner.");
   return { ok: true, write: { op: "delete" }, role: null };
 }
+
+// ── The roster log (07.11.2026) ──────────────────────────────────────────────────────────────────────────────────────
+//
+// `adminRosterLog/{auto}`: one row per change to the roster, written in the same transaction as the change (the model is
+// `aiConfigLog`), so a change that cannot be recorded does not happen. Before it, a removed admin left no trace at all.
+// Uids only, no email or name: the names are looked up when the log is read (`adminListAdmins`), so a deleted account
+// leaves a uid here and nothing else that is personal. No client reads or writes it (no rule matches, so none may;
+// rules-tests/admin-roster-log.test.ts).
+
+export const ROSTER_LOG = "adminRosterLog";
+
+/** How many of the newest rows `adminListAdmins` returns. */
+export const ROSTER_LOG_READ = 50;
+
+export interface RosterLogRow {
+  schema: 1;
+  /** Who made the change; `null` when it was the server's settings (BOOTSTRAP_ADMIN_EMAILS). */
+  by: string | null;
+  via: "adminSetAdmin" | "bootstrap" | "accountDeletion";
+  target: string;
+  /** The role before; `null`: was not an admin. */
+  from: AdminRole | null;
+  /** The role after; `null`: no longer an admin. */
+  to: AdminRole | null;
+}
+
+/** The row for what `planRosterChange` decided to write, or `null` when it writes nothing. */
+export function rosterLogRow(callerUid: string, targetUid: string, from: AdminRole | null, write: RosterWrite | null): RosterLogRow | null {
+  if (!write) return null;
+  return { schema: 1, by: callerUid, via: "adminSetAdmin", target: targetUid, from, to: write.op === "delete" ? null : write.role };
+}
+
+/** The row for the server's settings making `uid` an owner (provisioned when `from` is `null`). */
+export function bootstrapLogRow(uid: string, from: AdminRole | null): RosterLogRow {
+  return { schema: 1, by: null, via: "bootstrap", target: uid, from, to: "owner" };
+}
+
+/**
+ * The row for an account deletion taking its owner off the roster (accountDeletion.ts, step 11). Both guards refuse to
+ * delete an admin, so this is the narrow case of a grant landing while the deletion runs (review of 07.11.2026); it is
+ * logged like any other removal. `by` is the deletion's own: "self", or "admin:<uid>" for an admin's moderation.
+ */
+export function deletionLogRow(uid: string, by: string, from: AdminRole): RosterLogRow {
+  return { schema: 1, by: by.startsWith("admin:") ? by.slice("admin:".length) || null : uid, via: "accountDeletion", target: uid, from, to: null };
+}
+
+/** A role as read back from a stored row: only the two literals; anything else is `null`. */
+export function loggedRole(value: unknown): AdminRole | null {
+  return value === "owner" || value === "admin" ? value : null;
+}

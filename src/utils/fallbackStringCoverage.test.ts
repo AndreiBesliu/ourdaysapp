@@ -33,8 +33,9 @@ const SRC = join(__dirname, '..');
 
 /** The same two exemptions as the other guards: the game submodule and Andrei's own console. */
 const SKIP_DIRS = new Set(['warlord', 'warlordPvp', 'warlordAdmin', 'node_modules']);
-// ConfirmItsYouDialog.tsx (07.11.2026) is the admin's alone; i18nCoverage.test.ts holds that only Admin.tsx imports it.
-const SKIP_FILES = new Set(['Admin.tsx', 'Warlord.tsx', 'ConfirmItsYouDialog.tsx']);
+// ConfirmItsYouDialog.tsx and adminRosterView.ts (07.11.2026) are the admin's alone: i18nCoverage.test.ts and
+// adminRoles.test.ts hold that only Admin.tsx imports them.
+const SKIP_FILES = new Set(['Admin.tsx', 'Warlord.tsx', 'ConfirmItsYouDialog.tsx', 'adminRosterView.ts']);
 
 /**
  * `file::literal` pairs that are values, not labels.

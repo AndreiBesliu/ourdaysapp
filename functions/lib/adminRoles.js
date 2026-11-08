@@ -18,10 +18,14 @@
 // Pure, so every rule below is tested without the emulator (src/utils/adminRoles.test.ts); the callables run it inside
 // the transaction that reads the roster, so two owners acting at once cannot both pass a floor.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SET_BY_THE_SERVER = exports.ONLY_THE_OWNER = void 0;
+exports.ROSTER_LOG_READ = exports.ROSTER_LOG = exports.SET_BY_THE_SERVER = exports.ONLY_THE_OWNER = void 0;
 exports.roleOf = roleOf;
 exports.requestedRole = requestedRole;
 exports.planRosterChange = planRosterChange;
+exports.rosterLogRow = rosterLogRow;
+exports.bootstrapLogRow = bootstrapLogRow;
+exports.deletionLogRow = deletionLogRow;
+exports.loggedRole = loggedRole;
 /** The role a stored `admins/{uid}` row grants. Anything but the literal "owner" is a plain admin. */
 function roleOf(row) {
     return row !== null && typeof row === "object" && row.role === "owner" ? "owner" : "admin";
@@ -77,5 +81,37 @@ function planRosterChange(callerUid, roster, target, change) {
     if (current.role === "owner" && owners <= 1)
         return refuse("failed-precondition", "Can't remove the last owner.");
     return { ok: true, write: { op: "delete" }, role: null };
+}
+// ── The roster log (07.11.2026) ──────────────────────────────────────────────────────────────────────────────────────
+//
+// `adminRosterLog/{auto}`: one row per change to the roster, written in the same transaction as the change (the model is
+// `aiConfigLog`), so a change that cannot be recorded does not happen. Before it, a removed admin left no trace at all.
+// Uids only, no email or name: the names are looked up when the log is read (`adminListAdmins`), so a deleted account
+// leaves a uid here and nothing else that is personal. No client reads or writes it (no rule matches, so none may;
+// rules-tests/admin-roster-log.test.ts).
+exports.ROSTER_LOG = "adminRosterLog";
+/** How many of the newest rows `adminListAdmins` returns. */
+exports.ROSTER_LOG_READ = 50;
+/** The row for what `planRosterChange` decided to write, or `null` when it writes nothing. */
+function rosterLogRow(callerUid, targetUid, from, write) {
+    if (!write)
+        return null;
+    return { schema: 1, by: callerUid, via: "adminSetAdmin", target: targetUid, from, to: write.op === "delete" ? null : write.role };
+}
+/** The row for the server's settings making `uid` an owner (provisioned when `from` is `null`). */
+function bootstrapLogRow(uid, from) {
+    return { schema: 1, by: null, via: "bootstrap", target: uid, from, to: "owner" };
+}
+/**
+ * The row for an account deletion taking its owner off the roster (accountDeletion.ts, step 11). Both guards refuse to
+ * delete an admin, so this is the narrow case of a grant landing while the deletion runs (review of 07.11.2026); it is
+ * logged like any other removal. `by` is the deletion's own: "self", or "admin:<uid>" for an admin's moderation.
+ */
+function deletionLogRow(uid, by, from) {
+    return { schema: 1, by: by.startsWith("admin:") ? by.slice("admin:".length) || null : uid, via: "accountDeletion", target: uid, from, to: null };
+}
+/** A role as read back from a stored row: only the two literals; anything else is `null`. */
+function loggedRole(value) {
+    return value === "owner" || value === "admin" ? value : null;
 }
 //# sourceMappingURL=adminRoles.js.map

@@ -5,7 +5,7 @@ import {
   ArrowLeft, ShieldCheck, ShieldAlert, RefreshCw, Users, UsersRound, CalendarDays,
   Gamepad2, Wallet, Search, Crown, Trash2, UserPlus, CheckCircle2,
   XCircle, Mail, Loader2, Activity, Ban, MailCheck, Power, X,
-  Send, TrendingUp, Megaphone,
+  Send, TrendingUp, Megaphone, History,
 } from 'lucide-react';
 import { auth } from '../firebase';
 import { useDialog } from '../hooks/useDialog';
@@ -16,7 +16,7 @@ import ModelSpendList from '../components/ModelSpendList';
 import AdminRoadmap from '../components/AdminRoadmap';
 import ConfirmItsYouDialog from '../components/ConfirmItsYouDialog';
 import { makeConfirmGate, withRecentSignIn } from '../utils/recentSignIn';
-import { listedRole, rosterControls, rosterNote, viewerIsOwner, type RosterNote } from '../utils/adminRosterView';
+import { describeRosterChange, listedRole, rosterControls, rosterNote, viewerIsOwner, type RosterHistoryRow, type RosterNote } from '../utils/adminRosterView';
 import {
   adminCheck, adminGetStats, adminListProfiles, adminListAdmins, adminSetAdmin,
   adminGetHealth, adminSetErrorStatus, adminGetAiLedger, adminGetUser, adminModerateUser, adminBroadcast, adminListGroups, adminGetGrowth,
@@ -49,6 +49,12 @@ const usd = (n: number | undefined | null) => {
 const fmtDate = (iso?: string | null) => {
   if (!iso) return '—';
   try { return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
+  catch { return '—'; }
+};
+// A moment in the roster log: the day and the time.
+const fmtDateTime = (iso?: string | null) => {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
   catch { return '—'; }
 };
 const provLabel = (p?: string) => p === 'google.com' ? 'Google' : p === 'password' ? 'Email' : (p || '—');
@@ -141,6 +147,8 @@ export default function Admin() {
   // Whether `admins` has come back at least once ('loaded'), is on its way, or failed the first time. Until it has, the
   // viewer's role is not known, and the screen must not say "only an owner can…" to the owner (review of 07.11.2026).
   const [adminsState, setAdminsState] = useState<'loading' | 'loaded' | 'failed'>('loading');
+  // The newest changes to the list (the roster log, 07.11.2026); `null` when the server could not read them.
+  const [adminHistory, setAdminHistory] = useState<RosterHistoryRow[] | null>(null);
   // "Confirm it's you" (07.11.2026): open while an owner's action waits for a recent sign-in. The question and its answer
   // are one gate, made once (utils/recentSignIn.ts, makeConfirmGate; `setConfirmOpen` is stable).
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -296,7 +304,7 @@ export default function Admin() {
     if (s.status === 'fulfilled') setStats(s.value);
     if (p.status === 'fulfilled') setProfiles(p.value.profiles || []);
     // A later failure keeps the list already shown; only a first one leaves the role unknown.
-    if (a.status === 'fulfilled') { setAdmins(a.value.admins || []); setAdminsState('loaded'); }
+    if (a.status === 'fulfilled') { setAdmins(a.value.admins || []); setAdminHistory(a.value.history ?? null); setAdminsState('loaded'); }
     else setAdminsState((st) => (st === 'loaded' ? st : 'failed'));
     if (h.status === 'fulfilled') setHealth(h.value);
     // Names as text only (08.10.2026, src/utils/groupName.ts): the server hands them back raw.
@@ -805,6 +813,27 @@ export default function Admin() {
               {/* Only once the list has come back: before that, or when it failed, it was never read (review of 07.11.2026). */}
               {adminsState === 'loaded' && admins.length === 0 && <p className="text-center text-zinc-400 py-6">No admins.</p>}
             </div>
+
+            {/* Who changed the list, and how (the roster log, written with each change; functions/src/adminRoles.ts). */}
+            {adminsState === 'loaded' && (
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4">
+                <p className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-3 flex items-center gap-2"><History className="w-4 h-4" /> Recent changes</p>
+                {adminHistory === null ? (
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">Couldn't load the history. Try Refresh.</p>
+                ) : adminHistory.length === 0 ? (
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">No changes recorded yet. Changes are recorded from 7 November 2026.</p>
+                ) : (
+                  <ul className="flex flex-col gap-2.5">
+                    {adminHistory.map((h) => (
+                      <li key={h.id} className="text-sm">
+                        <span className="text-zinc-900 dark:text-zinc-100">{describeRosterChange(h)}</span>
+                        <span className="block text-xs text-zinc-500 dark:text-zinc-400">{fmtDateTime(h.at)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
         )}
 

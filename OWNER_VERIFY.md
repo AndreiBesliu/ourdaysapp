@@ -15,6 +15,19 @@
 
 ---
 
+## 🆕 Jurnalul listei de admini (07.11)
+
+**Fapt:** în Admin → Admins, sub listă, „Recent changes” arată ultimele 50 de schimbări: cine a adăugat, a scos sau a
+schimbat rolul cui și când. De exemplu „Alice made Bob an owner”. Fiecare rând se scrie odată cu schimbarea, iar jurnalul
+nu ține emailuri, doar conturile, ale căror nume se caută la afișare. Schimbările dinainte de 07.11 nu apar. Prima linie
+pe live va fi probabil a ta: „… was made an owner by the server's settings”, la prima intrare în admin.
+
+- [ ] **Pe live, deschide Admin → Admins și uită-te sub listă** (1 minut).
+      - **Cum arată bine:** „Recent changes” cu cel puțin rândul despre tine.
+      - **Ce e greșit:** „Couldn't load the history.” după o reîncărcare.
+
+---
+
 ## 🆕 Acțiunile de owner cer o autentificare recentă (07.11) — PUBLICAT pe 07.11
 
 **Fapt:** schimbarea adminilor sau a rolurilor, broadcast-ul și ridicarea bugetului AI (sau oprirea kill switch-ului)

@@ -7,9 +7,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   ONLY_THE_OWNER, SET_BY_THE_SERVER, planRosterChange, requestedRole, roleOf,
+  bootstrapLogRow, deletionLogRow, loggedRole, rosterLogRow,
   type RosterRow,
 } from '../../functions/src/adminRoles';
-import { rosterControls, rosterNote, viewerIsOwner, type ListedAdmin } from './adminRosterView';
+import { describeRosterChange, rosterControls, rosterNote, viewerIsOwner, type ListedAdmin, type RosterHistoryRow } from './adminRosterView';
 
 const OWNER = 'uid-owner';
 const OWNER2 = 'uid-owner-2';
@@ -169,5 +170,84 @@ describe('what Admin → Admins offers on each row', () => {
     expect(rosterControls(one, OWNER, one[1])).toEqual(['makeOwner', 'revoke']);
     const alone: ListedAdmin[] = [{ uid: OWNER, role: 'owner' }];
     expect(rosterNote(alone, OWNER, alone[0])).toBe('lastOwner');
+  });
+});
+
+describe('the roster log (07.11.2026)', () => {
+  it('a row for each write the rules decided on, none for nothing written; uids and roles only', () => {
+    expect(rosterLogRow(OWNER, NEW, null, { op: 'create', role: 'admin' }))
+      .toEqual({ schema: 1, by: OWNER, via: 'adminSetAdmin', target: NEW, from: null, to: 'admin' });
+    expect(rosterLogRow(OWNER, ADMIN, 'admin', { op: 'setRole', role: 'owner' })).toMatchObject({ from: 'admin', to: 'owner' });
+    expect(rosterLogRow(OWNER, OWNER2, 'owner', { op: 'delete' })).toMatchObject({ from: 'owner', to: null });
+    expect(rosterLogRow(OWNER, ADMIN, 'admin', null)).toBeNull();
+    expect(Object.keys(rosterLogRow(OWNER, NEW, null, { op: 'create', role: 'admin' })!).sort()).toEqual(['by', 'from', 'schema', 'target', 'to', 'via']);
+  });
+
+  it('an account deletion: by the account itself, or by the admin who deleted it', () => {
+    expect(deletionLogRow(ADMIN, 'self', 'admin')).toEqual({ schema: 1, by: ADMIN, via: 'accountDeletion', target: ADMIN, from: 'admin', to: null });
+    expect(deletionLogRow(ADMIN, `admin:${OWNER}`, 'owner')).toEqual({ schema: 1, by: OWNER, via: 'accountDeletion', target: ADMIN, from: 'owner', to: null });
+    expect(deletionLogRow(ADMIN, 'admin:', 'admin').by).toBeNull();
+  });
+
+  it('the server\u2019s settings: by nobody, provisioned or made an owner again', () => {
+    expect(bootstrapLogRow(OWNER, null)).toEqual({ schema: 1, by: null, via: 'bootstrap', target: OWNER, from: null, to: 'owner' });
+    expect(bootstrapLogRow(OWNER, 'admin')).toMatchObject({ from: 'admin', to: 'owner' });
+  });
+
+  it('a role read back is one of the two literals, or nothing', () => {
+    expect(loggedRole('owner')).toBe('owner');
+    expect(loggedRole('admin')).toBe('admin');
+    for (const odd of [null, undefined, 'Owner', '', 1, {}]) expect(loggedRole(odd)).toBeNull();
+  });
+});
+
+describe('what the history says', () => {
+  const row = (over: Partial<RosterHistoryRow>): RosterHistoryRow => ({
+    id: 'r', at: null, by: OWNER, byName: 'Alice', via: 'adminSetAdmin', target: ADMIN, targetName: 'Bob', from: null, to: 'admin', ...over,
+  });
+
+  it('each kind of change, as a sentence', () => {
+    expect(describeRosterChange(row({}))).toBe('Alice added Bob as an admin');
+    expect(describeRosterChange(row({ to: 'owner' }))).toBe('Alice added Bob as an owner');
+    expect(describeRosterChange(row({ from: 'admin', to: 'owner' }))).toBe('Alice made Bob an owner');
+    expect(describeRosterChange(row({ from: 'owner', to: 'admin' }))).toBe('Alice made Bob an admin (no longer an owner)');
+    expect(describeRosterChange(row({ from: 'owner', to: null }))).toBe('Alice removed Bob from the admins (was an owner)');
+    expect(describeRosterChange(row({ from: 'admin', to: null }))).toBe('Alice removed Bob from the admins (was an admin)');
+  });
+
+  it('a change to your own row says "themselves"; an account that is gone says so', () => {
+    expect(describeRosterChange(row({ target: OWNER, targetName: 'Alice', from: 'owner', to: 'admin' }))).toBe('Alice made themselves an admin (no longer an owner)');
+    expect(describeRosterChange(row({ targetName: null, from: 'admin', to: null }))).toBe('Alice removed a deleted account from the admins (was an admin)');
+    expect(describeRosterChange(row({ byName: null }))).toBe('A deleted account added Bob as an admin');
+  });
+
+  it('an account deletion that took someone off the list: by themselves, or by an admin', () => {
+    expect(describeRosterChange(row({ via: 'accountDeletion', by: ADMIN, byName: null, targetName: null, from: 'admin', to: null })))
+      .toBe('An account was deleted and left the admins (was an admin)');
+    expect(describeRosterChange(row({ via: 'accountDeletion', by: OWNER, byName: 'Alice', targetName: null, from: 'owner', to: null })))
+      .toBe('An account was deleted by Alice and left the admins (was an owner)');
+    expect(describeRosterChange(row({ via: 'accountDeletion', by: ADMIN, byName: 'Bob', targetName: 'Bob', from: 'admin', to: null })))
+      .toBe("Bob's account was deleted and left the admins (was an admin)");
+  });
+
+  it('the server\u2019s settings', () => {
+    expect(describeRosterChange(row({ via: 'bootstrap', by: null, byName: null, from: null, to: 'owner' }))).toBe("Bob was added as an owner by the server's settings");
+    expect(describeRosterChange(row({ via: 'bootstrap', by: null, byName: null, from: 'admin', to: 'owner' }))).toBe("Bob was made an owner by the server's settings");
+  });
+});
+
+describe('the history and the controls are the admin\u2019s alone', () => {
+  it('only Admin.tsx imports adminRosterView.ts for code (its English shares the admin\u2019s exemption from i18n)', async () => {
+    const { readdirSync, readFileSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const walk = (dir: string): string[] => readdirSync(dir).flatMap((n) => {
+      const p = join(dir, n);
+      return statSync(p).isDirectory() ? (n === 'warlord' ? [] : walk(p)) : /\.(ts|tsx)$/.test(n) && !/\.test\./.test(n) ? [p.split('\\').join('/')] : [];
+    });
+    // A static import or re-export for code, or a dynamic import (review of 07.11.2026); `import type` leaves no code.
+    // With or without an extension (allowImportingTsExtensions; main.tsx imports './App.tsx'), and in backticks (reverify).
+    const imports = /^\s*(?:import|export)\s+(?!type\b)[^;]*from\s+['"][^'"]*\/adminRosterView(?:\.[cm]?[jt]sx?)?['"]|\bimport\(\s*['"`][^'"`]*\/adminRosterView(?:\.[cm]?[jt]sx?)?['"`]/m;
+    const importers = walk('src').filter((f) => imports.test(readFileSync(f, 'utf8')));
+    expect(importers).toEqual(['src/screens/Admin.tsx']);
   });
 });

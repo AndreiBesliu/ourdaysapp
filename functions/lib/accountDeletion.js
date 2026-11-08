@@ -115,6 +115,7 @@ const docId_1 = require("./docId");
 const recentSignIn_1 = require("./recentSignIn");
 Object.defineProperty(exports, "RECENT_SIGN_IN_S", { enumerable: true, get: function () { return recentSignIn_1.RECENT_SIGN_IN_S; } });
 Object.defineProperty(exports, "signedInRecently", { enumerable: true, get: function () { return recentSignIn_1.signedInRecently; } });
+const adminRoles_1 = require("./adminRoles");
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 const BOOTSTRAP_ADMIN_EMAILS = (0, bootstrapAdmins_1.bootstrapAdminEmails)(process.env.BOOTSTRAP_ADMIN_EMAILS);
 const ALL = Number.MAX_SAFE_INTEGER;
@@ -618,8 +619,18 @@ async function deleteAccountData(uid, by) {
     // after 90 days (errorRetention.ts); a deleted account's should not wait for that (25.09.2026).
     add("errorLogs", await deleteAll(db.collection("errorLogs").where("uid", "==", uid)));
     // ── 11. Their own documents ──────────────────────────────────────────────────────────────
+    // The roster row on its own, in a transaction with its line in the roster log (adminRoles.ts): every change to the list
+    // is logged. Both guards refuse an admin before anything goes, so a row is here only when a grant landed while this ran.
+    await db.runTransaction(async (tx) => {
+        const ref = db.doc(`admins/${uid}`);
+        const row = await tx.get(ref);
+        if (!row.exists)
+            return;
+        tx.delete(ref);
+        tx.create(db.collection(adminRoles_1.ROSTER_LOG).doc(), Object.assign(Object.assign({}, (0, adminRoles_1.deletionLogRow)(uid, by, (0, adminRoles_1.roleOf)(row.data()))), { at: firestore_1.FieldValue.serverTimestamp() }));
+    });
     await Promise.all([
-        "users", "profiles", "admins",
+        "users", "profiles",
         "ai_usage", "ai_preview_usage", "ai_budget", "notif_usage", "error_usage", "warlord_challenge_usage",
         // The day notify() last reported a push that reached none of their devices (notify.ts).
         "push_unreached",

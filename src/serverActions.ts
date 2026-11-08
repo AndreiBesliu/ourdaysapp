@@ -1,5 +1,6 @@
 import { getFunctions, httpsCallable } from "firebase/functions";
 import type { RoadmapEdit, RoadmapRead } from "../functions/src/roadmapCore";
+import type { RosterHistoryRow } from "./utils/adminRosterView";
 import { app, FUNCTIONS_REGION } from "./firebase";
 
 // Server-side actions that create documents owned by ANOTHER user — these can't
@@ -136,9 +137,10 @@ export async function adminListProfiles(): Promise<{ profiles: any[]; count: num
   const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminListProfiles");
   return (await fn({})).data as { profiles: any[]; count: number };
 }
-export async function adminListAdmins(): Promise<{ admins: any[] }> {
+/** The admins, and the newest changes to the list (`history`; `null` when it could not be read; absent from an older server). */
+export async function adminListAdmins(): Promise<{ admins: any[]; history?: RosterHistoryRow[] | null }> {
   const fn = httpsCallable(getFunctions(app, FUNCTIONS_REGION), "adminListAdmins");
-  return (await fn({})).data as { admins: any[] };
+  return (await fn({})).data as { admins: any[]; history?: RosterHistoryRow[] | null };
 }
 /** Grant or revoke admin, or set an admin's role (owner only; functions/src/adminRoles.ts has the rules). */
 export async function adminSetAdmin(params: { uid?: string; email?: string; makeAdmin: boolean; role?: 'owner' | 'admin' }): Promise<void> {

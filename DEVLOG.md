@@ -15305,3 +15305,56 @@ cu parola sau cu Google în client. Se refolosește, nu se copiază.
   - lista de admini neschimbată: 1 rând, creat de bootstrap, încă fără rol (doar numere);
   - CI pe `8859920`: verde.
 - **Nevăzut de mine:** dialogul pe live, din spatele login-ului (`OWNER_VERIFY.md`, sus).
+
+## 2026-11-07 · Jurnalul listei de admini (Task Started)
+
+**Prompt (Andrei):** „Admin roster log” (la „Ce urmează?”, după autentificarea recentă).
+**Model:** Claude Opus 5.5.
+
+Punctul din BACKLOG §5: un admin scos din listă nu lasă nicio urmă, iar pe rând rămân doar `addedBy`, `roleSetBy` și
+`roleSetAt`. Fiecare schimbare a listei (acordare, schimbare de rol, scoatere, refacerea owner-ului din bootstrap)
+scrie un rând de jurnal în aceeași tranzacție, ca `aiConfigLog`, iar Admin → Admins îl arată.
+
+## 2026-11-07 · Jurnalul listei de admini (Task Completed)
+
+**Prompt (Andrei):** „Admin roster log”.
+**Model:** Claude Opus 5.5.
+
+- **Jurnalul** (`adminRosterLog`, `functions/src/adminRoles.ts`): un rând pentru fiecare schimbare a listei, scris în
+  aceeași tranzacție cu ea (modelul e `aiConfigLog`), cu `create`:
+  - `adminSetAdmin`: acordare, schimbare de rol, scoatere. Nimic scris când nu se schimbă nimic, și nimic la un refuz;
+  - bootstrap-ul (`adminRoleOf`): crearea sau refacerea owner-ului, acum într-o tranzacție care recitește rândul, deci
+    două prime apeluri deodată scriu o singură schimbare;
+  - ștergerea contului (`accountDeletion.ts`, pasul 11): dacă găsește rândul din admini (o acordare în clipa de dinaintea
+    înregistrării ei), îl scoate cu o linie `accountDeletion`;
+  - `adminSetAdmin` refuză să acorde drept de admin unui cont a cărui ștergere a început;
+  - rândul ține doar uid-uri și roluri (`by`, `via`, `target`, `from`, `to`, `at`), fără email sau nume. Numele se
+    caută la citire, deci un cont șters lasă doar un uid;
+  - nicio regulă nu se potrivește colecției, deci browserul nu poate face nimic cu ea (`rules-tests/admin-roster-log.test.ts`).
+    `firestore.rules` nu s-a schimbat.
+- **Citirea:** `adminListAdmins` dă și `history`: ultimele 50, cu numele contului (altfel emailul) căutat acum, `null`
+  pentru un cont care nu mai există. Dacă jurnalul nu se poate citi, `history` e `null`, iar lista de admini vine oricum.
+- **Ecranul:** sub listă, „Recent changes”, câte o propoziție pe rând (`describeRosterChange`), cu data și ora. Exemple:
+  „Alice made Bob an owner”, „Alice made themselves an admin (no longer an owner)”, „Boss was made an owner by the
+  server's settings”, „An account was deleted and left the admins (was an admin)”. Textul e în engleză, ca restul
+  adminului; un test ține ca doar `Admin.tsx` să importe modulul.
+- **Pe live:** jurnalul e gol. Prima linie va fi, probabil, refacerea owner-ului din bootstrap, la prima intrare a lui
+  Andrei în admin.
+- **Banc** (aplicația reală pe emulatoare; fișierele șterse înainte de commit): refacerea din bootstrap, o acordare și o
+  scoatere, listate cu cea mai nouă sus; contrast 16:1 pe text și 6,9:1 pe dată. A arătat că „made an owner again” era
+  fals pentru un rând vechi fără rol, așa că acum spune „made an owner”.
+- **Recenzia** (Workflow, 3 lentile și 8 verificatori, 11 agenți, 1,29 M tokeni, față de ~1,1 M anunțați). 8 constatări,
+  4 confirmate (mici), reparate:
+  - o cursă între ștergerea unui cont și o acordare: rândul ar fi fost scos fără linie;
+  - trei goluri de test: numele unui cont care există, rândul de bootstrap citit înapoi, garda importurilor.
+  Respinse, cu motive: patru, despre forma testelor și o întrebare de numire.
+- **Reverificările** (2 agenți, 0,19 M + 0,19 M): prima a lăsat cursa deschisă sub o secundă (garda ștergerii nu e în
+  tranzacție cu înregistrarea ei), iar garda importurilor fără extensii. Reparația completă: pasul 11 scrie linia
+  singur. A doua: închise pentru toate ordinile (acordare înainte și după înregistrare, ștergere reluată, două ștergeri).
+  Total recenzie: 1,67 M.
+- **Mutanți** (clonă în afara Drive, control verde înainte și după, fișierele restaurate la octet): **28 din 28 (13 unitari și 15 pe emulator) prinși**.
+- **Porți:**
+  - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
+  - `npm test` (2957), `test:tz` (46 + 46);
+  - funcțiile construite (`lib` în commit), `test:rules` întreg pe codul final (87 de fișiere, 1346 de teste);
+  - pornirea neschimbată (985.723 octeți).

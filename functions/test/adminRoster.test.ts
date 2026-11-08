@@ -45,6 +45,12 @@ function call(name: string, uid: string | null, data: unknown, token: Record<str
 }
 const setAdmin = (caller: string, data: unknown) => call('adminSetAdmin', caller, data);
 const row = async (uid: string) => (await db.doc(`admins/${uid}`).get()).data();
+/** The roster log, oldest first, without its timestamps (checked on their own). */
+const logged = async () => (await db.collection('adminRosterLog').orderBy('at').get()).docs.map((d) => {
+  const { at, ...rest } = d.data();
+  expect(at).toBeInstanceOf(admin.firestore.Timestamp);
+  return rest;
+});
 const roster = async () => Object.fromEntries((await db.collection('admins').get()).docs.map((d) => [d.id, d.get('role') ?? null]));
 
 beforeAll(async () => {
@@ -281,6 +287,134 @@ describe('a recent sign-in for the owner\u2019s actions (07.11.2026, functions/s
     await expect(call('adminListAdmins', ADMIN, {}, STALE)).resolves.toMatchObject({ admins: expect.any(Array) });
     await expect(call('adminCheck', BOSS, {}, STALE)).resolves.toEqual({ isAdmin: true });
     expect((await row(BOSS))!.role).toBe('owner');
+  });
+});
+
+describe('the roster log: every change, written with it (07.11.2026)', () => {
+  const by = (who: string, target: string, from: string | null, to: string | null) => ({ schema: 1, by: who, via: 'adminSetAdmin', target, from, to });
+
+  it('a grant, a role change and a removal each write one row: who, whom, from, to; uids only', async () => {
+    await setAdmin(OWNER, { email: EMAIL[MEMBER], makeAdmin: true });
+    await setAdmin(OWNER, { uid: MEMBER, makeAdmin: true, role: 'owner' });
+    await setAdmin(OWNER, { uid: MEMBER, makeAdmin: true, role: 'admin' });
+    await setAdmin(OWNER, { uid: MEMBER, makeAdmin: false });
+    expect(await logged()).toEqual([
+      by(OWNER, MEMBER, null, 'admin'), by(OWNER, MEMBER, 'admin', 'owner'), by(OWNER, MEMBER, 'owner', 'admin'), by(OWNER, MEMBER, 'admin', null),
+    ]);
+  });
+
+  it('a row from before 07.11.2026 (no role) is logged as an admin when it changes', async () => {
+    await setAdmin(OWNER, { uid: ADMIN, makeAdmin: false });
+    expect(await logged()).toEqual([by(OWNER, ADMIN, 'admin', null)]);
+  });
+
+  it('nothing changed, nothing logged: "Make admin" on an admin, revoking a non-admin, any refusal', async () => {
+    await setAdmin(OWNER, { uid: ADMIN, makeAdmin: true });
+    await setAdmin(OWNER, { uid: MEMBER, makeAdmin: false });
+    await expect(setAdmin(ADMIN, { email: EMAIL[MEMBER], makeAdmin: true })).rejects.toMatchObject({ code: 'permission-denied' });
+    await expect(setAdmin(OWNER, { uid: OWNER, makeAdmin: false })).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(await logged()).toEqual([]);
+  });
+
+  it('two owners demoting each other at once: one of the two changes happens, and only it is logged (with the promotion before)', async () => {
+    await setAdmin(OWNER, { uid: ADMIN, makeAdmin: true, role: 'owner' });
+    await Promise.allSettled([
+      setAdmin(OWNER, { uid: ADMIN, makeAdmin: true, role: 'admin' }),
+      setAdmin(ADMIN, { uid: OWNER, makeAdmin: true, role: 'admin' }),
+    ]);
+    expect(await logged()).toHaveLength(2);
+  });
+
+  it('the server\u2019s settings: provisioned, or made an owner again, by nobody; once, however often it calls', async () => {
+    await call('adminCheck', BOSS, {});
+    await call('adminCheck', BOSS, {});
+    await db.doc(`admins/${BOSS}`).set({ role: 'admin' }, { merge: true });
+    await Promise.all([call('adminCheck', BOSS, {}), call('adminCheck', BOSS, {})]);
+    expect(await logged()).toEqual([
+      { schema: 1, by: null, via: 'bootstrap', target: BOSS, from: null, to: 'owner' },
+      { schema: 1, by: null, via: 'bootstrap', target: BOSS, from: 'admin', to: 'owner' },
+    ]);
+    // And read back as the server's settings, not as somebody's grant (asked by ADMIN, so no new check runs for BOSS).
+    const { history } = await call('adminListAdmins', ADMIN, {});
+    expect(history).toEqual([
+      expect.objectContaining({ via: 'bootstrap', by: null, byName: null, target: BOSS, targetName: BOSS_EMAIL, from: 'admin', to: 'owner' }),
+      expect.objectContaining({ via: 'bootstrap', by: null, byName: null, target: BOSS, from: null, to: 'owner' }),
+    ]);
+  });
+
+  it('the list gives the newest changes first, with names looked up now: the account\u2019s name, else its email; a deleted account has none', async () => {
+    await admin.auth().updateUser(OWNER, { displayName: 'Olga' });
+    await setAdmin(OWNER, { uid: ADMIN, makeAdmin: true, role: 'owner' });
+    await setAdmin(OWNER, { email: EMAIL[MEMBER], makeAdmin: true });
+    await setAdmin(OWNER, { uid: MEMBER, makeAdmin: false });
+    await admin.auth().deleteUser(MEMBER);
+    const { history } = await call('adminListAdmins', ADMIN, {});
+    expect(history).toEqual([
+      expect.objectContaining({ by: OWNER, byName: 'Olga', target: MEMBER, targetName: null, from: 'admin', to: null, via: 'adminSetAdmin' }),
+      expect.objectContaining({ by: OWNER, target: MEMBER, targetName: null, from: null, to: 'admin' }),
+      expect.objectContaining({ by: OWNER, byName: 'Olga', target: ADMIN, targetName: EMAIL[ADMIN], from: 'admin', to: 'owner' }),
+    ]);
+    expect(Date.parse(history[0].at)).toBeGreaterThanOrEqual(Date.parse(history[1].at));
+  });
+
+  it('an account whose deletion has started can still have its role changed, or be removed; only a grant is refused', async () => {
+    await db.doc(`accountDeletions/${ADMIN}`).set({ startedAt: admin.firestore.Timestamp.now(), by: 'self' });
+    await expect(setAdmin(OWNER, { uid: ADMIN, makeAdmin: true, role: 'owner' })).resolves.toMatchObject({ changed: true });
+    await expect(setAdmin(OWNER, { uid: ADMIN, makeAdmin: false })).resolves.toMatchObject({ changed: true });
+    expect(await logged()).toHaveLength(2);
+  });
+
+  it('a deletion that finds a roster row (a grant in the moment before its record): the row goes, and so does a line', async () => {
+    const { deleteAccountData } = await import('../src/accountDeletion');
+    await db.doc(`admins/${MEMBER}`).set({ email: EMAIL[MEMBER], role: 'admin' });
+    await deleteAccountData(MEMBER, `admin:${OWNER}`);
+    expect(await row(MEMBER)).toBeUndefined();
+    expect(await logged()).toEqual([{ schema: 1, by: OWNER, via: 'accountDeletion', target: MEMBER, from: 'admin', to: null }]);
+    const { history } = await call('adminListAdmins', ADMIN, {});
+    expect(history[0]).toMatchObject({ via: 'accountDeletion', by: OWNER, target: MEMBER, targetName: null, from: 'admin', to: null });
+  });
+
+  it('a deletion with no roster row writes no line', async () => {
+    const { deleteAccountData } = await import('../src/accountDeletion');
+    await deleteAccountData(MEMBER, 'self');
+    expect(await logged()).toEqual([]);
+  });
+
+  it('an account whose deletion has started is not made an admin: its deletion would take the row away again', async () => {
+    await db.doc(`accountDeletions/${MEMBER}`).set({ startedAt: admin.firestore.Timestamp.now(), by: 'self' });
+    await expect(setAdmin(OWNER, { email: EMAIL[MEMBER], makeAdmin: true })).rejects.toMatchObject({ code: 'failed-precondition', message: expect.stringContaining('being deleted') });
+    expect(await row(MEMBER)).toBeUndefined();
+    expect(await logged()).toEqual([]);
+  });
+
+  it('the newest 50 only', async () => {
+    const batch = db.batch();
+    for (let i = 0; i < 55; i++) {
+      batch.set(db.collection('adminRosterLog').doc(`r${String(i).padStart(2, '0')}`), {
+        schema: 1, by: OWNER, via: 'adminSetAdmin', target: ADMIN, from: null, to: 'admin', at: admin.firestore.Timestamp.fromMillis(Date.UTC(2026, 10, 7, 12, i)),
+      });
+    }
+    await batch.commit();
+    const { history } = await call('adminListAdmins', ADMIN, {});
+    expect(history).toHaveLength(50);
+    expect(history[0].id).toBe('r54');
+    expect(history[49].id).toBe('r05');
+  });
+
+  it('a log that cannot be read: the roster still comes back, and the history says it could not be read (null)', async () => {
+    const realCollection = db.collection.bind(db);
+    vi.spyOn(db, 'collection').mockImplementation(((path: string) => {
+      if (path === 'adminRosterLog') throw new Error('injected: the log is unreadable');
+      return realCollection(path);
+    }) as typeof db.collection);
+    const res = await call('adminListAdmins', ADMIN, {});
+    expect(res.admins.map((a: any) => a.uid).sort()).toEqual([ADMIN, OWNER].sort());
+    expect(res.history).toBeNull();
+  });
+
+  it('no client may read or write it: refused by the rules (rules-tests/admin-roster-log.test.ts); the list is the way in', async () => {
+    const { history } = await call('adminListAdmins', ADMIN, {});
+    expect(history).toEqual([]);
   });
 });
 

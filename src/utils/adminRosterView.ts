@@ -51,3 +51,45 @@ export function rosterNote(list: readonly ListedAdmin[], viewerUid: string | nul
   if (roleOf(row) === 'owner') return 'lastOwner';
   return null;
 }
+
+/** A row of `history` from `adminListAdmins` (the roster log, 07.11.2026): uids, roles, and names looked up when read. */
+export interface RosterHistoryRow {
+  id: string;
+  at: string | null;
+  by: string | null;
+  byName: string | null;
+  via: 'adminSetAdmin' | 'bootstrap' | 'accountDeletion';
+  target: string;
+  targetName: string | null;
+  from: 'owner' | 'admin' | null;
+  to: 'owner' | 'admin' | null;
+}
+
+const article = (role: 'owner' | 'admin') => (role === 'owner' ? 'an owner' : 'an admin');
+
+/**
+ * One change, as a sentence. A uid whose account is gone reads "a deleted account"; a change someone made to their own
+ * row reads "themselves". English, like the rest of the admin.
+ */
+export function describeRosterChange(row: RosterHistoryRow): string {
+  const target = row.targetName ?? 'a deleted account';
+  if (row.via === 'bootstrap') {
+    return row.from === null
+      ? `${target} was added as an owner by the server's settings`
+      // From "admin": a row from before 07.11.2026 has no role, so "again" would be false the first time.
+      : `${target} was made an owner by the server's settings`;
+  }
+  if (row.via === 'accountDeletion') {
+    // By then the account is usually gone, so it is rarely named.
+    const subject = row.targetName ? `${row.targetName}'s account` : 'An account';
+    const byOther = row.by && row.by !== row.target ? ` by ${row.byName ?? 'a deleted account'}` : '';
+    return `${subject} was deleted${byOther} and left the admins${row.from ? ` (was ${article(row.from)})` : ''}`;
+  }
+  const who = row.by ? (row.byName ?? 'A deleted account') : 'An unknown admin';
+  const whom = row.by && row.by === row.target ? 'themselves' : target;
+  if (row.from === null && row.to) return `${who} added ${whom} as ${article(row.to)}`;
+  if (row.to === null && row.from) return `${who} removed ${whom} from the admins (was ${article(row.from)})`;
+  if (row.from === 'admin' && row.to === 'owner') return `${who} made ${whom} an owner`;
+  if (row.from === 'owner' && row.to === 'admin') return `${who} made ${whom} an admin (no longer an owner)`;
+  return `${who} changed ${whom}`;
+}

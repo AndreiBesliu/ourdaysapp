@@ -104,6 +104,7 @@ import { logServerError } from "./errorLog";
 import { RSVP_ANSWERS } from "./overrideRsvps";
 import { isPlainDocId } from "./docId";
 import { RECENT_SIGN_IN_S, SIGN_IN_AGAIN, signedInRecently } from "./recentSignIn";
+import { ROSTER_LOG, deletionLogRow, roleOf } from "./adminRoles";
 
 const ENFORCE_APP_CHECK = process.env.APPCHECK_ENFORCE === "true";
 const BOOTSTRAP_ADMIN_EMAILS = bootstrapAdminEmails(process.env.BOOTSTRAP_ADMIN_EMAILS);
@@ -602,8 +603,17 @@ export async function deleteAccountData(uid: string, by: string): Promise<Accoun
   add("errorLogs", await deleteAll(db.collection("errorLogs").where("uid", "==", uid)));
 
   // ── 11. Their own documents ──────────────────────────────────────────────────────────────
+  // The roster row on its own, in a transaction with its line in the roster log (adminRoles.ts): every change to the list
+  // is logged. Both guards refuse an admin before anything goes, so a row is here only when a grant landed while this ran.
+  await db.runTransaction(async (tx) => {
+    const ref = db.doc(`admins/${uid}`);
+    const row = await tx.get(ref);
+    if (!row.exists) return;
+    tx.delete(ref);
+    tx.create(db.collection(ROSTER_LOG).doc(), { ...deletionLogRow(uid, by, roleOf(row.data())), at: FieldValue.serverTimestamp() });
+  });
   await Promise.all([
-    "users", "profiles", "admins",
+    "users", "profiles",
     "ai_usage", "ai_preview_usage", "ai_budget", "notif_usage", "error_usage", "warlord_challenge_usage",
     // The day notify() last reported a push that reached none of their devices (notify.ts).
     "push_unreached",

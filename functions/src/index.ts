@@ -25,7 +25,10 @@ import {
   effectiveLimits, AI_CONFIG_PATH, AI_LIMITS, LIMITS_SOURCE, AI_MODEL, MODEL_PRICING,
 } from "./aiLedger";
 import { clampAiLimits, configChangeAllowed, type AiConfigFields } from "./aiLimits";
-import { planRosterChange, requestedRole, roleOf, ONLY_THE_OWNER, type AdminRole } from "./adminRoles";
+import {
+  planRosterChange, requestedRole, roleOf, ONLY_THE_OWNER, type AdminRole,
+  ROSTER_LOG, ROSTER_LOG_READ, rosterLogRow, bootstrapLogRow, loggedRole,
+} from "./adminRoles";
 import { SIGN_IN_AGAIN, signedInRecently } from "./recentSignIn";
 import { changedOutsideAdmin } from "./aiConfigProvenance";
 import { mergeRollups, mergeModelDays } from "./aiSpendMerge";
@@ -218,17 +221,29 @@ async function adminRoleOf(request: { auth?: { uid?: string; token?: any } }): P
   const email = (request.auth?.token?.email || "").toLowerCase();
   const emailVerified = request.auth?.token?.email_verified === true;
   if (emailVerified && BOOTSTRAP_ADMIN_EMAILS.includes(email)) {
-    if (!snap.exists) {
-      await adminRef.set({
-        email,
-        name: request.auth?.token?.name || email.split("@")[0],
-        addedBy: "bootstrap",
-        addedAt: FieldValue.serverTimestamp(),
-        role: "owner",
-      }, { merge: true });
-    } else if (roleOf(snap.data()) !== "owner") {
-      // Only the role: who added the row, and when, stay as they were.
-      await adminRef.set({ role: "owner" }, { merge: true });
+    if (!snap.exists || roleOf(snap.data()) !== "owner") {
+      // The row and its line in the roster log together (adminRoles.ts), re-read inside: two first calls at once write
+      // one change, not two.
+      await db.runTransaction(async (tx) => {
+        const current = await tx.get(adminRef);
+        if (current.exists && roleOf(current.data()) === "owner") return;
+        if (!current.exists) {
+          tx.set(adminRef, {
+            email,
+            name: request.auth?.token?.name || email.split("@")[0],
+            addedBy: "bootstrap",
+            addedAt: FieldValue.serverTimestamp(),
+            role: "owner",
+          }, { merge: true });
+        } else {
+          // Only the role: who added the row, and when, stay as they were.
+          tx.set(adminRef, { role: "owner" }, { merge: true });
+        }
+        tx.create(db.collection(ROSTER_LOG).doc(), {
+          ...bootstrapLogRow(uid, current.exists ? roleOf(current.data()) : null),
+          at: FieldValue.serverTimestamp(),
+        });
+      });
     }
     return { uid, role: "owner" };
   }
@@ -2177,11 +2192,11 @@ export const adminListProfiles = onCall({ region: CALLABLE_REGIONS, enforceAppCh
   return { profiles, count: profiles.length, truncated };
 });
 
-// Current admins with display details.
+// Current admins with display details, and the newest changes to the list (`history`, 07.11.2026).
 export const adminListAdmins = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: ENFORCE_APP_CHECK }, async (request) => {
   await assertAdmin(request);
   const db = admin.firestore();
-  const snap = await db.collection("admins").get();
+  const [snap, history] = await Promise.all([db.collection("admins").get(), readRosterLog(db)]);
   const admins = await Promise.all(snap.docs.map(async (d) => {
     const data = d.data();
     let email = data.email || null;
@@ -2205,8 +2220,40 @@ export const adminListAdmins = onCall({ region: CALLABLE_REGIONS, enforceAppChec
       bootstrap: emailVerified === true && BOOTSTRAP_ADMIN_EMAILS.includes(authEmail),
     };
   }));
-  return { admins };
+  return { admins, history };
 });
+
+/**
+ * The newest rows of the roster log (adminRoles.ts), with a name for each uid looked up now, from the account: the log
+ * keeps no names. A uid with no account left reads `null` (the screen says "a deleted account"). `null` for the whole
+ * list when it cannot be read: the roster above it still shows, and the screen says the history could not be loaded.
+ */
+async function readRosterLog(db: FirebaseFirestore.Firestore) {
+  try {
+    const rows = (await db.collection(ROSTER_LOG).orderBy("at", "desc").limit(ROSTER_LOG_READ).get()).docs.map((d) => {
+      const x = d.data();
+      return {
+        id: d.id,
+        at: x.at?.toDate?.()?.toISOString?.() || null,
+        by: typeof x.by === "string" && x.by ? x.by : null,
+        via: x.via === "bootstrap" || x.via === "accountDeletion" ? x.via : "adminSetAdmin",
+        target: typeof x.target === "string" ? x.target : "",
+        from: loggedRole(x.from),
+        to: loggedRole(x.to),
+      };
+    });
+    const uids = [...new Set(rows.flatMap((r) => (r.by ? [r.by, r.target] : [r.target])).filter(Boolean))];
+    const names = new Map<string, string>();
+    for (let i = 0; i < uids.length; i += 100) {
+      const found = await admin.auth().getUsers(uids.slice(i, i + 100).map((uid) => ({ uid })));
+      for (const u of found.users) names.set(u.uid, u.displayName || u.email || u.uid);
+    }
+    return rows.map((r) => ({ ...r, byName: r.by ? names.get(r.by) ?? null : null, targetName: names.get(r.target) ?? null }));
+  } catch (err) {
+    console.error("adminListAdmins: the roster log could not be read", (err as { message?: string })?.message || err);
+    return null;
+  }
+}
 
 // Grant or revoke admin, or change an admin's role (owner only, from 07.11.2026; before, any admin). Accepts a uid or an
 // email, `makeAdmin`, and with `makeAdmin: true` an optional `role` ("owner" | "admin"; without it a new admin is an
@@ -2253,11 +2300,21 @@ export const adminSetAdmin = onCall({ region: CALLABLE_REGIONS, enforceAppCheck:
   // role hold however many owners act at once.
   const plan = await db.runTransaction(async (tx) => {
     const all = await tx.get(db.collection("admins"));
+    // An account whose deletion has started (accountDeletion.ts writes this record early, deletes the Auth account last)
+    // is not made an admin: its deletion would take the row away again at step 11 (review of 07.11.2026). That step logs
+    // the removal too, so a grant in the moment before the record exists is still not lost from the log.
+    const deleting = (await tx.get(db.doc(`accountDeletions/${targetUid}`))).exists;
     const roster = all.docs.map((d) => ({ uid: d.id, role: roleOf(d.data()) }));
     const verdict = planRosterChange(callerUid, roster, { uid: targetUid as string, bootstrap: targetBootstrap },
       makeAdmin ? { kind: "grant", role } : { kind: "revoke" });
     if (!verdict.ok) throw new HttpsError(verdict.code, verdict.reason);
     const write = verdict.write;
+    if (deleting && write?.op === "create") {
+      throw new HttpsError("failed-precondition", "This account is being deleted. Nothing was changed.");
+    }
+    // The change and its line in the roster log, together: nothing is written when nothing changes (adminRoles.ts).
+    const logged = rosterLogRow(callerUid, targetUid as string, roster.find((r) => r.uid === targetUid)?.role ?? null, write);
+    if (logged) tx.create(db.collection(ROSTER_LOG).doc(), { ...logged, at: FieldValue.serverTimestamp() });
     if (write?.op === "create") {
       tx.create(ref, {
         email: targetEmail || null,
