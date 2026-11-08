@@ -15,6 +15,19 @@
 
 ---
 
+## 🆕 Moderarea cere și ea o autentificare recentă (08.11)
+
+**Fapt:** în fereastra unui utilizator din Admin, „Delete”, „Enable” (după o dezactivare) și „Verify email” cer acum o
+autentificare din ultimele 5 minute, ca acțiunile de owner. Dacă e mai veche, apare „Confirm it's you” deasupra
+ferestrei. „Disable” nu cere niciodată, ca un cont abuziv să poată fi oprit dintr-un clic. Probat pe banc cu o
+autentificare de 6 minute: Delete a cerut confirmarea (Cancel n-a șters nimic), Disable a mers direct, iar Enable, după
+parolă, a reactivat contul. **Implicitul ales:** dezactivarea liberă, celelalte trei cu confirmare. Spune dacă vrei altfel.
+
+- [ ] **Nimic de făcut acum.** Data viitoare când moderezi un cont, la mai mult de 5 minute după autentificare, apare
+      dialogul. **Ce e greșit:** un mesaj roșu „Confirm it's you: sign in again…” în locul dialogului.
+
+---
+
 ## 🆕 Jurnalul listei de admini (07.11) — PUBLICAT pe 08.11
 
 **Fapt:** în Admin → Admins, sub listă, „Recent changes” arată ultimele 50 de schimbări: cine a adăugat, a scos sau a

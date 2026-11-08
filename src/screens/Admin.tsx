@@ -432,7 +432,9 @@ export default function Admin() {
     if (action === 'delete' && !confirm('Permanently delete this user? Their personal data goes; groups they own pass to the longest-standing member (or are deleted if they are alone); their group events stay with the group\'s owner; their messages stay, marked as a deleted account. This cannot be undone.')) return;
     setModBusy(true);
     try {
-      await adminModerateUser(uid, action);
+      // Deleting, re-enabling or verifying needs a recent sign-in (08.11.2026); disabling never asks.
+      const done = await withRecentSignIn(() => adminModerateUser(uid, action), confirmItsYou);
+      if (!done.ok) { alert('Nothing was changed: it was not confirmed that it is you.'); return; }
       if (action === 'delete') { setDetail(null); await refresh(); }
       else { await openUser(uid); }
     } catch (e: any) { alert(e?.message || 'Action failed.'); }

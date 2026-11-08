@@ -2655,6 +2655,16 @@ export const adminGetUser = onCall({ region: CALLABLE_REGIONS, enforceAppCheck: 
   };
 });
 
+/** What `adminModerateUser` does; anything else is "Unknown action.". */
+const MODERATION_ACTIONS: readonly string[] = ["enable", "disable", "forceVerify", "delete"];
+
+/** The moderation actions that need a recent sign-in, with what the refusal says they are ("sign in again to …"). */
+const MODERATION_NEEDS_RECENT_SIGN_IN: Record<string, string> = {
+  delete: "delete an account",
+  forceVerify: "mark an email as verified",
+  enable: "re-enable an account",
+};
+
 // Moderate a user: enable | disable | forceVerify | delete. Admins/owner and the
 // caller themselves are protected from disable/delete.
 // The deletion runs the whole account cascade, the same as `deleteMyAccount`, and gets its time and its
@@ -2664,6 +2674,9 @@ export const adminModerateUser = onCall({ region: CALLABLE_REGIONS, enforceAppCh
   const { uid, action } = request.data || {};
   if (!uid || typeof uid !== "string" || uid.includes("/")) throw new HttpsError("invalid-argument", "A valid uid is required.");
   if (!action) throw new HttpsError("invalid-argument", "action is required.");
+  // One of the four, as a string, before anything else (review of 08.11.2026): a name such as "constructor" found an
+  // inherited key in the table below and was sent to sign in again for an action that does not exist.
+  if (typeof action !== "string" || !MODERATION_ACTIONS.includes(action)) throw new HttpsError("invalid-argument", "Unknown action.");
   if (uid === callerUid) throw new HttpsError("failed-precondition", "You can't moderate your own account.");
 
   const db = admin.firestore();
@@ -2688,6 +2701,11 @@ export const adminModerateUser = onCall({ region: CALLABLE_REGIONS, enforceAppCh
   if (isTargetAdmin && (action === "disable" || action === "delete" || action === "forceVerify")) {
     throw new HttpsError("failed-precondition", "You can't disable, delete, or force-verify another admin.");
   }
+  // A recent sign-in for what cannot be undone or hands out trust (08.11.2026, recentSignIn.ts), after every refusal
+  // above so nobody is sent to sign in for something they could not do anyway. Disabling never asks: like switching the
+  // AI kill switch on, the protective move stays one click away for whoever is dealing with an incident.
+  const needsRecentSignIn = Object.prototype.hasOwnProperty.call(MODERATION_NEEDS_RECENT_SIGN_IN, action) ? MODERATION_NEEDS_RECENT_SIGN_IN[action] : undefined;
+  if (needsRecentSignIn && !callerSignedInRecently(request)) throw recentSignInRefusal(needsRecentSignIn);
 
   if (action === "enable") { await admin.auth().updateUser(uid, { disabled: false }); return { ok: true }; }
   if (action === "disable") { await admin.auth().updateUser(uid, { disabled: true }); return { ok: true }; }

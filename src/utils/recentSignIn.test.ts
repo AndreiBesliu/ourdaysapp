@@ -201,7 +201,8 @@ describe('the wiring', () => {
     expect(ADMIN).toMatch(/withRecentSignIn\(\(\) => adminBroadcast\(/);
     expect(ADMIN).toMatch(/withRecentSignIn\(\(\) => adminSetAiConfig\(/);
     // And none of them is called outside it.
-    for (const fn of ['adminSetAdmin', 'adminBroadcast', 'adminSetAiConfig']) {
+    expect(ADMIN).toMatch(/withRecentSignIn\(\(\) => adminModerateUser\(/);
+    for (const fn of ['adminSetAdmin', 'adminBroadcast', 'adminSetAiConfig', 'adminModerateUser']) {
       const calls = ADMIN.match(new RegExp(`\\b${fn}\\(`, 'g')) ?? [];
       expect(calls, fn).toHaveLength(1);
     }

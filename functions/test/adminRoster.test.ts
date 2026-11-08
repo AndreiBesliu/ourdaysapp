@@ -290,6 +290,43 @@ describe('a recent sign-in for the owner\u2019s actions (07.11.2026, functions/s
   });
 });
 
+describe('moderation: a recent sign-in for what cannot be undone or hands out trust (08.11.2026)', () => {
+  const STALE = { auth_time: nowS() - 6 * 60 };
+  const SIGN_IN_AGAIN = { code: 'failed-precondition', details: { reason: 'recent-sign-in-required' } };
+  const moderate = (data: unknown, token: Record<string, unknown> = {}) => call('adminModerateUser', ADMIN, data, token);
+
+  it('deleting, re-enabling and verifying ask, from an old sign-in, and change nothing', async () => {
+    await admin.auth().updateUser(MEMBER, { emailVerified: false, disabled: true });
+    for (const action of ['delete', 'enable', 'forceVerify']) {
+      await expect(moderate({ uid: MEMBER, action }, STALE), action).rejects.toMatchObject(SIGN_IN_AGAIN);
+    }
+    const u = await admin.auth().getUser(MEMBER);
+    expect({ verified: u.emailVerified, disabled: u.disabled }).toEqual({ verified: false, disabled: true });
+  });
+
+  it('disabling never asks: the protective move stays one click away', async () => {
+    await expect(moderate({ uid: MEMBER, action: 'disable' }, STALE)).resolves.toEqual({ ok: true });
+    expect((await admin.auth().getUser(MEMBER)).disabled).toBe(true);
+  });
+
+  it('a fresh sign-in does them (any admin: moderation is not the owner’s alone)', async () => {
+    await admin.auth().updateUser(MEMBER, { emailVerified: false, disabled: true });
+    await expect(moderate({ uid: MEMBER, action: 'enable' })).resolves.toEqual({ ok: true });
+    await expect(moderate({ uid: MEMBER, action: 'forceVerify' })).resolves.toEqual({ ok: true });
+    const u = await admin.auth().getUser(MEMBER);
+    expect({ verified: u.emailVerified, disabled: u.disabled }).toEqual({ verified: true, disabled: false });
+  });
+
+  it('what could not be done anyway is refused for its reason, not sent to sign in again', async () => {
+    await expect(moderate({ uid: OWNER, action: 'delete' }, STALE)).rejects.toMatchObject({ code: 'failed-precondition', message: expect.stringContaining('another admin') });
+    await expect(moderate({ uid: ADMIN, action: 'delete' }, STALE)).rejects.toMatchObject({ message: "You can't moderate your own account." });
+    // Names an object inherits, and an array, are no action either (review of 08.11.2026).
+    for (const action of ['rename', 'constructor', '__proto__', 'toString', ['delete'], { 0: 'delete' }]) {
+      await expect(moderate({ uid: MEMBER, action }, STALE), JSON.stringify(action)).rejects.toMatchObject({ code: 'invalid-argument', message: 'Unknown action.' });
+    }
+  });
+});
+
 describe('the roster log: every change, written with it (07.11.2026)', () => {
   const by = (who: string, target: string, from: string | null, to: string | null) => ({ schema: 1, by: who, via: 'adminSetAdmin', target, from, to });
 

@@ -443,7 +443,8 @@ describe('who may', () => {
   it('an admin deleting somebody runs the same deletion', async () => {
     await db.doc(`admins/${ADMIN}`).set({ addedBy: 'test' });
     const r = await moderate.run({
-      data: { uid: GONE, action: 'delete' }, auth: { uid: ADMIN, token: { uid: ADMIN } }, rawRequest: {},
+      // A fresh sign-in: deleting an account by moderation needs one (08.11.2026, functions/src/recentSignIn.ts).
+      data: { uid: GONE, action: 'delete' }, auth: { uid: ADMIN, token: { uid: ADMIN, auth_time: Math.floor(Date.now() / 1000) } }, rawRequest: {},
     } as unknown as CallableRequest<unknown>);
     expect(r).toMatchObject({ ok: true, deleted: true, authDeleted: true });
     expect(await data(`groups/${G_OWNED}`)).toMatchObject({ ownerId: ANA, members: [ANA, BOB] });

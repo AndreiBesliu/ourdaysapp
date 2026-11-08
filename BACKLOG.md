@@ -578,7 +578,12 @@ fie când nimeni nu mai folosește APK-ul (Andrei spune), fie dacă se reia reco
     broadcast-ul și bugetul AI făcut mai riscant cer o autentificare din ultimele 5 minute (`functions/src/recentSignIn.ts`,
     fereastra ștergerii contului). Direcția mai sigură a bugetului nu o cere niciodată. Ecranul întreabă „Confirm it's you”
     (parola sau Google) și reia acțiunea o dată (`src/utils/recentSignIn.ts`). Publicarea din admin o va lua de aici.
-    Moderarea (dezactivare, ștergere de cont), care e a oricărui admin, nu o cere; e de decis dacă ar trebui.
+    ~~Moderarea~~ **decis și făcut pe 08.11:** ștergerea unui cont, marcarea emailului ca verificat și reactivarea cer
+    și ele fereastra; dezactivarea nu, ca într-un incident să rămână la un clic (regula bugetului AI). O acțiune
+    necunoscută e refuzată înaintea oricărei alte verificări.
+    - **Știut:** reluarea unei ștergeri lungi, după o primă rulare de ~7 minute, cere iar autentificarea, fiindcă rularea
+      e mai lungă decât fereastra. La fel și la ștergerea propriului cont. Ar putea fi scutită reluarea unei ștergeri
+      începute de același admin; decizia rămâne deschisă.
   - **MFA** pe conturile de admin: cere Identity Platform, deci e o decizie de cont a lui Andrei.
   - ~~**Jurnalul listei**~~ **făcut pe 07.11:** `adminRosterLog`. Fiecare acordare, schimbare de rol, scoatere și refacere
     din bootstrap scrie un rând în tranzacția schimbării: cine, pe cine, din ce rol, în ce rol. Rândul ține doar uid-uri,

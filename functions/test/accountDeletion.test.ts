@@ -44,7 +44,8 @@ describe('deleting an account', () => {
   it('takes that person\'s error rows with it, and nobody else\'s', async () => {
     expect(await rowsOf(GONE)).toBe(3);
     const r = await moderate.run({
-      data: { uid: GONE, action: 'delete' }, auth: { uid: ADMIN, token: { uid: ADMIN } }, rawRequest: {},
+      // A fresh sign-in: deleting an account by moderation needs one (08.11.2026, functions/src/recentSignIn.ts).
+      data: { uid: GONE, action: 'delete' }, auth: { uid: ADMIN, token: { uid: ADMIN, auth_time: Math.floor(Date.now() / 1000) } }, rawRequest: {},
     } as unknown as CallableRequest<unknown>);
     expect(r).toMatchObject({ ok: true, deleted: true, counts: { errorLogs: 3 } });
     expect(await rowsOf(GONE)).toBe(0);

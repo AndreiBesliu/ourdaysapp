@@ -77,7 +77,8 @@ export default function ConfirmItsYouDialog({ isOpen, onDone }: Props) {
         </div>
         <form onSubmit={submit} className="p-5 flex flex-col gap-4">
           <p className="text-sm text-zinc-600 dark:text-zinc-300">
-            Changing the admins, sending a broadcast or raising the AI budget needs a sign-in from the last 5 minutes.
+            This needs a sign-in from the last 5 minutes, like changing the admins, a broadcast, raising the AI budget,
+            and deleting, re-enabling or verifying an account.
           </p>
           {method === 'password' ? (
             <label className="flex flex-col gap-1.5">

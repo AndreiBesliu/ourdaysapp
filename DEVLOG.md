@@ -15375,3 +15375,50 @@ scrie un rând de jurnal în aceeași tranzacție, ca `aiConfigLog`, iar Admin �
     jurnalul are 0 rânduri;
   - CI pe `017da02`: verde.
 - **Nevăzut de mine:** „Recent changes” pe live, din spatele login-ului (`OWNER_VERIFY.md`, sus).
+
+## 2026-11-08 · Autentificare recentă pentru moderare (Task Started)
+
+**Prompt (Andrei):** „Moderation sign-in” (la „Ce urmează?”, după jurnalul listei de admini).
+**Model:** Claude Opus 5.5.
+
+Decizia rămasă în BACKLOG §5: moderarea (`adminModerateUser`) e a oricărui admin și nu cerea autentificare recentă.
+Regula aleasă e cea a bugetului AI: ce protejează rămâne la un clic (dezactivarea unui cont), iar ce nu se poate desface
+sau dă încredere cere autentificarea din ultimele 5 minute (ștergerea, marcarea emailului ca verificat, reactivarea).
+Ecranul folosește același „Confirm it's you”.
+
+## 2026-11-08 · Autentificare recentă pentru moderare (Task Completed)
+
+**Prompt (Andrei):** „Moderation sign-in”.
+**Model:** Claude Opus 5.5.
+
+- **Serverul** (`adminModerateUser`, `functions/src/index.ts`):
+  - ștergerea unui cont, marcarea emailului ca verificat și reactivarea cer autentificarea din ultimele 5 minute
+    (`MODERATION_NEEDS_RECENT_SIGN_IN`, aceeași fereastră și același refuz ca acțiunile de owner);
+  - dezactivarea nu o cere niciodată: ca pornirea kill switch-ului AI, mișcarea care protejează rămâne la un clic;
+  - verificarea vine după toate celelalte refuzuri (argumentele, propriul cont, un admin protejat), ca nimeni să nu fie
+    trimis să se autentifice pentru ceva ce oricum nu poate face;
+  - o acțiune necunoscută e refuzată înaintea oricărei alte verificări („Unknown action.”), iar tabelul se citește doar pe
+    chei proprii.
+- **Ecranul:** `moderate()` din `Admin.tsx` trece prin `withRecentSignIn`. Dialogul spune acum lista întreagă a
+  acțiunilor care cer confirmarea.
+- **Banc** (aplicația reală pe emulatoare, autentificare de 6 minute; fișierele șterse înainte de commit):
+  - Delete pe un membru: dialogul deasupra ferestrei utilizatorului (țintele trec testul de clic), iar Cancel spune
+    „Nothing was changed…” și nu șterge nimic;
+  - Disable a mers fără întrebare;
+  - Enable a cerut confirmarea și, după parolă, a reactivat contul.
+- **Recenzia** (Workflow, 2 lentile și 3 verificatori, 5 agenți, 0,57 M tokeni, față de ~0,7 M anunțați). O constatare
+  (raportată de ambele lentile), reparată: un `action` ca „constructor”, „__proto__” sau `["delete"]` găsea o cheie
+  moștenită în tabel și era trimis să se autentifice din nou pentru o acțiune care nu există. Respinsă, cu motive: un
+  test lipsă pentru ramura de anulare, care există.
+- **Reverificarea** (1 agent, 0,15 M): completă, probată pe 53 de valori ciudate. O problemă nouă, mică, lăsată și scrisă
+  în BACKLOG: reluarea unei ștergeri lungi cere iar autentificarea, fiindcă o rulare depășește fereastra (la fel ca la
+  ștergerea propriului cont). Total recenzie: 0,72 M.
+- **Mutanți** (clonă în afara Drive, control verde înainte și după, fișierele restaurate la octet): **9 din 10 prinși**.
+  Cel rămas e echivalent: citirea tabelului pe chei proprii e a doua plasă, după refuzul acțiunilor necunoscute. Clona
+  avea un depozit de obiecte stricat (o referință spre un commit pe care nu-l avea), așa că a fost adusă la zi prin
+  copierea fișierelor; repo-ul e întreg (`git fsck` curat).
+- **Porți:**
+  - `tsc -b`, `lint-gate`, build, `check-split`, `check-offline`, `check-bundle`;
+  - `npm test` (2957), `test:tz` (46 + 46);
+  - funcțiile construite (`lib` în commit), `test:rules` întreg pe codul final (87 de fișiere, 1350 de teste);
+  - pornirea neschimbată (985.723 octeți).
