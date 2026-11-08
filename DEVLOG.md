@@ -15422,3 +15422,15 @@ Ecranul folosește același „Confirm it's you”.
   - `npm test` (2957), `test:tz` (46 + 46);
   - funcțiile construite (`lib` în commit), `test:rules` întreg pe codul final (87 de fișiere, 1350 de teste);
   - pornirea neschimbată (985.723 octeți).
+
+## 2026-11-08 · Autentificarea recentă pentru moderare: publicat și verificat pe live
+
+- **Publicat:** `05502f3`, reconstruit din arborele curat, `--only functions,hosting`, `--project live`. Rezultat: 103
+  funcții actualizate fără eroare, iar hosting-ul a ajuns la release complete.
+- **Verificat pe live:**
+  - intrarea servită (`index-CuYllTt1.js`) și bucata adminului (`Admin-DgYKRzVI.js`, 200) sunt identice la octet cu cele
+    construite local; dialogul are textul nou;
+  - `adminModerateUser` și `adminSetAdmin` răspund: OPTIONS 204, iar fără cont refuză cu „You must be signed in.”;
+  - 0 rânduri de eroare de la publicare; lista de admini neschimbată (1 rând, încă fără rol), jurnalul are 0 rânduri;
+  - CI pe `05502f3`: verde.
+- **Nevăzut de mine:** moderarea pe live, din spatele login-ului (`OWNER_VERIFY.md`, sus).

@@ -15,7 +15,7 @@
 
 ---
 
-## 🆕 Moderarea cere și ea o autentificare recentă (08.11)
+## 🆕 Moderarea cere și ea o autentificare recentă (08.11) — PUBLICAT pe 08.11
 
 **Fapt:** în fereastra unui utilizator din Admin, „Delete”, „Enable” (după o dezactivare) și „Verify email” cer acum o
 autentificare din ultimele 5 minute, ca acțiunile de owner. Dacă e mai veche, apare „Confirm it's you” deasupra
